@@ -22,11 +22,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    // Override resolve to remove the alias causing the build issue
+    // The previous alias causes double resolution (@libsql/client/web/web) because the source code already imports /web
     resolve: {
-      alias: {
-        // Force the use of the web client to avoid Node.js specific modules (fs, net, tls) in browser
-        "@libsql/client": "@libsql/client/web",
-      },
+      alias: {}
     },
     build: {
       outDir: 'dist',
