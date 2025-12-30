@@ -476,38 +476,41 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
             showFilters ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 md:max-h-none md:opacity-100 hidden md:block'
         }`}>
-           <div className="flex items-center gap-2 md:gap-3 bg-slate-50 border border-slate-100 rounded-xl md:rounded-2xl px-3 md:px-4 py-2 h-12">
-              <Calendar className="w-5 h-5 text-slate-400 shrink-0" />
-              <div className="flex items-center gap-2 overflow-hidden w-full h-full">
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none p-0 text-sm font-bold text-slate-700 focus:ring-0 outline-none w-full min-w-0" />
-                <span className="text-slate-300">-</span>
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none p-0 text-sm font-bold text-slate-700 focus:ring-0 outline-none w-full min-w-0" />
+           <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-3 py-2 h-12 shadow-sm relative group focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+              <Calendar className="w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors shrink-0" />
+              <div className="flex items-center gap-2 flex-1 h-full">
+                <div className="relative flex-1 group/date">
+                    <span className="absolute -top-2 left-0 text-[9px] font-bold text-slate-400 bg-white px-1 opacity-0 group-focus-within/date:opacity-100 transition-opacity pointer-events-none">Từ ngày</span>
+                    <input 
+                        type="date" 
+                        value={startDate} 
+                        onChange={(e) => setStartDate(e.target.value)} 
+                        className="w-full bg-transparent border-none p-0 text-xs md:text-sm font-bold text-slate-700 focus:ring-0 outline-none cursor-pointer" 
+                    />
+                </div>
+                <span className="text-slate-300 font-light">|</span>
+                <div className="relative flex-1 group/date">
+                    <span className="absolute -top-2 left-0 text-[9px] font-bold text-slate-400 bg-white px-1 opacity-0 group-focus-within/date:opacity-100 transition-opacity pointer-events-none">Đến ngày</span>
+                    <input 
+                        type="date" 
+                        value={endDate} 
+                        onChange={(e) => setEndDate(e.target.value)} 
+                        className="w-full bg-transparent border-none p-0 text-xs md:text-sm font-bold text-slate-700 focus:ring-0 outline-none cursor-pointer" 
+                    />
+                </div>
               </div>
+              {(startDate || endDate) && (
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-1 hover:bg-slate-100 text-slate-400 hover:text-red-500 rounded-full transition-colors">
+                    <X className="w-4 h-4" />
+                </button>
+              )}
            </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 overflow-hidden pt-1">
-          {/* ... (Filter dropdowns) ... */}
-          <div className="md:hidden relative w-full grid grid-cols-2 gap-2">
-             <div className="flex items-center gap-2 bg-slate-100 px-3 py-2.5 rounded-xl border border-slate-200 relative">
-                <Layers className="w-4 h-4 text-blue-500" />
-                <span className="text-xs font-bold text-slate-700 uppercase flex-1 truncate">
-                    {selectedModule === 'ALL' ? 'Tất cả' : selectedModule}
-                </span>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-                <select
-                    value={selectedModule}
-                    onChange={(e) => onModuleChange && onModuleChange(e.target.value)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                >
-                    <option value="ALL">Tất cả</option>
-                    {visibleModules.map(m => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
-                    ))}
-                </select>
-             </div>
-
-             <div className="flex items-center gap-2 bg-slate-100 px-3 py-2.5 rounded-xl border border-slate-200 relative">
+          {/* Mobile Filters */}
+          <div className="md:hidden relative w-full">
+             <div className="flex items-center gap-2 bg-slate-100 px-3 py-2.5 rounded-xl border border-slate-200 relative w-full">
                 <Filter className="w-4 h-4 text-slate-500" />
                 <span className="text-xs font-bold text-slate-700 uppercase flex-1 truncate">
                     {FILTER_OPTIONS.find(f => f.value === filter)?.label || 'Bộ lọc'}
@@ -552,7 +555,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
       {/* List Content - Scrollable */}
       <div ref={listContainerRef} className="flex-1 overflow-y-auto min-h-0 space-y-3 px-3 py-3 no-scrollbar bg-slate-50">
-        {/* ... (Same list rendering logic) ... */}
         {sortedProjectCodes.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center text-slate-400 bg-white/50 rounded-3xl border border-dashed border-slate-200 mx-1 shadow-inner animate-in fade-in zoom-in duration-300">
             <div className="p-5 bg-slate-100 rounded-full mb-4">

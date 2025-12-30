@@ -44,7 +44,8 @@ import {
 import { 
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
   Home, LogOut, Box, WifiOff, QrCode, Zap, X, 
-  User as UserIcon, Shield, UserCircle, Menu, PanelLeftClose, PanelLeftOpen
+  User as UserIcon, Shield, UserCircle, Menu, PanelLeftClose, PanelLeftOpen,
+  FileText
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -78,7 +79,7 @@ const MobileNavItem: React.FC<MobileNavItemProps> = ({ viewName, label, icon: Ic
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<ViewState>('HOME');
-  const [currentModule, setCurrentModule] = useState<string>('SITE');
+  const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   
   // Plans State
@@ -110,8 +111,10 @@ const App = () => {
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null);
   const [initialFormState, setInitialFormState] = useState<Partial<Inspection> | undefined>(undefined);
 
-  // Scanner State
+  // Scanner & Module Selection State
   const [showScanner, setShowScanner] = useState(false);
+  const [showModuleSelector, setShowModuleSelector] = useState(false);
+  const [pendingInspectionData, setPendingInspectionData] = useState<Partial<Inspection> | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
@@ -346,6 +349,27 @@ const App = () => {
       setSelectedPlan(item);
   };
 
+  // --- NEW: Module Selection Handler ---
+  const handleSelectModule = (moduleId: string) => {
+      const template = templates[moduleId] || [];
+      const baseData = pendingInspectionData || {};
+      
+      const newFormState: Partial<Inspection> = {
+          ...baseData,
+          type: moduleId as any,
+          inspectorName: user?.name || '',
+          date: new Date().toISOString().split('T')[0],
+          items: template
+      };
+      
+      setInitialFormState(newFormState);
+      setCurrentModule(moduleId as any); 
+      setSelectedInspectionId(null);
+      setShowModuleSelector(false);
+      setPendingInspectionData(null);
+      setView('FORM');
+  };
+
   // Scanner Logic
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -393,12 +417,7 @@ const App = () => {
                  matchingPlan = plans.find(p => String(p.ma_nha_may).toLowerCase() === scannedData.toLowerCase());
              }
              
-             const partialData: Partial<Inspection> = {
-                type: currentModule !== 'ALL' ? currentModule as any : 'SITE',
-                inspectorName: user?.name || '',
-                date: new Date().toISOString().split('T')[0],
-                items: templates[currentModule !== 'ALL' ? currentModule : 'SITE'] || []
-             };
+             const partialData: Partial<Inspection> = {};
 
              if (matchingPlan) {
                 partialData.ma_ct = matchingPlan.ma_ct;
@@ -412,10 +431,10 @@ const App = () => {
                 partialData.ma_nha_may = scannedData;
              }
 
-             setInitialFormState(partialData);
-             setSelectedInspectionId(null);
-             setView('FORM');
+             // Instead of creating form immediately, ask for Module Type
+             setPendingInspectionData(partialData);
              setShowScanner(false);
+             setShowModuleSelector(true);
              return;
           }
         }
@@ -601,9 +620,8 @@ const App = () => {
                     </button>
                     <button 
                         onClick={() => { 
-                        setInitialFormState({type: currentModule !== 'ALL' ? currentModule as any : 'SITE', inspectorName: user.name, items: templates[currentModule !== 'ALL' ? currentModule : 'SITE'] || []}); 
-                        setSelectedInspectionId(null); 
-                        setView('FORM'); 
+                            setPendingInspectionData({}); 
+                            setShowModuleSelector(true);
                         }} 
                         className="bg-blue-600 text-white p-2.5 md:px-4 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 flex items-center transition-transform active:scale-95 whitespace-nowrap"
                     >
@@ -621,7 +639,7 @@ const App = () => {
                   </div>
                 </div>
 
-                <div className="hidden lg:flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar gap-2 scroll-smooth">
+                <div className="flex w-full bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar gap-2 scroll-smooth">
                     <button
                         key="ALL"
                         onClick={() => setCurrentModule('ALL')}
@@ -702,6 +720,39 @@ const App = () => {
 
   return (
     <div className="flex h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
+      
+      {/* Module Selection Modal */}
+      {showModuleSelector && (
+        <div className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <div>
+                        <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">Chọn loại phiếu</h3>
+                        <p className="text-xs text-slate-500 font-medium">Vui lòng chọn quy trình kiểm tra</p>
+                    </div>
+                    <button onClick={() => setShowModuleSelector(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors active:scale-90">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="p-4 grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto no-scrollbar">
+                    {visibleModules.map(mod => (
+                        <button 
+                            key={mod.id}
+                            onClick={() => handleSelectModule(mod.id)}
+                            className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-200 bg-white hover:border-blue-500 hover:bg-blue-50 transition-all gap-3 group active:scale-95 shadow-sm"
+                        >
+                            <div className="w-10 h-10 rounded-full bg-slate-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors">
+                                <FileText className="w-5 h-5 text-slate-500 group-hover:text-blue-700" />
+                            </div>
+                            <span className="font-black text-xs text-slate-700 group-hover:text-blue-700 uppercase tracking-tight text-center">{mod.label}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Scanner overlay */}
       {showScanner && (
         <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
             <button onClick={() => setShowScanner(false)} className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
@@ -722,6 +773,7 @@ const App = () => {
       )}
       {!isQC && (
         <div className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-white shrink-0 transition-all duration-300 ease-in-out`}>
+            {/* ... Sidebar Content ... */}
             <div className={`p-4 border-b border-slate-800 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} h-20`}>
                 {!isSidebarCollapsed ? (
                     <div className="flex items-center gap-3 overflow-hidden">
