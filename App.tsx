@@ -6,7 +6,6 @@ import {
   MOCK_USERS, 
   MOCK_INSPECTIONS, 
   MOCK_WORKSHOPS, 
-  MOCK_PLAN_DATA,
   IQC_CHECKLIST_TEMPLATE,
   PQC_CHECKLIST_TEMPLATE,
   SQC_MAT_CHECKLIST_TEMPLATE,
@@ -44,8 +43,8 @@ import {
 } from './services/apiService';
 import { 
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
-  Home, LogOut, Box, WifiOff, Layers, QrCode, Zap, X, ChevronDown, 
-  User as UserIcon, Shield, UserCircle, Briefcase, ChevronLeft, Menu, PanelLeftClose, PanelLeftOpen
+  Home, LogOut, Box, WifiOff, QrCode, Zap, X, 
+  User as UserIcon, Shield, UserCircle, Menu, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -227,12 +226,10 @@ const App = () => {
   useEffect(() => {
     if (user) {
         loadInspections();
-        // Removed explicit loadPlans() here to prevent double fetch on mount combined with the pagination effect below
     }
   }, [user]);
 
   // Reload plans when user is present OR search/page changes
-  // This single effect handles both initial load (if planPage is set) and updates
   useEffect(() => {
       if (user) {
           loadPlans();
@@ -283,7 +280,6 @@ const App = () => {
         setConnectionError(false);
     } catch (e) {
         console.error("Error loading plans:", e);
-        // Fallback to offline data handled inside fetchPlans, but if it bubbles up:
         setConnectionError(true);
     } finally {
         setIsLoadingPlans(false);
@@ -348,7 +344,6 @@ const App = () => {
 
   const handleViewPlan = (item: PlanItem) => {
       setSelectedPlan(item);
-      // We don't switch view here anymore, instead we show modal inside PLAN view
   };
 
   // Scanner Logic
@@ -397,8 +392,6 @@ const App = () => {
              if (!matchingPlan) {
                  matchingPlan = plans.find(p => String(p.ma_nha_may).toLowerCase() === scannedData.toLowerCase());
              }
-             
-             // If not found in current page, assume it's just a code or trigger search (implement later if needed)
              
              const partialData: Partial<Inspection> = {
                 type: currentModule !== 'ALL' ? currentModule as any : 'SITE',
@@ -512,7 +505,7 @@ const App = () => {
               )}
             </>
           );
-          case 'PLAN_DETAIL': return null; // Removed view
+          case 'PLAN_DETAIL': return null;
           case 'SETTINGS': return (
             <Settings 
                 currentUser={user}
@@ -543,7 +536,7 @@ const App = () => {
           case 'CONVERT_3D': return <ThreeDConverter />;
           case 'LIST': return (
             <div className="flex flex-col h-full overflow-hidden">
-              {/* Header/Filter Area - Sticky in InspectionList but can be passed down */}
+              {/* Header/Filter Area */}
               {isQC && isUserMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[1px]" onClick={() => setIsUserMenuOpen(false)}></div>
