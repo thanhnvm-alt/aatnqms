@@ -45,7 +45,7 @@ import {
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
   Home, LogOut, Box, WifiOff, QrCode, Zap, X, 
   User as UserIcon, Shield, UserCircle, Menu, PanelLeftClose, PanelLeftOpen,
-  FileText
+  FileText, ChevronDown
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -121,6 +121,8 @@ const App = () => {
 
   // User Menu State for QC
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isModuleMenuOpen, setIsModuleMenuOpen] = useState(false);
+  const moduleMenuRef = useRef<HTMLDivElement>(null);
 
   // --- SIDEBAR STATE LOGIC ---
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -156,6 +158,16 @@ const App = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [user]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (moduleMenuRef.current && !moduleMenuRef.current.contains(event.target as Node)) {
+            setIsModuleMenuOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const toggleSidebar = () => {
     if (isQC) return;
@@ -606,10 +618,58 @@ const App = () => {
 
               <div className="flex-none px-4 pt-4 pb-2">
                 <div className="flex justify-between items-center mb-3">
-                  <h2 className="text-lg font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
-                    <List className="w-5 h-5 text-blue-600" />
-                    <span className="truncate">Danh sách kiểm tra</span>
-                  </h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
+                        <List className="w-5 h-5 text-blue-600" />
+                        <span className="hidden sm:inline truncate">Danh sách kiểm tra</span>
+                        <span className="sm:hidden">DS Kiểm Tra</span>
+                    </h2>
+                    
+                    {/* Module Selection Dropdown */}
+                    <div className="relative" ref={moduleMenuRef}>
+                        <button 
+                            onClick={() => setIsModuleMenuOpen(!isModuleMenuOpen)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm hover:border-blue-400 hover:text-blue-600 transition-all active:scale-95"
+                        >
+                            <span className="uppercase tracking-wide">{currentModule === 'ALL' ? 'Tất cả' : visibleModules.find(m => m.id === currentModule)?.label}</span>
+                            <div className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${currentModule !== 'ALL' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                {currentModule === 'ALL' ? inspections.length : inspections.filter(i => i.type === currentModule).length}
+                            </div>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isModuleMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isModuleMenuOpen && (
+                            <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in duration-200 origin-top-left">
+                                <button
+                                    onClick={() => { setCurrentModule('ALL'); setIsModuleMenuOpen(false); }}
+                                    className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wide transition-colors ${
+                                        currentModule === 'ALL' ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <span>Tất cả</span>
+                                    <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[9px]">{inspections.length}</span>
+                                </button>
+                                <div className="h-px bg-slate-50 my-1"></div>
+                                {visibleModules.map(mod => {
+                                    const count = inspections.filter(i => i.type === mod.id).length;
+                                    return (
+                                        <button
+                                            key={mod.id}
+                                            onClick={() => { setCurrentModule(mod.id as any); setIsModuleMenuOpen(false); }}
+                                            className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wide transition-colors ${
+                                                currentModule === mod.id ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <span>{mod.label}</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[9px] ${currentModule === mod.id ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                  </div>
+
                   <div className="flex gap-2 items-center">
                     <button 
                         onClick={() => setShowScanner(true)}
@@ -637,43 +697,6 @@ const App = () => {
                         </button>
                     )}
                   </div>
-                </div>
-
-                <div className="flex w-full bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar gap-2 scroll-smooth">
-                    <button
-                        key="ALL"
-                        onClick={() => setCurrentModule('ALL')}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-                            currentModule === 'ALL'
-                            ? 'bg-slate-900 text-white shadow-md' 
-                            : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
-                        }`}
-                    >
-                        Tất cả
-                        <span className={`px-1.5 py-0.5 rounded-lg text-[9px] font-mono ${currentModule === 'ALL' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                            {inspections.length}
-                        </span>
-                    </button>
-                    {visibleModules.map(tab => {
-                        const count = inspections.filter(i => i.type === tab.id).length;
-                        const isActive = currentModule === tab.id;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setCurrentModule(tab.id as any)}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0 ${
-                                    isActive 
-                                    ? 'bg-slate-900 text-white shadow-md' 
-                                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
-                                }`}
-                            >
-                                {tab.label}
-                                <span className={`px-1.5 py-0.5 rounded-lg text-[9px] font-mono ${isActive ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                    {count}
-                                </span>
-                            </button>
-                        );
-                    })}
                 </div>
               </div>
               

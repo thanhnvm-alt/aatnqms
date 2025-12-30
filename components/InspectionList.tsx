@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   Briefcase,
   Loader2,
-  Upload
+  Upload,
+  ArrowRight
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -91,9 +92,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +106,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
         setShowExportMenu(false);
+      }
+      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+        setShowFilterMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -388,173 +394,142 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     <div className="flex flex-col h-full overflow-hidden bg-slate-50 relative">
       <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx,.xls,.csv" className="hidden" />
       
-      {/* Search and Filters Section - Sticky */}
-      <div className="bg-white p-3 md:p-4 rounded-b-2xl md:rounded-2xl shadow-sm border-b md:border border-slate-200 space-y-3 shrink-0 z-30 transition-all">
-        <div className="flex gap-2 h-12">
-            <button 
-                onClick={() => setShowFilters(!showFilters)}
-                className={`md:hidden w-12 rounded-xl flex items-center justify-center transition-all ${
-                    showFilters || activeFilterCount > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
-                }`}
-            >
-                <SlidersHorizontal className="w-5 h-5" />
-                {activeFilterCount > 0 && (
-                    <span className="ml-1 text-[10px] font-black bg-blue-600 text-white w-4 h-4 flex items-center justify-center rounded-full absolute top-2 right-1 border-2 border-white">
-                        {activeFilterCount}
-                    </span>
-                )}
-            </button>
-
-            <div className="relative group flex-1 h-full">
-              <Search className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-blue-600 transition-colors" />
+      {/* Consolidated Header Bar */}
+      <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm z-30 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 py-1">
+            
+            {/* 1. Search Box - Flexible */}
+            <div className="relative group min-w-[180px] max-w-[280px] shrink-0">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-600 transition-colors" />
               <input 
                 type="text" 
-                placeholder="Tìm sản phẩm, dự án, mã..." 
+                placeholder="Tìm sản phẩm, dự án..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full h-full pl-10 pr-9 md:pl-12 md:pr-12 bg-slate-50 border-2 border-transparent focus:border-blue-500 rounded-xl md:rounded-2xl text-base font-medium outline-none transition-all focus:bg-white shadow-inner placeholder:text-slate-400"
+                className="w-full pl-9 pr-8 h-9 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
               />
               {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors p-1"><X className="w-5 h-5"/></button>
+                <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"><X className="w-3.5 h-3.5"/></button>
               )}
             </div>
-            
-            {!isQC && (
-                <div className="flex gap-2 h-full">
-                    {onImportInspections && (
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isImporting}
-                            className="h-full w-12 md:w-auto md:px-4 bg-green-50 text-green-600 border border-green-200 rounded-xl md:rounded-2xl flex items-center justify-center gap-2 hover:bg-green-100 active:scale-95 transition-all shadow-sm"
-                            title="Import Excel"
-                        >
-                            {isImporting ? <Loader2 className="w-5 h-5 animate-spin"/> : <Upload className="w-5 h-5 md:w-4 md:h-4" />}
-                            <span className="hidden md:inline font-bold text-xs uppercase tracking-widest">Nhập</span>
-                        </button>
-                    )}
 
-                    <div className="relative h-full" ref={exportMenuRef}>
-                        <button 
-                            onClick={() => setShowExportMenu(!showExportMenu)}
-                            className="h-full w-12 md:w-auto md:px-4 bg-slate-900 text-white rounded-xl md:rounded-2xl flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all shadow-lg shadow-slate-200"
-                        >
-                            <FileDown className="w-5 h-5 md:w-4 md:h-4" />
-                            <span className="hidden md:inline font-bold text-xs uppercase tracking-widest">Xuất</span>
-                        </button>
+            <div className="h-6 w-px bg-slate-200 mx-1 shrink-0 hidden sm:block"></div>
 
-                        {showExportMenu && (
-                            <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in duration-200 origin-top-right">
-                                <div className="px-4 py-2 border-b border-slate-50 mb-1">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tùy chọn xuất file</p>
-                                </div>
-                                <button 
-                                    onClick={() => handleExport(filteredInspections, `Bao_cao_${currentModuleLabel}`)}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors text-left font-bold text-xs uppercase"
-                                >
-                                    <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-                                        <Layers className="w-4 h-4" />
-                                    </div>
-                                    Xuất {currentModuleLabel} ({filteredInspections.length})
-                                </button>
-                                <button 
-                                    onClick={() => handleExport(allInspections, "Bao_cao_tong_hop_AATN")}
-                                    className="w-full flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left font-bold text-xs uppercase"
-                                >
-                                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-                                        <LayoutGrid className="w-4 h-4" />
-                                    </div>
-                                    Xuất tất cả Module ({allInspections.length})
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
+            {/* 2. Compact Date Picker */}
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 h-9 shrink-0 group focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-200">
+               <Calendar className="w-3.5 h-3.5 text-slate-400 mr-2 group-focus-within:text-blue-500" />
+               <input 
+                   type="date" 
+                   value={startDate} 
+                   onChange={(e) => setStartDate(e.target.value)} 
+                   className="bg-transparent text-[10px] md:text-xs font-bold text-slate-600 outline-none w-[85px] cursor-pointer" 
+                   title="Từ ngày"
+               />
+               <ArrowRight className="w-3 h-3 text-slate-300 mx-1" />
+               <input 
+                   type="date" 
+                   value={endDate} 
+                   onChange={(e) => setEndDate(e.target.value)} 
+                   className="bg-transparent text-[10px] md:text-xs font-bold text-slate-600 outline-none w-[85px] cursor-pointer" 
+                   title="Đến ngày"
+               />
+               {(startDate || endDate) && (
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="ml-1 text-slate-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+               )}
+            </div>
 
-        {/* Date Filter Row - Collapsible on Mobile */}
-        <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            showFilters ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0 md:max-h-none md:opacity-100 hidden md:block'
-        }`}>
-           <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-3 py-2 h-12 shadow-sm relative group focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
-              <Calendar className="w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors shrink-0" />
-              <div className="flex items-center gap-2 flex-1 h-full">
-                <div className="relative flex-1 group/date">
-                    <span className="absolute -top-2 left-0 text-[9px] font-bold text-slate-400 bg-white px-1 opacity-0 group-focus-within/date:opacity-100 transition-opacity pointer-events-none">Từ ngày</span>
-                    <input 
-                        type="date" 
-                        value={startDate} 
-                        onChange={(e) => setStartDate(e.target.value)} 
-                        className="w-full bg-transparent border-none p-0 text-xs md:text-sm font-bold text-slate-700 focus:ring-0 outline-none cursor-pointer" 
-                    />
-                </div>
-                <span className="text-slate-300 font-light">|</span>
-                <div className="relative flex-1 group/date">
-                    <span className="absolute -top-2 left-0 text-[9px] font-bold text-slate-400 bg-white px-1 opacity-0 group-focus-within/date:opacity-100 transition-opacity pointer-events-none">Đến ngày</span>
-                    <input 
-                        type="date" 
-                        value={endDate} 
-                        onChange={(e) => setEndDate(e.target.value)} 
-                        className="w-full bg-transparent border-none p-0 text-xs md:text-sm font-bold text-slate-700 focus:ring-0 outline-none cursor-pointer" 
-                    />
-                </div>
-              </div>
-              {(startDate || endDate) && (
-                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-1 hover:bg-slate-100 text-slate-400 hover:text-red-500 rounded-full transition-colors">
-                    <X className="w-4 h-4" />
-                </button>
-              )}
-           </div>
-        </div>
+            <div className="h-6 w-px bg-slate-200 mx-1 shrink-0 hidden sm:block"></div>
 
-        <div className="flex items-center justify-between gap-3 overflow-hidden pt-1">
-          {/* Mobile Filters */}
-          <div className="md:hidden relative w-full">
-             <div className="flex items-center gap-2 bg-slate-100 px-3 py-2.5 rounded-xl border border-slate-200 relative w-full">
-                <Filter className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-bold text-slate-700 uppercase flex-1 truncate">
-                    {FILTER_OPTIONS.find(f => f.value === filter)?.label || 'Bộ lọc'}
-                </span>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-                <select
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value as any)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            {/* 3. Filter Dropdown (Replaces horizontal buttons) */}
+            <div className="relative shrink-0" ref={filterMenuRef}>
+                <button
+                    onClick={() => setShowFilterMenu(!showFilterMenu)}
+                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm min-w-[130px] justify-between"
                 >
-                    {FILTER_OPTIONS.map(f => (
-                        <option key={f.value} value={f.value}>{f.label}</option>
-                    ))}
-                </select>
-             </div>
-          </div>
+                    <div className="flex items-center gap-2">
+                        <Filter className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="uppercase tracking-wider">
+                            {FILTER_OPTIONS.find(f => f.value === filter)?.label}
+                        </span>
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showFilterMenu ? 'rotate-180 text-blue-500' : ''}`} />
+                </button>
 
-          <div className="hidden md:flex gap-2 overflow-x-auto pb-2 no-scrollbar flex-1 snap-x">
-            {FILTER_OPTIONS.map((f) => (
-              <button
-                key={f.label}
-                onClick={() => setFilter(f.value as any)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all border snap-start ${
-                  filter === f.value 
-                  ? 'bg-slate-800 text-white border-slate-800 shadow-lg' 
-                  : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {f.icon && <f.icon className="w-4 h-4" />}
-                {f.label}
-              </button>
-            ))}
-          </div>
+                {showFilterMenu && (
+                    <div className="absolute top-full mt-1 left-0 w-48 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-left">
+                        {FILTER_OPTIONS.map((f) => (
+                            <button
+                                key={f.value}
+                                onClick={() => { setFilter(f.value as any); setShowFilterMenu(false); }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide transition-colors border-b border-slate-50 last:border-0 ${
+                                    filter === f.value 
+                                    ? 'bg-blue-50 text-blue-700' 
+                                    : 'text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                {f.icon ? <f.icon className={`w-4 h-4 ${filter === f.value ? 'text-blue-500' : 'text-slate-400'}`} /> : <div className="w-4 h-4" />}
+                                {f.label}
+                                {filter === f.value && <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-blue-500" />}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
 
-          {(searchTerm || startDate || endDate || filter !== 'ALL') && (
-             <button onClick={clearFilters} className="p-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-colors active:scale-90 shadow-sm shrink-0">
-               <X className="w-5 h-5" />
-             </button>
-           )}
+            {/* 4. Import/Export Actions */}
+            {!isQC && (
+                <>
+                    <div className="flex-1"></div>
+                    <div className="flex items-center gap-2 shrink-0 ml-auto">
+                        {onImportInspections && (
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isImporting}
+                                className="h-9 px-3 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg flex items-center gap-1.5 hover:bg-emerald-100 transition-all active:scale-95"
+                                title="Import Excel"
+                            >
+                                {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
+                                <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Nhập</span>
+                            </button>
+                        )}
+
+                        <div className="relative h-9" ref={exportMenuRef}>
+                            <button 
+                                onClick={() => setShowExportMenu(!showExportMenu)}
+                                className="h-full px-3 bg-slate-900 text-white rounded-lg flex items-center gap-1.5 hover:bg-black transition-all active:scale-95 shadow-md"
+                            >
+                                <FileDown className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Xuất</span>
+                            </button>
+
+                            {showExportMenu && (
+                                <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in duration-200 origin-top-right">
+                                    <button 
+                                        onClick={() => handleExport(filteredInspections, `Bao_cao_${currentModuleLabel}`)}
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors text-left font-bold text-xs"
+                                    >
+                                        <Layers className="w-3.5 h-3.5" />
+                                        Xuất {currentModuleLabel}
+                                    </button>
+                                    <button 
+                                        onClick={() => handleExport(allInspections, "Bao_cao_tong_hop_AATN")}
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left font-bold text-xs"
+                                    >
+                                        <LayoutGrid className="w-3.5 h-3.5" />
+                                        Xuất tất cả Module
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
       </div>
 
       {/* List Content - Scrollable */}
       <div ref={listContainerRef} className="flex-1 overflow-y-auto min-h-0 space-y-3 px-3 py-3 no-scrollbar bg-slate-50">
+        {/* ... (Same list rendering logic) ... */}
         {sortedProjectCodes.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center text-slate-400 bg-white/50 rounded-3xl border border-dashed border-slate-200 mx-1 shadow-inner animate-in fade-in zoom-in duration-300">
             <div className="p-5 bg-slate-100 rounded-full mb-4">
