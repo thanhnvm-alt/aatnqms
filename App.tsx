@@ -93,7 +93,6 @@ const App = () => {
   
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
-  const [missingApiKey, setMissingApiKey] = useState(false); // Check for API Key on mount
   
   // Settings Tab State
   const [settingsInitialTab, setSettingsInitialTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE'>('PROFILE');
@@ -166,9 +165,6 @@ const App = () => {
 
   // --- AUTH FLOW ---
   useEffect(() => {
-    const key = getApiKey();
-    if (!key) setMissingApiKey(true);
-
     const tryAutoLogin = () => {
         const localData = localStorage.getItem(AUTH_STORAGE_KEY);
         if (localData) {
@@ -714,12 +710,6 @@ const App = () => {
 
   return (
     <div className="flex h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
-      {missingApiKey && (
-        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white p-2 z-[9999] text-center text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl animate-in slide-in-from-top duration-500">
-            <AlertTriangle className="w-4 h-4" />
-            ⚠️ System Alert: VITE_API_KEY Missing in Vercel Settings
-        </div>
-      )}
       {showScanner && (
         <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
             <button onClick={() => setShowScanner(false)} className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
