@@ -1,0 +1,1 @@
+// Deprecated - Firebase services moved to apiService.ts (using Turso & LocalStorage).

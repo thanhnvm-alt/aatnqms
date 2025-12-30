@@ -1,0 +1,9 @@
+{
+  "name": "Copy of Quản lý QA/QC AATN",
+  "description": "Ứng dụng quản lý Đảm bảo Chất lượng và Kiểm soát Chất lượng chuyên nghiệp cho kiểm tra hiện trường. Tích hợp báo cáo AI và đề xuất hành động khắc phục.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
