@@ -42,11 +42,10 @@ import {
   importUsers,
   importInspections
 } from './services/apiService';
-import { getApiKey } from './services/geminiService';
 import { 
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
   Home, LogOut, Box, WifiOff, Layers, QrCode, Zap, X, ChevronDown, 
-  User as UserIcon, Shield, UserCircle, Briefcase, ChevronLeft, Menu, PanelLeftClose, PanelLeftOpen, AlertTriangle 
+  User as UserIcon, Shield, UserCircle, Briefcase, ChevronLeft, Menu, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -804,7 +803,7 @@ const App = () => {
       )}
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
         {connectionError && (
-          <div className="bg-orange-50 text-white px-4 py-2 flex items-center justify-between z-[70] shadow-md shrink-0">
+          <div className="bg-orange-600 text-white px-4 py-2 flex items-center justify-between z-[70] shadow-md shrink-0">
             <div className="flex items-center gap-2 text-xs font-bold uppercase"><WifiOff className="w-4 h-4" /><span>Offline: Đang kết nối server...</span></div>
             <button onClick={checkConn} className="px-2 py-1 bg-white/20 rounded text-[10px] font-black uppercase">Thử lại</button>
           </div>
