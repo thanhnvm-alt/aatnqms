@@ -114,6 +114,11 @@ const App = () => {
   // Scanner & Module Selection State
   const [showScanner, setShowScanner] = useState(false);
   const [showModuleSelector, setShowModuleSelector] = useState(false);
+  
+  // New States for Scan Flow
+  const [isScanSelectionMode, setIsScanSelectionMode] = useState(false);
+  const [preSelectedModule, setPreSelectedModule] = useState<string | null>(null);
+
   const [pendingInspectionData, setPendingInspectionData] = useState<Partial<Inspection> | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -363,6 +368,17 @@ const App = () => {
 
   // --- NEW: Module Selection Handler ---
   const handleSelectModule = (moduleId: string) => {
+      // 1. Scan Mode Selection
+      if (isScanSelectionMode) {
+          setPreSelectedModule(moduleId);
+          setShowModuleSelector(false);
+          setIsScanSelectionMode(false);
+          // Launch Scanner AFTER module selection
+          setShowScanner(true);
+          return;
+      }
+
+      // 2. Normal Mode (Manual Create or Post-Scan)
       const template = templates[moduleId] || [];
       const baseData = pendingInspectionData || {};
       
@@ -443,10 +459,29 @@ const App = () => {
                 partialData.ma_nha_may = scannedData;
              }
 
-             // Instead of creating form immediately, ask for Module Type
-             setPendingInspectionData(partialData);
-             setShowScanner(false);
-             setShowModuleSelector(true);
+             // --- NEW: Handle Pre-selected Module ---
+             if (preSelectedModule) {
+                 // Use pre-selected module directly
+                 const template = templates[preSelectedModule] || [];
+                 const newFormState = {
+                     ...partialData,
+                     type: preSelectedModule as any,
+                     items: template,
+                     inspectorName: user?.name || '',
+                     date: new Date().toISOString().split('T')[0],
+                 };
+                 setInitialFormState(newFormState);
+                 setCurrentModule(preSelectedModule); // Optional: Switch view context to module
+                 setPreSelectedModule(null); // Reset
+                 
+                 setShowScanner(false);
+                 setView('FORM');
+             } else {
+                 // Fallback to old behavior (Select Module AFTER Scanning)
+                 setPendingInspectionData(partialData);
+                 setShowScanner(false);
+                 setShowModuleSelector(true);
+             }
              return;
           }
         }
@@ -672,7 +707,12 @@ const App = () => {
 
                   <div className="flex gap-2 items-center">
                     <button 
-                        onClick={() => setShowScanner(true)}
+                        onClick={() => {
+                            // NEW FLOW: Show Module Selector FIRST, set Scan Mode
+                            setPendingInspectionData(null);
+                            setIsScanSelectionMode(true);
+                            setShowModuleSelector(true);
+                        }}
                         className="group p-2.5 bg-slate-900 text-white rounded-xl shadow-lg hover:bg-black active:scale-95 transition-all flex items-center justify-center border border-slate-700"
                         title="Quét QR Code tạo phiếu"
                     >
@@ -680,7 +720,9 @@ const App = () => {
                     </button>
                     <button 
                         onClick={() => { 
+                            // Manual Creation
                             setPendingInspectionData({}); 
+                            setIsScanSelectionMode(false);
                             setShowModuleSelector(true);
                         }} 
                         className="bg-blue-600 text-white p-2.5 md:px-4 rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 flex items-center transition-transform active:scale-95 whitespace-nowrap"
@@ -751,10 +793,20 @@ const App = () => {
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <div>
-                        <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">Chọn loại phiếu</h3>
-                        <p className="text-xs text-slate-500 font-medium">Vui lòng chọn quy trình kiểm tra</p>
+                        <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
+                            {isScanSelectionMode ? 'Chọn loại phiếu để quét' : 'Chọn loại phiếu'}
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                            {isScanSelectionMode ? 'Sau khi chọn, camera sẽ bật để quét QR' : 'Vui lòng chọn quy trình kiểm tra'}
+                        </p>
                     </div>
-                    <button onClick={() => setShowModuleSelector(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors active:scale-90">
+                    <button 
+                        onClick={() => {
+                            setShowModuleSelector(false);
+                            setIsScanSelectionMode(false);
+                        }} 
+                        className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors active:scale-90"
+                    >
                         <X className="w-6 h-6" />
                     </button>
                 </div>
@@ -783,7 +835,9 @@ const App = () => {
             <div className="mb-10 text-center space-y-2 px-6">
                 <div className="inline-flex items-center gap-2 bg-blue-600/20 text-blue-400 px-4 py-1.5 rounded-full border border-blue-500/30 mb-2">
                     <Zap className="w-4 h-4 fill-blue-400" />
-                    <span className="text-xs font-black uppercase tracking-widest">Auto-Create Mode</span>
+                    <span className="text-xs font-black uppercase tracking-widest">
+                        {preSelectedModule ? `Đang quét cho ${preSelectedModule}` : 'Auto-Create Mode'}
+                    </span>
                 </div>
                 <h3 className="text-white text-xl font-black uppercase tracking-tighter">Quét mã sản phẩm</h3>
                 <p className="text-slate-400 text-sm font-medium">Tự động tạo phiếu kiểm tra mới từ mã quét được</p>
