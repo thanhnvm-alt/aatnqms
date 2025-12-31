@@ -114,8 +114,8 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
   const isOwner = inspection.inspectorName === user.name;
   
   // Rule: Admin/Manager can always edit. 
-  // QC can only edit if it is DRAFT AND they are the owner (creator).
-  const canEdit = user.role === 'ADMIN' || user.role === 'MANAGER' || (user.role === 'QC' && inspection.status === InspectionStatus.DRAFT && isOwner);
+  // Owner can edit their own report regardless of status.
+  const canEdit = user.role === 'ADMIN' || user.role === 'MANAGER' || isOwner;
   
   // Only Admin/Manager can delete
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';

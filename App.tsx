@@ -294,7 +294,8 @@ const App = () => {
     if (isLoadingPlans && !forceRefresh) return;
     setIsLoadingPlans(true);
     try {
-        const result = await fetchPlans(planSearchTerm, planPage, 2000);
+        // Fetch ALL plans (High limit, Page 1)
+        const result = await fetchPlans(planSearchTerm, 1, 100000);
         setPlans(result.items);
         setTotalPlans(result.total);
         setConnectionError(false);
@@ -554,7 +555,7 @@ const App = () => {
                 isLoading={isLoadingPlans} 
                 totalItems={totalPlans}
                 currentPage={planPage}
-                itemsPerPage={2000}
+                itemsPerPage={100000}
                 onPageChange={setPlanPage}
                 defaultTemplate={templates['PQC']} 
                 onViewPlan={handleViewPlan}
@@ -749,6 +750,7 @@ const App = () => {
                 currentModuleLabel={currentModule}
                 onSelect={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} 
                 userRole={user.role}
+                currentUserName={user.name}
                 selectedModule={currentModule}
                 onModuleChange={(mod) => setCurrentModule(mod)}
                 visibleModules={visibleModules}

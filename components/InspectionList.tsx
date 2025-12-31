@@ -27,7 +27,8 @@ import {
   Loader2,
   Upload,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  User
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -41,6 +42,7 @@ interface InspectionListProps {
   visibleModules?: { id: string; label: string }[];
   onImportInspections?: (inspections: Inspection[]) => Promise<void>;
   onRefresh?: () => void;
+  currentUserName?: string;
 }
 
 const PROJECTS_PER_PAGE = 10;
@@ -84,10 +86,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   onModuleChange,
   visibleModules = [],
   onImportInspections,
-  onRefresh
+  onRefresh,
+  currentUserName
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'ALL' | 'FLAGGED' | 'HIGH_PRIORITY' | 'DRAFT'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'FLAGGED' | 'HIGH_PRIORITY' | 'DRAFT' | 'MY_REPORTS'>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
@@ -166,6 +169,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         
         if (!matchesSearch) return false;
 
+        if (filter === 'MY_REPORTS') {
+            if (!currentUserName) return false;
+            // Case insensitive check for inspector name
+            if ((item.inspectorName || '').toLowerCase() !== currentUserName.toLowerCase()) return false;
+        }
+
         if (filter === 'FLAGGED' && item.status !== InspectionStatus.FLAGGED) return false;
         if (filter === 'HIGH_PRIORITY' && item.priority !== Priority.HIGH) return false;
         if (filter === 'DRAFT' && item.status !== InspectionStatus.DRAFT) return false;
@@ -176,7 +185,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, searchTerm, filter, startDate, endDate]);
+  }, [inspections, searchTerm, filter, startDate, endDate, currentUserName]);
 
   const groupedItems = useMemo(() => {
     const groups: { [key: string]: Inspection[] } = {};
@@ -388,6 +397,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   const FILTER_OPTIONS = [
     { label: 'Tất cả', value: 'ALL' },
+    { label: 'Báo cáo của tôi', value: 'MY_REPORTS', icon: User },
     { label: 'Cần chú ý', value: 'FLAGGED', icon: AlertCircle },
     { label: 'Ưu tiên cao', value: 'HIGH_PRIORITY', icon: Zap },
     { label: 'Nháp', value: 'DRAFT' }
@@ -398,150 +408,141 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx,.xls,.csv" className="hidden" />
       
       {/* Consolidated Header Bar */}
-      <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm z-30 shrink-0">
-        <div className="flex flex-wrap items-center gap-2 py-1">
+      <div className="bg-white px-2 py-2 border-b border-slate-200 shadow-sm z-30 shrink-0">
+        <div className="flex flex-col gap-2">
             
-            {/* 1. Search Box - Flexible */}
-            <div className="relative group min-w-[180px] max-w-[280px] shrink-0">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-600 transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Tìm sản phẩm, dự án..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-8 h-9 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
-              />
-              {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"><X className="w-3.5 h-3.5"/></button>
+            {/* Row 1: Search, Filter, Refresh */}
+            <div className="flex items-center gap-2 w-full">
+              {/* Search Box - Flex 1 */}
+              <div className="relative group flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-600 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="Tìm mã, sản phẩm..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 h-9 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400"
+                />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"><X className="w-3.5 h-3.5"/></button>
+                )}
+              </div>
+
+              {/* Filter Dropdown */}
+              <div className="relative shrink-0" ref={filterMenuRef}>
+                  <button
+                      onClick={() => setShowFilterMenu(!showFilterMenu)}
+                      className="h-9 w-9 bg-white border border-slate-200 rounded-lg flex items-center justify-center gap-2 text-[10px] font-bold text-slate-700 hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm"
+                  >
+                      <Filter className="w-3.5 h-3.5" />
+                  </button>
+
+                  {showFilterMenu && (
+                      <div className="absolute top-full mt-1 right-0 w-48 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right">
+                          {FILTER_OPTIONS.map((f) => (
+                              <button
+                                  key={f.value}
+                                  onClick={() => { setFilter(f.value as any); setShowFilterMenu(false); }}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide transition-colors border-b border-slate-50 last:border-0 ${
+                                      filter === f.value 
+                                      ? 'bg-blue-50 text-blue-700' 
+                                      : 'text-slate-600 hover:bg-slate-50'
+                                  }`}
+                              >
+                                  {f.icon ? <f.icon className={`w-4 h-4 ${filter === f.value ? 'text-blue-500' : 'text-slate-400'}`} /> : <div className="w-4 h-4" />}
+                                  {f.label}
+                                  {filter === f.value && <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-blue-500" />}
+                              </button>
+                          ))}
+                      </div>
+                  )}
+              </div>
+
+              {/* Refresh Button */}
+              <button 
+                  onClick={onRefresh}
+                  className="h-9 w-9 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-400 transition-all shrink-0 shadow-sm active:scale-95"
+                  title="Tải lại dữ liệu"
+              >
+                  <RefreshCw className="w-4 h-4" />
+              </button>
+
+              {/* Import/Export Actions (Hidden on Mobile if not needed, or compact) */}
+              {!isQC && (
+                  <div className="flex items-center gap-2 shrink-0 hidden md:flex">
+                      <div className="h-6 w-px bg-slate-200 mx-1"></div>
+                      {onImportInspections && (
+                          <button 
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={isImporting}
+                              className="h-9 w-9 md:w-auto md:px-3 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg flex items-center justify-center gap-1.5 hover:bg-emerald-100 transition-all active:scale-95"
+                              title="Import Excel"
+                          >
+                              {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
+                              <span className="text-[10px] font-black uppercase tracking-widest hidden md:inline">Nhập</span>
+                          </button>
+                      )}
+
+                      <div className="relative h-9" ref={exportMenuRef}>
+                          <button 
+                              onClick={() => setShowExportMenu(!showExportMenu)}
+                              className="h-full w-9 md:w-auto md:px-3 bg-slate-900 text-white rounded-lg flex items-center justify-center gap-1.5 hover:bg-black transition-all active:scale-95 shadow-md"
+                          >
+                              <FileDown className="w-3.5 h-3.5" />
+                              <span className="text-[10px] font-black uppercase tracking-widest hidden md:inline">Xuất</span>
+                          </button>
+
+                          {showExportMenu && (
+                              <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in duration-200 origin-top-right">
+                                  <button 
+                                      onClick={() => handleExport(filteredInspections, `Bao_cao_${currentModuleLabel}`)}
+                                      className="w-full flex items-center gap-2 px-3 py-2.5 text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors text-left font-bold text-xs"
+                                  >
+                                      <Layers className="w-3.5 h-3.5" />
+                                      Xuất {currentModuleLabel}
+                                  </button>
+                                  <button 
+                                      onClick={() => handleExport(allInspections, "Bao_cao_tong_hop_AATN")}
+                                      className="w-full flex items-center gap-2 px-3 py-2.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left font-bold text-xs"
+                                  >
+                                      <LayoutGrid className="w-3.5 h-3.5" />
+                                      Xuất tất cả Module
+                                  </button>
+                              </div>
+                          )}
+                      </div>
+                  </div>
               )}
             </div>
 
-            <div className="h-6 w-px bg-slate-200 mx-1 shrink-0 hidden sm:block"></div>
-
-            {/* 2. Compact Date Picker */}
-            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 h-9 shrink-0 group focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-200">
-               <Calendar className="w-3.5 h-3.5 text-slate-400 mr-2 group-focus-within:text-blue-500" />
-               <input 
-                   type="date" 
-                   value={startDate} 
-                   onChange={(e) => setStartDate(e.target.value)} 
-                   className="bg-transparent text-[10px] md:text-xs font-bold text-slate-600 outline-none w-[85px] cursor-pointer" 
-                   title="Từ ngày"
-               />
-               <ArrowRight className="w-3 h-3 text-slate-300 mx-1" />
-               <input 
-                   type="date" 
-                   value={endDate} 
-                   onChange={(e) => setEndDate(e.target.value)} 
-                   className="bg-transparent text-[10px] md:text-xs font-bold text-slate-600 outline-none w-[85px] cursor-pointer" 
-                   title="Đến ngày"
-               />
-               {(startDate || endDate) && (
-                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="ml-1 text-slate-400 hover:text-red-500"><X className="w-3 h-3" /></button>
-               )}
+            {/* Row 2: Date Picker (Full Width) */}
+            <div className="w-full">
+               <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-2 h-9 w-full group focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-200">
+                   <div className="flex items-center gap-2 flex-1">
+                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                       <input 
+                           type="date" 
+                           value={startDate} 
+                           onChange={(e) => setStartDate(e.target.value)} 
+                           className="bg-transparent text-xs font-bold text-slate-600 outline-none w-full cursor-pointer" 
+                       />
+                   </div>
+                   <span className="text-slate-300 mx-2">-</span>
+                   <div className="flex items-center justify-end gap-2 flex-1">
+                       <input 
+                           type="date" 
+                           value={endDate} 
+                           onChange={(e) => setEndDate(e.target.value)} 
+                           className="bg-transparent text-xs font-bold text-slate-600 outline-none w-full text-right cursor-pointer" 
+                       />
+                   </div>
+               </div>
             </div>
-
-            <div className="h-6 w-px bg-slate-200 mx-1 shrink-0 hidden sm:block"></div>
-
-            {/* 3. Filter Dropdown (Replaces horizontal buttons) */}
-            <div className="relative shrink-0" ref={filterMenuRef}>
-                <button
-                    onClick={() => setShowFilterMenu(!showFilterMenu)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm min-w-[130px] justify-between"
-                >
-                    <div className="flex items-center gap-2">
-                        <Filter className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="uppercase tracking-wider">
-                            {FILTER_OPTIONS.find(f => f.value === filter)?.label}
-                        </span>
-                    </div>
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showFilterMenu ? 'rotate-180 text-blue-500' : ''}`} />
-                </button>
-
-                {showFilterMenu && (
-                    <div className="absolute top-full mt-1 left-0 w-48 bg-white border border-slate-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-left">
-                        {FILTER_OPTIONS.map((f) => (
-                            <button
-                                key={f.value}
-                                onClick={() => { setFilter(f.value as any); setShowFilterMenu(false); }}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide transition-colors border-b border-slate-50 last:border-0 ${
-                                    filter === f.value 
-                                    ? 'bg-blue-50 text-blue-700' 
-                                    : 'text-slate-600 hover:bg-slate-50'
-                                }`}
-                            >
-                                {f.icon ? <f.icon className={`w-4 h-4 ${filter === f.value ? 'text-blue-500' : 'text-slate-400'}`} /> : <div className="w-4 h-4" />}
-                                {f.label}
-                                {filter === f.value && <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-blue-500" />}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Refresh Button */}
-            <button 
-                onClick={onRefresh}
-                className="h-9 w-9 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-400 transition-all shrink-0 shadow-sm active:scale-95"
-                title="Tải lại dữ liệu"
-            >
-                <RefreshCw className="w-4 h-4" />
-            </button>
-
-            {/* 4. Import/Export Actions */}
-            {!isQC && (
-                <>
-                    <div className="flex-1"></div>
-                    <div className="flex items-center gap-2 shrink-0 ml-auto">
-                        {onImportInspections && (
-                            <button 
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={isImporting}
-                                className="h-9 px-3 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg flex items-center gap-1.5 hover:bg-emerald-100 transition-all active:scale-95"
-                                title="Import Excel"
-                            >
-                                {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Upload className="w-3.5 h-3.5" />}
-                                <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Nhập</span>
-                            </button>
-                        )}
-
-                        <div className="relative h-9" ref={exportMenuRef}>
-                            <button 
-                                onClick={() => setShowExportMenu(!showExportMenu)}
-                                className="h-full px-3 bg-slate-900 text-white rounded-lg flex items-center gap-1.5 hover:bg-black transition-all active:scale-95 shadow-md"
-                            >
-                                <FileDown className="w-3.5 h-3.5" />
-                                <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Xuất</span>
-                            </button>
-
-                            {showExportMenu && (
-                                <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in duration-200 origin-top-right">
-                                    <button 
-                                        onClick={() => handleExport(filteredInspections, `Bao_cao_${currentModuleLabel}`)}
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-slate-700 hover:bg-blue-50 hover:text-blue-600 transition-colors text-left font-bold text-xs"
-                                    >
-                                        <Layers className="w-3.5 h-3.5" />
-                                        Xuất {currentModuleLabel}
-                                    </button>
-                                    <button 
-                                        onClick={() => handleExport(allInspections, "Bao_cao_tong_hop_AATN")}
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left font-bold text-xs"
-                                    >
-                                        <LayoutGrid className="w-3.5 h-3.5" />
-                                        Xuất tất cả Module
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </>
-            )}
         </div>
       </div>
 
       {/* List Content - Scrollable */}
-      <div ref={listContainerRef} className="flex-1 overflow-y-auto min-h-0 space-y-3 px-3 py-3 no-scrollbar bg-slate-50">
-        {/* ... (Same list rendering logic) ... */}
+      <div ref={listContainerRef} className="flex-1 overflow-y-auto min-h-0 space-y-2 md:space-y-3 px-2 md:px-3 py-3 no-scrollbar bg-slate-50 pb-20">
         {sortedProjectCodes.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center text-slate-400 bg-white/50 rounded-3xl border border-dashed border-slate-200 mx-1 shadow-inner animate-in fade-in zoom-in duration-300">
             <div className="p-5 bg-slate-100 rounded-full mb-4">
@@ -551,7 +552,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mt-2">Thử điều chỉnh bộ lọc hoặc xóa từ khóa</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {pagedProjectCodes.map(projectCode => {
                 const groupItems = groupedItems[projectCode];
                 const stats = getGroupStats(groupItems);
@@ -559,99 +560,85 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 const firstItem = groupItems[0];
 
                 return (
-                    <div key={projectCode} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
-                        {/* Group Header */}
+                    <div key={projectCode} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
+                        {/* Group Header - Refactored for Mobile */}
                         <div 
                             onClick={() => toggleGroup(projectCode)}
-                            className={`p-3 md:p-4 border-b border-slate-100 relative cursor-pointer active:bg-blue-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 ${isExpanded ? 'bg-blue-50/30' : 'bg-white'}`}
+                            className={`p-3 border-b border-slate-100 relative cursor-pointer active:bg-blue-50 transition-colors flex items-start justify-between gap-3 ${isExpanded ? 'bg-blue-50/30' : 'bg-white'}`}
                         >
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1 md:mb-0">
-                                    <FolderOpen className={`w-5 h-5 shrink-0 ${isExpanded ? 'text-blue-600' : 'text-slate-400'}`} />
-                                    <h3 className="font-black text-sm md:text-base text-slate-900 uppercase tracking-tight truncate">
+                            <div className="flex items-start gap-2 flex-1 min-w-0">
+                                <FolderOpen className={`w-5 h-5 shrink-0 mt-0.5 ${isExpanded ? 'text-blue-600' : 'text-slate-400'}`} />
+                                <div className="flex flex-col min-w-0">
+                                    <h3 className="font-black text-sm text-slate-900 uppercase tracking-tight truncate leading-tight">
                                         <HighlightedText text={projectCode} highlight={searchTerm} />
                                     </h3>
-                                    <span className="hidden md:inline text-slate-300 mx-2">|</span>
-                                    <span className="hidden md:block text-xs font-bold text-slate-500 uppercase truncate">
+                                    <p className="text-[11px] font-medium text-slate-500 truncate leading-tight mt-0.5">
                                         <HighlightedText text={firstItem.ten_ct} highlight={searchTerm} />
-                                    </span>
-                                </div>
-                                <div className="md:hidden text-[11px] font-bold text-slate-500 uppercase truncate mt-1">
-                                    <HighlightedText text={firstItem.ten_ct} highlight={searchTerm} />
+                                    </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4 w-full md:w-auto">
-                                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mask-fade-right md:mask-none">
-                                    <div className="flex-shrink-0 flex items-center gap-1.5 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 h-7 md:h-8">
-                                        <Layers className="w-3 h-3 text-blue-500" />
-                                        <span className="text-[10px] md:text-xs font-black text-blue-700 uppercase whitespace-nowrap">{stats.total} <span className="hidden lg:inline">PHIẾU</span></span>
-                                    </div>
-                                    <div className="flex-shrink-0 flex items-center gap-1.5 bg-green-50 px-2 py-1 rounded-lg border border-green-100 h-7 md:h-8">
-                                        <CheckCircle2 className="w-3 h-3 text-green-600" />
-                                        <span className="text-[10px] md:text-xs font-black text-green-700 uppercase whitespace-nowrap">{stats.pass} <span className="hidden lg:inline">ĐẠT</span></span>
+                            <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-600">
+                                        <Layers className="w-3 h-3" /> {stats.total}
                                     </div>
                                     {stats.fail > 0 && (
-                                        <div className="flex-shrink-0 flex items-center gap-1.5 bg-red-50 px-2 py-1 rounded-lg border border-red-200 animate-pulse h-7 md:h-8">
-                                            <AlertCircle className="w-3 h-3 text-red-500" />
-                                            <span className="text-[10px] md:text-xs font-black text-red-700 uppercase whitespace-nowrap">{stats.fail} <span className="hidden lg:inline">LỖI</span></span>
+                                        <div className="flex items-center gap-1 bg-red-100 px-1.5 py-0.5 rounded text-[10px] font-bold text-red-600">
+                                            <AlertCircle className="w-3 h-3" /> {stats.fail}
                                         </div>
                                     )}
+                                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ml-1 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
                                 </div>
-                                <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : 'text-slate-400'} shrink-0`} />
                             </div>
                         </div>
 
                         {isExpanded && (
-                            <div className="bg-slate-50/50 p-2 md:p-4 animate-in slide-in-from-top-2 duration-300">
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            <div className="bg-slate-50/50 p-2 md:p-3 animate-in slide-in-from-top-2 duration-300">
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                                     {groupItems.map(inspection => (
                                         <div 
                                             key={inspection.id}
                                             onClick={() => onSelect(inspection.id)}
-                                            className="bg-white p-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between"
+                                            className="bg-white p-3 rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden flex flex-col active:scale-[0.98]"
                                         >
                                             {inspection.priority === Priority.HIGH && (
-                                                <div className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-xl z-10 shadow-md">
-                                                    <Zap className="w-3.5 h-3.5 fill-white" />
+                                                <div className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-lg z-10 shadow-md">
+                                                    <Zap className="w-3 h-3 fill-white" />
                                                 </div>
                                             )}
 
-                                            <div className="space-y-2 mb-2">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <h4 className="text-xs md:text-sm font-black text-slate-800 leading-snug line-clamp-2 group-hover:text-blue-700 transition-colors uppercase">
-                                                        <HighlightedText text={inspection.ten_hang_muc || 'CHƯA CÓ TÊN SP'} highlight={searchTerm} />
-                                                    </h4>
-                                                </div>
-                                                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
                                                     <span className="flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                                         <Hash className="w-3 h-3" />
                                                         <HighlightedText text={inspection.ma_nha_may || '---'} highlight={searchTerm} />
                                                     </span>
-                                                    <span className="flex items-center gap-1">
+                                                    <span className="flex items-center gap-1 text-[9px] text-slate-400">
                                                         <Clock className="w-3 h-3" /> {inspection.date}
                                                     </span>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-auto">
+                                            <h4 className="text-sm font-bold text-slate-800 leading-snug line-clamp-2 group-hover:text-blue-700 transition-colors uppercase mb-3">
+                                                <HighlightedText text={inspection.ten_hang_muc || 'CHƯA CÓ TÊN SP'} highlight={searchTerm} />
+                                            </h4>
+
+                                            <div className="mt-auto pt-2 border-t border-slate-50 flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest border ${getStatusColor(inspection.status)}`}>
+                                                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest border ${getStatusColor(inspection.status)}`}>
                                                         {getStatusLabel(inspection.status)}
                                                     </span>
                                                     {inspection.status !== InspectionStatus.DRAFT && (
-                                                        <div className={`flex items-baseline gap-0.5 px-1.5 py-0.5 rounded-md border ${
-                                                            inspection.score >= 90 ? 'bg-green-50 text-green-700 border-green-200' : 
-                                                            inspection.score >= 70 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-red-50 text-red-700 border-red-200'
+                                                        <span className={`text-xs font-black ${
+                                                            inspection.score >= 90 ? 'text-green-600' : 
+                                                            inspection.score >= 70 ? 'text-blue-600' : 'text-red-600'
                                                         }`}>
-                                                            <span className="text-xs font-black">{inspection.score}</span>
-                                                            <span className="text-[8px] font-bold">%</span>
-                                                        </div>
+                                                            {inspection.score}%
+                                                        </span>
                                                     )}
                                                 </div>
-                                                <div className="bg-slate-100 text-slate-400 rounded-full p-1 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
-                                                    <ChevronRight className="w-3 h-3" />
-                                                </div>
+                                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
                                             </div>
                                         </div>
                                     ))}
@@ -667,15 +654,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
       {/* Pagination Controls - Fixed */}
       {totalPages > 1 && (
-        <div className="shrink-0 h-16 flex items-center justify-center gap-4 bg-white border-t border-slate-200 px-4 z-20 shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="shrink-0 h-14 flex items-center justify-center gap-4 bg-white border-t border-slate-200 px-4 z-20 shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)]">
             <button 
                 disabled={currentPage === 1} 
                 onClick={() => setCurrentPage(p => p - 1)}
-                className="w-10 h-10 flex items-center justify-center bg-slate-50 text-blue-600 rounded-xl disabled:opacity-30 active:bg-blue-100 transition-colors shadow-sm border border-slate-100"
+                className="w-9 h-9 flex items-center justify-center bg-slate-50 text-blue-600 rounded-lg disabled:opacity-30 active:bg-blue-100 transition-colors shadow-sm border border-slate-100"
             >
                 <ChevronLeft className="w-5 h-5" />
             </button>
-            <div className="flex flex-col items-center min-w-[100px]">
+            <div className="flex flex-col items-center min-w-[80px]">
                 <span className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">Trang {currentPage} / {totalPages}</span>
                 <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                     <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${(currentPage / totalPages) * 100}%` }}></div>
@@ -684,7 +671,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             <button 
                 disabled={currentPage === totalPages} 
                 onClick={() => setCurrentPage(p => p + 1)}
-                className="w-10 h-10 flex items-center justify-center bg-slate-50 text-blue-600 rounded-xl disabled:opacity-30 active:bg-blue-100 transition-colors shadow-sm border border-slate-100"
+                className="w-9 h-9 flex items-center justify-center bg-slate-50 text-blue-600 rounded-lg disabled:opacity-30 active:bg-blue-100 transition-colors shadow-sm border border-slate-100"
             >
                 <ChevronRight className="w-5 h-5" />
             </button>

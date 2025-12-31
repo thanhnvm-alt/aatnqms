@@ -5,6 +5,7 @@ export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
   FAIL = 'Hỏng', 
+  CONDITIONAL = 'Có điều kiện'
 }
 
 export enum InspectionStatus {
@@ -28,6 +29,19 @@ export type ViewState = 'HOME' | 'DASHBOARD' | 'PLAN' | 'PLAN_DETAIL' | 'LIST' |
 
 // --- INTERFACES ---
 
+export interface NCR {
+  id: string;
+  createdDate: string;
+  issueDescription: string;
+  rootCause?: string;
+  solution?: string;
+  responsiblePerson?: string;
+  deadline?: string;
+  status: 'OPEN' | 'CLOSED';
+  imagesBefore?: string[]; // Hình ảnh lỗi
+  imagesAfter?: string[];  // Hình ảnh sau khi khắc phục
+}
+
 export interface CheckItem {
   id: string;
   category: string;
@@ -35,6 +49,7 @@ export interface CheckItem {
   status: CheckStatus;
   notes?: string;
   images?: string[];
+  ncr?: NCR;
 }
 
 export interface Inspection {

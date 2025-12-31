@@ -56,7 +56,7 @@ export const generateInspectionAnalysis = async (inspection: Inspection): Promis
 };
 
 /**
- * Tạo gợi ý khắc phục nhanh cho một hạng mục lỗi cụ thể
+ * Tạo gợi ý khắc phục nhanh cho một hạng mục lỗi cụ thể (Plain text)
  */
 export const generateItemSuggestion = async (item: CheckItem, context?: string): Promise<string> => {
   try {
@@ -78,6 +78,47 @@ Bối cảnh dự án: ${context || 'Nội thất AA'}`,
   } catch (error) {
     console.error("Item suggestion failed:", error);
     return "Lỗi gợi ý AI (Kết nối).";
+  }
+};
+
+/**
+ * NEW: Phân tích NCR để tìm nguyên nhân gốc rễ và biện pháp khắc phục
+ */
+export const generateNCRSuggestions = async (
+  issueDescription: string, 
+  itemLabel: string
+): Promise<{ rootCause: string; solution: string }> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Phân tích sự không phù hợp (NCR) trong sản xuất nội thất/xây dựng:
+      - Hạng mục: ${itemLabel}
+      - Mô tả lỗi chi tiết: ${issueDescription}`,
+      config: {
+        systemInstruction: `Bạn là chuyên gia quản lý chất lượng (QA/QC) và kỹ thuật sản xuất. 
+        Nhiệm vụ: Dựa trên mô tả lỗi, hãy phân tích Nguyên nhân gốc rễ (Root Cause - Fishbone/5Whys) và Biện pháp khắc phục (Corrective Action).
+        Trả về kết quả bằng Tiếng Việt, ngắn gọn, chuyên nghiệp.`,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            rootCause: { type: Type.STRING, description: "Nguyên nhân kỹ thuật/con người/quy trình gây ra lỗi" },
+            solution: { type: Type.STRING, description: "Biện pháp sửa chữa ngay lập tức và phòng ngừa lâu dài" },
+          },
+          required: ["rootCause", "solution"],
+        }
+      }
+    });
+
+    const text = response.text;
+    if (!text) return { rootCause: '', solution: '' };
+    
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("NCR AI Analysis failed:", error);
+    throw error;
   }
 };
 

@@ -1,16 +1,17 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User } from '../types';
+import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR } from '../types';
 import { INITIAL_CHECKLIST_TEMPLATE } from '../constants';
 import { Button } from './Button';
-import { generateItemSuggestion } from '../services/geminiService';
+import { generateItemSuggestion, generateNCRSuggestions } from '../services/geminiService';
 import { fetchPlans } from '../services/apiService'; // Import fetchPlans for server-side lookup
 import { ImageEditorModal } from './ImageEditorModal';
 import { 
   Save, ArrowLeft, Camera, Image as ImageIcon, FileSpreadsheet, X, Trash2, 
   Box, Factory, Hash, Plus, PenTool, Eraser, PlusCircle, Building2, 
   Layers, User as UserIcon, Images, Sparkles, Loader2, Maximize2, QrCode, Zap,
-  ChevronDown, ChevronRight, List
+  ChevronDown, ChevronRight, List, AlertTriangle, FileWarning, Calendar, CheckCircle2,
+  BrainCircuit, ArrowRight
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -79,6 +80,11 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [isSearchingPlan, setIsSearchingPlan] = useState(false);
   const currentSearchRef = useRef<string>(''); // Track latest search input to prevent race conditions
   
+  // NCR Modal State
+  const [ncrModalItem, setNcrModalItem] = useState<{ itemId: string, itemLabel: string, ncrData?: NCR } | null>(null);
+  const [ncrFormData, setNcrFormData] = useState<Partial<NCR>>({});
+  const [isAnalyzingNCR, setIsAnalyzingNCR] = useState(false);
+
   // Image Editor State
   const [editorState, setEditorState] = useState<{ itemId: string; images: string[]; index: number } | null>(null);
 
@@ -296,6 +302,106 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     }));
   };
 
+  // Status Change Logic
+  const handleItemStatusChange = (item: CheckItem, status: CheckStatus) => {
+      updateItem(item.id, { status });
+      
+      // If status is FAIL, trigger NCR modal automatically if no NCR exists yet
+      if (status === CheckStatus.FAIL && !item.ncr) {
+          handleOpenNCR(item);
+      }
+  };
+
+  // NCR Handlers
+  const handleOpenNCR = (item: CheckItem) => {
+      setNcrModalItem({ 
+          itemId: item.id, 
+          itemLabel: item.label,
+          ncrData: item.ncr 
+      });
+      // Pre-fill form if data exists, else defaults
+      setNcrFormData(item.ncr || {
+          issueDescription: item.notes || '',
+          responsiblePerson: '',
+          rootCause: '',
+          solution: '',
+          status: 'OPEN',
+          createdDate: new Date().toISOString().split('T')[0],
+          imagesBefore: [],
+          imagesAfter: []
+      });
+  };
+
+  const handleAutoFillNCR = async () => {
+      if (!ncrFormData.issueDescription) {
+          alert("Vui lòng nhập mô tả lỗi trước khi nhờ AI phân tích.");
+          return;
+      }
+      if (!ncrModalItem) return;
+
+      setIsAnalyzingNCR(true);
+      try {
+          const suggestion = await generateNCRSuggestions(ncrFormData.issueDescription, ncrModalItem.itemLabel);
+          setNcrFormData(prev => ({
+              ...prev,
+              rootCause: suggestion.rootCause,
+              solution: suggestion.solution
+          }));
+      } catch (e) {
+          alert("Lỗi khi phân tích NCR: " + (e as Error).message);
+      } finally {
+          setIsAnalyzingNCR(false);
+      }
+  };
+
+  const handleSaveNCR = () => {
+      if (!ncrModalItem || !ncrFormData.issueDescription) {
+          alert("Vui lòng nhập mô tả lỗi");
+          return;
+      }
+
+      const newNCR: NCR = {
+          id: ncrModalItem.ncrData?.id || `NCR-${Date.now()}`,
+          createdDate: ncrFormData.createdDate || new Date().toISOString().split('T')[0],
+          issueDescription: ncrFormData.issueDescription,
+          rootCause: ncrFormData.rootCause,
+          solution: ncrFormData.solution,
+          responsiblePerson: ncrFormData.responsiblePerson,
+          deadline: ncrFormData.deadline,
+          status: ncrFormData.status || 'OPEN',
+          imagesBefore: ncrFormData.imagesBefore || [],
+          imagesAfter: ncrFormData.imagesAfter || []
+      };
+
+      updateItem(ncrModalItem.itemId, { 
+          ncr: newNCR,
+          status: CheckStatus.FAIL // Ensure status stays FAIL
+      });
+      
+      setNcrModalItem(null);
+      setNcrFormData({});
+  };
+
+  // Add NCR Photo handler
+  const handleAddNCRPhoto = (type: 'BEFORE' | 'AFTER') => {
+      setActiveUploadId(`NCR_${type}`);
+      fileInputRef.current?.click();
+  };
+
+  const handleRemoveNCRPhoto = (type: 'BEFORE' | 'AFTER', index: number) => {
+      if (type === 'BEFORE') {
+          setNcrFormData(prev => ({
+              ...prev,
+              imagesBefore: prev.imagesBefore?.filter((_, i) => i !== index)
+          }));
+      } else {
+          setNcrFormData(prev => ({
+              ...prev,
+              imagesAfter: prev.imagesAfter?.filter((_, i) => i !== index)
+          }));
+      }
+  };
+
   // Bulk update category name
   const updateCategoryName = (oldName: string, newName: string) => {
       if (oldName === newName) return;
@@ -365,6 +471,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     } else {
         const total = formData.items?.length || 1;
         const passed = formData.items?.filter(i => i.status === CheckStatus.PASS).length || 0;
+        // Conditional status counts as half pass or ignored? Let's treat it as neutral or handle logic per requirement.
+        // For now, score is purely Pass rate.
         score = Math.round((passed / total) * 100);
     }
     const hasFailures = (formData.failedQuantity && formData.failedQuantity > 0) || formData.items?.some(i => i.status === CheckStatus.FAIL);
@@ -394,8 +502,14 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         });
     }));
     const imgs = validImages.filter((img): img is string => img !== null);
-    if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...imgs] }));
-    else if (activeUploadId) {
+    
+    if (activeUploadId === 'MAIN') {
+        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...imgs] }));
+    } else if (activeUploadId === 'NCR_BEFORE') {
+        setNcrFormData(prev => ({ ...prev, imagesBefore: [...(prev.imagesBefore || []), ...imgs] }));
+    } else if (activeUploadId === 'NCR_AFTER') {
+        setNcrFormData(prev => ({ ...prev, imagesAfter: [...(prev.imagesAfter || []), ...imgs] }));
+    } else if (activeUploadId) {
         const currentItem = formData.items?.find(i => i.id === activeUploadId);
         updateItem(activeUploadId, { images: [...(currentItem?.images || []), ...imgs] });
     }
@@ -533,6 +647,146 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           onSave={handleSaveEditedImage}
           onClose={() => setEditorState(null)}
         />
+      )}
+
+      {/* NCR Edit Modal */}
+      {ncrModalItem && (
+          <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-4 bg-red-600 text-white flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-6 h-6" />
+                          <div>
+                              <h3 className="font-black uppercase tracking-tight text-sm">Phiếu NCR - Sự không phù hợp</h3>
+                              <p className="text-[10px] opacity-90 truncate max-w-[250px]">{ncrModalItem.itemLabel}</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setNcrModalItem(null)} className="p-1 hover:bg-white/20 rounded-lg transition-colors"><X className="w-5 h-5"/></button>
+                  </div>
+                  <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                      <div>
+                          <div className="flex justify-between items-end mb-1">
+                              <label className="text-xs font-bold text-slate-500 uppercase">Mô tả lỗi *</label>
+                              <button 
+                                onClick={handleAutoFillNCR}
+                                disabled={isAnalyzingNCR}
+                                className="text-[10px] font-black text-purple-600 bg-purple-50 hover:bg-purple-100 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50"
+                              >
+                                {isAnalyzingNCR ? <Loader2 className="w-3 h-3 animate-spin"/> : <BrainCircuit className="w-3 h-3"/>}
+                                {isAnalyzingNCR ? 'Đang phân tích...' : 'AI Phân tích & Đề xuất'}
+                              </button>
+                          </div>
+                          <textarea 
+                              value={ncrFormData.issueDescription || ''}
+                              onChange={e => setNcrFormData({...ncrFormData, issueDescription: e.target.value})}
+                              className="w-full px-3 py-2 border border-red-200 rounded-xl bg-red-50 text-slate-800 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                              rows={3}
+                              placeholder="Mô tả chi tiết vấn đề..."
+                          />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Người chịu trách nhiệm</label>
+                              <input 
+                                  value={ncrFormData.responsiblePerson || ''}
+                                  onChange={e => setNcrFormData({...ncrFormData, responsiblePerson: e.target.value})}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm"
+                                  placeholder="Tên nhân viên/Bộ phận"
+                              />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Hạn xử lý</label>
+                              <input 
+                                  type="date"
+                                  value={ncrFormData.deadline || ''}
+                                  onChange={e => setNcrFormData({...ncrFormData, deadline: e.target.value})}
+                                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono"
+                              />
+                          </div>
+                      </div>
+                      
+                      {/* Image Upload Section */}
+                      <div className="grid grid-cols-2 gap-4 border-t border-b border-slate-100 py-3">
+                          {/* Before Images */}
+                          <div className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                  <label className="text-[10px] font-black text-red-500 uppercase flex items-center gap-1">
+                                      <FileWarning className="w-3 h-3" /> Trước xử lý
+                                  </label>
+                                  <button onClick={() => handleAddNCRPhoto('BEFORE')} className="text-blue-600 hover:bg-blue-50 p-1 rounded-full"><PlusCircle className="w-4 h-4"/></button>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                  {ncrFormData.imagesBefore && ncrFormData.imagesBefore.length > 0 ? (
+                                      ncrFormData.imagesBefore.map((img, idx) => (
+                                          <div key={idx} className="relative w-12 h-12 group">
+                                              <img src={img} className="w-full h-full object-cover rounded-lg border border-red-200" alt="Before" />
+                                              <button 
+                                                  onClick={() => handleRemoveNCRPhoto('BEFORE', idx)}
+                                                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                              ><X className="w-3 h-3"/></button>
+                                          </div>
+                                      ))
+                                  ) : (
+                                      <div className="w-full h-12 bg-slate-50 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-[10px]" onClick={() => handleAddNCRPhoto('BEFORE')}>Trống</div>
+                                  )}
+                              </div>
+                          </div>
+
+                          {/* After Images */}
+                          <div className="space-y-2 border-l border-slate-100 pl-3">
+                              <div className="flex justify-between items-center">
+                                  <label className="text-[10px] font-black text-green-600 uppercase flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3" /> Sau xử lý
+                                  </label>
+                                  <button onClick={() => handleAddNCRPhoto('AFTER')} className="text-blue-600 hover:bg-blue-50 p-1 rounded-full"><PlusCircle className="w-4 h-4"/></button>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                  {ncrFormData.imagesAfter && ncrFormData.imagesAfter.length > 0 ? (
+                                      ncrFormData.imagesAfter.map((img, idx) => (
+                                          <div key={idx} className="relative w-12 h-12 group">
+                                              <img src={img} className="w-full h-full object-cover rounded-lg border border-green-200" alt="After" />
+                                              <button 
+                                                  onClick={() => handleRemoveNCRPhoto('AFTER', idx)}
+                                                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                              ><X className="w-3 h-3"/></button>
+                                          </div>
+                                      ))
+                                  ) : (
+                                      <div className="w-full h-12 bg-slate-50 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-[10px]" onClick={() => handleAddNCRPhoto('AFTER')}>Trống</div>
+                                  )}
+                              </div>
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nguyên nhân gốc rễ</label>
+                          <textarea 
+                              value={ncrFormData.rootCause || ''}
+                              onChange={e => setNcrFormData({...ncrFormData, rootCause: e.target.value})}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                              rows={2}
+                              placeholder={isAnalyzingNCR ? "Đang chờ AI phân tích..." : "Tại sao lỗi này xảy ra?"}
+                              disabled={isAnalyzingNCR}
+                          />
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Biện pháp khắc phục</label>
+                          <textarea 
+                              value={ncrFormData.solution || ''}
+                              onChange={e => setNcrFormData({...ncrFormData, solution: e.target.value})}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                              rows={2}
+                              placeholder={isAnalyzingNCR ? "Đang chờ AI đề xuất..." : "Hướng xử lý..."}
+                              disabled={isAnalyzingNCR}
+                          />
+                      </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
+                      <Button variant="ghost" onClick={() => setNcrModalItem(null)}>Hủy bỏ</Button>
+                      <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleSaveNCR} disabled={isAnalyzingNCR}>Lưu NCR</Button>
+                  </div>
+              </div>
+          </div>
       )}
 
       {showPlanModal && (
@@ -781,7 +1035,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                             <div key={item.id} className="p-4 hover:bg-slate-50 transition-colors group">
                                 <div className="flex items-start gap-3 mb-3">
                                     <div className="mt-1">
-                                        <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                                        <div className={`w-2 h-2 rounded-full ${item.status === CheckStatus.FAIL ? 'bg-red-500 animate-pulse' : 'bg-slate-300'}`}></div>
                                     </div>
                                     <div className="flex-1">
                                         <input 
@@ -790,6 +1044,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                             className="w-full font-bold text-slate-800 text-base bg-transparent border-b border-transparent focus:border-blue-300 focus:bg-white rounded-sm px-1 outline-none transition-all placeholder:text-slate-400 leading-relaxed"
                                             placeholder="Nhập tên hạng mục..."
                                         />
+                                        {/* NCR Indicator */}
+                                        {item.ncr && (
+                                            <div onClick={() => handleOpenNCR(item)} className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 cursor-pointer hover:bg-red-200 transition-colors">
+                                                <FileWarning className="w-3 h-3" /> NCR: {item.ncr.issueDescription.substring(0, 30)}...
+                                            </div>
+                                        )}
                                     </div>
                                     <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <X className="w-4 h-4" />
@@ -801,10 +1061,15 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                         {Object.values(CheckStatus).filter(v => v !== CheckStatus.PENDING).map(v => (
                                             <button 
                                                 key={v} 
-                                                onClick={() => updateItem(item.id, { status: v })} 
+                                                onClick={() => handleItemStatusChange(item, v)} 
                                                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-tighter whitespace-nowrap transition-all active:scale-95 border ${
                                                     item.status === v 
-                                                    ? (v === 'Đạt' ? 'bg-green-600 text-white border-green-600 shadow-md' : v === 'Hỏng' ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-slate-700 text-white border-slate-700 shadow-md') 
+                                                    ? (
+                                                        v === CheckStatus.PASS ? 'bg-green-600 text-white border-green-600 shadow-md' : 
+                                                        v === CheckStatus.FAIL ? 'bg-red-600 text-white border-red-600 shadow-md' : 
+                                                        v === CheckStatus.CONDITIONAL ? 'bg-amber-500 text-white border-amber-500 shadow-md' :
+                                                        'bg-slate-700 text-white border-slate-700 shadow-md'
+                                                      ) 
                                                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                                                 }`}
                                             >

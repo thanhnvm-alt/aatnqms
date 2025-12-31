@@ -130,19 +130,19 @@ export const getPlans = async (filter: PlanFilter): Promise<{ items: PlanItem[],
     let whereClauses: string[] = [];
     let args: (string | number)[] = [];
 
-    // Use COALESCE to search both columns to be safe
+    // Sử dụng tên cột chuẩn (ma_nha_may, ten_hang_muc,...) để tránh lỗi 'no such column'
     if (filter.search) {
-      whereClauses.push(`(ma_ct LIKE ? OR ten_sp LIKE ? OR ten_hang_muc LIKE ? OR headcode LIKE ? OR ma_nm_id LIKE ? OR ma_nha_may LIKE ?)`);
+      whereClauses.push(`(ma_ct LIKE ? OR ten_hang_muc LIKE ? OR headcode LIKE ? OR ma_nha_may LIKE ?)`);
       const term = `%${filter.search}%`;
-      args.push(term, term, term, term, term, term);
+      args.push(term, term, term, term);
     }
     if (filter.ma_ct) {
       whereClauses.push(`ma_ct = ?`);
       args.push(filter.ma_ct);
     }
     if (filter.ma_nha_may) {
-      whereClauses.push(`(ma_nm_id = ? OR ma_nha_may = ?)`);
-      args.push(filter.ma_nha_may, filter.ma_nha_may);
+      whereClauses.push(`ma_nha_may = ?`);
+      args.push(filter.ma_nha_may);
     }
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
@@ -154,19 +154,17 @@ export const getPlans = async (filter: PlanFilter): Promise<{ items: PlanItem[],
       });
       const total = Number(countResult.rows[0]?.total || 0);
 
-      // Select query using COALESCE to prefer one column but fallback to other
-      // This ensures we get data regardless of which column is populated
-      // Note: ngay_kh, assignee, status, pthsp rely on the columns definitely existing after initDatabase()
+      // Select query sử dụng alias trực tiếp cho các cột chuẩn của ứng dụng
       const sql = `
         SELECT 
           id,
           headcode,
           ma_ct,
           ten_ct,
-          COALESCE(ma_nm_id, ma_nha_may) as ma_nha_may,
-          COALESCE(ten_sp, ten_hang_muc) as ten_hang_muc,
-          COALESCE(don_vi, dvt) as dvt,
-          COALESCE(sl_dh, so_luong_ipo) as so_luong_ipo,
+          ma_nha_may, 
+          ten_hang_muc,
+          dvt,
+          so_luong_ipo,
           ngay_kh as plannedDate,
           assignee,
           status,
@@ -223,10 +221,10 @@ export const getPlanById = async (id: number): Promise<PlanEntity | null> => {
         const result = await turso.execute({
           sql: `SELECT 
             id, headcode, ma_ct, ten_ct, 
-            COALESCE(ma_nm_id, ma_nha_may) as ma_nha_may, 
-            COALESCE(ten_sp, ten_hang_muc) as ten_hang_muc, 
-            COALESCE(don_vi, dvt) as dvt, 
-            COALESCE(sl_dh, so_luong_ipo) as so_luong_ipo, 
+            ma_nha_may, 
+            ten_hang_muc, 
+            dvt, 
+            so_luong_ipo, 
             ngay_kh, assignee, status, pthsp,
             created_at 
             FROM plans WHERE id = ?`,
