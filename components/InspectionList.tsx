@@ -26,7 +26,8 @@ import {
   Briefcase,
   Loader2,
   Upload,
-  ArrowRight
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -39,6 +40,7 @@ interface InspectionListProps {
   onModuleChange?: (module: string) => void;
   visibleModules?: { id: string; label: string }[];
   onImportInspections?: (inspections: Inspection[]) => Promise<void>;
+  onRefresh?: () => void;
 }
 
 const PROJECTS_PER_PAGE = 10;
@@ -81,7 +83,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   selectedModule,
   onModuleChange,
   visibleModules = [],
-  onImportInspections
+  onImportInspections,
+  onRefresh
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'FLAGGED' | 'HIGH_PRIORITY' | 'DRAFT'>('ALL');
@@ -475,6 +478,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Refresh Button */}
+            <button 
+                onClick={onRefresh}
+                className="h-9 w-9 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-400 transition-all shrink-0 shadow-sm active:scale-95"
+                title="Tải lại dữ liệu"
+            >
+                <RefreshCw className="w-4 h-4" />
+            </button>
 
             {/* 4. Import/Export Actions */}
             {!isQC && (

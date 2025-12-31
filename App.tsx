@@ -711,6 +711,7 @@ const App = () => {
                 onModuleChange={(mod) => setCurrentModule(mod)}
                 visibleModules={visibleModules}
                 onImportInspections={handleImportInspections}
+                onRefresh={loadInspections}
               />
             </div>
           );

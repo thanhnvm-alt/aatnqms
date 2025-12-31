@@ -4,6 +4,7 @@ import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckIte
 import { INITIAL_CHECKLIST_TEMPLATE } from '../constants';
 import { Button } from './Button';
 import { generateItemSuggestion } from '../services/geminiService';
+import { fetchPlans } from '../services/apiService'; // Import fetchPlans for server-side lookup
 import { ImageEditorModal } from './ImageEditorModal';
 import { 
   Save, ArrowLeft, Camera, Image as ImageIcon, FileSpreadsheet, X, Trash2, 
@@ -75,6 +76,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [itemLoadingStates, setItemLoadingStates] = useState<Record<string, boolean>>({});
+  const [isSearchingPlan, setIsSearchingPlan] = useState(false);
+  const currentSearchRef = useRef<string>(''); // Track latest search input to prevent race conditions
   
   // Image Editor State
   const [editorState, setEditorState] = useState<{ itemId: string; images: string[]; index: number } | null>(null);
@@ -169,6 +172,72 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     return groups;
   }, [formData.items]);
 
+  const fillFormData = (match: PlanItem) => {
+      setFormData(prev => ({
+        ...prev,
+        // Keep the searched value but update others
+        ma_nha_may: match.ma_nha_may, 
+        headcode: match.headcode,
+        ten_ct: match.ten_ct,
+        ten_hang_muc: match.ten_hang_muc,
+        ma_ct: match.ma_ct,
+        dvt: match.dvt || prev.dvt, 
+        so_luong_ipo: match.so_luong_ipo || prev.so_luong_ipo,
+      }));
+  };
+
+  const handleFactoryCodeChange = async (code: string) => {
+    // 1. Update UI immediately
+    setFormData(prev => ({ ...prev, ma_nha_may: code }));
+
+    const trimmedCode = code.trim();
+    currentSearchRef.current = trimmedCode; // Mark this as the latest search
+
+    if (!trimmedCode) return;
+
+    const len = trimmedCode.length;
+
+    // Requirement: 9 chars (Headcode) or 12 chars (Ma Nha May)
+    // Only proceed if length matches strict requirements
+    if (len !== 9 && len !== 12) return;
+
+    // 2. Try Local Search first (Fast)
+    const localMatch = plans.find(p => 
+        (len === 9 && String(p.headcode || '').trim().toLowerCase() === trimmedCode.toLowerCase()) ||
+        (len === 12 && String(p.ma_nha_may || '').trim().toLowerCase() === trimmedCode.toLowerCase())
+    );
+
+    if (localMatch) {
+        fillFormData(localMatch);
+        return;
+    }
+
+    // 3. Server Search (Async) if not found locally
+    setIsSearchingPlan(true);
+    try {
+        const result = await fetchPlans(trimmedCode, 1, 10);
+        
+        // Race Condition Check: Ensure user hasn't typed something else while waiting
+        if (currentSearchRef.current !== trimmedCode) return;
+
+        const serverMatch = result.items.find(p => 
+            (len === 9 && String(p.headcode || '').trim().toLowerCase() === trimmedCode.toLowerCase()) ||
+            (len === 12 && String(p.ma_nha_may || '').trim().toLowerCase() === trimmedCode.toLowerCase())
+        );
+
+        if (serverMatch) {
+            fillFormData(serverMatch);
+        }
+    } catch (e) {
+        console.error("Auto-fill error:", e);
+    } finally {
+        // Only stop loading if we are still on the same search
+        if (currentSearchRef.current === trimmedCode) {
+            setIsSearchingPlan(false);
+        }
+    }
+  };
+
   // Scanner Logic
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -209,7 +278,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           const code = jsQR(imageData.data, imageData.width, imageData.height);
           if (code && code.data) {
              const scannedData = code.data.trim();
-             // Auto fill
+             // Auto fill logic handled by common function
              handleFactoryCodeChange(scannedData);
              setShowScanner(false);
              return;
@@ -381,45 +450,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   };
 
   const handleSelectPlan = (item: PlanItem) => {
-      setFormData(prev => ({ 
-        ...prev, 
-        ma_nha_may: item.ma_nha_may,
-        headcode: item.headcode,
-        ten_ct: item.ten_ct,
-        ten_hang_muc: item.ten_hang_muc,
-        ma_ct: item.ma_ct,
-        dvt: item.dvt || prev.dvt,
-        inspectorName: user?.name || prev.inspectorName, 
-        so_luong_ipo: item.so_luong_ipo || prev.so_luong_ipo
-      }));
+      // Manual select plan always overrides
+      fillFormData(item);
       setShowPlanModal(false);
-  };
-
-  const handleFactoryCodeChange = (code: string) => {
-    let matchingPlan: PlanItem | undefined;
-
-    if (code.length === 9) {
-        matchingPlan = plans.find(p => String(p.headcode).toLowerCase() === code.toLowerCase());
-    }
-
-    if (!matchingPlan) {
-        matchingPlan = plans.find(p => String(p.ma_nha_may).toLowerCase() === code.toLowerCase());
-    }
-    
-    if (matchingPlan) {
-      setFormData(prev => ({
-        ...prev,
-        ma_nha_may: matchingPlan.ma_nha_may,
-        headcode: matchingPlan.headcode,
-        ten_ct: matchingPlan.ten_ct,
-        ten_hang_muc: matchingPlan.ten_hang_muc,
-        ma_ct: matchingPlan.ma_ct,
-        dvt: matchingPlan.dvt || prev.dvt, 
-        so_luong_ipo: matchingPlan.so_luong_ipo || prev.so_luong_ipo,
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, ma_nha_may: code }));
-    }
   };
 
   const startDrawing = (canvas: HTMLCanvasElement | null, e: React.MouseEvent | React.TouchEvent) => {
@@ -583,14 +616,19 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Mã Nhà Máy *</label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 relative">
                       <input 
                         value={formData.ma_nha_may} 
                         onChange={e => handleFactoryCodeChange(e.target.value)} 
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-base" 
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-base pr-10" 
                         placeholder="Nhập mã nhà máy..." 
                       />
-                      <button onClick={() => setShowScanner(true)} className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95"><QrCode className="w-5 h-5" /></button>
+                      {isSearchingPlan && (
+                          <div className="absolute right-12 top-1/2 -translate-y-1/2 pointer-events-none">
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                          </div>
+                      )}
+                      <button onClick={() => setShowScanner(true)} className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 shrink-0"><QrCode className="w-5 h-5" /></button>
                     </div>
                 </div>
                 <div className="space-y-1.5">

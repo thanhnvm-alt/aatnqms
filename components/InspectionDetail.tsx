@@ -7,7 +7,7 @@ import {
   User as UserIcon, ImageIcon, X, ChevronLeft, ChevronRight, 
   PenTool, Maximize2, ShieldCheck, Eraser, CheckCircle, Images,
   CheckCircle2, AlertCircle, HelpCircle, ClipboardList, Info,
-  Loader2, MoreVertical, Factory, RefreshCw, FileDown
+  Loader2, MoreVertical, Factory, RefreshCw, FileDown, Lock
 } from 'lucide-react';
 import { generateInspectionAnalysis } from '../services/geminiService';
 import { saveInspectionToSheet } from '../services/apiService';
@@ -110,9 +110,15 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
     }
   };
 
-  // ... (Rest of the component logic remains identical)
+  // --- PERMISSION LOGIC ---
+  const isOwner = inspection.inspectorName === user.name;
+  
+  // Rule: Admin/Manager can always edit. 
+  // QC can only edit if it is DRAFT AND they are the owner (creator).
+  const canEdit = user.role === 'ADMIN' || user.role === 'MANAGER' || (user.role === 'QC' && inspection.status === InspectionStatus.DRAFT && isOwner);
+  
+  // Only Admin/Manager can delete
   const canDelete = user.role === 'ADMIN' || user.role === 'MANAGER';
-  const canEdit = user.role === 'ADMIN' || user.role === 'MANAGER' || (user.role === 'QC' && inspection.status === InspectionStatus.DRAFT);
   
   const canConfirmManager = (user.role === 'ADMIN' || user.role === 'MANAGER') && !inspection.managerSignature;
   const canConfirmProd = !inspection.productionSignature;
@@ -292,6 +298,13 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
         </button>
 
         <div className="flex items-center gap-1.5">
+            {/* View Only Badge for QC viewing other's report */}
+            {!canEdit && user.role === 'QC' && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-bold uppercase mr-2 border border-slate-200">
+                    <Lock className="w-3 h-3" /> Chỉ xem
+                </div>
+            )}
+
             <div className="flex items-center gap-1.5 sm:gap-2">
                 {canConfirmProd && (
                     <button 
@@ -364,7 +377,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
 
       <div className="flex-1 overflow-y-auto pb-10">
         <div id="inspection-report-content" className="max-w-5xl mx-auto md:p-6 p-4 space-y-6 bg-slate-50">
-            {/* Same report layout */}
+            {/* Report Header */}
             <div className="text-center sm:text-left">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <h1 className="text-xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter">Biên Bản Kiểm Tra</h1>
@@ -383,7 +396,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                         <Calendar className="w-3.5 h-3.5" />
                         {inspection.date}
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                    <div className={`flex items-center gap-1.5 text-xs font-medium ${!isOwner && user.role === 'QC' ? 'text-blue-600 font-bold' : ''}`}>
                         <UserIcon className="w-3.5 h-3.5" />
                         {inspection.inspectorName}
                     </div>
