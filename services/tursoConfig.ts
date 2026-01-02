@@ -41,7 +41,9 @@ if (isTursoConfigured) {
 
 // Create client
 // We use a try-catch block for the client creation just in case, though usually it doesn't throw until usage.
+// CRITICAL FIX: intMode: "number" prevents BigInt return values which crash JSON.stringify on iOS/Safari
 export const turso: Client = createClient({
   url: isTursoConfigured ? url : "https://placeholder-db.turso.io", 
   authToken: authToken,
+  intMode: "number", 
 });

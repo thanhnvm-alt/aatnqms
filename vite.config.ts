@@ -23,7 +23,6 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     // Override resolve to remove the alias causing the build issue
-    // The previous alias causes double resolution (@libsql/client/web/web) because the source code already imports /web
     resolve: {
       alias: {}
     },
@@ -31,6 +30,7 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: true,
+      target: 'es2020', // Explicit target for better iOS compatibility
     },
     define: {
       // Tiêm API_KEY vào mã nguồn theo chuẩn Gemini SDK

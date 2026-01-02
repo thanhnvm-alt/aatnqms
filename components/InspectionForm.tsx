@@ -12,7 +12,7 @@ import {
   Box, Factory, Hash, Plus, PenTool, Eraser, PlusCircle, Building2, 
   Layers, User as UserIcon, Images, Sparkles, Loader2, Maximize2, QrCode, Zap,
   ChevronDown, ChevronRight, List, AlertTriangle, FileWarning, Calendar, CheckCircle2,
-  BrainCircuit, ArrowRight
+  BrainCircuit, ArrowRight, ClipboardList, MapPin, ShieldCheck
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -71,7 +71,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   workshops = [],
   user
 }) => {
-  // ... existing state ...
+  // ... keep existing state ...
   const [showPlanModal, setShowPlanModal] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const prodCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -617,6 +617,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           </div>
       )}
 
+      {/* Show Plan Modal */}
       {showPlanModal && (
           <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80%] flex flex-col overflow-hidden animate-in zoom-in duration-300">
@@ -653,79 +654,175 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         <button onClick={handleSave} className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-500/30 active:scale-90 transition-transform"><Save className="w-5 h-5"/></button>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 p-3 md:p-6 space-y-4 pb-20 md:pb-8 no-scrollbar bg-white">
+      <div className="flex-1 overflow-y-auto min-h-0 p-3 md:p-6 space-y-4 pb-20 md:pb-8 no-scrollbar bg-slate-50">
         
-        {/* Photo Gallery - Compact Grid */}
+        {/* 1. IMAGES SECTION */}
         <div className="space-y-2">
           <div className="flex items-center justify-between px-1">
-             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Images className="w-3.5 h-3.5" /> Hình ảnh hiện trường ({formData.images?.length || 0})
+             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Images className="w-4 h-4" /> Hình ảnh hiện trường ({formData.images?.length || 0})
              </h3>
           </div>
-          <div className="flex flex-wrap gap-2 py-1">
-            {formData.images && formData.images.map((img, idx) => (
-              <div key={idx} className="relative w-20 h-20 md:w-24 md:h-24 group">
-                <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-200 shadow-sm transition-transform active:scale-95" alt={`Img ${idx}`} />
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl">
-                    <button onClick={(e) => { e.stopPropagation(); handleOpenImageEditor('MAIN_GALLERY', formData.images!, idx); }} className="p-1 bg-white rounded-lg shadow text-blue-600 mr-1"><Maximize2 className="w-4 h-4"/></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleRemoveProductPhoto(idx); }} className="p-1 bg-red-500 text-white rounded-lg shadow"><Trash2 className="w-4 h-4" /></button>
-                </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex flex-wrap gap-3">
+                {formData.images && formData.images.map((img, idx) => (
+                  <div key={idx} className="relative w-20 h-20 md:w-24 md:h-24 group">
+                    <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-200 shadow-sm transition-transform active:scale-95" alt={`Img ${idx}`} />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl">
+                        <button onClick={(e) => { e.stopPropagation(); handleOpenImageEditor('MAIN_GALLERY', formData.images!, idx); }} className="p-1 bg-white rounded-lg shadow text-blue-600 mr-1"><Maximize2 className="w-4 h-4"/></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleRemoveProductPhoto(idx); }} className="p-1 bg-red-500 text-white rounded-lg shadow"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={handleAddPhoto} className="w-20 h-20 md:w-24 md:h-24 rounded-xl border-2 border-dashed border-blue-300 flex flex-col items-center justify-center text-blue-500 bg-blue-50/30 hover:bg-blue-50 transition-all active:scale-95 group">
+                  <Plus className="w-6 h-6 mb-1 group-hover:scale-110 transition-transform" />
+                  <span className="text-[8px] font-black uppercase">Thêm ảnh</span>
+                </button>
               </div>
-            ))}
-            <button onClick={handleAddPhoto} className="w-20 h-20 md:w-24 md:h-24 rounded-xl border-2 border-dashed border-blue-200 flex flex-col items-center justify-center text-blue-500 bg-blue-50/30 hover:bg-blue-50 transition-all active:scale-95">
-              <Plus className="w-6 h-6 mb-1" /><span className="text-[8px] font-black uppercase">Thêm</span>
-            </button>
           </div>
         </div>
 
-        {/* Source Info Card */}
-        <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-           <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-50 pb-1 flex items-center gap-2"><Box className="w-3.5 h-3.5 text-blue-600" /> Thông tin nguồn</h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* 2. SOURCE INFO SECTION */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+           <h3 className="text-sm font-black text-blue-600 uppercase tracking-tight flex items-center gap-2 border-b border-slate-100 pb-2">
+               <Box className="w-4 h-4" /> Thông tin nguồn
+           </h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mã Nhà Máy *</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Mã Nhà Máy *</label>
                     <div className="flex gap-2 relative">
-                      <input value={formData.ma_nha_may} onChange={e => handleFactoryCodeChange(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-blue-700 text-sm focus:bg-white" placeholder="Mã..." />
-                      {isSearchingPlan && <div className="absolute right-10 top-1/2 -translate-y-1/2"><Loader2 className="w-3 h-3 animate-spin text-blue-500" /></div>}
-                      <button onClick={() => setShowScanner(true)} className="p-2 bg-blue-600 text-white rounded-lg shadow-sm active:scale-95 shrink-0"><QrCode className="w-4 h-4" /></button>
+                      <input value={formData.ma_nha_may} onChange={e => handleFactoryCodeChange(e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-700 text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập mã..." />
+                      {isSearchingPlan && <div className="absolute right-12 top-1/2 -translate-y-1/2"><Loader2 className="w-4 h-4 animate-spin text-blue-500" /></div>}
+                      <button onClick={() => setShowScanner(true)} className="p-2.5 bg-blue-100 text-blue-600 rounded-xl shadow-sm active:scale-95 shrink-0 hover:bg-blue-200 transition-colors"><QrCode className="w-5 h-5" /></button>
                     </div>
                 </div>
-                <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mã Công Trình</label><input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm focus:bg-white" /></div>
-                <div className="md:col-span-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên Sản Phẩm *</label><input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium text-sm focus:bg-white" /></div>
+                <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Mã Công Trình *</label>
+                    <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập mã CT..." />
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Tên Công Trình</label>
+                    <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập tên CT..." />
+                </div>
+                <div className="md:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Tên Sản Phẩm *</label>
+                    <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl font-medium text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập tên SP..." />
+                </div>
            </div>
         </div>
 
-        {/* Quantities - Compact */}
-        <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-           <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-50 pb-1 flex items-center gap-2"><Hash className="w-3.5 h-3.5 text-indigo-600" /> Số lượng</h3>
-           <div className="grid grid-cols-2 gap-3">
+        {/* 3. INSPECTION INFO SECTION (Matching the screenshot layout) */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+           <h3 className="text-sm font-black text-orange-600 uppercase tracking-tight flex items-center gap-2 border-b border-slate-100 pb-2">
+             <ClipboardList className="w-4 h-4" /> Thông tin kiểm tra
+           </h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Row 1 */}
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">Xưởng / Kho / Phòng</label>
+                    <div className="relative">
+                        <select 
+                            value={formData.workshop || ''} 
+                            onChange={e => setFormData(prev => ({ ...prev, workshop: e.target.value, inspectionStage: '' }))}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none appearance-none transition-all focus:ring-2 focus:ring-orange-100"
+                        >
+                            <option value="">-- Chọn Xưởng --</option>
+                            {workshops.map(ws => (
+                                <option key={ws.id} value={ws.name}>{ws.name} ({ws.code})</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">Công đoạn sản xuất</label>
+                    <div className="relative">
+                        {availableStages.length > 0 ? (
+                            <select 
+                                value={formData.inspectionStage || ''} 
+                                onChange={e => setFormData(prev => ({ ...prev, inspectionStage: e.target.value }))}
+                                disabled={!formData.workshop}
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none appearance-none disabled:opacity-50 transition-all focus:ring-2 focus:ring-orange-100"
+                            >
+                                <option value="">-- Chọn công đoạn --</option>
+                                {availableStages.map(stage => (
+                                    <option key={stage} value={stage}>{stage}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <input 
+                                type="text"
+                                value={formData.inspectionStage || ''} 
+                                onChange={e => setFormData(prev => ({ ...prev, inspectionStage: e.target.value }))}
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-orange-100"
+                                placeholder="Nhập công đoạn..."
+                            />
+                        )}
+                        {availableStages.length > 0 && <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />}
+                    </div>
+                </div>
+
+                {/* Row 2 */}
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">QC Thực hiện *</label>
+                    <input 
+                        type="text" 
+                        value={formData.inspectorName || ''} 
+                        onChange={e => setFormData(prev => ({ ...prev, inspectorName: e.target.value.toUpperCase() }))}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none uppercase transition-all focus:ring-2 focus:ring-orange-100"
+                        placeholder="TÊN QC..."
+                    />
+                </div>
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">Ngày kiểm tra</label>
+                    <div className="relative">
+                        <input 
+                            type="date" 
+                            value={formData.date || ''} 
+                            onChange={e => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-orange-100"
+                        />
+                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                </div>
+           </div>
+        </div>
+
+        {/* 4. QUANTITIES SECTION */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+           <h3 className="text-sm font-black text-indigo-900 uppercase tracking-tight flex items-center gap-2 border-b border-slate-100 pb-2">
+               <Hash className="w-4 h-4" /> Số lượng kiểm tra
+           </h3>
+           <div className="grid grid-cols-2 gap-4">
                 <div>
-                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">SL Đơn hàng</label>
+                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">SL Đơn hàng (IPO)</label>
                      <div className="relative">
-                        <input type="number" inputMode="numeric" value={formData.so_luong_ipo} onChange={e => setFormData({...formData, so_luong_ipo: parseInt(e.target.value)||0})} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-black text-slate-800 text-sm" />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{formData.dvt}</span>
+                        <input type="number" inputMode="numeric" value={formData.so_luong_ipo} onChange={e => setFormData({...formData, so_luong_ipo: parseInt(e.target.value)||0})} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl font-black text-slate-900 text-sm focus:ring-2 focus:ring-indigo-100 outline-none" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{formData.dvt}</span>
                      </div>
                 </div>
                 <div>
-                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">SL Kiểm tra</label>
-                     <input type="number" inputMode="numeric" value={formData.inspectedQuantity} onChange={e => setFormData({...formData, inspectedQuantity: parseInt(e.target.value)||0})} className="w-full px-3 py-2 border border-blue-200 bg-blue-50/50 rounded-lg font-black text-blue-700 text-sm" />
+                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">SL Kiểm tra</label>
+                     <input type="number" inputMode="numeric" value={formData.inspectedQuantity} onChange={e => setFormData({...formData, inspectedQuantity: parseInt(e.target.value)||0})} className="w-full px-3 py-2.5 border border-blue-200 bg-blue-50/30 rounded-xl font-black text-blue-700 text-sm focus:ring-2 focus:ring-blue-100 outline-none" />
                 </div>
                 <div>
-                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex justify-between"><span>SL Đạt</span><span className="text-green-600">{passRate}%</span></label>
-                     <input type="number" inputMode="numeric" value={formData.passedQuantity} readOnly className="w-full px-3 py-2 border border-green-200 bg-green-50/30 rounded-lg font-black text-green-600 text-sm" />
+                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 flex justify-between"><span>SL Đạt</span><span className="text-green-600">{passRate}%</span></label>
+                     <input type="number" inputMode="numeric" value={formData.passedQuantity} readOnly className="w-full px-3 py-2.5 border border-green-200 bg-green-50/20 rounded-xl font-black text-green-700 text-sm focus:outline-none" />
                 </div>
                 <div>
-                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex justify-between"><span>SL Lỗi</span><span className="text-red-600">{failRate}%</span></label>
-                     <input type="number" inputMode="numeric" value={formData.failedQuantity} onChange={e => setFormData({...formData, failedQuantity: parseInt(e.target.value)||0})} className="w-full px-3 py-2 border border-red-200 bg-red-50/30 rounded-lg font-black text-red-600 text-sm" />
+                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 flex justify-between"><span>SL Lỗi</span><span className="text-red-600">{failRate}%</span></label>
+                     <input type="number" inputMode="numeric" value={formData.failedQuantity} onChange={e => setFormData({...formData, failedQuantity: parseInt(e.target.value)||0})} className="w-full px-3 py-2.5 border border-red-200 bg-red-50/20 rounded-xl font-black text-red-600 text-sm focus:ring-2 focus:ring-red-100 outline-none" />
                 </div>
            </div>
         </div>
         
-        {/* Check Items */}
+        {/* 5. CHECK ITEMS */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-             <h3 className="text-xs font-black text-slate-800 uppercase tracking-tighter">Hạng mục kiểm tra</h3>
-             <button onClick={handleAddNewCategory} className="text-[9px] bg-slate-900 text-white px-2 py-1 rounded-lg font-bold uppercase shadow-sm flex items-center gap-1">
+          <div className="flex items-center justify-between px-1 border-b-2 border-slate-800 pb-1">
+             <h3 className="text-xs font-black text-slate-900 uppercase tracking-tighter">Chi tiết hạng mục ({formData.items?.length || 0})</h3>
+             <button onClick={handleAddNewCategory} className="text-[9px] bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold uppercase shadow-sm flex items-center gap-1 active:scale-95 transition-transform">
                 <PlusCircle className="w-3 h-3"/> Thêm mục
              </button>
           </div>
@@ -733,38 +830,38 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           <div className="space-y-4">
             {Object.entries(groupedItems).map(([category, items]: [string, CheckItem[]]) => (
                 <div key={category} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-2">
+                    <div className="p-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2">
                         <input 
                             defaultValue={category}
                             onBlur={(e) => updateCategoryName(category, e.target.value.toUpperCase())}
-                            className="bg-transparent text-xs font-black text-blue-700 uppercase focus:bg-white rounded px-2 w-full"
+                            className="bg-transparent text-xs font-black text-slate-700 uppercase focus:bg-white rounded px-2 w-full outline-none focus:ring-1 focus:ring-blue-300"
                         />
                         <div className="flex gap-1">
-                            <button onClick={() => handleAddItemToCategory(category)} className="bg-blue-600 text-white px-2 py-1 rounded text-[9px] font-bold uppercase"><Plus className="w-3 h-3" /></button>
-                            <button onClick={() => handleRemoveCategory(category)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleAddItemToCategory(category)} className="bg-white border border-slate-300 text-slate-600 hover:text-blue-600 px-2 py-1 rounded-lg text-[9px] font-bold uppercase shadow-sm"><Plus className="w-3 h-3" /></button>
+                            <button onClick={() => handleRemoveCategory(category)} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                     </div>
                     <div className="divide-y divide-slate-100">
                         {items.map((item) => (
-                            <div key={item.id} className="p-3 hover:bg-slate-50 transition-colors">
+                            <div key={item.id} className="p-3 hover:bg-slate-50 transition-colors group">
                                 <div className="flex justify-between items-start mb-2 gap-2">
-                                    <input value={item.label} onChange={(e) => updateItem(item.id, { label: e.target.value })} className="w-full text-sm font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-blue-300 focus:bg-white rounded-sm outline-none" placeholder="Hạng mục..." />
-                                    <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-500"><X className="w-4 h-4" /></button>
+                                    <input value={item.label} onChange={(e) => updateItem(item.id, { label: e.target.value })} className="w-full text-sm font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-blue-300 focus:bg-white rounded-sm outline-none transition-colors" placeholder="Hạng mục..." />
+                                    <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
                                 </div>
                                 <div className="space-y-2">
                                     <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
                                         {Object.values(CheckStatus).filter(v => v !== CheckStatus.PENDING).map(v => (
-                                            <button key={v} onClick={() => handleItemStatusChange(item, v)} className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase whitespace-nowrap border ${item.status === v ? (v === CheckStatus.PASS ? 'bg-green-600 text-white border-green-600' : v === CheckStatus.FAIL ? 'bg-red-600 text-white border-red-600' : 'bg-amber-500 text-white border-amber-500') : 'bg-white text-slate-500 border-slate-200'}`}>{v}</button>
+                                            <button key={v} onClick={() => handleItemStatusChange(item, v)} className={`flex-1 py-2 px-2 rounded-lg text-[10px] font-black uppercase whitespace-nowrap border transition-all active:scale-95 ${item.status === v ? (v === CheckStatus.PASS ? 'bg-green-600 text-white border-green-600 shadow-md' : v === CheckStatus.FAIL ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-amber-500 text-white border-amber-500 shadow-md') : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>{v}</button>
                                         ))}
                                     </div>
                                     <div className="flex gap-2">
                                         <div className="relative flex-1">
-                                            <input value={item.notes} onChange={e => updateItem(item.id, { notes: e.target.value })} className="w-full pl-2 pr-8 py-1.5 text-xs border border-slate-200 rounded-lg outline-none bg-white" placeholder="Ghi chú..." />
-                                            {item.status === CheckStatus.FAIL && <button onClick={() => handleAIItemSuggest(item.id)} className="absolute right-1 top-1/2 -translate-y-1/2 text-purple-600"><Sparkles className="w-3.5 h-3.5" /></button>}
+                                            <input value={item.notes} onChange={e => updateItem(item.id, { notes: e.target.value })} className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-lg outline-none bg-slate-50 focus:bg-white focus:border-blue-300 transition-all" placeholder="Ghi chú..." />
+                                            {item.status === CheckStatus.FAIL && <button onClick={() => handleAIItemSuggest(item.id)} className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-500 hover:text-purple-700 animate-pulse"><Sparkles className="w-3.5 h-3.5" /></button>}
                                         </div>
-                                        <button onClick={() => handleAddItemPhoto(item.id)} className={`p-1.5 rounded-lg border ${item.images?.length ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-400 border-slate-200'}`}><Camera className="w-4 h-4"/></button>
+                                        <button onClick={() => handleAddItemPhoto(item.id)} className={`p-2 rounded-lg border transition-colors ${item.images?.length ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-500'}`}><Camera className="w-4 h-4"/></button>
                                     </div>
-                                    {item.images && item.images.length > 0 && <div className="flex gap-1 pt-1 overflow-x-auto">{item.images.map((img, i) => <div key={i} className="w-10 h-10 shrink-0"><img src={img} className="w-full h-full object-cover rounded border" /></div>)}</div>}
+                                    {item.images && item.images.length > 0 && <div className="flex gap-2 pt-2 overflow-x-auto">{item.images.map((img, i) => <div key={i} className="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200"><img src={img} className="w-full h-full object-cover" /></div>)}</div>}
                                 </div>
                             </div>
                         ))}
@@ -774,7 +871,96 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           </div>
         </div>
         
-        {/* Signatures ... existing code ... */}
+        {/* Signatures */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight border-b border-slate-100 pb-2 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-green-600"/> Xác nhận
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* QC Signature */}
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">QC Kiểm tra</label>
+                        {formData.signature && (
+                            <button onClick={() => handleClearSignature('QC')} className="text-[10px] text-red-500 hover:underline flex items-center gap-1">
+                                <Eraser className="w-3 h-3"/> Ký lại
+                            </button>
+                        )}
+                    </div>
+                    <div className={`border-2 border-dashed ${formData.signature ? 'border-green-200 bg-green-50/30' : 'border-slate-300 bg-slate-50'} rounded-xl h-32 relative overflow-hidden touch-none`}>
+                        {qcSignMode === 'VIEW' && formData.signature ? (
+                            <img src={formData.signature} className="w-full h-full object-contain" alt="QC Sign" />
+                        ) : (
+                            <>
+                                <canvas
+                                    ref={canvasRef}
+                                    className="w-full h-full cursor-crosshair"
+                                    onMouseDown={(e) => startDrawing(canvasRef.current, e)}
+                                    onMouseMove={(e) => draw(canvasRef.current, e)}
+                                    onMouseUp={() => stopDrawing('QC')}
+                                    onMouseLeave={() => stopDrawing('QC')}
+                                    onTouchStart={(e) => startDrawing(canvasRef.current, e)}
+                                    onTouchMove={(e) => draw(canvasRef.current, e)}
+                                    onTouchEnd={() => stopDrawing('QC')}
+                                    width={400}
+                                    height={160}
+                                />
+                                {!isDrawing && !formData.signature && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
+                                        <span className="bg-white/50 px-2 py-1 rounded">Ký tên tại đây</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <p className="text-center text-xs font-bold text-slate-700 uppercase">{formData.inspectorName || 'Tên QC'}</p>
+                </div>
+
+                {/* Production Signature */}
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Đại diện Sản xuất</label>
+                        {formData.productionSignature && (
+                            <button onClick={() => handleClearSignature('PROD')} className="text-[10px] text-red-500 hover:underline flex items-center gap-1">
+                                <Eraser className="w-3 h-3"/> Ký lại
+                            </button>
+                        )}
+                    </div>
+                    <div className={`border-2 border-dashed ${formData.productionSignature ? 'border-blue-200 bg-blue-50/30' : 'border-slate-300 bg-slate-50'} rounded-xl h-32 relative overflow-hidden touch-none`}>
+                        {prodSignMode === 'VIEW' && formData.productionSignature ? (
+                            <img src={formData.productionSignature} className="w-full h-full object-contain" alt="Prod Sign" />
+                        ) : (
+                            <>
+                                <canvas
+                                    ref={prodCanvasRef}
+                                    className="w-full h-full cursor-crosshair"
+                                    onMouseDown={(e) => startDrawing(prodCanvasRef.current, e)}
+                                    onMouseMove={(e) => draw(prodCanvasRef.current, e)}
+                                    onMouseUp={() => stopDrawing('PROD')}
+                                    onMouseLeave={() => stopDrawing('PROD')}
+                                    onTouchStart={(e) => startDrawing(prodCanvasRef.current, e)}
+                                    onTouchMove={(e) => draw(prodCanvasRef.current, e)}
+                                    onTouchEnd={() => stopDrawing('PROD')}
+                                    width={400}
+                                    height={160}
+                                />
+                                {!isDrawing && !formData.productionSignature && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
+                                        <span className="bg-white/50 px-2 py-1 rounded">Ký tên tại đây</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <input 
+                        className="w-full text-center text-xs font-bold text-slate-700 uppercase bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none placeholder:font-normal"
+                        placeholder="NHẬP TÊN NGƯỜI ĐẠI DIỆN..."
+                        value={formData.productionName || ''}
+                        onChange={(e) => setFormData({...formData, productionName: e.target.value})}
+                    />
+                </div>
+            </div>
+        </div>
         
       </div>
     </div>
