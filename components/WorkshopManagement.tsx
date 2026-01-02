@@ -1,8 +1,8 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Workshop } from '../types';
 import { Button } from './Button';
-import { Plus, Edit2, Trash2, X, Save, Factory, MapPin, Phone, User, Image as ImageIcon, Camera, Locate, Layers, Check, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Factory, MapPin, Phone, User, Image as ImageIcon, Camera, Locate, Layers, Check, Loader2, Pencil } from 'lucide-react';
 
 interface WorkshopManagementProps {
   workshops: Workshop[];
@@ -35,6 +35,12 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // State for stage management
+  const [newStageInput, setNewStageInput] = useState('');
+  const [localStages, setLocalStages] = useState<string[]>([]);
+  const [editingStage, setEditingStage] = useState<string | null>(null);
+  const [editStageValue, setEditStageValue] = useState('');
 
   const [formData, setFormData] = useState<Partial<Workshop>>({
     code: '',
@@ -50,6 +56,9 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
     if (workshop) {
       setEditingWorkshop(workshop);
       setFormData({ ...workshop, stages: workshop.stages || [] });
+      // Initialize local stages with predefined + workshop specific stages
+      const combined = Array.from(new Set([...PREDEFINED_STAGES, ...(workshop.stages || [])]));
+      setLocalStages(combined);
     } else {
       setEditingWorkshop(null);
       setFormData({
@@ -61,11 +70,17 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
         image: undefined,
         stages: []
       });
+      setLocalStages([...PREDEFINED_STAGES]);
     }
+    setNewStageInput('');
+    setEditingStage(null);
     setIsModalOpen(true);
   };
 
   const toggleStage = (stage: string) => {
+      // Don't toggle if we are clicking inside the edit input
+      if (editingStage === stage) return;
+
       setFormData(prev => {
           const currentStages = prev.stages || [];
           if (currentStages.includes(stage)) {
@@ -74,6 +89,65 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
               return { ...prev, stages: [...currentStages, stage] };
           }
       });
+  };
+
+  const handleAddCustomStage = () => {
+      const stageName = newStageInput.trim();
+      if (!stageName) return;
+
+      if (!localStages.includes(stageName)) {
+          setLocalStages(prev => [...prev, stageName]);
+      }
+
+      // Automatically select the new stage
+      setFormData(prev => {
+          const currentStages = prev.stages || [];
+          if (currentStages.includes(stageName)) return prev;
+          return { ...prev, stages: [...currentStages, stageName] };
+      });
+      setNewStageInput('');
+  };
+
+  const handleDeleteStage = (e: React.MouseEvent, stage: string) => {
+      e.stopPropagation();
+      if (window.confirm(`Xóa công đoạn "${stage}"?`)) {
+          setLocalStages(prev => prev.filter(s => s !== stage));
+          setFormData(prev => ({
+              ...prev,
+              stages: prev.stages?.filter(s => s !== stage)
+          }));
+      }
+  };
+
+  const startEditStage = (e: React.MouseEvent, stage: string) => {
+      e.stopPropagation();
+      setEditingStage(stage);
+      setEditStageValue(stage);
+  };
+
+  const saveEditStage = () => {
+      if (editingStage && editStageValue.trim()) {
+          const oldName = editingStage;
+          const newName = editStageValue.trim();
+
+          // Update local list
+          setLocalStages(prev => prev.map(s => s === oldName ? newName : s));
+
+          // Update selection if it was selected
+          setFormData(prev => {
+              const currentStages = prev.stages || [];
+              if (currentStages.includes(oldName)) {
+                  // Replace old name with new name in selection
+                  return {
+                      ...prev,
+                      stages: currentStages.map(s => s === oldName ? newName : s)
+                  };
+              }
+              return prev;
+          });
+      }
+      setEditingStage(null);
+      setEditStageValue('');
   };
 
   // Chuyển sang async để await operations
@@ -408,30 +482,86 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
 
                    {/* Production Stages Management */}
                    <div className="md:col-span-2 space-y-2 pt-2 border-t border-slate-100">
-                       <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">
-                           <Layers className="w-3 h-3 text-blue-500"/>
-                           Chọn công đoạn sản xuất
+                       <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center justify-between">
+                           <div className="flex items-center gap-2"><Layers className="w-3 h-3 text-blue-500"/> Chọn công đoạn sản xuất</div>
+                           <span className="text-slate-400 text-[9px]">{formData.stages?.length} đã chọn</span>
                        </label>
                        
-                       <div className="grid grid-cols-2 gap-2">
-                           {PREDEFINED_STAGES.map(stage => {
+                       {/* Custom Stage Input */}
+                       <div className="flex gap-2 mb-2">
+                           <input 
+                               type="text" 
+                               value={newStageInput}
+                               onChange={e => setNewStageInput(e.target.value)}
+                               onKeyDown={e => { if(e.key === 'Enter') handleAddCustomStage() }}
+                               className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                               placeholder="Thêm công đoạn mới..."
+                           />
+                           <button 
+                               onClick={handleAddCustomStage}
+                               className="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-black transition-colors flex items-center gap-1 active:scale-95"
+                           >
+                               <Plus className="w-3 h-3" /> Thêm
+                           </button>
+                       </div>
+
+                       <div className="grid grid-cols-2 gap-2 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
+                           {localStages.map(stage => {
                                const isSelected = formData.stages?.includes(stage);
+                               const isEditingThis = editingStage === stage;
+
+                               if (isEditingThis) {
+                                   return (
+                                       <div key={stage} className="flex gap-1">
+                                           <input 
+                                              autoFocus
+                                              type="text"
+                                              value={editStageValue}
+                                              onChange={(e) => setEditStageValue(e.target.value)}
+                                              onKeyDown={(e) => { if(e.key === 'Enter') saveEditStage() }}
+                                              onBlur={saveEditStage}
+                                              className="flex-1 px-2 py-2 border border-blue-500 rounded-lg text-xs outline-none bg-blue-50"
+                                           />
+                                           <button onMouseDown={saveEditStage} className="px-2 bg-green-500 text-white rounded-lg"><Check className="w-3 h-3" /></button>
+                                       </div>
+                                   );
+                               }
+
                                return (
                                    <div 
                                        key={stage} 
                                        onClick={() => toggleStage(stage)}
                                        className={`
-                                           cursor-pointer px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-2 select-none
+                                           cursor-pointer px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-between select-none group relative
                                            ${isSelected 
                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
                                                : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:bg-blue-50'
                                            }
                                        `}
                                    >
-                                       <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white border-white' : 'bg-slate-100 border-slate-300'}`}>
-                                           {isSelected && <Check className="w-3 h-3 text-blue-600 stroke-[4px]" />}
+                                       <div className="flex items-center gap-2 overflow-hidden">
+                                           <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white border-white' : 'bg-slate-100 border-slate-300'}`}>
+                                               {isSelected && <Check className="w-3 h-3 text-blue-600 stroke-[4px]" />}
+                                           </div>
+                                           <span className="truncate">{stage}</span>
                                        </div>
-                                       <span className="truncate">{stage}</span>
+                                       
+                                       <div className={`flex gap-1 ${isSelected ? 'text-white' : 'text-slate-400'} opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                           <button 
+                                              onClick={(e) => startEditStage(e, stage)}
+                                              className={`p-1 rounded hover:bg-white/20`}
+                                              title="Sửa tên"
+                                           >
+                                               <Pencil className="w-3 h-3" />
+                                           </button>
+                                           <button 
+                                              onClick={(e) => handleDeleteStage(e, stage)}
+                                              className={`p-1 rounded hover:bg-red-500 hover:text-white`}
+                                              title="Xóa"
+                                           >
+                                               <Trash2 className="w-3 h-3" />
+                                           </button>
+                                       </div>
                                    </div>
                                );
                            })}

@@ -12,7 +12,7 @@ import {
   Box, Factory, Hash, Plus, PenTool, Eraser, PlusCircle, Building2, 
   Layers, User as UserIcon, Images, Sparkles, Loader2, Maximize2, QrCode, Zap,
   ChevronDown, ChevronRight, List, AlertTriangle, FileWarning, Calendar, CheckCircle2,
-  BrainCircuit, ArrowRight, ClipboardList, MapPin
+  BrainCircuit, ArrowRight, ClipboardList, MapPin, ShieldCheck
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -871,7 +871,96 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           </div>
         </div>
         
-        {/* Signatures ... existing code ... */}
+        {/* Signatures */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight border-b border-slate-100 pb-2 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-green-600"/> Xác nhận
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* QC Signature */}
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">QC Kiểm tra</label>
+                        {formData.signature && (
+                            <button onClick={() => handleClearSignature('QC')} className="text-[10px] text-red-500 hover:underline flex items-center gap-1">
+                                <Eraser className="w-3 h-3"/> Ký lại
+                            </button>
+                        )}
+                    </div>
+                    <div className={`border-2 border-dashed ${formData.signature ? 'border-green-200 bg-green-50/30' : 'border-slate-300 bg-slate-50'} rounded-xl h-32 relative overflow-hidden touch-none`}>
+                        {qcSignMode === 'VIEW' && formData.signature ? (
+                            <img src={formData.signature} className="w-full h-full object-contain" alt="QC Sign" />
+                        ) : (
+                            <>
+                                <canvas
+                                    ref={canvasRef}
+                                    className="w-full h-full cursor-crosshair"
+                                    onMouseDown={(e) => startDrawing(canvasRef.current, e)}
+                                    onMouseMove={(e) => draw(canvasRef.current, e)}
+                                    onMouseUp={() => stopDrawing('QC')}
+                                    onMouseLeave={() => stopDrawing('QC')}
+                                    onTouchStart={(e) => startDrawing(canvasRef.current, e)}
+                                    onTouchMove={(e) => draw(canvasRef.current, e)}
+                                    onTouchEnd={() => stopDrawing('QC')}
+                                    width={400}
+                                    height={160}
+                                />
+                                {!isDrawing && !formData.signature && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
+                                        <span className="bg-white/50 px-2 py-1 rounded">Ký tên tại đây</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <p className="text-center text-xs font-bold text-slate-700 uppercase">{formData.inspectorName || 'Tên QC'}</p>
+                </div>
+
+                {/* Production Signature */}
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Đại diện Sản xuất</label>
+                        {formData.productionSignature && (
+                            <button onClick={() => handleClearSignature('PROD')} className="text-[10px] text-red-500 hover:underline flex items-center gap-1">
+                                <Eraser className="w-3 h-3"/> Ký lại
+                            </button>
+                        )}
+                    </div>
+                    <div className={`border-2 border-dashed ${formData.productionSignature ? 'border-blue-200 bg-blue-50/30' : 'border-slate-300 bg-slate-50'} rounded-xl h-32 relative overflow-hidden touch-none`}>
+                        {prodSignMode === 'VIEW' && formData.productionSignature ? (
+                            <img src={formData.productionSignature} className="w-full h-full object-contain" alt="Prod Sign" />
+                        ) : (
+                            <>
+                                <canvas
+                                    ref={prodCanvasRef}
+                                    className="w-full h-full cursor-crosshair"
+                                    onMouseDown={(e) => startDrawing(prodCanvasRef.current, e)}
+                                    onMouseMove={(e) => draw(prodCanvasRef.current, e)}
+                                    onMouseUp={() => stopDrawing('PROD')}
+                                    onMouseLeave={() => stopDrawing('PROD')}
+                                    onTouchStart={(e) => startDrawing(prodCanvasRef.current, e)}
+                                    onTouchMove={(e) => draw(prodCanvasRef.current, e)}
+                                    onTouchEnd={() => stopDrawing('PROD')}
+                                    width={400}
+                                    height={160}
+                                />
+                                {!isDrawing && !formData.productionSignature && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
+                                        <span className="bg-white/50 px-2 py-1 rounded">Ký tên tại đây</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <input 
+                        className="w-full text-center text-xs font-bold text-slate-700 uppercase bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none placeholder:font-normal"
+                        placeholder="NHẬP TÊN NGƯỜI ĐẠI DIỆN..."
+                        value={formData.productionName || ''}
+                        onChange={(e) => setFormData({...formData, productionName: e.target.value})}
+                    />
+                </div>
+            </div>
+        </div>
         
       </div>
     </div>
