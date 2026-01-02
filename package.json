@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "test:db": "node test-connection.js" 
+    "test:db": "node test-connection.js",
+    "test:create": "npx tsx scripts/test-create.ts",
+    "check:schema": "npx tsx scripts/checkSchema.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
