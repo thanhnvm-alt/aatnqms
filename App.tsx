@@ -81,7 +81,7 @@ const MobileNavItem: React.FC<MobileNavItemProps> = ({ viewName, label, icon: Ic
 
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<ViewState>('HOME');
+  const [view, setView] = useState<ViewState>('DASHBOARD'); // Default to DASHBOARD
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   
@@ -196,9 +196,7 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(localData);
                 setUser(parsedUser);
-                if (parsedUser.role === 'QC') setView('LIST');
-                else if (parsedUser.role === 'ADMIN') setView('DASHBOARD');
-                else setView('HOME');
+                setView('DASHBOARD'); // Redirect to Dashboard
                 return;
             } catch (e) {
                 console.error("Auth storage corrupted", e);
@@ -210,9 +208,7 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(sessionData);
                 setUser(parsedUser);
-                if (parsedUser.role === 'QC') setView('LIST');
-                else if (parsedUser.role === 'ADMIN') setView('DASHBOARD');
-                else setView('HOME');
+                setView('DASHBOARD'); // Redirect to Dashboard
             } catch (e) {
                 sessionStorage.removeItem(AUTH_STORAGE_KEY);
             }
@@ -237,9 +233,7 @@ const App = () => {
           sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
           localStorage.removeItem(AUTH_STORAGE_KEY);
       }
-      if (safeUser.role === 'QC') setView('LIST');
-      else if (safeUser.role === 'ADMIN') setView('DASHBOARD');
-      else setView('HOME');
+      setView('DASHBOARD'); // Redirect to Dashboard immediately
   };
 
   const handleLogout = () => {
@@ -543,7 +537,7 @@ const App = () => {
   const renderContent = () => {
     if (!user) return null;
     // Allow QC to access PLAN, PLAN_DETAIL, PROJECTS, PROJECT_DETAIL views
-    if (isQC && view !== 'LIST' && view !== 'FORM' && view !== 'DETAIL' && view !== 'SETTINGS' && view !== 'PLAN' && view !== 'PLAN_DETAIL' && view !== 'PROJECTS' && view !== 'PROJECT_DETAIL') {
+    if (isQC && view !== 'LIST' && view !== 'FORM' && view !== 'DETAIL' && view !== 'SETTINGS' && view !== 'PLAN' && view !== 'PLAN_DETAIL' && view !== 'PROJECTS' && view !== 'PROJECT_DETAIL' && view !== 'DASHBOARD') {
         return <div className="p-4 text-center">Redirecting...</div>;
     }
 
@@ -564,7 +558,17 @@ const App = () => {
                 onOpenProfile={() => { setSettingsInitialTab('PROFILE'); setView('SETTINGS'); }}
             />
           );
-          case 'DASHBOARD': return <Dashboard inspections={inspections} />;
+          case 'DASHBOARD': return (
+            <Dashboard 
+                inspections={inspections} 
+                user={user} 
+                onLogout={handleLogout} 
+                onNavigate={(viewName) => {
+                    if (viewName === 'SETTINGS') { setSettingsInitialTab('PROFILE'); setView('SETTINGS'); }
+                    else setView(viewName);
+                }} 
+            />
+          );
           case 'PLAN': return (
             <>
               <PlanList 
@@ -981,7 +985,7 @@ const App = () => {
         
         {!isQC && (
             <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] fixed bottom-0 w-full z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
-            <MobileNavItem viewName="HOME" label="Home" icon={Home} currentView={view} onNavigate={setView} />
+            <MobileNavItem viewName="LIST" label="Checklist" icon={List} currentView={view} onNavigate={setView} />
             <MobileNavItem viewName="PROJECTS" label="Projects" icon={Briefcase} currentView={view} onNavigate={setView} />
             <div className="relative -top-5">
                 <button 
