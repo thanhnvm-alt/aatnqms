@@ -11,7 +11,8 @@
     "deploy": "npm run build && wrangler deploy",
     "test:db": "node test-connection.js",
     "test:create": "npx tsx scripts/test-create.ts",
-    "check:schema": "npx tsx scripts/checkSchema.ts"
+    "check:schema": "npx tsx scripts/checkSchema.ts",
+    "db:recreate": "npx tsx scripts/recreateTable.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
