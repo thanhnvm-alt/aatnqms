@@ -18,7 +18,7 @@ import {
 import jsQR from 'jsqr';
 
 interface InspectionFormProps {
-  onSave: (inspection: Inspection) => void;
+  onSave: (inspection: Inspection) => Promise<void>; // Updated to Promise
   onCancel: () => void;
   initialData?: Partial<Inspection>;
   template?: CheckItem[];
@@ -81,6 +81,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [itemLoadingStates, setItemLoadingStates] = useState<Record<string, boolean>>({});
   const [isSearchingPlan, setIsSearchingPlan] = useState(false);
   const currentSearchRef = useRef<string>(''); 
+  const [isSaving, setIsSaving] = useState(false); // Add Loading state for save
   
   const [ncrModalItem, setNcrModalItem] = useState<{ itemId: string, itemLabel: string, ncrData?: NCR } | null>(null);
   const [ncrFormData, setNcrFormData] = useState<Partial<NCR>>({});
@@ -313,8 +314,11 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.ma_ct || !formData.ten_hang_muc || !formData.inspectorName) { alert("Vui lòng điền đầy đủ thông tin bắt buộc"); return; }
+    
+    setIsSaving(true); // Start loading state
+    
     let score = 0;
     if (formData.inspectedQuantity && formData.inspectedQuantity > 0) {
         score = Math.round(((formData.passedQuantity || 0) / formData.inspectedQuantity) * 100);
@@ -325,7 +329,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     }
     const hasFailures = (formData.failedQuantity && formData.failedQuantity > 0) || formData.items?.some(i => i.status === CheckStatus.FAIL);
     const status = hasFailures ? InspectionStatus.FLAGGED : InspectionStatus.COMPLETED;
-    onSave({ ...formData as Inspection, id: formData.id || `INS-${Date.now()}`, score, status: formData.status === InspectionStatus.DRAFT ? status : formData.status || status });
+    
+    try {
+        await onSave({ ...formData as Inspection, id: formData.id || `INS-${Date.now()}`, score, status: formData.status === InspectionStatus.DRAFT ? status : formData.status || status });
+    } finally {
+        setIsSaving(false); // End loading state
+    }
   };
 
   const handleAddPhoto = () => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); };
@@ -651,7 +660,13 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                 <span className="text-[9px] font-black px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full uppercase tracking-tighter">{getModuleLabel()}</span>
             </div>
         </div>
-        <button onClick={handleSave} className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-500/30 active:scale-90 transition-transform"><Save className="w-5 h-5"/></button>
+        <button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-500/30 active:scale-90 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+            {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5"/>}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 p-3 md:p-6 space-y-4 pb-20 md:pb-8 no-scrollbar bg-slate-50">

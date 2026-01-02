@@ -196,7 +196,6 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(localData);
                 setUser(parsedUser);
-                // Redirect QC to Checklist (LIST), others to Dashboard
                 setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
                 return;
             } catch (e) {
@@ -209,7 +208,6 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(sessionData);
                 setUser(parsedUser);
-                // Redirect QC to Checklist (LIST), others to Dashboard
                 setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
             } catch (e) {
                 sessionStorage.removeItem(AUTH_STORAGE_KEY);
@@ -235,8 +233,6 @@ const App = () => {
           sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
           localStorage.removeItem(AUTH_STORAGE_KEY);
       }
-      
-      // Redirect Logic: QC -> Checklist, Others -> Dashboard
       if (safeUser.role === 'QC') {
           setView('LIST');
       } else {
@@ -339,13 +335,24 @@ const App = () => {
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => {
-    setInspections(prev => {
-        const exists = prev.some(i => i.id === newInspection.id);
-        if (exists) return prev.map(i => i.id === newInspection.id ? newInspection : i);
-        return [newInspection, ...prev];
-    });
-    setView('LIST');
-    await saveInspectionToSheet(newInspection);
+    try {
+        // CRITICAL FIX FOR IOS: 
+        // We MUST await the DB save BEFORE changing the view.
+        // If we switch view first, the component unmounts and Safari often kills the pending fetch request.
+        await saveInspectionToSheet(newInspection);
+        
+        // After DB confirms success, update local state and navigation
+        setInspections(prev => {
+            const exists = prev.some(i => i.id === newInspection.id);
+            if (exists) return prev.map(i => i.id === newInspection.id ? newInspection : i);
+            return [newInspection, ...prev];
+        });
+        
+        setView('LIST');
+    } catch (error) {
+        console.error("Failed to save inspection:", error);
+        alert("Lỗi khi lưu dữ liệu! Vui lòng kiểm tra kết nối mạng và thử lại.");
+    }
   };
 
   const handleImportInspections = async (data: Inspection[]) => {

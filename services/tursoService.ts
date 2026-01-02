@@ -6,6 +6,7 @@ export const initDatabase = async () => {
   if (!isTursoConfigured) return;
   try {
     // 1. Create tables if not exist (Base schema)
+    // Note: JS timestamp used instead of unixepoch() in queries for broader compatibility
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,7 +21,7 @@ export const initDatabase = async () => {
         assignee TEXT,
         status TEXT DEFAULT 'PENDING',
         pthsp TEXT,
-        created_at INTEGER DEFAULT (unixepoch())
+        created_at INTEGER DEFAULT 0
       )
     `);
     
@@ -266,9 +267,10 @@ export const createPlan = async (data: CreatePlanInput): Promise<PlanEntity> => 
         dvt, don_vi, 
         so_luong_ipo, sl_dh, 
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id, headcode, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, dvt, so_luong_ipo, created_at
     `;
+    const now = Math.floor(Date.now() / 1000);
     const args = [
       data.headcode, 
       data.ma_ct, 
@@ -276,7 +278,8 @@ export const createPlan = async (data: CreatePlanInput): Promise<PlanEntity> => 
       data.ma_nha_may || null, data.ma_nha_may || null, // Fill both
       data.ten_hang_muc, data.ten_hang_muc, // Fill both
       data.dvt || 'PCS', data.dvt || 'PCS', // Fill both
-      data.so_luong_ipo || 0, data.so_luong_ipo || 0 // Fill both
+      data.so_luong_ipo || 0, data.so_luong_ipo || 0, // Fill both
+      now
     ];
     const result = await turso.execute({ sql, args });
     return result.rows[0] as unknown as PlanEntity;
@@ -342,6 +345,7 @@ export const importPlans = async (plans: PlanItem[]): Promise<void> => {
    if (!isTursoConfigured) return;
    
    await initDatabase();
+   const now = Math.floor(Date.now() / 1000);
 
    for (const p of plans) {
        try {
@@ -357,7 +361,7 @@ export const importPlans = async (plans: PlanItem[]): Promise<void> => {
                 so_luong_ipo, sl_dh,
                 ngay_kh, assignee, status, pthsp,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          `;
          const args = [
              p.headcode || '',
@@ -370,7 +374,8 @@ export const importPlans = async (plans: PlanItem[]): Promise<void> => {
              p.plannedDate || null,
              p.assignee || 'QC',
              'PENDING',
-             p.pthsp || null
+             p.pthsp || null,
+             now
          ];
          await turso.execute({ sql, args });
 
@@ -507,17 +512,18 @@ export const getAllInspections = async (): Promise<Inspection[]> => {
 
 export const saveInspection = async (inspection: Inspection): Promise<void> => {
     if (!isTursoConfigured) return;
+    const now = Math.floor(Date.now() / 1000);
     try {
         const exists = await turso.execute({sql: "SELECT 1 FROM inspections WHERE id = ?", args: [inspection.id]});
         if (exists.rows.length > 0) {
              await turso.execute({
-                sql: "UPDATE inspections SET data = ?, updated_at = unixepoch() WHERE id = ?",
-                args: [JSON.stringify(inspection), inspection.id]
+                sql: "UPDATE inspections SET data = ?, updated_at = ? WHERE id = ?",
+                args: [JSON.stringify(inspection), now, inspection.id]
              });
         } else {
              await turso.execute({
-                sql: "INSERT INTO inspections (id, data, created_at) VALUES (?, ?, unixepoch())",
-                args: [inspection.id, JSON.stringify(inspection)]
+                sql: "INSERT INTO inspections (id, data, created_at) VALUES (?, ?, ?)",
+                args: [inspection.id, JSON.stringify(inspection), now]
              });
         }
     } catch(e) { console.error("Error saving inspection", e); }
