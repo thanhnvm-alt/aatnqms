@@ -1,59 +1,51 @@
 
-import { NextRequest } from 'next/server';
-import { plansService } from '@/services/plansService';
-import { PlanUpdateSchema } from '@/lib/validations';
-import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response';
-import { ValidationError } from '@/lib/errors';
+import { NextResponse } from 'next/server';
+import { createClient } from '@libsql/client';
 
-interface RouteParams {
-  params: { id: string };
-}
-
-// Helper to validate ID
-const validateId = (idStr: string) => {
-  const id = parseInt(idStr);
-  if (isNaN(id)) throw new ValidationError("ID không hợp lệ");
-  return id;
+const getClient = () => {
+  const url = process.env.TURSO_DATABASE_URL;
+  if (!url) throw new Error("TURSO_DATABASE_URL is not defined");
+  
+  return createClient({
+    url: url.startsWith('libsql://') ? url.replace('libsql://', 'https://') : url,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+    intMode: 'number',
+  });
 };
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
-  const requestId = generateRequestId();
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    const id = validateId(params.id);
-    const plan = await plansService.getPlanById(id);
-    return successResponse(plan, 200, { requestId });
-  } catch (error) {
-    return errorResponse(error, requestId);
-  }
-}
-
-export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const requestId = generateRequestId();
-  try {
-    const id = validateId(params.id);
+    const id = params.id;
     const body = await request.json();
+    const client = getClient();
 
-    // Validate partial update
-    const validation = PlanUpdateSchema.safeParse(body);
-    if (!validation.success) {
-      throw new ValidationError("Dữ liệu cập nhật không hợp lệ", validation.error.flatten().fieldErrors);
-    }
+    // Construct dynamic update query
+    const fields = Object.keys(body).filter(k => k !== 'id' && k !== 'created_at');
+    if (fields.length === 0) return NextResponse.json({ success: false, error: 'No fields to update' });
 
-    const updatedPlan = await plansService.updatePlan(id, validation.data);
-    return successResponse(updatedPlan, 200, { requestId });
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => body[f]);
 
-  } catch (error) {
-    return errorResponse(error, requestId);
+    const result = await client.execute({
+      sql: `UPDATE searchPlans SET ${setClause} WHERE id = ? RETURNING *`,
+      args: [...values, id]
+    });
+
+    return NextResponse.json({ success: true, data: result.rows[0], message: 'Updated successfully' });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const requestId = generateRequestId();
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   try {
-    const id = validateId(params.id);
-    await plansService.deletePlan(id);
-    return successResponse({ message: "Đã xóa thành công" }, 200, { requestId });
-  } catch (error) {
-    return errorResponse(error, requestId);
+    const client = getClient();
+    await client.execute({
+      sql: `DELETE FROM searchPlans WHERE id = ?`,
+      args: [params.id]
+    });
+    return NextResponse.json({ success: true, message: 'Deleted successfully' });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
