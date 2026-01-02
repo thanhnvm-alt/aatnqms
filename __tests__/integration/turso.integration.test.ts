@@ -11,7 +11,7 @@ import { turso } from '../../services/tursoConfig';
 const runIntegration = process.env.TURSO_DATABASE_URL && !process.env.TURSO_DATABASE_URL.includes('placeholder');
 
 describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
-  let createdId: number | string;
+  let createdId: number;
 
   beforeAll(async () => {
     // Optional: Setup test table or clean state
@@ -35,7 +35,7 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
     });
     
     expect(newPlan.id).toBeDefined();
-    if (newPlan.id) createdId = newPlan.id;
+    createdId = newPlan.id;
 
     // 2. READ
     const fetched = await plansService.getPlanById(createdId);

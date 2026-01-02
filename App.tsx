@@ -23,8 +23,8 @@ import { HomeMenu } from './components/HomeMenu';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
 import { ThreeDConverter } from './components/ThreeDConverter';
-import { ProjectList } from './components/ProjectList'; 
-import { ProjectDetail } from './components/ProjectDetail'; 
+import { ProjectList } from './components/ProjectList'; // Import new component
+import { ProjectDetail } from './components/ProjectDetail'; // Import new component
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -42,7 +42,7 @@ import {
   importPlans,
   importUsers,
   importInspections,
-  fetchProjects
+  fetchProjects // Import
 } from './services/apiService';
 import { 
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
@@ -80,9 +80,8 @@ const MobileNavItem: React.FC<MobileNavItemProps> = ({ viewName, label, icon: Ic
 };
 
 const App = () => {
-  // ... state ...
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<ViewState>('DASHBOARD'); // Default to DASHBOARD
+  const [view, setView] = useState<ViewState>('HOME');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   
@@ -197,7 +196,9 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(localData);
                 setUser(parsedUser);
-                setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
+                if (parsedUser.role === 'QC') setView('LIST');
+                else if (parsedUser.role === 'ADMIN') setView('DASHBOARD');
+                else setView('HOME');
                 return;
             } catch (e) {
                 console.error("Auth storage corrupted", e);
@@ -209,7 +210,9 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(sessionData);
                 setUser(parsedUser);
-                setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
+                if (parsedUser.role === 'QC') setView('LIST');
+                else if (parsedUser.role === 'ADMIN') setView('DASHBOARD');
+                else setView('HOME');
             } catch (e) {
                 sessionStorage.removeItem(AUTH_STORAGE_KEY);
             }
@@ -234,11 +237,9 @@ const App = () => {
           sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
           localStorage.removeItem(AUTH_STORAGE_KEY);
       }
-      if (safeUser.role === 'QC') {
-          setView('LIST');
-      } else {
-          setView('DASHBOARD');
-      }
+      if (safeUser.role === 'QC') setView('LIST');
+      else if (safeUser.role === 'ADMIN') setView('DASHBOARD');
+      else setView('HOME');
   };
 
   const handleLogout = () => {
@@ -336,27 +337,13 @@ const App = () => {
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => {
-    try {
-        // iOS Fix: Ensure we check the result before navigating
-        const result = await saveInspectionToSheet(newInspection);
-        
-        if (result.success) {
-            // Only update state and navigate if save was successful
-            setInspections(prev => {
-                const exists = prev.some(i => i.id === newInspection.id);
-                if (exists) return prev.map(i => i.id === newInspection.id ? newInspection : i);
-                return [newInspection, ...prev];
-            });
-            setView('LIST');
-        } else {
-            // Show explicit error to user
-            console.error("Save failed:", result.message);
-            alert(`Lỗi khi lưu dữ liệu (Server): ${result.message || 'Không xác định'}. Vui lòng thử lại.`);
-        }
-    } catch (error: any) {
-        console.error("Failed to save inspection (Client):", error);
-        alert(`Lỗi ứng dụng: ${error.message}. Kiểm tra kết nối mạng.`);
-    }
+    setInspections(prev => {
+        const exists = prev.some(i => i.id === newInspection.id);
+        if (exists) return prev.map(i => i.id === newInspection.id ? newInspection : i);
+        return [newInspection, ...prev];
+    });
+    setView('LIST');
+    await saveInspectionToSheet(newInspection);
   };
 
   const handleImportInspections = async (data: Inspection[]) => {
@@ -433,7 +420,6 @@ const App = () => {
       setView('FORM');
   };
 
-  // ... (Scanner logic and renderContent same as before) ...
   // Scanner Logic
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -557,7 +543,7 @@ const App = () => {
   const renderContent = () => {
     if (!user) return null;
     // Allow QC to access PLAN, PLAN_DETAIL, PROJECTS, PROJECT_DETAIL views
-    if (isQC && view !== 'LIST' && view !== 'FORM' && view !== 'DETAIL' && view !== 'SETTINGS' && view !== 'PLAN' && view !== 'PLAN_DETAIL' && view !== 'PROJECTS' && view !== 'PROJECT_DETAIL' && view !== 'DASHBOARD') {
+    if (isQC && view !== 'LIST' && view !== 'FORM' && view !== 'DETAIL' && view !== 'SETTINGS' && view !== 'PLAN' && view !== 'PLAN_DETAIL' && view !== 'PROJECTS' && view !== 'PROJECT_DETAIL') {
         return <div className="p-4 text-center">Redirecting...</div>;
     }
 
@@ -578,17 +564,7 @@ const App = () => {
                 onOpenProfile={() => { setSettingsInitialTab('PROFILE'); setView('SETTINGS'); }}
             />
           );
-          case 'DASHBOARD': return (
-            <Dashboard 
-                inspections={inspections} 
-                user={user} 
-                onLogout={handleLogout} 
-                onNavigate={(viewName) => {
-                    if (viewName === 'SETTINGS') { setSettingsInitialTab('PROFILE'); setView('SETTINGS'); }
-                    else setView(viewName);
-                }} 
-            />
-          );
+          case 'DASHBOARD': return <Dashboard inspections={inspections} />;
           case 'PLAN': return (
             <>
               <PlanList 
@@ -1005,7 +981,7 @@ const App = () => {
         
         {!isQC && (
             <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] fixed bottom-0 w-full z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
-            <MobileNavItem viewName="LIST" label="Checklist" icon={List} currentView={view} onNavigate={setView} />
+            <MobileNavItem viewName="HOME" label="Home" icon={Home} currentView={view} onNavigate={setView} />
             <MobileNavItem viewName="PROJECTS" label="Projects" icon={Briefcase} currentView={view} onNavigate={setView} />
             <div className="relative -top-5">
                 <button 

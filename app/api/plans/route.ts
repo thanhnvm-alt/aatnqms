@@ -1,221 +1,62 @@
 
-import { createClient } from '@libsql/client';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { plansService } from '@/services/plansService';
+import { PlanSchema, PaginationSchema } from '@/lib/validations';
+import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response';
+import { ValidationError } from '@/lib/errors';
 
-const serverClient = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
-});
+export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
-  const userAgent = request.headers.get('user-agent') || 'unknown';
-  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
-  
-  console.log('📥 API POST from:', { userAgent, isIOS });
-
+export async function GET(request: NextRequest) {
+  const requestId = generateRequestId();
   try {
-    const body = await request.text();
-    console.log('📦 Raw body:', body);
-
-    let data;
-    try {
-      data = JSON.parse(body);
-    } catch (parseError) {
-      console.error('❌ JSON parse error:', parseError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid JSON format',
-          details: parseError instanceof Error ? parseError.message : 'Unknown parse error'
-        },
-        { status: 400 }
-      );
-    }
-
-    console.log('📦 Parsed data:', data);
-
-    // Validation
-    const requiredFields = ['headcode', 'ma_ct', 'ten_ct', 'ten_hang_muc'];
-    const missingFields = requiredFields.filter(field => !data[field]);
+    const { searchParams } = new URL(request.url);
     
-    if (missingFields.length > 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Thiếu thông tin bắt buộc',
-          missingFields
-        },
-        { status: 400 }
-      );
+    // Validate Query Params
+    const query = PaginationSchema.safeParse({
+      page: searchParams.get('page'),
+      limit: searchParams.get('limit'),
+      search: searchParams.get('search')
+    });
+
+    if (!query.success) {
+      throw new ValidationError('Tham số truy vấn không hợp lệ', query.error.flatten());
     }
 
-    // Clean and validate data
-    const cleanData = {
-      headcode: String(data.headcode).trim(),
-      ma_ct: String(data.ma_ct).trim(),
-      ten_ct: String(data.ten_ct).trim(),
-      ma_nha_may: data.ma_nha_may ? String(data.ma_nha_may).trim() : null,
-      ten_hang_muc: String(data.ten_hang_muc).trim(),
-      dvt: data.dvt ? String(data.dvt).trim() : null,
-      so_luong_ipo: typeof data.so_luong_ipo === 'number' ? data.so_luong_ipo : parseFloat(data.so_luong_ipo) || 0
-    };
+    const { page, limit, search } = query.data;
+    const { items, total } = await plansService.getPlans(page, limit, search);
 
-    console.log('🧹 Cleaned data:', cleanData);
-
-    // Insert into Turso
-    const result = await serverClient.execute({
-      sql: `
-        INSERT INTO searchPlans (
-          headcode, 
-          ma_ct, 
-          ten_ct, 
-          ma_nha_may,
-          ten_hang_muc, 
-          dvt,
-          so_luong_ipo,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
-      `,
-      args: [
-        cleanData.headcode,
-        cleanData.ma_ct,
-        cleanData.ten_ct,
-        cleanData.ma_nha_may,
-        cleanData.ten_hang_muc,
-        cleanData.dvt,
-        cleanData.so_luong_ipo
-      ]
-    });
-
-    console.log('✅ Insert result:', {
-      lastInsertRowid: result.lastInsertRowid,
-      rowsAffected: result.rowsAffected
-    });
-
-    // Convert BigInt to string for JSON serialization
-    const responseData = {
-      id: result.lastInsertRowid ? String(result.lastInsertRowid) : null,
-      rowsAffected: result.rowsAffected
-    };
-
-    return NextResponse.json({
-      success: true,
-      data: responseData,
-      message: 'Lưu thành công!',
-      platform: isIOS ? 'iOS' : 'other'
+    return successResponse(items, 200, {
+      requestId,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
     });
 
   } catch (error) {
-    console.error('❌ API error:', {
-      error,
-      message: error instanceof Error ? error.message : 'Unknown',
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    
-    // Check for specific error types
-    let errorMessage = 'Lỗi không xác định';
-    let errorCode = 'UNKNOWN_ERROR';
-
-    if (error instanceof Error) {
-      if (error.message.includes('pattern')) {
-        errorMessage = 'Dữ liệu không đúng định dạng';
-        errorCode = 'VALIDATION_ERROR';
-      } else if (error.message.includes('UNIQUE')) {
-        errorMessage = 'Dữ liệu đã tồn tại';
-        errorCode = 'DUPLICATE_ERROR';
-      } else if (error.message.includes('quota')) {
-        errorMessage = 'Hết dung lượng lưu trữ';
-        errorCode = 'QUOTA_ERROR';
-      } else if (error.message.includes('connection') || error.message.includes('network')) {
-        errorMessage = 'Lỗi kết nối database';
-        errorCode = 'CONNECTION_ERROR';
-      } else {
-        errorMessage = error.message;
-      }
-    }
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage,
-        code: errorCode,
-        details: process.env.NODE_ENV === 'development' && error instanceof Error ? {
-          message: error.message,
-          stack: error.stack
-        } : undefined
-      },
-      { status: 500 }
-    );
+    return errorResponse(error, requestId);
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
+  const requestId = generateRequestId();
   try {
-    const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
-    const offset = parseInt(searchParams.get('offset') || '0');
-    const ma_ct = searchParams.get('ma_ct');
+    const body = await request.json();
 
-    let sql = `
-      SELECT 
-        id,
-        headcode,
-        ma_ct,
-        ten_ct,
-        ma_nha_may,
-        ten_hang_muc,
-        dvt,
-        so_luong_ipo,
-        created_at
-      FROM searchPlans
-    `;
-    
-    const args: any[] = [];
-
-    if (ma_ct) {
-      sql += ' WHERE ma_ct = ?';
-      args.push(ma_ct);
+    // Validate Input Body
+    const validation = PlanSchema.safeParse(body);
+    if (!validation.success) {
+      throw new ValidationError("Dữ liệu đầu vào không hợp lệ", validation.error.flatten().fieldErrors);
     }
 
-    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    args.push(limit, offset);
+    const newPlan = await plansService.createPlan(validation.data);
 
-    const result = await serverClient.execute({ sql, args });
-
-    // Convert BigInt to string for JSON serialization
-    const rows = result.rows.map(row => ({
-      ...row,
-      id: row.id ? String(row.id) : null,
-      created_at: row.created_at ? String(row.created_at) : null
-    }));
-
-    // Count total
-    const countSql = ma_ct 
-      ? 'SELECT COUNT(*) as total FROM searchPlans WHERE ma_ct = ?'
-      : 'SELECT COUNT(*) as total FROM searchPlans';
-    const countArgs = ma_ct ? [ma_ct] : [];
-    const countResult = await serverClient.execute({ sql: countSql, args: countArgs });
-    const total = Number(countResult.rows[0]?.total) || 0;
-
-    return NextResponse.json({
-      success: true,
-      data: rows,
-      pagination: {
-        limit,
-        offset,
-        total,
-        hasMore: offset + limit < total
-      }
-    });
+    return successResponse(newPlan, 201, { requestId });
 
   } catch (error) {
-    console.error('❌ GET error:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Không thể tải dữ liệu' 
-      },
-      { status: 500 }
-    );
+    return errorResponse(error, requestId);
   }
 }
