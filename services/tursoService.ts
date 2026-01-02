@@ -1,6 +1,6 @@
 
 import { turso, isTursoConfigured } from "./tursoConfig";
-import { CreatePlanInput, PlanFilter, PlanEntity, Inspection, User, Workshop, PlanItem } from "../types";
+import { CreatePlanInput, PlanFilter, PlanEntity, Inspection, User, Workshop, PlanItem, Project } from "../types";
 
 export const initDatabase = async () => {
   if (!isTursoConfigured) return;
@@ -99,6 +99,26 @@ export const initDatabase = async () => {
       )
     `);
     await ensureColumn('workshops', 'data', 'TEXT');
+
+    // --- NEW: Projects Metadata Table ---
+    // Stores additional info like PM, PC, QA, Timeline not present in plans
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS projects (
+        code TEXT PRIMARY KEY,
+        manager TEXT,
+        pc TEXT,
+        qa TEXT,
+        location TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        status TEXT,
+        progress INTEGER,
+        description TEXT,
+        thumbnail TEXT,
+        images TEXT
+      )
+    `);
+    await ensureColumn('projects', 'images', 'TEXT');
 
     console.log("✅ Database tables verified & migrated");
   } catch (e) {
@@ -358,6 +378,108 @@ export const importPlans = async (plans: PlanItem[]): Promise<void> => {
            console.error("Failed to import plan", p, e);
        }
    }
+};
+
+// --- PROJECTS Aggregation ---
+
+export const getProjects = async (): Promise<Project[]> => {
+    if (!isTursoConfigured) return [];
+    try {
+        // 1. Get unique project codes/names from plans (Source of truth for existence)
+        const plansResult = await turso.execute(`
+            SELECT DISTINCT ma_ct, ten_ct 
+            FROM plans 
+            WHERE ma_ct IS NOT NULL AND ma_ct != ''
+        `);
+
+        if (plansResult.rows.length === 0) return [];
+
+        // 2. Get metadata from projects table (Source of truth for details)
+        const metaResult = await turso.execute(`SELECT * FROM projects`);
+        const metaMap = new Map<string, any>();
+        metaResult.rows.forEach((row: any) => {
+            metaMap.set(row.code, row);
+        });
+
+        // 3. Merge data
+        const projects: Project[] = plansResult.rows.map((planRow: any, index: number) => {
+            const code = planRow.ma_ct as string;
+            const name = planRow.ten_ct as string;
+            const meta = metaMap.get(code) || {};
+
+            let images: string[] = [];
+            try {
+                if (meta.images) {
+                    images = JSON.parse(meta.images);
+                }
+            } catch (e) {}
+
+            return {
+                id: meta.code || `${index}_${code}`, // Use code as ID if available, else generated
+                code: code,
+                name: name,
+                ma_ct: code,
+                ten_ct: name,
+                status: (meta.status as any) || 'Planning',
+                startDate: meta.start_date || new Date().toISOString().split('T')[0],
+                endDate: meta.end_date || new Date(Date.now() + 90*24*60*60*1000).toISOString().split('T')[0],
+                manager: meta.manager || 'Chưa cập nhật',
+                pc: meta.pc || '',
+                qa: meta.qa || '',
+                progress: Number(meta.progress || 0),
+                thumbnail: meta.thumbnail || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&size=400`,
+                description: meta.description || '',
+                location: meta.location || '',
+                images: images
+            };
+        });
+
+        return projects;
+    } catch (e) {
+        console.error("Error fetching projects:", e);
+        return [];
+    }
+};
+
+export const saveProjectMetadata = async (project: Project): Promise<void> => {
+    if (!isTursoConfigured) return;
+    try {
+        await turso.execute({
+            sql: `
+                INSERT INTO projects (code, manager, pc, qa, location, start_date, end_date, status, progress, description, thumbnail, images)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(code) DO UPDATE SET
+                    manager=excluded.manager,
+                    pc=excluded.pc,
+                    qa=excluded.qa,
+                    location=excluded.location,
+                    start_date=excluded.start_date,
+                    end_date=excluded.end_date,
+                    status=excluded.status,
+                    progress=excluded.progress,
+                    description=excluded.description,
+                    thumbnail=excluded.thumbnail,
+                    images=excluded.images
+            `,
+            args: [
+                project.ma_ct,
+                project.manager,
+                project.pc || '',
+                project.qa || '',
+                project.location || '',
+                project.startDate,
+                project.endDate,
+                project.status,
+                project.progress,
+                project.description || '',
+                project.thumbnail,
+                JSON.stringify(project.images || [])
+            ]
+        });
+    } catch (e) {
+        console.error("Error saving project metadata:", e);
+        throw e;
+    }
 };
 
 // --- INSPECTIONS (Stored as JSON for flexibility) ---

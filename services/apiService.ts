@@ -1,6 +1,6 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem } from '../types';
-import { MOCK_INSPECTIONS, MOCK_USERS, MOCK_WORKSHOPS, MOCK_PLAN_DATA, INITIAL_CHECKLIST_TEMPLATE } from '../constants';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project } from '../types';
+import { MOCK_INSPECTIONS, MOCK_USERS, MOCK_WORKSHOPS, MOCK_PLAN_DATA, INITIAL_CHECKLIST_TEMPLATE, MOCK_PROJECTS } from '../constants';
 import * as Turso from './tursoService';
 import { isTursoConfigured } from './tursoConfig';
 
@@ -211,6 +211,33 @@ export const importInspections = async (inspections: Inspection[]) => {
         return { success: true };
     } catch (error: any) {
         return { success: false, message: error.message };
+    }
+};
+
+// --- PROJECTS ---
+
+export const fetchProjects = async (): Promise<Project[]> => {
+    if (isTursoConfigured) {
+        try {
+            return await Turso.getProjects();
+        } catch(e) {
+            console.error("Failed to fetch projects from DB", e);
+        }
+    }
+    // Return empty if offline, removed Mock Data to force real data usage
+    return []; 
+};
+
+export const updateProject = async (project: Project): Promise<void> => {
+    if (isTursoConfigured) {
+        try {
+            await Turso.saveProjectMetadata(project);
+        } catch(e) {
+            console.error("Failed to update project metadata", e);
+            throw new Error("Không thể lưu thông tin dự án.");
+        }
+    } else {
+        console.warn("Update project not supported in offline/mock mode.");
     }
 };
 

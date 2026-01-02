@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop } from './types';
+import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
@@ -23,6 +23,8 @@ import { HomeMenu } from './components/HomeMenu';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
 import { ThreeDConverter } from './components/ThreeDConverter';
+import { ProjectList } from './components/ProjectList'; // Import new component
+import { ProjectDetail } from './components/ProjectDetail'; // Import new component
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -39,13 +41,14 @@ import {
   saveTemplate,
   importPlans,
   importUsers,
-  importInspections
+  importInspections,
+  fetchProjects // Import
 } from './services/apiService';
 import { 
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
   Home, LogOut, Box, WifiOff, QrCode, Zap, X, 
   User as UserIcon, Shield, UserCircle, Menu, PanelLeftClose, PanelLeftOpen,
-  FileText, ChevronDown
+  FileText, ChevronDown, Briefcase
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -90,6 +93,10 @@ const App = () => {
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanItem | null>(null);
   
+  // Projects State
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
   
@@ -246,6 +253,7 @@ const App = () => {
   useEffect(() => {
     if (user) {
         loadInspections();
+        loadProjects(); // Load projects when user logs in
     }
   }, [user]);
 
@@ -288,6 +296,13 @@ const App = () => {
       const data = await fetchWorkshops();
       if (data.length > 0) setWorkshops(data);
     } catch (e) {}
+  };
+
+  const loadProjects = async () => {
+      try {
+          const data = await fetchProjects();
+          if (data.length > 0) setProjects(data);
+      } catch(e) {}
   };
 
   const loadPlans = async (forceRefresh: boolean = false) => {
@@ -380,6 +395,12 @@ const App = () => {
       }
 
       // 2. Normal Mode (Manual Create or Post-Scan)
+      if(moduleId === 'PROJECTS') {
+          setView('PROJECTS');
+          setShowModuleSelector(false);
+          return;
+      }
+
       const template = templates[moduleId] || [];
       const baseData = pendingInspectionData || {};
       
@@ -497,7 +518,8 @@ const App = () => {
       { id: 'SQC_BTP', label: 'SQC-BTP' },
       { id: 'PQC', label: 'PQC' },
       { id: 'FSR', label: 'FSR' },
-      { id: 'SITE', label: 'SITE' }
+      { id: 'SITE', label: 'SITE' },
+      { id: 'PROJECTS', label: 'PROJECTS' }
   ];
 
   const visibleModules = useMemo(() => {
@@ -520,7 +542,8 @@ const App = () => {
 
   const renderContent = () => {
     if (!user) return null;
-    if (isQC && view !== 'LIST' && view !== 'FORM' && view !== 'DETAIL' && view !== 'SETTINGS') {
+    // Allow QC to access PLAN, PLAN_DETAIL, PROJECTS, PROJECT_DETAIL views
+    if (isQC && view !== 'LIST' && view !== 'FORM' && view !== 'DETAIL' && view !== 'SETTINGS' && view !== 'PLAN' && view !== 'PLAN_DETAIL' && view !== 'PROJECTS' && view !== 'PROJECT_DETAIL') {
         return <div className="p-4 text-center">Redirecting...</div>;
     }
 
@@ -533,6 +556,7 @@ const App = () => {
                         setCurrentModule(id as any); 
                         setView('LIST');
                     } else if(id==='CONVERT_3D') setView('CONVERT_3D'); 
+                    else if(id==='PROJECTS') setView('PROJECTS');
                 }} 
                 currentUser={user} 
                 onLogout={handleLogout}
@@ -573,6 +597,19 @@ const App = () => {
             </>
           );
           case 'PLAN_DETAIL': return null;
+          case 'PROJECTS': return (
+              <ProjectList 
+                  projects={projects} 
+                  onSelectProject={(id) => { setSelectedProjectId(id); setView('PROJECT_DETAIL'); }} 
+              />
+          );
+          case 'PROJECT_DETAIL': return selectedProjectId ? (
+              <ProjectDetail 
+                  project={projects.find(p => p.id === selectedProjectId)!}
+                  inspections={inspections}
+                  onBack={() => { setSelectedProjectId(null); setView('PROJECTS'); }}
+              />
+          ) : null;
           case 'SETTINGS': return (
             <Settings 
                 currentUser={user}
@@ -881,6 +918,7 @@ const App = () => {
             <nav className="flex-1 py-4 space-y-1 overflow-y-auto no-scrollbar">
                 {[
                     { id: 'HOME', label: 'TRANG CHỦ', icon: Home },
+                    { id: 'PROJECTS', label: 'DỰ ÁN', icon: Briefcase }, // Updated
                     { id: 'PLAN', label: 'KẾ HOẠCH', icon: FileSpreadsheet },
                     { id: 'LIST', label: 'DANH SÁCH', icon: List },
                     { id: 'DASHBOARD', label: 'BÁO CÁO', icon: LayoutDashboard },
@@ -891,7 +929,7 @@ const App = () => {
                         onClick={() => setView(item.id as ViewState)} 
                         className={`w-full flex items-center py-3 text-sm font-bold transition-all relative group
                             ${isSidebarCollapsed ? 'justify-center px-0' : 'px-6'}
-                            ${view === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}
+                            ${view === item.id || (item.id === 'PROJECTS' && view === 'PROJECT_DETAIL') ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}
                         `}
                     >
                         <item.icon className={`w-5 h-5 ${!isSidebarCollapsed ? 'mr-3' : ''}`} />
@@ -944,7 +982,7 @@ const App = () => {
         {!isQC && (
             <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] fixed bottom-0 w-full z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
             <MobileNavItem viewName="HOME" label="Home" icon={Home} currentView={view} onNavigate={setView} />
-            <MobileNavItem viewName="LIST" label="Checklist" icon={List} currentView={view} onNavigate={setView} />
+            <MobileNavItem viewName="PROJECTS" label="Projects" icon={Briefcase} currentView={view} onNavigate={setView} />
             <div className="relative -top-5">
                 <button 
                     onClick={() => setView('CONVERT_3D')} 

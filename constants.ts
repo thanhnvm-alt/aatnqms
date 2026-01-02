@@ -1,5 +1,5 @@
 
-import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop } from "./types";
+import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
   { id: 'site_1', category: 'Lắp đặt', label: 'Vệ sinh khu vực thi công', status: CheckStatus.PENDING, notes: '' },
@@ -197,5 +197,76 @@ export const MOCK_INSPECTIONS: Inspection[] = [
       { id: 'site_2', category: 'Lắp đặt', label: 'Kiểm tra mặt bằng/cao độ', status: CheckStatus.PASS, notes: '' },
     ],
     summary: 'Kiểm tra hiện trường hoàn tất.',
+  }
+];
+
+export const MOCK_PROJECTS: Project[] = [
+  {
+    id: '1',
+    code: 'PROJ-2023-884',
+    name: 'HQ Fit-out: Apex Towers',
+    ma_ct: 'PROJ-2023-884',
+    ten_ct: 'HQ Fit-out: Apex Towers',
+    status: 'In Progress',
+    startDate: 'Oct 12, 2023',
+    endDate: 'Mar 01, 2024',
+    manager: 'Nguyen Van A',
+    pc: 'Pham Thi B',
+    qa: 'Le Van C',
+    progress: 65,
+    thumbnail: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=600',
+    description: 'Thi công nội thất văn phòng trụ sở chính tập đoàn Apex. Bao gồm 5 tầng văn phòng và khu vực sảnh đón.',
+    location: 'Quận 1, TP.HCM'
+  },
+  {
+    id: '2',
+    code: 'PROJ-2023-712',
+    name: 'Lobby Renovation: West Wing',
+    ma_ct: 'PROJ-2023-712',
+    ten_ct: 'Lobby Renovation: West Wing',
+    status: 'Completed',
+    startDate: 'Jan 10, 2023',
+    endDate: 'Aug 15, 2023',
+    manager: 'Tran Thi B',
+    pc: 'Nguyen Van D',
+    qa: 'Hoang Thi E',
+    progress: 100,
+    thumbnail: 'https://images.unsplash.com/photo-1600607686527-6fb886090705?auto=format&fit=crop&q=80&w=600',
+    description: 'Cải tạo khu vực sảnh tây khách sạn 5 sao. Yêu cầu vật liệu cao cấp và thi công đêm.',
+    location: 'Quận 3, TP.HCM'
+  },
+  {
+    id: '3',
+    code: 'PROJ-2024-002',
+    name: 'Executive Suite Expansion',
+    ma_ct: 'PROJ-2024-002',
+    ten_ct: 'Executive Suite Expansion',
+    status: 'On Hold',
+    startDate: 'Nov 05, 2023',
+    endDate: 'Dec 20, 2023',
+    manager: 'Le Van C',
+    pc: 'Tran Van F',
+    qa: 'Nguyen Thi G',
+    progress: 15,
+    thumbnail: 'https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&q=80&w=600',
+    description: 'Mở rộng khu vực phòng họp cấp cao. Tạm dừng do thay đổi thiết kế từ chủ đầu tư.',
+    location: 'Hà Nội'
+  },
+  {
+    id: '4',
+    code: 'PROJ-2024-110',
+    name: 'Factory Floor B: Automation',
+    ma_ct: 'PROJ-2024-110',
+    ten_ct: 'Factory Floor B: Automation',
+    status: 'In Progress',
+    startDate: 'Feb 01, 2024',
+    endDate: 'Aug 30, 2024',
+    manager: 'Pham Van D',
+    pc: 'Le Thi H',
+    qa: 'Tran Van I',
+    progress: 30,
+    thumbnail: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=600',
+    description: 'Lắp đặt dây chuyền tự động hóa mới cho xưởng B. Yêu cầu độ chính xác cao.',
+    location: 'Bình Dương'
   }
 ];

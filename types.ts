@@ -25,9 +25,19 @@ export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'QC' | 'QA';
 
-export type ViewState = 'HOME' | 'DASHBOARD' | 'PLAN' | 'PLAN_DETAIL' | 'LIST' | 'FORM' | 'DETAIL' | 'SETTINGS' | 'CONVERT_3D';
+export type ViewState = 'HOME' | 'DASHBOARD' | 'PLAN' | 'PLAN_DETAIL' | 'LIST' | 'FORM' | 'DETAIL' | 'SETTINGS' | 'CONVERT_3D' | 'PROJECTS' | 'PROJECT_DETAIL';
 
 // --- INTERFACES ---
+
+export interface NCRComment {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  content: string;
+  createdAt: string;
+  attachments?: string[];
+}
 
 export interface NCR {
   id: string;
@@ -40,6 +50,7 @@ export interface NCR {
   status: 'OPEN' | 'CLOSED';
   imagesBefore?: string[]; // Hình ảnh lỗi
   imagesAfter?: string[];  // Hình ảnh sau khi khắc phục
+  comments?: NCRComment[]; // Danh sách bình luận
 }
 
 export interface CheckItem {
@@ -100,6 +111,27 @@ export interface PlanItem {
   status?: string;
   pthsp?: string;
   created_at?: number;
+}
+
+export interface Project {
+  id: string;
+  code: string; // Display Code (can be alias of ma_ct)
+  name: string; // Display Name (can be alias of ten_ct)
+  ma_ct: string; // Lấy từ kế hoạch
+  ten_ct: string; // Lấy từ kế hoạch
+  status: 'In Progress' | 'Completed' | 'On Hold' | 'Planning';
+  startDate: string; // Timeline Start
+  endDate: string; // Timeline End
+  manager: string; // PM
+  pc?: string; // Project Coordinator
+  qa?: string; // Quality Assurance
+  thumbnail: string;
+  progress: number;
+  description?: string;
+  location?: string;
+  budget?: string;
+  teamMembers?: string[];
+  images?: string[]; // Danh sách hình ảnh dự án
 }
 
 export interface User {
