@@ -28,6 +28,19 @@ const STORAGE_KEYS = {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const withRetry = async <T>(operation: () => Promise<T>, retries = 3, delayMs = 500): Promise<T> => {
+    let lastError;
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+            if (i < retries - 1) await delay(delayMs * (i + 1));
+        }
+    }
+    throw lastError;
+};
+
 export const checkApiConnection = async (): Promise<ConnectionStatus> => {
     if (!isTursoConfigured) {
         return { ok: false, error: 'unavailable', message: 'Turso URL not set' };
@@ -173,11 +186,13 @@ export const saveInspectionToSheet = async (inspection: Inspection) => {
         localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updated));
 
         if (isTursoConfigured) {
-            await Turso.saveInspection(inspection);
+            // iOS Fix: Retry logic to handle flaky connections
+            await withRetry(() => Turso.saveInspection(inspection));
         }
         return { success: true };
     } catch (error: any) {
-        return { success: false, message: error.message };
+        console.error("API Service Save Error:", error);
+        return { success: false, message: error.message || 'Unknown error' };
     }
 };
 

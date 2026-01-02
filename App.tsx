@@ -23,8 +23,8 @@ import { HomeMenu } from './components/HomeMenu';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
 import { ThreeDConverter } from './components/ThreeDConverter';
-import { ProjectList } from './components/ProjectList'; // Import new component
-import { ProjectDetail } from './components/ProjectDetail'; // Import new component
+import { ProjectList } from './components/ProjectList'; 
+import { ProjectDetail } from './components/ProjectDetail'; 
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -42,7 +42,7 @@ import {
   importPlans,
   importUsers,
   importInspections,
-  fetchProjects // Import
+  fetchProjects
 } from './services/apiService';
 import { 
   LayoutDashboard, List, Plus, Settings as SettingsIcon, FileSpreadsheet, 
@@ -80,6 +80,7 @@ const MobileNavItem: React.FC<MobileNavItemProps> = ({ viewName, label, icon: Ic
 };
 
 const App = () => {
+  // ... state ...
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<ViewState>('DASHBOARD'); // Default to DASHBOARD
   const [currentModule, setCurrentModule] = useState<string>('ALL');
@@ -336,22 +337,25 @@ const App = () => {
 
   const handleSaveInspection = async (newInspection: Inspection) => {
     try {
-        // CRITICAL FIX FOR IOS: 
-        // We MUST await the DB save BEFORE changing the view.
-        // If we switch view first, the component unmounts and Safari often kills the pending fetch request.
-        await saveInspectionToSheet(newInspection);
+        // iOS Fix: Ensure we check the result before navigating
+        const result = await saveInspectionToSheet(newInspection);
         
-        // After DB confirms success, update local state and navigation
-        setInspections(prev => {
-            const exists = prev.some(i => i.id === newInspection.id);
-            if (exists) return prev.map(i => i.id === newInspection.id ? newInspection : i);
-            return [newInspection, ...prev];
-        });
-        
-        setView('LIST');
-    } catch (error) {
-        console.error("Failed to save inspection:", error);
-        alert("Lỗi khi lưu dữ liệu! Vui lòng kiểm tra kết nối mạng và thử lại.");
+        if (result.success) {
+            // Only update state and navigate if save was successful
+            setInspections(prev => {
+                const exists = prev.some(i => i.id === newInspection.id);
+                if (exists) return prev.map(i => i.id === newInspection.id ? newInspection : i);
+                return [newInspection, ...prev];
+            });
+            setView('LIST');
+        } else {
+            // Show explicit error to user
+            console.error("Save failed:", result.message);
+            alert(`Lỗi khi lưu dữ liệu (Server): ${result.message || 'Không xác định'}. Vui lòng thử lại.`);
+        }
+    } catch (error: any) {
+        console.error("Failed to save inspection (Client):", error);
+        alert(`Lỗi ứng dụng: ${error.message}. Kiểm tra kết nối mạng.`);
     }
   };
 
@@ -429,6 +433,7 @@ const App = () => {
       setView('FORM');
   };
 
+  // ... (Scanner logic and renderContent same as before) ...
   // Scanner Logic
   useEffect(() => {
     let stream: MediaStream | null = null;
