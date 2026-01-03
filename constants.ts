@@ -1,4 +1,5 @@
 
+
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
@@ -210,7 +211,7 @@ export const MOCK_PROJECTS: Project[] = [
     status: 'In Progress',
     startDate: 'Oct 12, 2023',
     endDate: 'Mar 01, 2024',
-    manager: 'Nguyen Van A',
+    pm: 'Nguyen Van A',
     pc: 'Pham Thi B',
     qa: 'Le Van C',
     progress: 65,
@@ -227,7 +228,7 @@ export const MOCK_PROJECTS: Project[] = [
     status: 'Completed',
     startDate: 'Jan 10, 2023',
     endDate: 'Aug 15, 2023',
-    manager: 'Tran Thi B',
+    pm: 'Tran Thi B',
     pc: 'Nguyen Van D',
     qa: 'Hoang Thi E',
     progress: 100,
@@ -244,7 +245,7 @@ export const MOCK_PROJECTS: Project[] = [
     status: 'On Hold',
     startDate: 'Nov 05, 2023',
     endDate: 'Dec 20, 2023',
-    manager: 'Le Van C',
+    pm: 'Le Van C',
     pc: 'Tran Van F',
     qa: 'Nguyen Thi G',
     progress: 15,
@@ -261,7 +262,7 @@ export const MOCK_PROJECTS: Project[] = [
     status: 'In Progress',
     startDate: 'Feb 01, 2024',
     endDate: 'Aug 30, 2024',
-    manager: 'Pham Van D',
+    pm: 'Pham Van D',
     pc: 'Le Thi H',
     qa: 'Tran Van I',
     progress: 30,

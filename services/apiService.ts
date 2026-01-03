@@ -1,9 +1,7 @@
+
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project } from '../types';
 import * as db from './tursoService';
 
-/**
- * SHARED API TYPES
- */
 export interface PagedResult<T> {
   items: T[];
   total: number;
@@ -11,60 +9,50 @@ export interface PagedResult<T> {
   limit: number;
 }
 
-/**
- * 1. HEALTH & SYSTEM
- */
 export const checkApiConnection = async () => {
   const ok = await db.testConnection();
   return { ok };
 };
 
-/**
- * 2. PRODUCTION PLANS
- */
-export const fetchPlans = async (
-  search: string = '',
-  page: number = 1,
-  limit: number = 50
-): Promise<PagedResult<PlanItem>> => {
+export const fetchPlans = async (search: string = '', page: number = 1, limit: number = 50): Promise<PagedResult<PlanItem>> => {
   const result = await db.getPlans({ search, page, limit });
-  return {
-    items: result.items,
-    total: result.total,
-    page,
-    limit
+  return { items: result.items, total: result.total, page, limit };
+};
+
+/**
+ * OPTIMIZED: Fetch inspections with server-side pagination and filters
+ */
+export const fetchInspections = async (filters: { 
+    status?: string; 
+    search?: string; 
+    type?: string; 
+    page?: number; 
+    limit?: number 
+} = {}): Promise<PagedResult<Inspection>> => {
+  const page = filters.page || 1;
+  const limit = filters.limit || 100; // Default reasonable limit
+  
+  const result = await db.getInspectionsPaginated({
+      page,
+      limit,
+      search: filters.search,
+      status: filters.status,
+      type: filters.type
+  });
+
+  return { 
+      items: result.items, 
+      total: result.total, 
+      page, 
+      limit 
   };
 };
 
 /**
- * 3. INSPECTION WORKFLOW
+ * NEW: Fetch full inspection data including large checklist array
  */
-export const fetchInspections = async (
-  filters: { status?: string; search?: string; page?: number; limit?: number } = {}
-): Promise<PagedResult<Inspection>> => {
-  const all = await db.getAllInspections(filters);
-  // Simple client-side pagination for robustness
-  const page = filters.page || 1;
-  const limit = filters.limit || 1000;
-  const startIndex = (page - 1) * limit;
-  const items = all.slice(startIndex, startIndex + limit);
-  
-  return {
-    items,
-    total: all.length,
-    page,
-    limit
-  };
-};
-
-export const createInspection = async (inspection: Partial<Inspection>) => {
-  await db.saveInspection(inspection as Inspection);
-  return { success: true, data: inspection };
-};
-
-export const updateInspection = async (id: string, inspection: Partial<Inspection>) => {
-  await db.saveInspection(inspection as Inspection);
-  return { success: true, data: inspection };
+export const fetchInspectionById = async (id: string): Promise<Inspection | null> => {
+    return await db.getInspectionById(id);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
@@ -76,41 +64,41 @@ export const deleteInspectionFromSheet = async (id: string) => {
   await db.deleteInspection(id);
 };
 
-// Workflow status changes (Updates directly to DB)
-export const submitInspection = async (id: string) => {
-    // In a real app, this would trigger notifications. Here we just update status.
-    const all = await db.getAllInspections();
-    const found = all.find(i => i.id === id);
-    if (found) {
-        found.status = 'SUBMITTED' as any;
-        await db.saveInspection(found);
+export const fetchProjects = async (): Promise<Project[]> => {
+  const plansData = await db.getPlans({ search: '', page: 1, limit: 1000 });
+  const dbProjects = await db.getProjects();
+  
+  const distinctPlanProjects = new Map<string, PlanItem>();
+  plansData.items.forEach(p => {
+    if (!distinctPlanProjects.has(p.ma_ct)) {
+      distinctPlanProjects.set(p.ma_ct, p);
     }
-};
+  });
 
-export const approveInspection = async (id: string) => {
-    const all = await db.getAllInspections();
-    const found = all.find(i => i.id === id);
-    if (found) {
-        found.status = 'APPROVED' as any;
-        await db.saveInspection(found);
-    }
-};
+  const combined: Project[] = Array.from(distinctPlanProjects.values()).map(p => {
+    const existing = dbProjects.find(dp => dp.ma_ct === p.ma_ct);
+    if (existing) return existing;
+    return {
+      id: `proj_${p.ma_ct}`,
+      code: p.ma_ct,
+      name: p.ten_ct,
+      ma_ct: p.ma_ct,
+      ten_ct: p.ten_ct,
+      status: 'In Progress',
+      startDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      endDate: 'TBD',
+      pm: 'Unassigned',
+      pc: '',
+      qa: '',
+      thumbnail: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=600',
+      progress: 0,
+      description: '',
+      location: '',
+      images: []
+    };
+  });
 
-export const rejectInspection = async (id: string, reason: string) => {
-    const all = await db.getAllInspections();
-    const found = all.find(i => i.id === id);
-    if (found) {
-        found.status = 'FLAGGED' as any; // Rejected maps to FLAGGED in this UI
-        found.summary = (found.summary || '') + `\n[REJECT REASON]: ${reason}`;
-        await db.saveInspection(found);
-    }
-};
-
-/**
- * 4. PROJECT MANAGEMENT
- */
-export const fetchProjects = async () => {
-  return await db.getProjects();
+  return combined;
 };
 
 export const updateProject = async (project: Project) => {
@@ -118,62 +106,22 @@ export const updateProject = async (project: Project) => {
   return project;
 };
 
-/**
- * 5. USER & ACCESS CONTROL
- */
-export const fetchUsers = async () => {
-  return await db.getUsers();
-};
-
-export const saveUser = async (user: User) => {
-  await db.saveUser(user);
-  return user;
-};
-
-export const deleteUser = async (id: string) => {
-  await db.deleteUser(id);
-};
-
-export const importUsers = async (users: User[]) => {
-  await db.importUsers(users);
-};
-
-/**
- * 6. WORKSHOP MANAGEMENT
- */
-export const fetchWorkshops = async () => {
-  return await db.getWorkshops();
-};
-
-export const saveWorkshop = async (workshop: Workshop) => {
-  await db.saveWorkshop(workshop);
-  return workshop;
-};
-
-export const deleteWorkshop = async (id: string) => {
-  await db.deleteWorkshop(id);
-};
-
-/**
- * 7. TEMPLATE MANAGEMENT
- */
-export const fetchTemplates = async () => {
-  return await db.getTemplates();
-};
-
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
-  await db.saveTemplate(moduleId, items);
-};
-
-/**
- * 8. BULK IMPORT
- */
-export const importPlans = async (plans: PlanItem[]) => {
-  await db.importPlansBatch(plans);
-};
+export const fetchUsers = async () => await db.getUsers();
+export const saveUser = async (user: User) => { await db.saveUser(user); return user; };
+export const deleteUser = async (id: string) => { await db.deleteUser(id); };
+export const importUsers = async (users: User[]) => { await db.importUsers(users); };
 
 export const importInspections = async (inspections: Inspection[]) => {
-  for (const i of inspections) {
-      await db.saveInspection(i);
+  for (const inspection of inspections) {
+    await db.saveInspection(inspection);
   }
 };
+
+export const fetchWorkshops = async () => await db.getWorkshops();
+export const saveWorkshop = async (workshop: Workshop) => { await db.saveWorkshop(workshop); return workshop; };
+export const deleteWorkshop = async (id: string) => { await db.deleteWorkshop(id); };
+
+export const fetchTemplates = async () => await db.getTemplates();
+export const saveTemplate = async (moduleId: string, items: CheckItem[]) => { await db.saveTemplate(moduleId, items); };
+
+export const importPlans = async (plans: PlanItem[]) => { await db.importPlansBatch(plans); };

@@ -1,7 +1,10 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project } from '../types';
-import { Search, Plus, Calendar, CheckCircle2, Clock, PauseCircle, ChevronRight, User as UserIcon, ImageIcon } from 'lucide-react';
+import { 
+  Search, Calendar, CheckCircle2, Clock, PauseCircle, 
+  ImageIcon, Target, BarChart3, ArrowUpRight, ChevronDown, Filter, LayoutGrid, X
+} from 'lucide-react';
 
 interface ProjectListProps {
   projects: Project[];
@@ -9,156 +12,181 @@ interface ProjectListProps {
 }
 
 const STATUS_COLORS = {
-  'In Progress': 'bg-blue-100 text-blue-700',
-  'Completed': 'bg-green-100 text-green-700',
-  'On Hold': 'bg-orange-100 text-orange-700',
-  'Planning': 'bg-slate-100 text-slate-700'
+  'In Progress': 'bg-blue-50 text-blue-700 border-blue-100',
+  'Completed': 'bg-green-50 text-green-700 border-green-100',
+  'On Hold': 'bg-orange-50 text-orange-700 border-orange-100',
+  'Planning': 'bg-slate-50 text-slate-700 border-slate-100'
 };
 
 const STATUS_ICONS = {
-  'In Progress': <Clock className="w-4 h-4" />,
-  'Completed': <CheckCircle2 className="w-4 h-4" />,
-  'On Hold': <PauseCircle className="w-4 h-4" />,
-  'Planning': <Calendar className="w-4 h-4" />
+  'In Progress': <Clock className="w-3.5 h-3.5" />,
+  'Completed': <CheckCircle2 className="w-3.5 h-3.5" />,
+  'On Hold': <PauseCircle className="w-3.5 h-3.5" />,
+  'Planning': <Calendar className="w-3.5 h-3.5" />
 };
 
 export const ProjectList: React.FC<ProjectListProps> = ({ projects, onSelectProject }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'All' | 'In Progress' | 'Completed' | 'On Hold'>('All');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const filteredProjects = useMemo(() => {
     const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
-    
     return projects.filter(p => {
-      if (!p) return false;
       const matchesSearch = !safeSearchTerm || 
-                            String(p.name || '').toLowerCase().includes(safeSearchTerm) || 
-                            String(p.code || '').toLowerCase().includes(safeSearchTerm);
+                            p.name.toLowerCase().includes(safeSearchTerm) || 
+                            p.code.toLowerCase().includes(safeSearchTerm) ||
+                            p.ma_ct.toLowerCase().includes(safeSearchTerm);
       const matchesFilter = filter === 'All' || p.status === filter;
       return matchesSearch && matchesFilter;
     });
   }, [projects, searchTerm, filter]);
 
+  const filterOptions = ['All', 'In Progress', 'Completed', 'On Hold'] as const;
+
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      {/* Header */}
-      <div className="bg-white px-4 py-4 border-b border-slate-200 sticky top-0 z-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Project Master Plan</h2>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95">
-            <Plus className="w-5 h-5" /> New
-          </button>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+      {/* Refined Search & Filter Header */}
+      <div className="bg-white px-4 py-4 border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div className="flex items-center gap-3 w-full">
+          {/* Search Input Container */}
+          <div className="relative group flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
             <input 
               type="text" 
-              placeholder="Search by Project ID or Name..." 
+              placeholder="Tìm tên dự án, mã công trình..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-slate-100 border-none rounded-xl font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm text-slate-700 focus:ring-4 focus:ring-blue-100 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner"
             />
-          </div>
-          
-          <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
-            {(['All', 'In Progress', 'Completed', 'On Hold'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${
-                  filter === f 
-                  ? 'bg-slate-900 text-white border-slate-900' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                }`}
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-600 transition-colors"
               >
-                {f}
+                <X className="w-4 h-4" />
               </button>
-            ))}
+            )}
+          </div>
+
+          {/* Filter Dropdown List */}
+          <div className="relative shrink-0" ref={filterRef}>
+            <button 
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className={`h-full px-4 py-3 rounded-2xl border flex items-center gap-2 transition-all active:scale-95 shadow-sm font-black text-xs uppercase tracking-tight ${
+                filter !== 'All' 
+                ? 'bg-blue-600 text-white border-blue-600 shadow-blue-200' 
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Filter className={`w-4 h-4 ${filter !== 'All' ? 'text-white' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">{filter === 'All' ? 'Bộ lọc' : filter}</span>
+              <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isFilterOpen && (
+              <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-right overflow-hidden">
+                <div className="px-4 py-2 border-b border-slate-50 mb-1">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trạng thái dự án</p>
+                </div>
+                {filterOptions.map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => { setFilter(opt); setIsFilterOpen(false); }}
+                    className={`w-full text-left px-4 py-3 flex items-center justify-between group transition-colors ${
+                      filter === opt ? 'bg-blue-50' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className={`w-2 h-2 rounded-full ${
+                          opt === 'All' ? 'bg-slate-400' : 
+                          opt === 'In Progress' ? 'bg-blue-500' : 
+                          opt === 'Completed' ? 'bg-green-500' : 'bg-orange-500'
+                       }`} />
+                       <span className={`text-xs font-black uppercase tracking-tight ${filter === opt ? 'text-blue-700' : 'text-slate-600'}`}>{opt}</span>
+                    </div>
+                    {filter === opt && <CheckCircle2 className="w-4 h-4 text-blue-600" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Grid Content */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar pb-24">
         {filteredProjects.length === 0 ? (
-          <div className="text-center py-20 text-slate-400">
-            <p>No projects found matching your criteria.</p>
+          <div className="py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200 mx-2 flex flex-col items-center">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                <Target className="w-10 h-10 text-slate-200" />
+            </div>
+            <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Không tìm thấy dự án phù hợp</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map(project => {
-              // Prioritize the first image from the gallery, fallback to default thumbnail
-              const displayImage = (project.images && project.images.length > 0) 
-                ? project.images[0] 
-                : project.thumbnail;
-
+              const displayImage = (project.images && project.images.length > 0) ? project.images[0] : project.thumbnail;
               return (
-                <div key={project.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                  {/* Status Badge */}
-                  <div className="flex justify-between items-start mb-4">
-                     <div className="flex items-center gap-2">
-                        <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">
-                          {project.code}
-                        </span>
-                     </div>
-                     <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[project.status]}`}>
-                        {STATUS_ICONS[project.status]} {project.status}
-                     </span>
+                <div 
+                  key={project.id} 
+                  onClick={() => onSelectProject(project.id)}
+                  className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300"
+                >
+                  <div className="h-44 relative overflow-hidden bg-slate-900 shrink-0">
+                    {displayImage ? (
+                      <img src={displayImage} alt={project.name} className="w-full h-full object-cover opacity-80 transition-transform duration-700 group-hover:scale-110 group-hover:opacity-100" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-600"><ImageIcon className="w-12 h-12 opacity-20" /></div>
+                    )}
+                    <div className="absolute top-4 left-4">
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg backdrop-blur-md ${STATUS_COLORS[project.status]}`}>
+                            {STATUS_ICONS[project.status]} {project.status}
+                        </div>
+                    </div>
                   </div>
-
-                  <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-                     {/* Thumbnail */}
-                     <div className="w-full md:w-32 h-32 md:h-32 rounded-xl bg-slate-100 shrink-0 overflow-hidden border border-slate-100 relative">
-                        {displayImage ? (
-                          <img src={displayImage} alt={project.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-300">
-                            <ImageIcon className="w-10 h-10" />
-                          </div>
-                        )}
-                     </div>
-
-                     {/* Info */}
-                     <div className="flex-1">
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">{project.name}</h3>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-8 mb-4">
-                            <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
-                               <Calendar className="w-4 h-4 text-slate-400" />
-                               <span>Start: {project.startDate}</span>
+                  <div className="p-5 flex-1 flex flex-col space-y-4">
+                    <div className="flex-1">
+                        <h3 className="text-base font-black text-slate-800 leading-tight uppercase tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">{project.name}</h3>
+                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2 mb-3">
+                            <Target className="w-3.5 h-3.5 text-blue-500" /> {project.pm || 'No PM Assigned'}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
+                                <p className="text-xs font-bold text-slate-700">{project.startDate}</p>
                             </div>
-                            <div className={`flex items-center gap-2 text-sm font-medium ${new Date(project.endDate) < new Date() && project.status !== 'Completed' ? 'text-red-600' : 'text-slate-500'}`}>
-                               <Clock className="w-4 h-4 text-slate-400" />
-                               <span>Due: {project.endDate}</span>
+                            <div className="space-y-1">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
+                                <p className="text-xs font-bold text-slate-700">{project.endDate}</p>
                             </div>
                         </div>
-
-                        <div className="flex items-center justify-between">
-                            <div className="flex -space-x-2">
-                                {/* Mock Team Avatars */}
-                                {[1,2,3].map(i => (
-                                  <img key={i} className="w-8 h-8 rounded-full border-2 border-white" src={`https://ui-avatars.com/api/?name=User+${i}&background=random`} alt="" />
-                                ))}
-                            </div>
-                            <button 
-                              onClick={() => onSelectProject(project.id)}
-                              className="text-blue-600 font-bold text-sm flex items-center gap-1 hover:gap-2 transition-all"
-                            >
-                              View Details <ChevronRight className="w-4 h-4" />
-                            </button>
+                    </div>
+                    <div className="pt-2">
+                        <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><BarChart3 className="w-3 h-3 text-indigo-500" /> Progress</span>
+                            <span className="text-[10px] font-black text-blue-600">{project.progress}%</span>
                         </div>
-                     </div>
+                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000 group-hover:from-indigo-600 group-hover:to-blue-600" style={{ width: `${project.progress}%` }}></div>
+                        </div>
+                    </div>
                   </div>
-                  
-                  {/* Progress Bar (Only visible for active projects) */}
-                  {project.status === 'In Progress' && (
-                      <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100">
-                          <div className="h-full bg-blue-600" style={{ width: `${project.progress}%` }}></div>
-                      </div>
-                  )}
-                  <div className={`absolute left-0 top-6 h-12 w-1 rounded-r-full ${project.status === 'Completed' ? 'bg-green-500' : project.status === 'On Hold' ? 'bg-orange-500' : 'bg-blue-600'}`}></div>
+                  <div className="px-5 py-3 border-t border-slate-50 bg-slate-50/50 flex justify-between items-center">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Project Detail</span>
+                        <div className="p-1.5 rounded-lg bg-white border border-slate-200 text-blue-600 shadow-sm group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all"><ArrowUpRight className="w-4 h-4" /></div>
+                  </div>
                 </div>
               );
             })}
