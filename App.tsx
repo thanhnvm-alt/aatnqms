@@ -204,9 +204,25 @@ const App = () => {
 
   const handleQrDetected = (scannedCode: string) => {
       setShowQrScanner(false);
+      const cleanCode = scannedCode.trim();
+
+      // Auto-fill: Tìm kiếm trong danh sách Plans đã tải
+      const matchedPlan = plans.find(p => 
+        (p.ma_nha_may && p.ma_nha_may.toLowerCase() === cleanCode.toLowerCase()) || 
+        (p.headcode && p.headcode.toLowerCase() === cleanCode.toLowerCase())
+      );
+
       setInitialFormState({
           type: pendingType || 'IQC',
-          ma_nha_may: scannedCode,
+          ma_nha_may: cleanCode,
+          // Nếu tìm thấy plan, điền luôn thông tin vào form
+          ma_ct: matchedPlan?.ma_ct || '',
+          ten_ct: matchedPlan?.ten_ct || '',
+          ten_hang_muc: matchedPlan?.ten_hang_muc || '',
+          headcode: matchedPlan?.headcode || '',
+          dvt: matchedPlan?.dvt || 'PCS',
+          so_luong_ipo: matchedPlan?.so_luong_ipo || 0,
+          
           inspectorName: user?.name || '',
           date: new Date().toISOString().split('T')[0],
           items: templates[pendingType || 'IQC'] || []
