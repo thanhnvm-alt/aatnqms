@@ -52,18 +52,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogout, onNavigate }) => {
   const safeInspections = Array.isArray(inspections) ? inspections : [];
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const stats = useMemo(() => {
     const total = safeInspections.length;
@@ -136,105 +124,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
     <div className="h-full overflow-y-auto no-scrollbar p-4 md:p-6 animate-fade-in bg-slate-50/50">
       <div className="space-y-4 md:space-y-6 pb-20 md:pb-6">
         
-        {/* Header with Title and User Avatar - Updated Layout */}
-        <div className="flex items-start gap-4">
-             {/* User Avatar with Dropdown - Moved to LEFT */}
-             {user && (
-               <div className="relative z-50 shrink-0" ref={menuRef}>
-                  <button 
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="relative w-14 h-14 rounded-full border-2 border-white shadow-md overflow-hidden active:scale-95 transition-transform"
-                  >
-                    <div className="w-full h-full bg-blue-600 flex items-center justify-center text-white font-black text-sm">
-                        {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : user.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
-                  </button>
-
-                  {isMenuOpen && (
-                    <div className="absolute left-0 mt-3 w-72 bg-white rounded-3xl shadow-2xl border border-slate-100 z-50 animate-in zoom-in-95 origin-top-left overflow-hidden">
-                       <div className="relative">
-                          <div className="absolute top-0 left-0 w-full h-16 bg-gradient-to-r from-blue-500 to-indigo-600 opacity-10"></div>
-                          <div className="p-6 text-center relative z-10">
-                             <div className="w-20 h-20 rounded-full border-4 border-white shadow-lg mx-auto mb-3 overflow-hidden bg-blue-600 flex items-center justify-center text-white font-black text-2xl">
-                                {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : user.name.substring(0, 2).toUpperCase()}
-                             </div>
-                             <div className="flex items-center justify-center gap-1.5 mb-1">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang trực tuyến</span>
-                             </div>
-                             <h3 className="font-black text-slate-900 text-lg leading-tight uppercase">{user.name}</h3>
-                             <p className="text-blue-600 font-bold text-xs uppercase tracking-tight mt-0.5">{user.msnv || 'USER-ID'}</p>
-                             
-                             <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-100 rounded-full">
-                                <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
-                                <span className="text-[10px] font-black text-slate-600 uppercase">PHÂN QUYỀN: {user.role}</span>
-                             </div>
-                          </div>
-                       </div>
-
-                       <div className="px-3 pb-3 space-y-1">
-                          <button 
-                            onClick={() => { setIsMenuOpen(false); onNavigate?.('SETTINGS'); }}
-                            className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-colors group"
-                          >
-                             <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all">
-                                <UserCircle className="w-5 h-5" />
-                             </div>
-                             <div className="text-left">
-                                <p className="text-xs font-black text-slate-700 uppercase">Thông tin tài khoản</p>
-                                <p className="text-[10px] text-slate-400 font-medium">Chỉnh sửa hồ sơ cá nhân</p>
-                             </div>
-                          </button>
-
-                          <button 
-                            onClick={() => { setIsMenuOpen(false); onNavigate?.('SETTINGS'); }}
-                            className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-colors group"
-                          >
-                             <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all">
-                                <Settings className="w-5 h-5" />
-                             </div>
-                             <div className="text-left">
-                                <p className="text-xs font-black text-slate-700 uppercase">Cài đặt hệ thống</p>
-                                <p className="text-[10px] text-slate-400 font-medium">Quản lý nhân sự & mẫu</p>
-                             </div>
-                          </button>
-
-                          <div className="h-px bg-slate-100 mx-2 my-1"></div>
-
-                          <button 
-                            onClick={() => { setIsMenuOpen(false); onLogout?.(); }}
-                            className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-red-50 transition-colors group"
-                          >
-                             <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-500 group-hover:bg-white group-hover:shadow-sm transition-all">
-                                <LogOut className="w-5 h-5" />
-                             </div>
-                             <div className="text-left">
-                                <p className="text-xs font-black text-red-600 uppercase">Đăng xuất ngay</p>
-                                <p className="text-[10px] text-red-400 font-medium">Kết thúc phiên làm việc</p>
-                             </div>
-                          </button>
-                       </div>
-                    </div>
-                  )}
-               </div>
-             )}
-
-             {/* Header Content */}
-             <div className="flex flex-col gap-1.5 pt-1">
-                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Dashboard</h2>
-                <p className="text-slate-500 text-xs font-medium flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> 
-                  Hôm nay, {new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
-                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm w-fit mt-1">
-                    <Activity className="w-3 h-3 text-blue-500 animate-pulse" />
-                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Hệ thống ổn định</span>
-                </div>
-             </div>
-        </div>
-        
-        {/* Mobile Optimized Grid: 2 columns on mobile */}
+        {/* Mobile Stat Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <StatCard 
             title="Tổng phiếu" 
@@ -270,7 +160,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-200 lg:col-span-1 flex flex-col">
             <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-widest mb-4 md:mb-6">Phân bố trạng thái</h3>
-            {/* Added explicit height to container to resolve Recharts warning about width/height being 0 or -1 */}
             <div className="w-full h-[250px] relative">
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <PieChart>
@@ -292,7 +181,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                   <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }}/>
                 </PieChart>
               </ResponsiveContainer>
-              {/* Center Label */}
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center -mt-4">
                  <p className="text-2xl md:text-3xl font-black text-slate-800">{stats.completed + stats.flagged}</p>
                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Đã xong</p>
@@ -302,7 +190,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
 
           <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-200 lg:col-span-2 flex flex-col">
             <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-widest mb-4 md:mb-6">Hiệu suất chất lượng theo Dự án (Top 8)</h3>
-            {/* Added explicit height to container to resolve Recharts warning */}
             <div className="w-full h-[250px]">
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={projectData} layout="vertical" margin={{ left: 10, right: 10 }}>

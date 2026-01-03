@@ -23,6 +23,7 @@ import { LoginPage } from './components/LoginPage';
 import { ThreeDConverter } from './components/ThreeDConverter';
 import { ProjectList } from './components/ProjectList';
 import { ProjectDetail } from './components/ProjectDetail';
+import { GlobalHeader } from './components/GlobalHeader';
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -44,6 +45,8 @@ import {
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { List, Plus, FileSpreadsheet, Box, LayoutDashboard, QrCode, X, FileText, Briefcase } from 'lucide-react';
+// @ts-ignore
+import jsQR from 'jsqr';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
@@ -68,9 +71,17 @@ const App = () => {
   });
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null);
   const [initialFormState, setInitialFormState] = useState<Partial<Inspection> | undefined>(undefined);
+  
+  // Modals state
   const [showModuleSelector, setShowModuleSelector] = useState(false);
   const [isScanSelectionMode, setIsScanSelectionMode] = useState(false);
-  const [pendingInspectionData, setPendingInspectionData] = useState<Partial<Inspection> | null>(null);
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [pendingType, setPendingType] = useState<ModuleId | null>(null);
+
+  // QR Camera Ref
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scannerCanvasRef = useRef<HTMLCanvasElement>(null);
+  const qrRequestRef = useRef<number>(0);
 
   const isQC = user?.role === 'QC';
 
@@ -148,13 +159,80 @@ const App = () => {
       setView('SETTINGS');
   };
 
+  // QR Scanning Workflow
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (showQrScanner) {
+      const startCamera = async () => {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          if (videoRef.current && stream) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.setAttribute('playsinline', 'true');
+              videoRef.current.play();
+              qrRequestRef.current = requestAnimationFrame(qrTick);
+          }
+        } catch (err) { alert('Camera access denied'); setShowQrScanner(false); }
+      };
+      startCamera();
+    }
+    return () => { if (stream) stream.getTracks().forEach(track => track.stop()); if (qrRequestRef.current) cancelAnimationFrame(qrRequestRef.current); };
+  }, [showQrScanner]);
+
+  const qrTick = () => {
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const canvas = scannerCanvasRef.current;
+      const video = videoRef.current;
+      if (canvas) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) { 
+             handleQrDetected(code.data.trim()); 
+             return; 
+          }
+        }
+      }
+    }
+    if (showQrScanner) qrRequestRef.current = requestAnimationFrame(qrTick);
+  };
+
+  const handleQrDetected = (scannedCode: string) => {
+      setShowQrScanner(false);
+      setInitialFormState({
+          type: pendingType || 'IQC',
+          ma_nha_may: scannedCode,
+          inspectorName: user?.name || '',
+          date: new Date().toISOString().split('T')[0],
+          items: templates[pendingType || 'IQC'] || []
+      });
+      setView('FORM');
+      setPendingType(null);
+  };
+
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} />;
 
+  const headerActions = {
+    onRefresh: view === 'LIST' || view === 'DASHBOARD' ? loadInspections : (view === 'PLAN' ? loadPlans : undefined),
+    onScanClick: () => { setIsScanSelectionMode(true); setShowModuleSelector(true); },
+    onCreate: () => { setIsScanSelectionMode(false); setShowModuleSelector(true); },
+  };
+
   return (
-    <div className="flex h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
+    <div className="flex flex-col h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
+      <GlobalHeader 
+        user={user} view={view} onNavigate={setView} onLogout={handleLogout}
+        onOpenSettingsTab={handleNavigateToSettings} {...headerActions}
+      />
+
+      {/* Module Selector Modal */}
       {showModuleSelector && (
-        <div className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
                 <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">{isScanSelectionMode ? 'Chọn loại để quét' : 'Chọn loại phiếu'}</h3>
                     <button onClick={() => setShowModuleSelector(false)} className="p-2 text-slate-400"><X className="w-6 h-6" /></button>
@@ -162,10 +240,19 @@ const App = () => {
                 <div className="p-4 grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
                     {[
                         { id: 'IQC', label: 'IQC' }, { id: 'SQC_MAT', label: 'SQC-MAT' }, { id: 'SQC_BTP', label: 'SQC-BTP' },
-                        { id: 'PQC', label: 'PQC' }, { id: 'FSR', label: 'FSR' }, { id: 'SITE', label: 'SITE' }, { id: 'PROJECTS', label: 'PROJECTS' }
+                        { id: 'PQC', label: 'PQC' }, { id: 'FSR', label: 'FSR' }, { id: 'SITE', label: 'SITE' }
                     ].filter(m => user.role === 'ADMIN' || user.allowedModules?.includes(m.id as any)).map(mod => (
-                        <button key={mod.id} onClick={() => { if(mod.id === 'PROJECTS') setView('PROJECTS'); else { setInitialFormState({ ...(pendingInspectionData || {}), type: mod.id as any, inspectorName: user?.name || '', date: new Date().toISOString().split('T')[0], items: templates[mod.id] || [] }); setView('FORM'); } setShowModuleSelector(false); }} className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-200 bg-white hover:border-blue-500 transition-all gap-3 active:scale-95 shadow-sm">
-                            <FileText className="w-5 h-5 text-slate-500" />
+                        <button key={mod.id} onClick={() => { 
+                            setShowModuleSelector(false);
+                            if (isScanSelectionMode) {
+                                setPendingType(mod.id as ModuleId);
+                                setShowQrScanner(true);
+                            } else {
+                                setInitialFormState({ type: mod.id as any, inspectorName: user?.name || '', date: new Date().toISOString().split('T')[0], items: templates[mod.id] || [] });
+                                setView('FORM');
+                            }
+                        }} className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-200 bg-white hover:border-blue-500 transition-all gap-3 active:scale-95 shadow-sm">
+                            <FileText className="w-6 h-6 text-slate-500" />
                             <span className="font-black text-xs text-slate-700 uppercase">{mod.label}</span>
                         </button>
                     ))}
@@ -174,30 +261,48 @@ const App = () => {
         </div>
       )}
 
+      {/* Standalone QR Scanner Modal */}
+      {showQrScanner && (
+        <div className="fixed inset-0 z-[160] bg-black flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+            <button onClick={() => setShowQrScanner(false)} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform z-20"><X className="w-8 h-8"/></button>
+            <div className="text-center mb-8 z-10">
+                <h3 className="text-white font-black text-xl uppercase tracking-widest mb-2">Đang quét mã QR</h3>
+                <p className="text-blue-400 text-xs font-bold uppercase tracking-tighter bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">Module: {pendingType}</p>
+            </div>
+            <div className="w-full max-w-xs aspect-square bg-slate-800 rounded-[2.5rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.4)]">
+                <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+                <canvas ref={scannerCanvasRef} className="hidden" />
+                <div className="absolute inset-0 border-2 border-white/20 pointer-events-none">
+                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
+                </div>
+            </div>
+            <p className="text-white/40 mt-10 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Align QR within frame</p>
+            <style>{`
+                @keyframes scan-line {
+                    0% { top: 10%; opacity: 0; }
+                    50% { opacity: 1; }
+                    100% { top: 90%; opacity: 0; }
+                }
+                .animate-scan-line { animation: scan-line 2s linear infinite; }
+            `}</style>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
             {view === 'LIST' && (
-                <div className="flex flex-col h-full">
-                    <div className="p-4 flex justify-between items-center bg-white border-b border-slate-100">
-                        <h2 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2"><List className="w-5 h-5 text-blue-600" /> Checklist</h2>
-                        <div className="flex gap-2">
-                             <button onClick={() => { setIsScanSelectionMode(true); setShowModuleSelector(true); }} className="p-2.5 bg-slate-900 text-white rounded-xl shadow-lg"><QrCode className="w-5 h-5" /></button>
-                             <button onClick={() => { setPendingInspectionData({}); setIsScanSelectionMode(false); setShowModuleSelector(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg"><Plus className="w-5 h-5" /> Tạo mới</button>
-                        </div>
-                    </div>
-                    <InspectionList 
-                        inspections={currentModule === 'ALL' ? inspections : inspections.filter(i => i.type === currentModule)} 
-                        onSelect={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} 
-                        userRole={user.role} currentUserName={user.name} selectedModule={currentModule}
-                        currentUser={user} onLogout={handleLogout} onNavigateSettings={handleNavigateToSettings}
-                        onModuleChange={setCurrentModule} onRefresh={loadInspections}
-                    />
-                </div>
+                <InspectionList 
+                    inspections={inspections} 
+                    onSelect={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} 
+                    userRole={user.role} currentUserName={user.name} selectedModule={currentModule}
+                    currentUser={user} onLogout={handleLogout} onNavigateSettings={handleNavigateToSettings}
+                    onModuleChange={setCurrentModule} onRefresh={loadInspections}
+                />
             )}
             {view === 'FORM' && <InspectionForm initialData={selectedInspectionId ? inspections.find(i => i.id === selectedInspectionId) : initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
             {view === 'DETAIL' && inspections.find(i => i.id === selectedInspectionId) && <InspectionDetail inspection={inspections.find(i => i.id === selectedInspectionId)!} user={user} onBack={() => setView('LIST')} onEdit={(id) => setView('FORM')} onDelete={async (id) => { await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); }} />}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setPendingInspectionData({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} currentPage={1} itemsPerPage={1000} onPageChange={()=>{}} />}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} currentPage={1} itemsPerPage={1000} onPageChange={()=>{}} />}
             {view === 'SETTINGS' && (
                 <Settings 
                     currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users}
@@ -215,12 +320,12 @@ const App = () => {
         <AIChatbox inspections={inspections} plans={plans} />
         
         {!isQC && (
-            <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-50">
-                <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full py-2 ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Checklist</span></button>
-                <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full py-2 ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Projects</span></button>
-                <div className="relative -top-5"><button onClick={() => setView('CONVERT_3D')} className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Box className="w-7 h-7" /></button></div>
-                <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full py-2 ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Plans</span></button>
-                <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full py-2 ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-6 h-6" /><span className="text-[9px] font-black uppercase">Report</span></button>
+            <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
+                <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Checklist</span></button>
+                <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Projects</span></button>
+                <div className="relative -top-4"><button onClick={() => setView('CONVERT_3D')} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Box className="w-6 h-6" /></button></div>
+                <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Plans</span></button>
+                <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Report</span></button>
             </div>
         )}
       </div>
