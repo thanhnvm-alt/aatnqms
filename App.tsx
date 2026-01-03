@@ -138,7 +138,8 @@ const App = () => {
     if (isLoadingPlans) return;
     setIsLoadingPlans(true);
     try {
-        const result = await fetchPlans(planSearchTerm, 1, 1000);
+        // Updated limit from 1000 to 100000 to fetch all plans
+        const result = await fetchPlans(planSearchTerm, 1, 100000);
         setPlans(result.items);
     } catch (e) {} finally { setIsLoadingPlans(false); }
   };
@@ -302,7 +303,7 @@ const App = () => {
             )}
             {view === 'FORM' && <InspectionForm initialData={selectedInspectionId ? inspections.find(i => i.id === selectedInspectionId) : initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
             {view === 'DETAIL' && inspections.find(i => i.id === selectedInspectionId) && <InspectionDetail inspection={inspections.find(i => i.id === selectedInspectionId)!} user={user} onBack={() => setView('LIST')} onEdit={(id) => setView('FORM')} onDelete={async (id) => { await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); }} />}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} currentPage={1} itemsPerPage={1000} onPageChange={()=>{}} />}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={(id) => { setSelectedInspectionId(id); setView('DETAIL'); }} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} currentPage={1} itemsPerPage={100000} onPageChange={()=>{}} />}
             {view === 'SETTINGS' && (
                 <Settings 
                     currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users}
