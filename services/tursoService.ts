@@ -41,13 +41,29 @@ export const initDatabase = async () => {
         id TEXT PRIMARY KEY, 
         data TEXT, 
         created_at INTEGER, 
-        updated_at INTEGER, 
-        created_by TEXT,
-        ma_ct TEXT,
-        ma_nha_may TEXT,
-        status TEXT
+        updated_at INTEGER
       )
     `);
+
+    // Schema Migration: Add missing columns if they don't exist
+    const columnsToAdd = [
+      { name: 'created_by', type: 'TEXT' },
+      { name: 'ma_ct', type: 'TEXT' },
+      { name: 'ma_nha_may', type: 'TEXT' },
+      { name: 'status', type: 'TEXT' }
+    ];
+
+    for (const col of columnsToAdd) {
+      try {
+        await turso.execute(`ALTER TABLE inspections ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`✅ Column '${col.name}' added to inspections table.`);
+      } catch (e: any) {
+        // Ignore "duplicate column name" error
+        if (!e.message.includes("duplicate column name") && !e.message.includes("already exists")) {
+          console.warn(`ℹ️ Note adding column ${col.name}: ${e.message}`);
+        }
+      }
+    }
 
     // Users Table
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT)`);
