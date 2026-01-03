@@ -2,110 +2,90 @@
 import { NextRequest } from 'next/server';
 import { turso } from '@/services/tursoConfig';
 import { buildSuccessResponse, buildErrorResponse } from '@/lib/api-response';
+import { getAuthUser, canModifyInspection } from '@/lib/auth';
 
 interface RouteParams {
   params: { id: string };
 }
 
-// --- GET: Detail ---
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const user = getAuthUser(request);
+    if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
     const result = await turso.execute({
-      sql: 'SELECT id, created_at, updated_at, data FROM inspections WHERE id = ?',
-      args: [id]
+      sql: 'SELECT id, data, created_by FROM inspections WHERE id = ?',
+      args: [params.id]
     });
 
-    if (result.rows.length === 0) {
-      return buildErrorResponse('Inspection not found', 'NOT_FOUND', { id }, 404);
-    }
-
-    const row = result.rows[0];
+    if (result.rows.length === 0) return buildErrorResponse('Not Found', 'NOT_FOUND', null, 404);
     
-    // Data Parsing: Convert JSON string back to Object for the client
-    let parsedPayload = null;
-    try {
-      parsedPayload = JSON.parse(row.data as string);
-    } catch (e) {
-      console.error('JSON Parse Error for ID:', id, e);
-      parsedPayload = {}; // Fallback empty object
+    const row = result.rows[0];
+    if (user.role === 'QC' && row.created_by !== user.userId) {
+        return buildErrorResponse('Access Denied', 'FORBIDDEN', null, 403);
     }
 
-    const responseData = {
-      id: row.id,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      payload: parsedPayload // Rename 'data' column to 'payload' to avoid confusion with API 'data' field
-    };
-
-    return buildSuccessResponse(responseData, 'Inspection loaded');
-
-  } catch (error: any) {
-    console.error(`GET /api/inspections/${params.id} error:`, error);
-    return buildErrorResponse('Internal Server Error', 'SERVER_ERROR');
+    return buildSuccessResponse(JSON.parse(row.data as string));
+  } catch (error) {
+    return buildErrorResponse('Server Error', 'SERVER_ERROR', null, 500);
   }
 }
 
-// --- PUT: Update ---
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
-    const body = await request.json();
-    const { data } = body;
+    const user = getAuthUser(request);
+    if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
-    if (!data) {
-      return buildErrorResponse('Missing data payload', 'INVALID_PARAMS', null, 400);
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    const jsonString = JSON.stringify(data);
-
-    const result = await turso.execute({
-      sql: `
-        UPDATE inspections 
-        SET data = ?, updated_at = ? 
-        WHERE id = ?
-      `,
-      args: [jsonString, now, id]
+    const { data } = await request.json();
+    
+    // 1. Fetch current state to check status (ISO Locking)
+    const current = await turso.execute({
+      sql: 'SELECT data, created_by FROM inspections WHERE id = ?',
+      args: [params.id]
     });
 
-    if (result.rowsAffected === 0) {
-      return buildErrorResponse('Inspection not found or not updated', 'NOT_FOUND', null, 404);
+    if (current.rows.length === 0) return buildErrorResponse('Not Found', 'NOT_FOUND', null, 404);
+    
+    const currentData = JSON.parse(current.rows[0].data as string);
+    const ownerId = current.rows[0].created_by as string;
+
+    // 2. ISO Rule: Prevent editing of APPROVED/LOCKED records
+    if (currentData.status === 'APPROVED' && user.role !== 'ADMIN') {
+        return buildErrorResponse(
+            'Bản ghi đã được phê duyệt và khóa. Vui lòng liên hệ Admin để thay đổi.',
+            'ISO_LOCK_VIOLATION',
+            null,
+            409
+        );
     }
 
-    return buildSuccessResponse(
-      { id, updated_at: now },
-      'Inspection updated successfully'
-    );
+    // 3. Ownership check
+    if (!canModifyInspection(user, ownerId)) {
+        return buildErrorResponse('Bạn không có quyền sửa bản ghi này', 'FORBIDDEN', null, 403);
+    }
 
+    // 4. Update
+    await turso.execute({
+      sql: 'UPDATE inspections SET data = ?, updated_at = unixepoch() WHERE id = ?',
+      args: [JSON.stringify(data), params.id]
+    });
+
+    return buildSuccessResponse({ id: params.id }, 'Cập nhật thành công');
   } catch (error: any) {
-    console.error(`PUT /api/inspections/${params.id} error:`, error);
-    return buildErrorResponse('Internal Server Error', 'SERVER_ERROR');
+    return buildErrorResponse(error.message, 'SERVER_ERROR', null, 500);
   }
 }
 
-// --- DELETE: Remove ---
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  try {
-    const { id } = params;
-
-    const result = await turso.execute({
-      sql: 'DELETE FROM inspections WHERE id = ?',
-      args: [id]
-    });
-
-    if (result.rowsAffected === 0) {
-      return buildErrorResponse('Inspection not found', 'NOT_FOUND', null, 404);
+    const user = getAuthUser(request);
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'MANAGER')) {
+        return buildErrorResponse('Chỉ Quản lý mới có quyền xóa dữ liệu kiểm tra', 'FORBIDDEN', null, 403);
     }
 
-    return buildSuccessResponse(
-      { id },
-      'Inspection deleted successfully'
-    );
+    await turso.execute({
+        sql: 'DELETE FROM inspections WHERE id = ?',
+        args: [params.id]
+    });
 
-  } catch (error: any) {
-    console.error(`DELETE /api/inspections/${params.id} error:`, error);
-    return buildErrorResponse('Internal Server Error', 'SERVER_ERROR');
-  }
+    return buildSuccessResponse(null, 'Đã xóa bản ghi (Audit Logged)');
 }
