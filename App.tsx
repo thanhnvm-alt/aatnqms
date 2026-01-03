@@ -6,11 +6,11 @@ import {
   MOCK_USERS, 
   MOCK_INSPECTIONS, 
   MOCK_WORKSHOPS, 
-  IQC_CHECKLIST_TEMPLATE,
-  PQC_CHECKLIST_TEMPLATE,
-  SQC_MAT_CHECKLIST_TEMPLATE,
-  SQC_BTP_CHECKLIST_TEMPLATE,
-  FSR_CHECKLIST_TEMPLATE
+  IQC_CHECKLIST_TEMPLATE, 
+  PQC_CHECKLIST_TEMPLATE, 
+  SQC_MAT_CHECKLIST_TEMPLATE, 
+  SQC_BTP_CHECKLIST_TEMPLATE, 
+  FSR_CHECKLIST_TEMPLATE 
 } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { InspectionList } from './components/InspectionList';
@@ -29,19 +29,19 @@ import {
   fetchInspections, 
   saveInspectionToSheet, 
   deleteInspectionFromSheet, 
-  checkApiConnection,
-  fetchUsers,
-  saveUser,
-  deleteUser,
-  fetchWorkshops,
-  saveWorkshop,
-  deleteWorkshop,
-  fetchTemplates,
-  saveTemplate,
-  importPlans,
-  importUsers,
-  importInspections,
-  fetchProjects
+  checkApiConnection, 
+  fetchUsers, 
+  saveUser, 
+  deleteUser, 
+  fetchWorkshops, 
+  saveWorkshop, 
+  deleteWorkshop, 
+  fetchTemplates, 
+  saveTemplate, 
+  importPlans, 
+  importUsers, 
+  importInspections, 
+  fetchProjects 
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { List, Plus, FileSpreadsheet, Box, LayoutDashboard, QrCode, X, FileText, Briefcase } from 'lucide-react';
@@ -138,7 +138,6 @@ const App = () => {
     if (isLoadingPlans) return;
     setIsLoadingPlans(true);
     try {
-        // Updated limit from 1000 to 100000 to fetch all plans
         const result = await fetchPlans(planSearchTerm, 1, 100000);
         setPlans(result.items);
     } catch (e) {} finally { setIsLoadingPlans(false); }
@@ -206,7 +205,6 @@ const App = () => {
       setShowQrScanner(false);
       const cleanCode = scannedCode.trim();
 
-      // Auto-fill: Tìm kiếm trong danh sách Plans đã tải
       const matchedPlan = plans.find(p => 
         (p.ma_nha_may && p.ma_nha_may.toLowerCase() === cleanCode.toLowerCase()) || 
         (p.headcode && p.headcode.toLowerCase() === cleanCode.toLowerCase())
@@ -215,7 +213,6 @@ const App = () => {
       setInitialFormState({
           type: pendingType || 'IQC',
           ma_nha_may: cleanCode,
-          // Nếu tìm thấy plan, điền luôn thông tin vào form
           ma_ct: matchedPlan?.ma_ct || '',
           ten_ct: matchedPlan?.ten_ct || '',
           ten_hang_muc: matchedPlan?.ten_hang_muc || '',
@@ -336,15 +333,23 @@ const App = () => {
         
         <AIChatbox inspections={inspections} plans={plans} />
         
-        {!isQC && (
-            <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
-                <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Checklist</span></button>
-                <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Projects</span></button>
-                <div className="relative -top-4"><button onClick={() => setView('CONVERT_3D')} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Box className="w-6 h-6" /></button></div>
-                <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Plans</span></button>
-                <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Report</span></button>
-            </div>
-        )}
+        {/* Mobile Navigation Menu - Restricted for QC role */}
+        <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
+            <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Checklist</span></button>
+            
+            {!isQC && (
+                <>
+                    <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Projects</span></button>
+                    <div className="relative -top-4">
+                        <button onClick={() => setView('CONVERT_3D')} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white">
+                            <Box className="w-6 h-6" />
+                        </button>
+                    </div>
+                    <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Plans</span></button>
+                    <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Report</span></button>
+                </>
+            )}
+        </div>
       </div>
     </div>
   );

@@ -834,9 +834,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                         <input 
                             defaultValue={category}
                             onBlur={(e) => updateCategoryName(category, e.target.value.toUpperCase())}
-                            className="bg-transparent text-xs font-black text-slate-700 uppercase focus:bg-white rounded px-2 w-full outline-none focus:ring-1 focus:ring-blue-300"
+                            className="bg-transparent text-xs font-black text-slate-700 uppercase focus:bg-white rounded px-2 flex-1 min-w-0 outline-none focus:ring-1 focus:ring-blue-300"
                         />
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 shrink-0">
                             <button onClick={() => handleAddItemToCategory(category)} className="bg-white border border-slate-300 text-slate-600 hover:text-blue-600 px-2 py-1 rounded-lg text-[9px] font-bold uppercase shadow-sm"><Plus className="w-3 h-3" /></button>
                             <button onClick={() => handleRemoveCategory(category)} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
@@ -845,23 +845,23 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                         {items.map((item) => (
                             <div key={item.id} className="p-3 hover:bg-slate-50 transition-colors group">
                                 <div className="flex justify-between items-start mb-2 gap-2">
-                                    <input value={item.label} onChange={(e) => updateItem(item.id, { label: e.target.value })} className="w-full text-sm font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-blue-300 focus:bg-white rounded-sm outline-none transition-colors" placeholder="Hạng mục..." />
+                                    <input value={item.label} onChange={(e) => updateItem(item.id, { label: e.target.value })} className="flex-1 min-w-0 text-sm font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-blue-300 focus:bg-white rounded-sm outline-none transition-colors" placeholder="Hạng mục..." />
                                     <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
                                 </div>
                                 <div className="space-y-2">
-                                    <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
+                                    <div className="flex flex-wrap gap-1 pb-1">
                                         {Object.values(CheckStatus).filter(v => v !== CheckStatus.PENDING).map(v => (
                                             <button key={v} onClick={() => handleItemStatusChange(item, v)} className={`flex-1 py-2 px-2 rounded-lg text-[10px] font-black uppercase whitespace-nowrap border transition-all active:scale-95 ${item.status === v ? (v === CheckStatus.PASS ? 'bg-green-600 text-white border-green-600 shadow-md' : v === CheckStatus.FAIL ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-amber-500 text-white border-amber-500 shadow-md') : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>{v}</button>
                                         ))}
                                     </div>
                                     <div className="flex gap-2">
-                                        <div className="relative flex-1">
+                                        <div className="relative flex-1 min-w-0">
                                             <input value={item.notes} onChange={e => updateItem(item.id, { notes: e.target.value })} className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-lg outline-none bg-slate-50 focus:bg-white focus:border-blue-300 transition-all" placeholder="Ghi chú..." />
                                             {item.status === CheckStatus.FAIL && <button onClick={() => handleAIItemSuggest(item.id)} className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-500 hover:text-purple-700 animate-pulse"><Sparkles className="w-3.5 h-3.5" /></button>}
                                         </div>
-                                        <button onClick={() => handleAddItemPhoto(item.id)} className={`p-2 rounded-lg border transition-colors ${item.images?.length ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-500'}`}><Camera className="w-4 h-4"/></button>
+                                        <button onClick={() => handleAddItemPhoto(item.id)} className={`p-2 rounded-lg border transition-colors shrink-0 ${item.images?.length ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-500'}`}><Camera className="w-4 h-4"/></button>
                                     </div>
-                                    {item.images && item.images.length > 0 && <div className="flex gap-2 pt-2 overflow-x-auto">{item.images.map((img, i) => <div key={i} className="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200"><img src={img} className="w-full h-full object-cover" /></div>)}</div>}
+                                    {item.images && item.images.length > 0 && <div className="flex flex-wrap gap-2 pt-2">{item.images.map((img, i) => <div key={i} className="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200"><img src={img} className="w-full h-full object-cover" /></div>)}</div>}
                                 </div>
                             </div>
                         ))}
