@@ -24,7 +24,17 @@ export async function GET(request: NextRequest) {
     }
 
     const { page, limit, search } = query.data;
-    const { items, total } = await plansService.getPlans(page, limit, search);
+    
+    // Extract specific filters
+    const filterType = searchParams.get('filterType');
+    const filterValue = searchParams.get('filterValue');
+    
+    let filter = undefined;
+    if (filterType && filterValue) {
+        filter = { type: filterType, value: filterValue };
+    }
+
+    const { items, total } = await plansService.getPlans(page, limit, search, filter);
 
     return successResponse(items, 200, {
       requestId,

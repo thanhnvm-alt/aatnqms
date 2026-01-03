@@ -196,7 +196,8 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(localData);
                 setUser(parsedUser);
-                setView('DASHBOARD'); // Redirect to Dashboard
+                // QC goes to LIST, others to DASHBOARD
+                setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
                 return;
             } catch (e) {
                 console.error("Auth storage corrupted", e);
@@ -208,7 +209,8 @@ const App = () => {
             try {
                 const parsedUser = JSON.parse(sessionData);
                 setUser(parsedUser);
-                setView('DASHBOARD'); // Redirect to Dashboard
+                // QC goes to LIST, others to DASHBOARD
+                setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
             } catch (e) {
                 sessionStorage.removeItem(AUTH_STORAGE_KEY);
             }
@@ -233,7 +235,8 @@ const App = () => {
           sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
           localStorage.removeItem(AUTH_STORAGE_KEY);
       }
-      setView('DASHBOARD'); // Redirect to Dashboard immediately
+      // QC goes to LIST, others to DASHBOARD
+      setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
   };
 
   const handleLogout = () => {

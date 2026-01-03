@@ -7,22 +7,40 @@ import { PlanEntity } from '../types';
 
 export const plansService = {
   /**
-   * Get all plans with pagination and search
+   * Get all plans with pagination, search, and specific filtering
    */
-  getPlans: async (page: number, limit: number, search?: string) => {
+  getPlans: async (page: number, limit: number, search?: string, filter?: { type: string, value: string }) => {
     if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     const offset = (page - 1) * limit;
     let sql = `SELECT * FROM searchPlans`;
     let countSql = `SELECT COUNT(*) as total FROM searchPlans`;
+    
+    const whereClauses: string[] = [];
     const args: any[] = [];
 
+    // Generic Search
     if (search) {
-      const whereClause = ` WHERE ma_ct LIKE ? OR headcode LIKE ? OR ten_hang_muc LIKE ?`;
+      whereClauses.push(`(ma_ct LIKE ? OR headcode LIKE ? OR ten_hang_muc LIKE ?)`);
       const term = `%${search}%`;
-      sql += whereClause;
-      countSql += whereClause;
       args.push(term, term, term);
+    }
+
+    // Specific Filter (e.g. ma_ct = 'XYZ')
+    if (filter && filter.type && filter.value) {
+      const allowedFilters = ['ma_ct', 'ma_nha_may', 'ma_nm', 'headcode'];
+      if (allowedFilters.includes(filter.type)) {
+        // Map 'ma_nm' alias to actual column 'ma_nha_may'
+        const dbColumn = filter.type === 'ma_nm' ? 'ma_nha_may' : filter.type;
+        whereClauses.push(`${dbColumn} = ?`);
+        args.push(filter.value);
+      }
+    }
+
+    if (whereClauses.length > 0) {
+      const whereSql = ` WHERE ${whereClauses.join(' AND ')}`;
+      sql += whereSql;
+      countSql += whereSql;
     }
 
     sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
@@ -70,15 +88,26 @@ export const plansService = {
     return await withRetry(async () => {
       // Use RETURNING * to get the created record immediately
       const sql = `
-        INSERT INTO searchPlans (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+        INSERT INTO searchPlans (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
         RETURNING *
       `;
       
       try {
         const result = await turso.execute({
           sql,
-          args: [data.headcode, data.ma_ct, data.ten_ct, data.ten_hang_muc, data.dvt, data.so_luong_ipo]
+          args: [
+            data.headcode, 
+            data.ma_ct, 
+            data.ten_ct, 
+            data.ten_hang_muc, 
+            data.dvt, 
+            data.so_luong_ipo,
+            // Assuming input might have ma_nha_may if PlanInput allows it, 
+            // otherwise strictly from schema it might need adjustment. 
+            // For now, defaulting null if not in strict Schema, but Schema implies it might be needed.
+            (data as any).ma_nha_may || null 
+          ]
         });
         return result.rows[0] as unknown as PlanEntity;
       } catch (e: any) {
