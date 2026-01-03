@@ -1,180 +1,179 @@
-
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project } from '../types';
+import * as db from './tursoService';
 
 /**
- * MOBILE-SAFE API SERVICE
- * No direct DB access. All requests route through /api/*
+ * SHARED API TYPES
  */
-
-// Fix: Defined PagedResult locally and exported it to resolve circular dependency and missing export error
 export interface PagedResult<T> {
   items: T[];
   total: number;
+  page: number;
+  limit: number;
 }
 
-const getAuthHeaders = () => {
-  const localData = localStorage.getItem('aatn_auth_storage');
-  if (!localData) return {};
-  const user = JSON.parse(localData);
-  return {
-    'Authorization': `Bearer ${user.id}`, // In production, this is a real JWT
-    'Content-Type': 'application/json',
-    'x-user-id': user.id,
-    'x-user-role': user.role
-  };
-};
-
+/**
+ * 1. HEALTH & SYSTEM
+ */
 export const checkApiConnection = async () => {
-  try {
-    const res = await fetch('/api/health');
-    return { ok: res.ok };
-  } catch (e) {
-    return { ok: false };
-  }
+  const ok = await db.testConnection();
+  return { ok };
 };
 
-export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 50): Promise<PagedResult<PlanItem>> => {
-  const res = await fetch(`/api/plans?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`, {
-    headers: getAuthHeaders()
-  });
-  const json = await res.json();
-  return { 
-    items: json.data || [], 
-    total: json.meta?.pagination?.total || 0 
+/**
+ * 2. PRODUCTION PLANS
+ */
+export const fetchPlans = async (
+  search: string = '',
+  page: number = 1,
+  limit: number = 50
+): Promise<PagedResult<PlanItem>> => {
+  const result = await db.getPlans({ search, page, limit });
+  return {
+    items: result.items,
+    total: result.total,
+    page,
+    limit
   };
 };
 
-export const fetchInspections = async (): Promise<Inspection[]> => {
-  const res = await fetch('/api/inspections', { headers: getAuthHeaders() });
-  const json = await res.json();
-  return json.data || [];
+/**
+ * 3. INSPECTION WORKFLOW
+ */
+export const fetchInspections = async (
+  filters: { status?: string; search?: string; page?: number; limit?: number } = {}
+): Promise<PagedResult<Inspection>> => {
+  const all = await db.getAllInspections(filters);
+  // Simple client-side pagination for robustness
+  const page = filters.page || 1;
+  const limit = filters.limit || 1000;
+  const startIndex = (page - 1) * limit;
+  const items = all.slice(startIndex, startIndex + limit);
+  
+  return {
+    items,
+    total: all.length,
+    page,
+    limit
+  };
+};
+
+export const createInspection = async (inspection: Partial<Inspection>) => {
+  await db.saveInspection(inspection as Inspection);
+  return { success: true, data: inspection };
+};
+
+export const updateInspection = async (id: string, inspection: Partial<Inspection>) => {
+  await db.saveInspection(inspection as Inspection);
+  return { success: true, data: inspection };
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
-  // Fix: Property '_meta' does not exist on type 'Inspection'. Using casting to any to suppress error while maintaining detection logic.
-  const isUpdate = !!(inspection as any)._meta?.created_at; 
-  const method = isUpdate ? 'PUT' : 'POST';
-  const url = isUpdate ? `/api/inspections/${inspection.id}` : '/api/inspections';
-
-  const res = await fetch(url, {
-    method,
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ id: inspection.id, data: inspection })
-  });
-  
-  const json = await res.json();
-  if (!json.success) throw new Error(json.message || 'Lưu thất bại');
-  return json;
+  await db.saveInspection(inspection);
+  return { success: true };
 };
 
 export const deleteInspectionFromSheet = async (id: string) => {
-  const res = await fetch(`/api/inspections/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders()
-  });
-  return res.json();
+  await db.deleteInspection(id);
 };
 
-export const fetchProjects = async (): Promise<Project[]> => {
-    const res = await fetch('/api/projects', { headers: getAuthHeaders() });
-    const json = await res.json();
-    return json.data || [];
+// Workflow status changes (Updates directly to DB)
+export const submitInspection = async (id: string) => {
+    // In a real app, this would trigger notifications. Here we just update status.
+    const all = await db.getAllInspections();
+    const found = all.find(i => i.id === id);
+    if (found) {
+        found.status = 'SUBMITTED' as any;
+        await db.saveInspection(found);
+    }
 };
 
-// Fix: Added updateProject export for ProjectDetail.tsx
+export const approveInspection = async (id: string) => {
+    const all = await db.getAllInspections();
+    const found = all.find(i => i.id === id);
+    if (found) {
+        found.status = 'APPROVED' as any;
+        await db.saveInspection(found);
+    }
+};
+
+export const rejectInspection = async (id: string, reason: string) => {
+    const all = await db.getAllInspections();
+    const found = all.find(i => i.id === id);
+    if (found) {
+        found.status = 'FLAGGED' as any; // Rejected maps to FLAGGED in this UI
+        found.summary = (found.summary || '') + `\n[REJECT REASON]: ${reason}`;
+        await db.saveInspection(found);
+    }
+};
+
+/**
+ * 4. PROJECT MANAGEMENT
+ */
+export const fetchProjects = async () => {
+  return await db.getProjects();
+};
+
 export const updateProject = async (project: Project) => {
-    const res = await fetch(`/api/projects/${project.code}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(project)
-    });
-    return res.json();
+  await db.saveProjectMetadata(project);
+  return project;
 };
 
+/**
+ * 5. USER & ACCESS CONTROL
+ */
 export const fetchUsers = async () => {
-    const res = await fetch('/api/users', { headers: getAuthHeaders() });
-    const json = await res.json();
-    return json.data || [];
+  return await db.getUsers();
 };
 
 export const saveUser = async (user: User) => {
-    await fetch('/api/users', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(user)
-    });
+  await db.saveUser(user);
+  return user;
 };
 
-// Fix: Added deleteUser export for App.tsx
 export const deleteUser = async (id: string) => {
-    await fetch(`/api/users/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-    });
+  await db.deleteUser(id);
 };
 
-export const fetchWorkshops = async () => {
-    const res = await fetch('/api/workshops', { headers: getAuthHeaders() });
-    const json = await res.json();
-    return json.data || [];
-};
-
-// Fix: Added saveWorkshop export for App.tsx
-export const saveWorkshop = async (workshop: Workshop) => {
-    await fetch('/api/workshops', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(workshop)
-    });
-};
-
-// Fix: Added deleteWorkshop export for App.tsx
-export const deleteWorkshop = async (id: string) => {
-    await fetch(`/api/workshops/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-    });
-};
-
-// Fix: Added fetchTemplates export for App.tsx
-export const fetchTemplates = async (): Promise<Record<string, CheckItem[]>> => {
-    const res = await fetch('/api/templates', { headers: getAuthHeaders() });
-    const json = await res.json();
-    return json.data || {};
-};
-
-// Fix: Added saveTemplate export for App.tsx
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
-    await fetch(`/api/templates/${moduleId}`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(items)
-    });
-};
-
-// Fix: Added importPlans export for App.tsx
-export const importPlans = async (plans: PlanItem[]) => {
-    await fetch('/api/plans/import', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(plans)
-    });
-};
-
-// Fix: Added importUsers export for App.tsx
 export const importUsers = async (users: User[]) => {
-    await fetch('/api/users/import', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(users)
-    });
+  await db.importUsers(users);
 };
 
-// Fix: Added importInspections export for App.tsx
+/**
+ * 6. WORKSHOP MANAGEMENT
+ */
+export const fetchWorkshops = async () => {
+  return await db.getWorkshops();
+};
+
+export const saveWorkshop = async (workshop: Workshop) => {
+  await db.saveWorkshop(workshop);
+  return workshop;
+};
+
+export const deleteWorkshop = async (id: string) => {
+  await db.deleteWorkshop(id);
+};
+
+/**
+ * 7. TEMPLATE MANAGEMENT
+ */
+export const fetchTemplates = async () => {
+  return await db.getTemplates();
+};
+
+export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
+  await db.saveTemplate(moduleId, items);
+};
+
+/**
+ * 8. BULK IMPORT
+ */
+export const importPlans = async (plans: PlanItem[]) => {
+  await db.importPlansBatch(plans);
+};
+
 export const importInspections = async (inspections: Inspection[]) => {
-    await fetch('/api/inspections/import', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(inspections)
-    });
+  for (const i of inspections) {
+      await db.saveInspection(i);
+  }
 };

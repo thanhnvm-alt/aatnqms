@@ -87,16 +87,17 @@ export const PlanList: React.FC<PlanListProps> = ({
   // --- LOGIC: Advanced Search & Grouping ---
 
   const filteredItems = useMemo(() => {
-    if (!searchTerm) return items;
-    const lowerTerm = searchTerm.toLowerCase().trim();
+    const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
+    if (!safeSearchTerm) return items;
+    
     return items.filter(item => {
         return (
-            (item.ma_ct && item.ma_ct.toLowerCase().includes(lowerTerm)) ||
-            (item.ten_ct && item.ten_ct.toLowerCase().includes(lowerTerm)) ||
-            (item.ten_hang_muc && item.ten_hang_muc.toLowerCase().includes(lowerTerm)) ||
-            (item.ma_nha_may && item.ma_nha_may.toLowerCase().includes(lowerTerm)) ||
-            (item.headcode && item.headcode.toLowerCase().includes(lowerTerm)) ||
-            (item.assignee && item.assignee.toLowerCase().includes(lowerTerm))
+            (String(item.ma_ct || '').toLowerCase().includes(safeSearchTerm)) ||
+            (String(item.ten_ct || '').toLowerCase().includes(safeSearchTerm)) ||
+            (String(item.ten_hang_muc || '').toLowerCase().includes(safeSearchTerm)) ||
+            (String(item.ma_nha_may || '').toLowerCase().includes(safeSearchTerm)) ||
+            (String(item.headcode || '').toLowerCase().includes(safeSearchTerm)) ||
+            (String(item.assignee || '').toLowerCase().includes(safeSearchTerm))
         );
     });
   }, [items, searchTerm]);
@@ -326,7 +327,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                 
                 {/* Action Bar Row */}
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center justify-start gap-1.5">
                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded border border-slate-100">
                             Total: {totalItems}
                         </span>

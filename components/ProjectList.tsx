@@ -27,9 +27,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, onSelectProj
   const [filter, setFilter] = useState<'All' | 'In Progress' | 'Completed' | 'On Hold'>('All');
 
   const filteredProjects = useMemo(() => {
+    const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
+    
     return projects.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            p.code.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!p) return false;
+      const matchesSearch = !safeSearchTerm || 
+                            String(p.name || '').toLowerCase().includes(safeSearchTerm) || 
+                            String(p.code || '').toLowerCase().includes(safeSearchTerm);
       const matchesFilter = filter === 'All' || p.status === filter;
       return matchesSearch && matchesFilter;
     });
