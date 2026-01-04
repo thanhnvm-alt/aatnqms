@@ -17,6 +17,7 @@ import { InspectionList } from './components/InspectionList';
 import { InspectionForm } from './components/InspectionForm';
 import { InspectionDetail } from './components/InspectionDetail';
 import { PlanList } from './components/PlanList';
+import { PlanDetail } from './components/PlanDetail';
 import { Settings } from './components/Settings';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
@@ -46,7 +47,7 @@ import {
   fetchProjects 
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
-import { List, Plus, FileSpreadsheet, Box, LayoutDashboard, QrCode, X, FileText, Briefcase, Loader2 } from 'lucide-react';
+import { List, Plus, FileSpreadsheet, Box, LayoutDashboard, QrCode, X, FileText, Briefcase, Loader2, UserCircle, Settings as SettingsIcon } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
 
@@ -60,6 +61,7 @@ const App = () => {
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]); 
+  const [selectedPlanItem, setSelectedPlanItem] = useState<PlanItem | null>(null);
   const [planSearchTerm, setPlanSearchTerm] = useState('');
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -306,7 +308,24 @@ const App = () => {
             {view === 'DETAIL' && activeInspection && (
                 <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />
             )}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
+            {view === 'PLAN' && (
+                <PlanList 
+                    items={plans} 
+                    inspections={inspections} 
+                    onSelect={(item) => { 
+                        setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); 
+                        setShowModuleSelector(true); 
+                    }} 
+                    onViewInspection={handleSelectInspection} 
+                    onRefresh={loadPlans} 
+                    onImportPlans={async (p) => { await importPlans(p); }} 
+                    searchTerm={planSearchTerm} 
+                    onSearch={setPlanSearchTerm} 
+                    isLoading={isLoadingPlans} 
+                    totalItems={plans.length} 
+                    onViewPlan={(item) => setSelectedPlanItem(item)}
+                />
+            )}
             {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(isQC ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} onSelectProject={(id) => { setSelectedProjectId(id); setView('PROJECT_DETAIL'); }} />}
             {view === 'PROJECT_DETAIL' && selectedProjectId && <ProjectDetail project={projects.find(p => p.id === selectedProjectId)!} inspections={inspections} onBack={() => setView('PROJECTS')} />}
@@ -315,13 +334,46 @@ const App = () => {
         
         <AIChatbox inspections={inspections} plans={plans} />
 
-        {/* Mobile Bottom Navigation */}
+        {/* Plan Detail Modal */}
+        {selectedPlanItem && (
+            <PlanDetail 
+                item={selectedPlanItem} 
+                onBack={() => setSelectedPlanItem(null)} 
+                onCreateInspection={(customItems) => {
+                    setInitialFormState({ 
+                        ma_nha_may: selectedPlanItem.ma_nha_may, 
+                        headcode: selectedPlanItem.headcode, 
+                        ma_ct: selectedPlanItem.ma_ct, 
+                        ten_ct: selectedPlanItem.ten_ct, 
+                        ten_hang_muc: selectedPlanItem.ten_hang_muc, 
+                        dvt: selectedPlanItem.dvt, 
+                        so_luong_ipo: selectedPlanItem.so_luong_ipo,
+                        items: customItems,
+                        type: 'PQC' // Default to PQC when starting from plan
+                    });
+                    setSelectedPlanItem(null);
+                    setView('FORM');
+                }} 
+            />
+        )}
+
+        {/* Mobile Bottom Navigation - Tối ưu cho QC */}
         <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
-            <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Danh sách</span></button>
-            <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Dự án</span></button>
-            <div className="relative -top-4"><button onClick={headerActions.onCreate} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Plus className="w-6 h-6" /></button></div>
-            <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Kế hoạch</span></button>
-            <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Báo cáo</span></button>
+            {!isQC ? (
+                <>
+                    <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Danh sách</span></button>
+                    <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Dự án</span></button>
+                    <div className="relative -top-4"><button onClick={headerActions.onCreate} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Plus className="w-6 h-6" /></button></div>
+                    <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Kế hoạch</span></button>
+                    <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Báo cáo</span></button>
+                </>
+            ) : (
+                <>
+                    <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-6 h-6" /><span className="text-[10px] font-black uppercase mt-1">Danh sách</span></button>
+                    <div className="relative -top-4"><button onClick={headerActions.onCreate} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Plus className="w-6 h-6" /></button></div>
+                    <button onClick={() => setView('SETTINGS')} className={`flex flex-col items-center justify-center w-full ${view === 'SETTINGS' ? 'text-blue-600' : 'text-slate-400'}`}><UserCircle className="w-6 h-6" /><span className="text-[10px] font-black uppercase mt-1">Cá nhân</span></button>
+                </>
+            )}
         </div>
       </div>
 

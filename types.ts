@@ -19,13 +19,31 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
+/* Added ViewState type used in components and App.tsx to track navigation state */
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D';
+
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D';
 
-export type UserRoleName = 'ADMIN' | 'MANAGER' | 'QA' | 'QC';
+/* Added UserRole for stricter role definitions used in UserManagement and Turso services */
+export type UserRole = 'ADMIN' | 'MANAGER' | 'QA' | 'QC';
 
-export type UserRole = UserRoleName;
+export type UserRoleName = UserRole | string;
 
-export type ViewState = 'HOME' | 'DASHBOARD' | 'PLAN' | 'PLAN_DETAIL' | 'LIST' | 'FORM' | 'DETAIL' | 'SETTINGS' | 'CONVERT_3D' | 'PROJECTS' | 'PROJECT_DETAIL' | 'ROLE_MGMT';
+export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'EXPORT';
+
+export interface ModulePermission {
+  moduleId: ModuleId;
+  actions: PermissionAction[];
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  permissions: ModulePermission[];
+  allowedModules?: ModuleId[]; // Giữ lại để tương thích ngược
+  isSystem?: boolean;
+}
 
 export interface User {
   id: string;
@@ -35,6 +53,7 @@ export interface User {
   role: UserRoleName;
   avatar: string;
   allowedModules?: ModuleId[];
+  permissions?: ModulePermission[];
   msnv?: string;
   position?: string;
   workLocation?: string;
@@ -45,6 +64,7 @@ export interface User {
   notes?: string;
 }
 
+// ... các interface khác giữ nguyên
 export interface NCRComment {
   id: string;
   userId: string;
@@ -148,20 +168,24 @@ export interface PlanItem {
   created_at?: number;
 }
 
-// Added PlanEntity for Turso DB row representation
+/* Added PlanEntity for database row representation used in plansService and utils */
 export interface PlanEntity {
   id: number;
   headcode: string;
   ma_ct: string;
   ten_ct: string;
-  ma_nha_may?: string;
+  ma_nha_may: string;
   ten_hang_muc: string;
-  dvt?: string;
+  dvt: string;
   so_luong_ipo: number;
+  ngay_kh: string;
+  assignee: string;
+  status: string;
+  pthsp: string;
   created_at: number;
 }
 
-// Added PlanResponse for API responses
+/* Added PlanResponse for frontend data transformation used in utils */
 export interface PlanResponse {
   id: number;
   headcode: string;

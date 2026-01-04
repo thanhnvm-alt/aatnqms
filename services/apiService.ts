@@ -1,5 +1,5 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project } from '../types';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role } from '../types';
 import * as db from './tursoService';
 
 export interface PagedResult<T> {
@@ -14,14 +14,15 @@ export const checkApiConnection = async () => {
   return { ok };
 };
 
+export const fetchRoles = async () => await db.getRoles();
+export const saveRole = async (role: Role) => { await db.saveRole(role); return role; };
+export const deleteRole = async (id: string) => { await db.deleteRole(id); };
+
 export const fetchPlans = async (search: string = '', page?: number, limit?: number): Promise<PagedResult<PlanItem>> => {
   const result = await db.getPlans({ search, page, limit });
   return { items: result.items, total: result.total, page, limit };
 };
 
-/**
- * OPTIMIZED: Fetch inspections with server-side pagination and filters
- */
 export const fetchInspections = async (filters: { 
     status?: string; 
     search?: string; 
@@ -45,9 +46,6 @@ export const fetchInspections = async (filters: {
   };
 };
 
-/**
- * NEW: Fetch full inspection data including large checklist array
- */
 export const fetchInspectionById = async (id: string): Promise<Inspection | null> => {
     return await db.getInspectionById(id);
 };
@@ -62,7 +60,7 @@ export const deleteInspectionFromSheet = async (id: string) => {
 };
 
 export const fetchProjects = async (): Promise<Project[]> => {
-  const plansData = await db.getPlans({ search: '' }); // Fetch all plans for project grouping
+  const plansData = await db.getPlans({ search: '' }); 
   const dbProjects = await db.getProjects();
   
   const distinctPlanProjects = new Map<string, PlanItem>();

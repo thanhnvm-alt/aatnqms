@@ -8,17 +8,17 @@ import {
   Project, 
   CheckItem,
   UserRole,
-  UserRoleName
+  UserRoleName,
+  Role,
+  PermissionAction
 } from "../types";
 
 /**
  * Khởi tạo toàn bộ cấu trúc Database.
- * Sử dụng CREATE TABLE IF NOT EXISTS để đảm bảo tính ổn định.
  */
 export const initDatabase = async () => {
   if (!isTursoConfigured) return;
   try {
-    // 1. Bảng Kế hoạch (plans)
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -36,7 +36,6 @@ export const initDatabase = async () => {
         created_at INTEGER DEFAULT (unixepoch())
       )`);
     
-    // 2. Bảng Kiểm tra (inspections)
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS inspections (
         id TEXT PRIMARY KEY, 
@@ -51,10 +50,10 @@ export const initDatabase = async () => {
         score INTEGER DEFAULT 0
       )`);
     
-    // 3. Các bảng bổ trợ
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, data TEXT)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (id TEXT PRIMARY KEY, data TEXT)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, data TEXT)`);
     
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS projects (
@@ -76,22 +75,67 @@ export const initDatabase = async () => {
         images TEXT
       )`);
 
-    // Migrations & Indexes
-    try { await turso.execute(`ALTER TABLE inspections ADD COLUMN type TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE inspections ADD COLUMN score INTEGER DEFAULT 0`); } catch (e) {}
-    
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_ma_ct ON inspections(ma_ct)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_status ON inspections(status)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_plans_ma_ct ON plans(ma_ct)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_plans_ma_nm ON plans(ma_nha_may)`);
-    
-    console.log("✅ Database tables and indexes verified.");
+    console.log("✅ Database tables verified.");
   } catch (e) {
     console.error("❌ Database initialization failed:", e);
-    throw e; // Ném lỗi để App xử lý overlay nếu cần
+    throw e;
   }
 };
 
+const DEFAULT_ACTIONS: PermissionAction[] = ['VIEW', 'CREATE', 'EDIT'];
+const ADMIN_ACTIONS: PermissionAction[] = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'];
+
+export const getRoles = async (): Promise<Role[]> => {
+  if (!isTursoConfigured) return [];
+  const res = await turso.execute("SELECT data FROM roles");
+  if (res.rows.length === 0) {
+      const defaultRoles: Role[] = [
+          { 
+            id: 'ADMIN', 
+            name: 'Quản trị viên', 
+            description: 'Toàn quyền hệ thống', 
+            permissions: [
+              { moduleId: 'IQC', actions: ADMIN_ACTIONS },
+              { moduleId: 'PQC', actions: ADMIN_ACTIONS },
+              { moduleId: 'FQC', actions: ADMIN_ACTIONS },
+              { moduleId: 'SITE', actions: ADMIN_ACTIONS },
+              { moduleId: 'PROJECTS', actions: ADMIN_ACTIONS },
+              { moduleId: 'CONVERT_3D', actions: ADMIN_ACTIONS },
+              { moduleId: 'SETTINGS', actions: ADMIN_ACTIONS }
+            ],
+            isSystem: true 
+          },
+          { 
+            id: 'QC', 
+            name: 'Nhân viên QC', 
+            description: 'Thực hiện kiểm tra tại xưởng', 
+            permissions: [
+              { moduleId: 'IQC', actions: DEFAULT_ACTIONS },
+              { moduleId: 'PQC', actions: DEFAULT_ACTIONS },
+              { moduleId: 'SITE', actions: DEFAULT_ACTIONS }
+            ],
+            isSystem: true 
+          }
+      ];
+      return defaultRoles;
+  }
+  return res.rows.map(r => JSON.parse(r.data as string));
+};
+
+export const saveRole = async (role: Role) => {
+  if (!isTursoConfigured) return;
+  await turso.execute({
+    sql: "INSERT INTO roles (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+    args: [role.id, JSON.stringify(role)]
+  });
+};
+
+export const deleteRole = async (id: string) => {
+  if (!isTursoConfigured) return;
+  await turso.execute({ sql: "DELETE FROM roles WHERE id = ?", args: [id] });
+};
+
+// ... giữ nguyên các hàm CRUD khác
 export const getProjects = async (): Promise<Project[]> => {
   if (!isTursoConfigured) return [];
   const res = await turso.execute("SELECT * FROM projects");
@@ -136,12 +180,9 @@ export const getInspectionsPaginated = async (options: {
     type?: string;
 }) => {
   if (!isTursoConfigured) return { items: [], total: 0 };
-  
   const { page, limit, search = '', status = '', type = '' } = options;
-
   let whereClauses = [];
   let filterArgs: any[] = [];
-
   if (search) {
     whereClauses.push("(ma_ct LIKE ? OR ma_nha_may LIKE ? OR created_by LIKE ?)");
     const t = `%${search}%`;
@@ -155,27 +196,19 @@ export const getInspectionsPaginated = async (options: {
     whereClauses.push("type = ?");
     filterArgs.push(type);
   }
-
   const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-
-  // 1. Lấy dữ liệu phân trang
   let dataSql = `SELECT id, data, status, type, score, created_at FROM inspections ${whereSql} ORDER BY created_at DESC`;
   let dataArgs = [...filterArgs];
-
   if (limit !== undefined && page !== undefined) {
     const offset = (page - 1) * limit;
     dataSql += ` LIMIT ? OFFSET ?`;
     dataArgs.push(limit, offset);
   }
-
   const dataRes = await turso.execute({ sql: dataSql, args: dataArgs });
-
-  // 2. Lấy tổng số bản ghi
   const countRes = await turso.execute({
     sql: `SELECT COUNT(*) as total FROM inspections ${whereSql}`,
     args: filterArgs
   });
-
   const items = dataRes.rows.map(r => {
       const fullData = JSON.parse(r.data as string);
       return {
@@ -187,16 +220,12 @@ export const getInspectionsPaginated = async (options: {
           date: fullData.date || new Date(Number(r.created_at || Date.now() / 1000) * 1000).toISOString().split('T')[0]
       } as Inspection;
   });
-
   return { items, total: Number(countRes.rows[0].total) };
 };
 
 export const getInspectionById = async (id: string): Promise<Inspection | null> => {
     if (!isTursoConfigured) return null;
-    const res = await turso.execute({
-        sql: "SELECT data FROM inspections WHERE id = ?",
-        args: [id]
-    });
+    const res = await turso.execute({ sql: "SELECT data FROM inspections WHERE id = ?", args: [id] });
     if (res.rows.length === 0) return null;
     return JSON.parse(res.rows[0].data as string);
 };
@@ -207,29 +236,15 @@ export const saveInspection = async (i: Inspection) => {
     sql: `INSERT INTO inspections (id, data, created_at, updated_at, created_by, ma_ct, ma_nha_may, status, type, score) 
           VALUES (?, ?, unixepoch(), unixepoch(), ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET 
-            data = excluded.data, 
-            updated_at = unixepoch(), 
-            status = excluded.status,
-            score = excluded.score`,
+            data = excluded.data, updated_at = unixepoch(), status = excluded.status, score = excluded.score`,
     args: [i.id, JSON.stringify(i), i.inspectorName, i.ma_ct, i.ma_nha_may || '', i.status, i.type || 'SITE', i.score || 0]
   });
 };
 
-export const getInspectionStatsSummary = async () => {
-    if (!isTursoConfigured) return { total: 0, completed: 0, flagged: 0, highPriority: 0 };
-    const res = await turso.execute(`
-        SELECT 
-            COUNT(*) as total,
-            SUM(CASE WHEN status IN ('COMPLETED', 'APPROVED') THEN 1 ELSE 0 END) as completed,
-            SUM(CASE WHEN status = 'FLAGGED' THEN 1 ELSE 0 END) as flagged
-        FROM inspections
-    `);
-    const row = res.rows[0];
-    return {
-        total: Number(row.total),
-        completed: Number(row.completed),
-        flagged: Number(row.flagged)
-    };
+/* Added deleteInspection fix to support record removal from apiService */
+export const deleteInspection = async (id: string) => {
+  if (!isTursoConfigured) return;
+  await turso.execute({ sql: "DELETE FROM inspections WHERE id = ?", args: [id] });
 };
 
 export const getUsers = async (): Promise<User[]> => {
@@ -244,19 +259,19 @@ export const saveUser = async (user: User) => {
     args: [user.id, JSON.stringify(user)]
   });
 };
-export const importUsers = async (users: User[]) => {
-  if (!isTursoConfigured) return;
-  for (const user of users) {
-    await turso.execute({
-      sql: "INSERT INTO users (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-      args: [user.id, JSON.stringify(user)]
-    });
-  }
-};
 export const deleteUser = async (id: string) => {
   if (!isTursoConfigured) return;
   await turso.execute({ sql: "DELETE FROM users WHERE id = ?", args: [id] });
 };
+
+/* Added importUsers fix to support bulk user imports from apiService */
+export const importUsers = async (users: User[]) => {
+  if (!isTursoConfigured) return;
+  for (const user of users) {
+    await saveUser(user);
+  }
+};
+
 export const getWorkshops = async (): Promise<Workshop[]> => {
   if (!isTursoConfigured) return [];
   const res = await turso.execute("SELECT data FROM workshops");
@@ -272,15 +287,6 @@ export const saveWorkshop = async (w: Workshop) => {
 export const deleteWorkshop = async (id: string) => {
   if (!isTursoConfigured) return;
   await turso.execute({ sql: "DELETE FROM workshops WHERE id = ?", args: [id] });
-};
-export const getAllInspections = async () => {
-  if (!isTursoConfigured) return [];
-  const res = await turso.execute(`SELECT data FROM inspections ORDER BY created_at DESC`);
-  return res.rows.map(r => JSON.parse(r.data as string)) as Inspection[];
-};
-export const deleteInspection = async (id: string) => {
-  if (!isTursoConfigured) return;
-  await turso.execute({ sql: "DELETE FROM inspections WHERE id = ?", args: [id] });
 };
 export const getTemplates = async (): Promise<Record<string, CheckItem[]>> => {
   if (!isTursoConfigured) return {};
@@ -299,7 +305,6 @@ export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
 export const getPlans = async (filter: { search?: string; page?: number; limit?: number }) => {
   if (!isTursoConfigured) return { items: [], total: 0 };
   const { search = '', page, limit } = filter;
-  
   let sql = `SELECT * FROM plans`;
   let args: any[] = [];
   if (search) {
@@ -307,15 +312,12 @@ export const getPlans = async (filter: { search?: string; page?: number; limit?:
     const t = `%${search}%`;
     args = [t, t, t, t];
   }
-  
   sql += ` ORDER BY created_at DESC`;
-  
   if (limit !== undefined && page !== undefined) {
     const offset = (page - 1) * limit;
     sql += ` LIMIT ? OFFSET ?`;
     args.push(limit, offset);
   }
-
   const countRes = await turso.execute({ 
     sql: `SELECT COUNT(*) as total FROM plans ${search ? 'WHERE ma_ct LIKE ? OR ten_hang_muc LIKE ? OR headcode LIKE ? OR ma_nha_may LIKE ?' : ''}`, 
     args: search ? args.slice(0, 4) : [] 

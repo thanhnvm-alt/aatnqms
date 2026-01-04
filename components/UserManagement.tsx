@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { User, UserRole, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
@@ -178,8 +177,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
      setFormData(prev => ({ ...prev, allowedModules: [] }));
   };
 
-  const getRoleBadge = (role: UserRole) => {
-    switch (role) {
+  // Fix: changed parameter type to string to handle user.role which is UserRoleName (UserRole | string)
+  const getRoleBadge = (role: string) => {
+    switch (role as UserRole) {
       case 'ADMIN': return 'bg-purple-100 text-purple-700 border-purple-200';
       case 'MANAGER': return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'QA': return 'bg-teal-100 text-teal-700 border-teal-200';

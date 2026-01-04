@@ -2,7 +2,7 @@
 import React from 'react';
 import { ViewState, User } from '../types';
 import { 
-  Home, 
+  Briefcase, 
   FileSpreadsheet, 
   List, 
   LayoutDashboard, 
@@ -22,13 +22,20 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ view, onNavigate, user, onLogout, collapsed, setCollapsed }) => {
+  // Lọc menu dựa trên vai trò QC
   const menuItems = [
-    { id: 'PROJECTS', label: 'TRANG CHỦ', icon: Home },
+    { id: 'PROJECTS', label: 'QUẢN LÝ DỰ ÁN', icon: Briefcase },
     { id: 'PLAN', label: 'KẾ HOẠCH', icon: FileSpreadsheet },
     { id: 'LIST', label: 'DANH SÁCH', icon: List },
     { id: 'DASHBOARD', label: 'BÁO CÁO', icon: LayoutDashboard },
     { id: 'SETTINGS', label: 'CÀI ĐẶT', icon: Settings },
-  ];
+  ].filter(item => {
+    if (user.role === 'QC') {
+      // QC chỉ được thấy Danh sách và Cài đặt
+      return item.id === 'LIST' || item.id === 'SETTINGS';
+    }
+    return true;
+  });
 
   return (
     <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-64'}`}>
