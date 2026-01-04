@@ -8,8 +8,10 @@ import {
   Plus, FileDown, SlidersHorizontal, MapPin, Hash, FolderOpen, 
   ChevronLeft, Briefcase, Loader2, Upload, ArrowRight, RefreshCw,
   User, UserCircle, LogOut, Settings as SettingsIcon, ShieldCheck,
-  ListFilter
+  ListFilter, QrCode
 } from 'lucide-react';
+// @ts-ignore
+import jsQR from 'jsqr';
 
 interface InspectionListProps {
   inspections: Inspection[];
@@ -44,6 +46,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showModuleMenu, setShowModuleMenu] = useState(false);
   
+  // QR Scanner State
+  const [showScanner, setShowScanner] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>(0);
+  
   const filterMenuRef = useRef<HTMLDivElement>(null);
   const moduleMenuRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +63,56 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // --- QR Scanner Logic ---
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (showScanner) {
+      const startCamera = async () => {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          if (videoRef.current && stream) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.setAttribute('playsinline', 'true');
+              videoRef.current.play();
+              requestRef.current = requestAnimationFrame(tick);
+          }
+        } catch (err) {
+          alert('Không thể truy cập camera. Vui lòng cấp quyền.');
+          setShowScanner(false);
+        }
+      };
+      startCamera();
+    }
+    return () => {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [showScanner]);
+
+  const tick = () => {
+    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      if (canvas) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) {
+             const scannedData = code.data.trim();
+             setSearchTerm(scannedData);
+             setShowScanner(false);
+             return;
+          }
+        }
+      }
+    }
+    if (showScanner) requestRef.current = requestAnimationFrame(tick);
+  };
 
   // Calculate counts for each module
   const moduleStats = useMemo(() => {
@@ -87,7 +145,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           String(item.ten_ct || '').toLowerCase().includes(term) ||
           String(item.inspectorName || '').toLowerCase().includes(term) ||
           String(item.ten_hang_muc || '').toLowerCase().includes(term) ||
-          String(item.ma_nha_may || '').toLowerCase().includes(term);
+          String(item.ma_nha_may || '').toLowerCase().includes(term) ||
+          String(item.headcode || '').toLowerCase().includes(term);
         
         if (!matchesSearch) return false;
         if (filter === 'MY_REPORTS' && (item.inspectorName || '').toLowerCase() !== currentUserName?.toLowerCase()) return false;
@@ -127,11 +186,27 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     ? 'TẤT CẢ' 
     : ALL_MODULES.find(m => m.id === selectedModule)?.label || selectedModule;
 
-  // Display only modules that have counts or are part of the main list
-  const displayModules = ['ALL', ...ALL_MODULES.map(m => m.id)];
-
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+      {/* QR Scanner Overlay */}
+      {showScanner && (
+        <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
+            <button onClick={() => setShowScanner(false)} className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
+            <div className="text-center mb-8">
+                <h3 className="text-white font-black text-lg uppercase tracking-widest mb-1">Tìm kiếm bằng QR</h3>
+                <p className="text-slate-400 text-xs">Di chuyển camera đến mã QR trên sản phẩm</p>
+            </div>
+            <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[2.5rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.4)]">
+                <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="absolute inset-0 border-2 border-white/20 pointer-events-none">
+                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan-line"></div>
+                </div>
+            </div>
+            <p className="text-blue-400 mt-10 font-black text-[10px] uppercase tracking-[0.3em] animate-pulse">Scanning...</p>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="bg-white px-3 py-3 border-b border-slate-200 shadow-sm z-30 shrink-0 lg:px-6 lg:py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
@@ -139,7 +214,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             {/* Top Row: Module Dropdown + Search + Filter Button */}
             <div className="flex items-center gap-2 w-full lg:w-auto">
                 
-                {/* NEW: Module Filter Dropdown (Droplist) */}
+                {/* Module Filter Dropdown */}
                 <div className="relative shrink-0" ref={moduleMenuRef}>
                     <button 
                         onClick={() => setShowModuleMenu(!showModuleMenu)}
@@ -179,18 +254,31 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     )}
                 </div>
 
-                {/* Search Input */}
+                {/* Search Input with QR Scanner */}
                 <div className="relative group flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-500 transition-colors" />
                   <input 
-                    type="text" placeholder="Tìm mã, sản phẩm, QC..." value={searchTerm}
+                    type="text" placeholder="Tìm mã NM, Headcode, Sản phẩm..." value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-10 h-11 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner lg:text-sm lg:h-12"
+                    className="w-full pl-10 pr-20 h-11 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner lg:text-sm lg:h-12"
                   />
-                  {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"><X className="w-4 h-4"/></button>}
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm('')} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
+                        <X className="w-4 h-4"/>
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => setShowScanner(true)}
+                      className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 active:scale-90 transition-all"
+                      title="Quét mã QR để tìm"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Status Filter Button (Dropdown) */}
+                {/* Status Filter Button */}
                 <div className="relative lg:hidden shrink-0" ref={filterMenuRef}>
                      <button 
                         onClick={() => setShowFilterMenu(!showFilterMenu)} 
@@ -217,7 +305,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 </div>
             </div>
             
-            {/* 2. Controls Area (Date + Desktop Filters) */}
+            {/* Controls Area (Date + Desktop Filters) */}
             <div className="flex items-center gap-2 lg:gap-4 flex-1 lg:justify-end">
                
                {/* Date Filter */}
@@ -292,6 +380,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                              <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.date}</span>
                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${item.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>{item.status}</span>
                              {item.type && <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">{item.type}</span>}
+                             {item.ma_nha_may && <span className="text-[9px] font-mono font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">{item.ma_nha_may}</span>}
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-slate-300 ml-2 group-hover:text-blue-500 transition-colors" />
