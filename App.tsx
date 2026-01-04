@@ -24,6 +24,7 @@ import { ThreeDConverter } from './components/ThreeDConverter';
 import { ProjectList } from './components/ProjectList';
 import { ProjectDetail } from './components/ProjectDetail';
 import { GlobalHeader } from './components/GlobalHeader';
+import { Sidebar } from './components/Sidebar';
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -75,6 +76,7 @@ const App = () => {
   });
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null);
   const [initialFormState, setInitialFormState] = useState<Partial<Inspection> | undefined>(undefined);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   const [showModuleSelector, setShowModuleSelector] = useState(false);
   const [isScanSelectionMode, setIsScanSelectionMode] = useState(false);
@@ -278,8 +280,50 @@ const App = () => {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
-      <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} {...headerActions} />
+    <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:block h-full shrink-0">
+          <Sidebar 
+            view={view} 
+            onNavigate={setView} 
+            user={user} 
+            onLogout={handleLogout} 
+            collapsed={sidebarCollapsed}
+            setCollapsed={setSidebarCollapsed}
+          />
+      </div>
+
+      <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
+        {/* Header Area */}
+        <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} {...headerActions} />
+
+        <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4rem)] lg:pb-0">
+            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
+            {view === 'LIST' && (
+                <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} currentUser={user} onLogout={handleLogout} onNavigateSettings={handleNavigateToSettings} onModuleChange={setCurrentModule} onRefresh={loadInspections} />
+            )}
+            {view === 'FORM' && <InspectionForm initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
+            {view === 'DETAIL' && activeInspection && (
+                <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />
+            )}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
+            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(isQC ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
+            {view === 'PROJECTS' && <ProjectList projects={projects} onSelectProject={(id) => { setSelectedProjectId(id); setView('PROJECT_DETAIL'); }} />}
+            {view === 'PROJECT_DETAIL' && selectedProjectId && <ProjectDetail project={projects.find(p => p.id === selectedProjectId)!} inspections={inspections} onBack={() => setView('PROJECTS')} />}
+            {view === 'CONVERT_3D' && <ThreeDConverter />}
+        </main>
+        
+        <AIChatbox inspections={inspections} plans={plans} />
+
+        {/* Mobile Bottom Navigation */}
+        <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
+            <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Danh sách</span></button>
+            <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Dự án</span></button>
+            <div className="relative -top-4"><button onClick={headerActions.onCreate} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Plus className="w-6 h-6" /></button></div>
+            <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Kế hoạch</span></button>
+            <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Báo cáo</span></button>
+        </div>
+      </div>
 
       {/* Detail Loading Overlay */}
       {isDetailLoading && (
@@ -328,36 +372,6 @@ const App = () => {
             <p className="text-white/40 mt-10 text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Align QR within frame</p>
         </div>
       )}
-
-      <div className="flex-1 flex flex-col h-full relative overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4rem)] lg:pb-0">
-            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
-            {view === 'LIST' && (
-                <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} currentUser={user} onLogout={handleLogout} onNavigateSettings={handleNavigateToSettings} onModuleChange={setCurrentModule} onRefresh={loadInspections} />
-            )}
-            {view === 'FORM' && <InspectionForm initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
-            {view === 'DETAIL' && activeInspection && (
-                <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />
-            )}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
-            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(isQC ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
-            {view === 'PROJECTS' && <ProjectList projects={projects} onSelectProject={(id) => { setSelectedProjectId(id); setView('PROJECT_DETAIL'); }} />}
-            {view === 'PROJECT_DETAIL' && selectedProjectId && <ProjectDetail project={projects.find(p => p.id === selectedProjectId)!} inspections={inspections} onBack={() => setView('PROJECTS')} />}
-            {view === 'CONVERT_3D' && <ThreeDConverter />}
-        </main>
-        <AIChatbox inspections={inspections} plans={plans} />
-        <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
-            <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Checklist</span></button>
-            {!isQC && (
-                <>
-                    <button onClick={() => setView('PROJECTS')} className={`flex flex-col items-center justify-center w-full ${view === 'PROJECTS' ? 'text-blue-600' : 'text-slate-400'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Projects</span></button>
-                    <div className="relative -top-4"><button onClick={() => setView('CONVERT_3D')} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Box className="w-6 h-6" /></button></div>
-                    <button onClick={() => setView('PLAN')} className={`flex flex-col items-center justify-center w-full ${view === 'PLAN' ? 'text-blue-600' : 'text-slate-400'}`}><FileSpreadsheet className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Plans</span></button>
-                    <button onClick={() => setView('DASHBOARD')} className={`flex flex-col items-center justify-center w-full ${view === 'DASHBOARD' ? 'text-blue-600' : 'text-slate-400'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[9px] font-black uppercase mt-1">Report</span></button>
-                </>
-            )}
-        </div>
-      </div>
     </div>
   );
 };
