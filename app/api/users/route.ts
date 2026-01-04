@@ -8,6 +8,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const user = getAuthUser(request);
+    if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
+
     const users = await getUsers();
     return buildSuccessResponse(users, 'Users retrieved successfully');
   } catch (error: any) {
@@ -17,6 +20,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Kiểm tra xác thực và phân quyền
+    const user = getAuthUser(request);
+    if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
+    
+    // Chỉ Admin và Manager được phép tạo/sửa người dùng
+    if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return buildErrorResponse('Forbidden: Bạn không có quyền quản lý người dùng', 'FORBIDDEN', null, 403);
+    }
+
     const body = await request.json();
     
     // Handle bulk import

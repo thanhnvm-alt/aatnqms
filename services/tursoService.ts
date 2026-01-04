@@ -55,25 +55,9 @@ export const initDatabase = async () => {
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (id TEXT PRIMARY KEY, data TEXT)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, data TEXT)`);
     
-    await turso.execute(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id TEXT PRIMARY KEY, 
-        code TEXT UNIQUE, 
-        name TEXT, 
-        ma_ct TEXT, 
-        ten_ct TEXT, 
-        pm TEXT, 
-        pc TEXT, 
-        qa TEXT, 
-        location TEXT, 
-        start_date TEXT, 
-        end_date TEXT, 
-        status TEXT, 
-        progress INTEGER, 
-        description TEXT, 
-        thumbnail TEXT, 
-        images TEXT
-      )`);
+    // SỬ DỤNG BẢNG MỚI 'project_store' ĐỂ TRÁNH XUNG ĐỘT SCHEMA CŨ
+    // Cấu trúc (id, data) là cách an toàn nhất để handle các trường động (pm, pc, qa, location...)
+    await turso.execute(`CREATE TABLE IF NOT EXISTS project_store (id TEXT PRIMARY KEY, data TEXT)`);
 
     console.log("✅ Database tables verified.");
   } catch (e) {
@@ -135,41 +119,30 @@ export const deleteRole = async (id: string) => {
   await turso.execute({ sql: "DELETE FROM roles WHERE id = ?", args: [id] });
 };
 
-// ... giữ nguyên các hàm CRUD khác
 export const getProjects = async (): Promise<Project[]> => {
   if (!isTursoConfigured) return [];
-  const res = await turso.execute("SELECT * FROM projects");
-  return res.rows.map(r => ({
-    id: r.id as string,
-    code: r.code as string,
-    name: r.name as string,
-    ma_ct: r.ma_ct as string,
-    ten_ct: r.ten_ct as string,
-    pm: r.pm as string || '',
-    pc: r.pc as string || '',
-    qa: r.qa as string || '',
-    location: r.location as string || '',
-    startDate: r.start_date as string || '',
-    endDate: r.end_date as string || '',
-    status: (r.status as any) || 'Planning',
-    progress: Number(r.progress || 0),
-    description: r.description as string || '',
-    thumbnail: r.thumbnail as string || '',
-    images: r.images ? JSON.parse(r.images as string) : []
-  }));
+  try {
+    // Luôn lấy từ project_store để đồng nhất cấu trúc id/data
+    const res = await turso.execute("SELECT data FROM project_store");
+    return res.rows.map(r => JSON.parse(r.data as string));
+  } catch (error) {
+    console.error("❌ [getProjects] Failed to fetch from project_store:", error);
+    return [];
+  }
 };
 
 export const saveProjectMetadata = async (p: Project) => {
   if (!isTursoConfigured) return;
-  await turso.execute({
-    sql: `INSERT INTO projects (id, code, name, ma_ct, ten_ct, pm, pc, qa, location, start_date, end_date, status, progress, description, thumbnail, images) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET 
-            pm = excluded.pm, pc = excluded.pc, qa = excluded.qa, location = excluded.location,
-            start_date = excluded.start_date, end_date = excluded.end_date, status = excluded.status,
-            progress = excluded.progress, description = excluded.description, thumbnail = excluded.thumbnail, images = excluded.images`,
-    args: [p.id, p.code, p.name, p.ma_ct, p.ten_ct, p.pm, p.pc || '', p.qa || '', p.location || '', p.startDate, p.endDate, p.status, p.progress, p.description || '', p.thumbnail, JSON.stringify(p.images || [])]
-  });
+  try {
+    // Dùng ma_ct làm ID duy nhất trong project_store
+    await turso.execute({
+      sql: "INSERT INTO project_store (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+      args: [p.ma_ct, JSON.stringify(p)]
+    });
+  } catch (error) {
+    console.error("❌ [saveProjectMetadata] Database Error:", error);
+    throw error;
+  }
 };
 
 export const getInspectionsPaginated = async (options: { 
@@ -241,7 +214,6 @@ export const saveInspection = async (i: Inspection) => {
   });
 };
 
-/* Added deleteInspection fix to support record removal from apiService */
 export const deleteInspection = async (id: string) => {
   if (!isTursoConfigured) return;
   await turso.execute({ sql: "DELETE FROM inspections WHERE id = ?", args: [id] });
@@ -264,7 +236,6 @@ export const deleteUser = async (id: string) => {
   await turso.execute({ sql: "DELETE FROM users WHERE id = ?", args: [id] });
 };
 
-/* Added importUsers fix to support bulk user imports from apiService */
 export const importUsers = async (users: User[]) => {
   if (!isTursoConfigured) return;
   for (const user of users) {

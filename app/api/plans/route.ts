@@ -2,17 +2,21 @@
 import { NextRequest } from 'next/server';
 import { plansService } from '@/services/plansService';
 import { PlanSchema, PaginationSchema } from '@/lib/validations';
-import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response';
+import { successResponse, errorResponse, generateRequestId, buildErrorResponse } from '@/lib/api-response';
 import { ValidationError } from '@/lib/errors';
+import { getAuthUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const requestId = generateRequestId();
   try {
+    // Xác thực cơ bản
+    const user = getAuthUser(request);
+    if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
+
     const { searchParams } = new URL(request.url);
     
-    // Validate Query Params
     const query = PaginationSchema.safeParse({
       page: searchParams.get('page'),
       limit: searchParams.get('limit'),
@@ -25,7 +29,6 @@ export async function GET(request: NextRequest) {
 
     const { page, limit, search } = query.data;
     
-    // Extract specific filters
     const filterType = searchParams.get('filterType');
     const filterValue = searchParams.get('filterValue');
     
@@ -54,9 +57,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
   try {
+    const user = getAuthUser(request);
+    if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
+    
+    // Chỉ Admin và Manager được phép tạo kế hoạch
+    if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return buildErrorResponse('Forbidden', 'FORBIDDEN', null, 403);
+    }
+
     const body = await request.json();
 
-    // Validate Input Body
     const validation = PlanSchema.safeParse(body);
     if (!validation.success) {
       throw new ValidationError("Dữ liệu đầu vào không hợp lệ", validation.error.flatten().fieldErrors);

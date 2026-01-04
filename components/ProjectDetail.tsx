@@ -85,8 +85,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
 
   const handleSave = async () => {
       setIsSaving(true);
-      try { const updated: Project = { ...project, ...editForm as any }; await updateProject(updated); setProject(updated); setIsEditing(false); }
-      catch (error) { alert("Lỗi khi lưu thông tin."); } finally { setIsSaving(false); }
+      try { 
+          const updated: Project = { ...project, ...editForm as any }; 
+          await updateProject(updated); 
+          setProject(updated); 
+          setIsEditing(false); 
+      }
+      catch (error) { 
+          console.error("❌ Project Save Failed:", error);
+          alert("Lỗi khi lưu thông tin dự án. Vui lòng kiểm tra kết nối hệ thống."); 
+      } finally { 
+          setIsSaving(false); 
+      }
   };
 
   const InfoRow = ({ icon: Icon, label, value, colorClass = "bg-slate-100 text-slate-600", mapsLink = false }: any) => (
@@ -180,26 +190,168 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
       {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
 
       {isEditing && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-                  <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0"><h3 className="font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter"><Edit3 className="w-5 h-5 text-blue-600"/> Edit Project Info</h3><button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-transform"><X className="w-6 h-6"/></button></div>
-                  <div className="p-6 overflow-y-auto space-y-5 no-scrollbar flex-1">
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status</label><select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value as any})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-2 focus:ring-blue-100 outline-none"><option value="Planning">Planning</option><option value="In Progress">In Progress</option><option value="On Hold">On Hold</option><option value="Completed">Completed</option></select></div>
-                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Progress (%)</label><input type="number" min="0" max="100" value={editForm.progress} onChange={e => setEditForm({...editForm, progress: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-2 focus:ring-blue-100 outline-none" /></div>
+          <div className="fixed inset-0 z-50 bg-[#0f172a]/60 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 overflow-hidden">
+              <div className="bg-white w-full max-w-lg md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-full md:h-auto md:max-h-[90vh] animate-in zoom-in-95 duration-200">
+                  {/* Header Style from Screenshot */}
+                  <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                      <div className="flex items-center gap-3">
+                          <Edit3 className="w-5 h-5 text-blue-600" />
+                          <h3 className="font-black text-slate-800 uppercase tracking-tighter text-sm">EDIT PROJECT INFO</h3>
                       </div>
-                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PM Name</label><input type="text" value={editForm.pm || ''} onChange={e => setEditForm({...editForm, pm: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold uppercase" placeholder="Enter PM Name..." /></div>
+                      <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform">
+                          <X className="w-6 h-6"/>
+                      </button>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto space-y-6 no-scrollbar flex-1 bg-white">
+                      {/* Row 1: Status & Progress */}
                       <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PC Name</label><input type="text" value={editForm.pc || ''} onChange={e => setEditForm({...editForm, pc: e.target.value})} className="w-full px-4 py-2 border rounded-xl" /></div>
-                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QA Name</label><input type="text" value={editForm.qa || ''} onChange={e => setEditForm({...editForm, qa: e.target.value})} className="w-full px-4 py-2 border rounded-xl" /></div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">STATUS</label>
+                              <div className="relative group">
+                                  <select 
+                                      value={editForm.status} 
+                                      onChange={e => setEditForm({...editForm, status: e.target.value as any})} 
+                                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none appearance-none transition-all"
+                                  >
+                                      <option value="Planning">Planning</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="On Hold">On Hold</option>
+                                      <option value="Completed">Completed</option>
+                                  </select>
+                                  <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                              </div>
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PROGRESS (%)</label>
+                              <input 
+                                  type="number" min="0" max="100" 
+                                  value={editForm.progress} 
+                                  onChange={e => setEditForm({...editForm, progress: Number(e.target.value)})} 
+                                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all" 
+                              />
+                          </div>
                       </div>
-                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Location</label><div className="flex gap-2"><input type="text" value={editForm.location || ''} onChange={e => setEditForm({...editForm, location: e.target.value})} className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold" placeholder="Coordinates or address" /><button onClick={handleGetLocation} className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Locate className="w-5 h-5" /></button></div></div>
+
+                      {/* Row 2: PM Name */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PM NAME</label>
+                          <input 
+                              type="text" 
+                              value={editForm.pm || ''} 
+                              onChange={e => setEditForm({...editForm, pm: e.target.value.toUpperCase()})} 
+                              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all uppercase" 
+                              placeholder="UNASSIGNED" 
+                          />
+                      </div>
+
+                      {/* Row 3: PC & QA Name */}
                       <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Start Date</label><input type="date" value={editForm.startDate} onChange={e => setEditForm({...editForm, startDate: e.target.value})} className="w-full px-4 py-2.5 border rounded-xl" /></div>
-                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">End Date</label><input type="date" value={editForm.endDate} onChange={e => setEditForm({...editForm, endDate: e.target.value})} className="w-full px-4 py-2.5 border rounded-xl" /></div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PC NAME</label>
+                              <input 
+                                  type="text" 
+                                  value={editForm.pc || ''} 
+                                  onChange={e => setEditForm({...editForm, pc: e.target.value})} 
+                                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
+                              />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QA NAME</label>
+                              <input 
+                                  type="text" 
+                                  value={editForm.qa || ''} 
+                                  onChange={e => setEditForm({...editForm, qa: e.target.value})} 
+                                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
+                              />
+                          </div>
                       </div>
-                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Description</label><textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm h-32 resize-none" placeholder="Project notes..." /></div>
-                      <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Gallery Images ({editForm.images?.length || 0})</label><div className="grid grid-cols-4 gap-2">{editForm.images?.map((img, i) => (<div key={i} className="relative aspect-square"><img src={img} className="w-full h-full object-cover rounded-xl border" /><button onClick={() => setEditForm({...editForm, images: editForm.images?.filter((_, idx) => idx !== i)})} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5"><X className="w-3 h-3" /></button></div>))}<button onClick={() => modalFileInputRef.current?.click()} className="aspect-square border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all"><Camera className="w-6 h-6" /></button></div></div>
+
+                      {/* Row 4: Location */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">LOCATION</label>
+                          <div className="flex gap-2">
+                              <input 
+                                  type="text" 
+                                  value={editForm.location || ''} 
+                                  onChange={e => setEditForm({...editForm, location: e.target.value})} 
+                                  className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all" 
+                                  placeholder="Coordinates or address" 
+                              />
+                              <button 
+                                  onClick={handleGetLocation} 
+                                  disabled={isGettingLocation}
+                                  className="p-3 bg-blue-100 text-blue-600 rounded-2xl active:scale-90 transition-transform shadow-sm flex items-center justify-center disabled:opacity-50"
+                              >
+                                  {isGettingLocation ? <Loader2 className="w-5 h-5 animate-spin"/> : <Locate className="w-5 h-5" />}
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Row 5: Dates */}
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">START DATE</label>
+                              <div className="relative">
+                                  <input 
+                                      type="date" 
+                                      value={editForm.startDate} 
+                                      onChange={e => setEditForm({...editForm, startDate: e.target.value})} 
+                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
+                                  />
+                                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                              </div>
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">END DATE</label>
+                              <div className="relative">
+                                  <input 
+                                      type="date" 
+                                      value={editForm.endDate} 
+                                      onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
+                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
+                                  />
+                                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Row 6: Description */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">DESCRIPTION</label>
+                          <textarea 
+                              value={editForm.description || ''} 
+                              onChange={e => setEditForm({...editForm, description: e.target.value})} 
+                              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium h-32 resize-none focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
+                              placeholder="Project notes..." 
+                          />
+                      </div>
+
+                      {/* Image Management */}
+                      <div className="space-y-2 pt-2 border-t border-slate-50">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">GALLERY IMAGES ({editForm.images?.length || 0})</label>
+                          <div className="grid grid-cols-4 gap-2">
+                              {editForm.images?.map((img, i) => (
+                                  <div key={i} className="relative aspect-square group">
+                                      <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-100 shadow-sm" />
+                                      <button 
+                                          onClick={() => setEditForm({...editForm, images: editForm.images?.filter((_, idx) => idx !== i)})} 
+                                          className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-all"
+                                      >
+                                          <X className="w-3 h-3" />
+                                      </button>
+                                  </div>
+                              ))}
+                              <button 
+                                  onClick={() => modalFileInputRef.current?.click()} 
+                                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all bg-slate-50/50"
+                              >
+                                  <Camera className="w-6 h-6 mb-1 opacity-40" />
+                                  <span className="text-[8px] font-black">UPLOAD</span>
+                              </button>
+                          </div>
+                      </div>
+
                       <input 
                         type="file" 
                         ref={modalFileInputRef} 
@@ -223,7 +375,24 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                         }} 
                       />
                   </div>
-                  <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0"><button onClick={() => setIsEditing(false)} className="px-6 py-2.5 text-slate-600 text-xs font-black uppercase">Cancel</button><button onClick={handleSave} disabled={isSaving} className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/30 active:scale-95 flex items-center gap-2">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}Save Changes</button></div>
+
+                  {/* Footer Style from Screenshot */}
+                  <div className="p-5 border-t border-slate-100 bg-slate-50/30 flex justify-end gap-6 shrink-0">
+                      <button 
+                          onClick={() => setIsEditing(false)} 
+                          className="px-4 py-2 text-slate-800 text-xs font-black uppercase tracking-widest hover:text-red-600 transition-colors"
+                      >
+                          CANCEL
+                      </button>
+                      <button 
+                          onClick={handleSave} 
+                          disabled={isSaving} 
+                          className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/30 active:scale-95 flex items-center gap-2 transition-all hover:bg-blue-700 disabled:opacity-50"
+                      >
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
+                          SAVE CHANGES
+                      </button>
+                  </div>
               </div>
           </div>
       )}

@@ -8,7 +8,7 @@ import {
   Plus, FileDown, SlidersHorizontal, MapPin, Hash, FolderOpen, 
   ChevronLeft, Briefcase, Loader2, Upload, ArrowRight, RefreshCw,
   User, UserCircle, LogOut, Settings as SettingsIcon, ShieldCheck,
-  ListFilter, QrCode
+  ListFilter, QrCode, FileUp, FileSpreadsheet
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -45,6 +45,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showModuleMenu, setShowModuleMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   
   // QR Scanner State
   const [showScanner, setShowScanner] = useState(false);
@@ -54,6 +56,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   
   const filterMenuRef = useRef<HTMLDivElement>(null);
   const moduleMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isQC = userRole === 'QC';
 
@@ -65,6 +68,98 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // --- Excel Logic ---
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      // @ts-ignore
+      const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+      const exportData = filteredInspections.map(item => ({
+        'Mã NM': item.ma_nha_may || '',
+        'Headcode': item.headcode || '',
+        'Mã CT': item.ma_ct || '',
+        'Tên CT': item.ten_ct || '',
+        'Hạng mục': item.ten_hang_muc || '',
+        'QC Thực hiện': item.inspectorName || '',
+        'Ngày kiểm': item.date || '',
+        'Điểm số': item.score || 0,
+        'Trạng thái': item.status || '',
+        'Loại': item.type || '',
+        'Số lượng ĐH': item.so_luong_ipo || 0,
+        'Số lượng Đạt': item.passedQuantity || 0,
+        'Số lượng Lỗi': item.failedQuantity || 0,
+        'ĐVT': item.dvt || ''
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "BaoCaoKiemTra");
+      XLSX.writeFile(wb, `Bao_cao_QC_AATN_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Lỗi khi xuất file Excel.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onImportInspections) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        // @ts-ignore
+        const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+        if (data.length === 0) {
+          alert("File không có dữ liệu.");
+          setIsImporting(false);
+          return;
+        }
+
+        const parsedInspections: Inspection[] = data.map((row: any, index: number) => ({
+          id: `IMP-${Date.now()}-${index}`,
+          ma_nha_may: row['Mã NM'] || row['ma_nha_may'] || '',
+          headcode: row['Headcode'] || row['headcode'] || '',
+          ma_ct: row['Mã CT'] || row['ma_ct'] || '',
+          ten_ct: row['Tên CT'] || row['ten_ct'] || '',
+          ten_hang_muc: row['Hạng mục'] || row['ten_hang_muc'] || '',
+          inspectorName: row['QC Thực hiện'] || row['inspectorName'] || currentUserName || '',
+          date: row['Ngày kiểm'] || row['date'] || new Date().toISOString().split('T')[0],
+          score: parseInt(row['Điểm số'] || row['score'] || '0'),
+          status: row['Trạng thái'] || row['status'] || InspectionStatus.COMPLETED,
+          type: row['Loại'] || row['type'] || 'SITE',
+          so_luong_ipo: parseInt(row['Số lượng ĐH'] || row['so_luong_ipo'] || '0'),
+          passedQuantity: parseInt(row['Số lượng Đạt'] || row['passedQuantity'] || '0'),
+          failedQuantity: parseInt(row['Số lượng Lỗi'] || row['failedQuantity'] || '0'),
+          dvt: row['ĐVT'] || row['dvt'] || 'PCS',
+          items: [] // Empty items for imported data, only summary info usually
+        }));
+
+        if (window.confirm(`Nhập ${parsedInspections.length} bản ghi vào hệ thống?`)) {
+          await onImportInspections(parsedInspections);
+          alert(`Đã nhập ${parsedInspections.length} bản ghi thành công!`);
+          onRefresh?.();
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Lỗi khi đọc file Excel.");
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
 
   // --- QR Scanner Logic ---
   useEffect(() => {
@@ -156,15 +251,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           String(item.headcode || '').toLowerCase().includes(term);
         
         if (!matchesSearch) return false;
-
-        // Skip filters for QC role as per requirement "only search visible"
+        
+        // Luôn áp dụng bộ lọc ngày nếu có
+        if (startDate && item.date < startDate) return false;
+        if (endDate && item.date > endDate) return false;
+        
+        // Các bộ lọc trạng thái khác chỉ dành cho vai trò không phải QC
         if (!isQC) {
-          if (filter === 'MY_REPORTS' && (item.inspectorName || '').toLowerCase() !== currentUserName?.toLowerCase()) return false;
-          if (filter === 'FLAGGED' && item.status !== InspectionStatus.FLAGGED) return false;
-          if (filter === 'HIGH_PRIORITY' && item.priority !== Priority.HIGH) return false;
-          if (filter === 'DRAFT' && item.status !== InspectionStatus.DRAFT) return false;
-          if (startDate && item.date < startDate) return false;
-          if (endDate && item.date > endDate) return false;
+            if (filter === 'MY_REPORTS' && (item.inspectorName || '').toLowerCase() !== currentUserName?.toLowerCase()) return false;
+            if (filter === 'FLAGGED' && item.status !== InspectionStatus.FLAGGED) return false;
+            if (filter === 'HIGH_PRIORITY' && item.priority !== Priority.HIGH) return false;
+            if (filter === 'DRAFT' && item.status !== InspectionStatus.DRAFT) return false;
         }
         
         return true;
@@ -203,6 +300,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+      <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx,.xls" className="hidden" />
+
       {showScanner && (
         <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
             <button onClick={() => setShowScanner(false)} className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
@@ -221,11 +320,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         </div>
       )}
 
-      {/* Header Bar */}
+      {/* Header Bar - Tinh chỉnh giao diện theo hình ảnh */}
       <div className="bg-white px-3 py-3 border-b border-slate-200 shadow-sm z-30 shrink-0 lg:px-6">
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 w-full">
             
-            {/* 1. Module Filter Dropdown - Hidden for QC */}
+            {/* 1. Module Filter Dropdown - Ẩn đối với QC */}
             {!isQC && (
                 <div className="relative shrink-0" ref={moduleMenuRef}>
                     <button 
@@ -250,7 +349,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 </div>
             )}
 
-            {/* 2. Status Filter Dropdown - Hidden for QC */}
+            {/* 2. Status Filter Dropdown - Ẩn đối với QC */}
             {!isQC && (
                 <div className="relative shrink-0" ref={filterMenuRef}>
                     <button 
@@ -289,31 +388,55 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 </div>
             )}
 
-            {/* 3. Search Input */}
+            {/* 3. Search Input Container */}
             <div className="relative group flex-1 min-w-[200px]">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-500 transition-colors" />
               <input 
                 type="text" placeholder="Mã NM, Headcode, Sản phẩm..." value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-20 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
+                className="w-full pl-10 pr-12 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
               />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 {searchTerm && <button onClick={() => setSearchTerm('')} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"><X className="w-4 h-4"/></button>}
-                <button onClick={() => setShowScanner(true)} className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 active:scale-90 transition-all"><QrCode className="w-4 h-4" /></button>
+                <button onClick={() => setShowScanner(true)} className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50"><QrCode className="w-4 h-4" /></button>
               </div>
             </div>
             
-            {/* 4. Date Filter - Hidden for QC */}
-            {!isQC && (
-                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-10 w-full lg:w-auto min-w-[280px] group hover:border-blue-300 transition-colors shrink-0">
+            {/* 4. Date Filter & Excel Actions - Chỉ hiển thị Export/Import nếu KHÔNG phải QC */}
+            <div className="flex items-center gap-2 w-full lg:w-auto">
+                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-10 flex-1 lg:flex-none lg:min-w-[320px] group hover:border-blue-300 transition-colors shrink-0">
                     <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-full cursor-pointer py-1" />
-                    <div className="flex items-center px-1 shrink-0">
-                        <Calendar className="w-4 h-4 text-slate-300" />
+                    <div className="flex items-center px-1 shrink-0 gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-900" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-200" />
                         <span className="text-slate-200 mx-2 font-light">|</span>
                     </div>
                     <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-full text-right cursor-pointer py-1" />
+                    <Calendar className="w-3.5 h-3.5 text-slate-900 ml-1.5 shrink-0" />
                 </div>
-            )}
+                
+                {/* Excel Actions Group - Ẩn khi là QC */}
+                {!isQC && (
+                    <div className="flex gap-2 shrink-0">
+                        <button 
+                            onClick={handleExportExcel}
+                            disabled={isExporting}
+                            className="h-10 w-10 flex items-center justify-center bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl hover:bg-indigo-100 active:scale-90 transition-all shadow-sm"
+                            title="Xuất báo cáo Excel"
+                        >
+                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileDown className="w-5 h-5" />}
+                        </button>
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isImporting}
+                            className="h-10 w-10 flex items-center justify-center bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl hover:bg-emerald-100 active:scale-90 transition-all shadow-sm"
+                            title="Nhập dữ liệu Excel"
+                        >
+                            {isImporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileUp className="w-5 h-5" />}
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
       </div>
 
