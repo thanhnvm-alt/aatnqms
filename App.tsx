@@ -53,6 +53,7 @@ const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [isDbReady, setIsDbReady] = useState(false);
   const [view, setView] = useState<ViewState>('DASHBOARD');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
@@ -88,19 +89,26 @@ const App = () => {
 
   useEffect(() => {
     const init = async () => {
-        await initDatabase();
-        const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
-        if (localData) {
-            try {
-                const parsedUser = JSON.parse(localData);
-                setUser(parsedUser);
-                setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
-            } catch (e) {}
+        try {
+            await initDatabase();
+            setIsDbReady(true);
+            
+            const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
+            if (localData) {
+                try {
+                    const parsedUser = JSON.parse(localData);
+                    setUser(parsedUser);
+                    setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
+                } catch (e) {}
+            }
+            await checkConn();
+            await loadUsers();
+            loadWorkshops();
+            loadTemplates();
+        } catch (error) {
+            console.error("Critical: Initialization failed", error);
+            setConnectionError(true);
         }
-        await checkConn();
-        await loadUsers();
-        loadWorkshops();
-        loadTemplates();
     };
     init();
   }, []);
@@ -129,7 +137,13 @@ const App = () => {
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  useEffect(() => { if (user) { loadInspections(); loadProjects(); loadPlans(); } }, [user, planSearchTerm]);
+  useEffect(() => { 
+    if (user && isDbReady) { 
+        loadInspections(); 
+        loadProjects(); 
+        loadPlans(); 
+    } 
+  }, [user, isDbReady, planSearchTerm]);
 
   const checkConn = async () => { try { const status = await checkApiConnection(); setConnectionError(!status.ok); } catch (e) { setConnectionError(true); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
@@ -137,19 +151,19 @@ const App = () => {
   const loadProjects = async () => { try { const data = await fetchProjects(); if (data.length > 0) setProjects(data); } catch(e) {} };
   
   const loadPlans = async () => {
-    if (isLoadingPlans) return;
+    if (isLoadingPlans || !isDbReady) return;
     setIsLoadingPlans(true);
     try {
-        // Removed page/limit to load all plans as requested
         const result = await fetchPlans(planSearchTerm);
         setPlans(result.items);
     } catch (e) {} finally { setIsLoadingPlans(false); }
   };
 
   const loadInspections = async () => {
+    if (isLoadingInspections || !isDbReady) return;
     setIsLoadingInspections(true);
     try { 
-        const data = await fetchInspections({ limit: 1000 }); 
+        const data = await fetchInspections(); 
         setInspections(data.items || []); 
     } catch (e) {} finally { setIsLoadingInspections(false); }
   };
@@ -253,6 +267,15 @@ const App = () => {
     onScanClick: () => { setIsScanSelectionMode(true); setShowModuleSelector(true); },
     onCreate: () => { setIsScanSelectionMode(false); setShowModuleSelector(true); setInitialFormState(undefined); setSelectedInspectionId(null); setActiveInspection(null); },
   };
+
+  if (!isDbReady) {
+      return (
+          <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+              <p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo hệ thống...</p>
+          </div>
+      );
+  }
 
   return (
     <div className="flex flex-col h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">

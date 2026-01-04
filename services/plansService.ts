@@ -13,8 +13,8 @@ export const plansService = {
     if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     const offset = (page - 1) * limit;
-    let sql = `SELECT * FROM searchPlans`;
-    let countSql = `SELECT COUNT(*) as total FROM searchPlans`;
+    let sql = `SELECT * FROM plans`;
+    let countSql = `SELECT COUNT(*) as total FROM plans`;
     
     const whereClauses: string[] = [];
     const args: any[] = [];
@@ -67,7 +67,7 @@ export const plansService = {
 
     return await withRetry(async () => {
       const result = await turso.execute({
-        sql: `SELECT * FROM searchPlans WHERE id = ?`,
+        sql: `SELECT * FROM plans WHERE id = ?`,
         args: [id]
       });
 
@@ -86,9 +86,8 @@ export const plansService = {
     if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     return await withRetry(async () => {
-      // Use RETURNING * to get the created record immediately
       const sql = `
-        INSERT INTO searchPlans (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
+        INSERT INTO plans (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
         RETURNING *
       `;
@@ -103,15 +102,11 @@ export const plansService = {
             data.ten_hang_muc, 
             data.dvt, 
             data.so_luong_ipo,
-            // Assuming input might have ma_nha_may if PlanInput allows it, 
-            // otherwise strictly from schema it might need adjustment. 
-            // For now, defaulting null if not in strict Schema, but Schema implies it might be needed.
             (data as any).ma_nha_may || null 
           ]
         });
         return result.rows[0] as unknown as PlanEntity;
       } catch (e: any) {
-        // Handle specific DB constraint errors if any
         throw new DatabaseError("Lỗi khi tạo bản ghi", e);
       }
     });
@@ -123,7 +118,6 @@ export const plansService = {
   updatePlan: async (id: number, data: Partial<PlanInput>) => {
     if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
-    // Dynamic query building
     const updates: string[] = [];
     const args: any[] = [];
 
@@ -139,11 +133,10 @@ export const plansService = {
     args.push(id);
 
     return await withRetry(async () => {
-      // Check existence first
-      const check = await turso.execute({ sql: "SELECT id FROM searchPlans WHERE id = ?", args: [id] });
+      const check = await turso.execute({ sql: "SELECT id FROM plans WHERE id = ?", args: [id] });
       if (check.rows.length === 0) throw new NotFoundError(`Kế hoạch ID ${id} không tồn tại`);
 
-      const sql = `UPDATE searchPlans SET ${updates.join(', ')} WHERE id = ? RETURNING *`;
+      const sql = `UPDATE plans SET ${updates.join(', ')} WHERE id = ? RETURNING *`;
       const result = await turso.execute({ sql, args });
       
       return result.rows[0] as unknown as PlanEntity;
@@ -158,7 +151,7 @@ export const plansService = {
 
     return await withRetry(async () => {
       const result = await turso.execute({
-        sql: `DELETE FROM searchPlans WHERE id = ?`,
+        sql: `DELETE FROM plans WHERE id = ?`,
         args: [id]
       });
 

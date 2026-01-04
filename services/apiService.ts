@@ -29,12 +29,9 @@ export const fetchInspections = async (filters: {
     page?: number; 
     limit?: number 
 } = {}): Promise<PagedResult<Inspection>> => {
-  const page = filters.page || 1;
-  const limit = filters.limit || 100; // Default reasonable limit
-  
   const result = await db.getInspectionsPaginated({
-      page,
-      limit,
+      page: filters.page,
+      limit: filters.limit,
       search: filters.search,
       status: filters.status,
       type: filters.type
@@ -43,8 +40,8 @@ export const fetchInspections = async (filters: {
   return { 
       items: result.items, 
       total: result.total, 
-      page, 
-      limit 
+      page: filters.page, 
+      limit: filters.limit 
   };
 };
 

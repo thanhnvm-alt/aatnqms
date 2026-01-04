@@ -7,7 +7,7 @@ import {
   ArrowRight, Loader2, CheckCircle2, AlertCircle, FileUp,
   FolderOpen, Tag, MoreHorizontal, Clock, ArrowUpRight,
   QrCode, X, ChevronDown, Filter, Layers, FileDown,
-  PieChart
+  PieChart, FileText
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -417,6 +417,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                                         const inspection = getInspectionStatus(item.ma_nha_may);
                                         const isDone = inspection?.status === InspectionStatus.COMPLETED || inspection?.status === InspectionStatus.APPROVED;
                                         const hasIssue = inspection?.status === InspectionStatus.FLAGGED;
+                                        const isDraft = inspection?.status === InspectionStatus.DRAFT;
                                         
                                         return (
                                             <div 
@@ -441,9 +442,23 @@ export const PlanList: React.FC<PlanListProps> = ({
                                                     </span>
                                                 </div>
 
-                                                <h4 className="text-xs font-bold text-slate-800 leading-snug line-clamp-2">
-                                                    <HighlightedText text={item.ten_hang_muc} highlight={searchTerm} />
-                                                </h4>
+                                                <div className="flex items-start gap-2">
+                                                    <h4 className="text-xs font-bold text-slate-800 leading-snug flex-1">
+                                                        <HighlightedText text={item.ten_hang_muc} highlight={searchTerm} />
+                                                    </h4>
+                                                    
+                                                    {/* Status Badge next to name */}
+                                                    {inspection && (
+                                                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border ${
+                                                            isDone ? 'bg-green-100 text-green-700 border-green-200' : 
+                                                            hasIssue ? 'bg-red-100 text-red-700 border-red-200' :
+                                                            isDraft ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                                                            'bg-orange-100 text-orange-700 border-orange-200'
+                                                        }`}>
+                                                            {isDone ? 'ĐẠT' : hasIssue ? 'LỖI' : isDraft ? 'NHÁP' : 'ĐANG XỬ LÝ'}
+                                                        </span>
+                                                    )}
+                                                </div>
 
                                                 <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                                                     <span className="text-[10px] font-black text-blue-600 uppercase">
@@ -457,11 +472,12 @@ export const PlanList: React.FC<PlanListProps> = ({
                                                                 className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border shadow-sm ${
                                                                     isDone ? 'bg-green-50 text-green-700 border-green-200' : 
                                                                     hasIssue ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                    isDraft ? 'bg-slate-50 text-slate-600 border-slate-200' :
                                                                     'bg-white text-slate-600 border-slate-200'
                                                                 }`}
                                                             >
-                                                                {isDone ? <CheckCircle2 className="w-3 h-3"/> : hasIssue ? <AlertCircle className="w-3 h-3"/> : <div className="w-2 h-2 rounded-full bg-slate-400"></div>}
-                                                                {isDone ? 'Đã xong' : hasIssue ? 'Lỗi' : 'Đang xử lý'}
+                                                                {isDone ? <CheckCircle2 className="w-3 h-3"/> : hasIssue ? <AlertCircle className="w-3 h-3"/> : isDraft ? <FileText className="w-3 h-3" /> : <div className="w-2 h-2 rounded-full bg-slate-400"></div>}
+                                                                {isDone ? 'Chi tiết' : hasIssue ? 'Lỗi/NCR' : isDraft ? 'Sửa nháp' : 'Đang xử lý'}
                                                             </button>
                                                         ) : (
                                                             <button 

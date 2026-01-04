@@ -11,27 +11,51 @@ import {
   UserRoleName
 } from "../types";
 
+/**
+ * Khởi tạo toàn bộ cấu trúc Database.
+ * Sử dụng CREATE TABLE IF NOT EXISTS để đảm bảo tính ổn định.
+ */
 export const initDatabase = async () => {
   if (!isTursoConfigured) return;
   try {
-    // Basic Tables
-    await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, headcode TEXT, ma_ct TEXT NOT NULL, ten_ct TEXT NOT NULL, ma_nha_may TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo REAL DEFAULT 0, ngay_kh TEXT, assignee TEXT, status TEXT DEFAULT 'PENDING', pthsp TEXT, created_at INTEGER DEFAULT (unixepoch()))`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS inspections (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER, created_by TEXT, ma_ct TEXT, ma_nha_may TEXT, status TEXT)`);
+    // 1. Bảng Kế hoạch (plans)
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        headcode TEXT, 
+        ma_ct TEXT NOT NULL, 
+        ten_ct TEXT NOT NULL, 
+        ma_nha_may TEXT, 
+        ten_hang_muc TEXT, 
+        dvt TEXT, 
+        so_luong_ipo REAL DEFAULT 0, 
+        ngay_kh TEXT, 
+        assignee TEXT, 
+        status TEXT DEFAULT 'PENDING', 
+        pthsp TEXT, 
+        created_at INTEGER DEFAULT (unixepoch())
+      )`);
+    
+    // 2. Bảng Kiểm tra (inspections)
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS inspections (
+        id TEXT PRIMARY KEY, 
+        data TEXT, 
+        created_at INTEGER DEFAULT (unixepoch()), 
+        updated_at INTEGER DEFAULT (unixepoch()), 
+        created_by TEXT, 
+        ma_ct TEXT, 
+        ma_nha_may TEXT, 
+        status TEXT,
+        type TEXT,
+        score INTEGER DEFAULT 0
+      )`);
+    
+    // 3. Các bảng bổ trợ
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, data TEXT)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (id TEXT PRIMARY KEY, data TEXT)`);
     
-    // Migration for inspections table (Add missing columns for optimization)
-    try { await turso.execute(`ALTER TABLE inspections ADD COLUMN type TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE inspections ADD COLUMN score INTEGER`); } catch (e) {}
-
-    // Create Indexes for faster lookup
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_ma_ct ON inspections(ma_ct)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_status ON inspections(status)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_type ON inspections(type)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_plans_ma_ct ON plans(ma_ct)`);
-    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_plans_ma_nm ON plans(ma_nha_may)`);
-
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY, 
@@ -51,17 +75,20 @@ export const initDatabase = async () => {
         thumbnail TEXT, 
         images TEXT
       )`);
+
+    // Migrations & Indexes
+    try { await turso.execute(`ALTER TABLE inspections ADD COLUMN type TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE inspections ADD COLUMN score INTEGER DEFAULT 0`); } catch (e) {}
     
-    // Migration for projects table
-    try { await turso.execute(`ALTER TABLE projects ADD COLUMN pm TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE projects ADD COLUMN pc TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE projects ADD COLUMN qa TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE projects ADD COLUMN images TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE projects ADD COLUMN location TEXT`); } catch (e) {}
+    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_ma_ct ON inspections(ma_ct)`);
+    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_inspections_status ON inspections(status)`);
+    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_plans_ma_ct ON plans(ma_ct)`);
+    await turso.execute(`CREATE INDEX IF NOT EXISTS idx_plans_ma_nm ON plans(ma_nha_may)`);
     
-    console.log("✅ Database tables optimized and indexes verified.");
+    console.log("✅ Database tables and indexes verified.");
   } catch (e) {
-    console.error("❌ Database optimization failed:", e);
+    console.error("❌ Database initialization failed:", e);
+    throw e; // Ném lỗi để App xử lý overlay nếu cần
   }
 };
 
@@ -101,9 +128,6 @@ export const saveProjectMetadata = async (p: Project) => {
   });
 };
 
-/**
- * OPTIMIZED: Lấy danh sách phiếu kiểm tra thu gọn (không kèm items chi tiết)
- */
 export const getInspectionsPaginated = async (options: { 
     page?: number; 
     limit?: number; 
@@ -113,36 +137,43 @@ export const getInspectionsPaginated = async (options: {
 }) => {
   if (!isTursoConfigured) return { items: [], total: 0 };
   
-  const { page = 1, limit = 50, search = '', status = '', type = '' } = options;
-  const offset = (page - 1) * limit;
+  const { page, limit, search = '', status = '', type = '' } = options;
 
   let whereClauses = [];
-  let args: any[] = [];
+  let filterArgs: any[] = [];
 
   if (search) {
     whereClauses.push("(ma_ct LIKE ? OR ma_nha_may LIKE ? OR created_by LIKE ?)");
     const t = `%${search}%`;
-    args.push(t, t, t);
+    filterArgs.push(t, t, t);
   }
   if (status && status !== 'ALL') {
     whereClauses.push("status = ?");
-    args.push(status);
+    filterArgs.push(status);
   }
   if (type && type !== 'ALL') {
     whereClauses.push("type = ?");
-    args.push(type);
+    filterArgs.push(type);
   }
 
   const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-  const dataRes = await turso.execute({
-    sql: `SELECT id, data, status, type, score, created_at FROM inspections ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    args: [...args, limit, offset]
-  });
+  // 1. Lấy dữ liệu phân trang
+  let dataSql = `SELECT id, data, status, type, score, created_at FROM inspections ${whereSql} ORDER BY created_at DESC`;
+  let dataArgs = [...filterArgs];
 
+  if (limit !== undefined && page !== undefined) {
+    const offset = (page - 1) * limit;
+    dataSql += ` LIMIT ? OFFSET ?`;
+    dataArgs.push(limit, offset);
+  }
+
+  const dataRes = await turso.execute({ sql: dataSql, args: dataArgs });
+
+  // 2. Lấy tổng số bản ghi
   const countRes = await turso.execute({
     sql: `SELECT COUNT(*) as total FROM inspections ${whereSql}`,
-    args: args
+    args: filterArgs
   });
 
   const items = dataRes.rows.map(r => {
@@ -152,8 +183,8 @@ export const getInspectionsPaginated = async (options: {
           id: r.id,
           status: r.status,
           type: r.type,
-          score: r.score,
-          date: fullData.date || new Date(Number(r.created_at) * 1000).toISOString().split('T')[0]
+          score: r.score || 0,
+          date: fullData.date || new Date(Number(r.created_at || Date.now() / 1000) * 1000).toISOString().split('T')[0]
       } as Inspection;
   });
 
@@ -285,7 +316,10 @@ export const getPlans = async (filter: { search?: string; page?: number; limit?:
     args.push(limit, offset);
   }
 
-  const countRes = await turso.execute({ sql: `SELECT COUNT(*) as total FROM plans ${search ? 'WHERE ma_ct LIKE ? OR ten_hang_muc LIKE ? OR headcode LIKE ? OR ma_nha_may LIKE ?' : ''}`, args: search ? args.slice(0, 4) : [] });
+  const countRes = await turso.execute({ 
+    sql: `SELECT COUNT(*) as total FROM plans ${search ? 'WHERE ma_ct LIKE ? OR ten_hang_muc LIKE ? OR headcode LIKE ? OR ma_nha_may LIKE ?' : ''}`, 
+    args: search ? args.slice(0, 4) : [] 
+  });
   const dataRes = await turso.execute({ sql, args });
   return { items: dataRes.rows as unknown as PlanItem[], total: Number(countRes.rows[0].total) };
 };
