@@ -5,8 +5,8 @@ import * as db from './tursoService';
 export interface PagedResult<T> {
   items: T[];
   total: number;
-  page: number;
-  limit: number;
+  page?: number;
+  limit?: number;
 }
 
 export const checkApiConnection = async () => {
@@ -14,7 +14,7 @@ export const checkApiConnection = async () => {
   return { ok };
 };
 
-export const fetchPlans = async (search: string = '', page: number = 1, limit: number = 50): Promise<PagedResult<PlanItem>> => {
+export const fetchPlans = async (search: string = '', page?: number, limit?: number): Promise<PagedResult<PlanItem>> => {
   const result = await db.getPlans({ search, page, limit });
   return { items: result.items, total: result.total, page, limit };
 };
@@ -65,7 +65,7 @@ export const deleteInspectionFromSheet = async (id: string) => {
 };
 
 export const fetchProjects = async (): Promise<Project[]> => {
-  const plansData = await db.getPlans({ search: '', page: 1, limit: 1000 });
+  const plansData = await db.getPlans({ search: '' }); // Fetch all plans for project grouping
   const dbProjects = await db.getProjects();
   
   const distinctPlanProjects = new Map<string, PlanItem>();

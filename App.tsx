@@ -135,11 +135,13 @@ const App = () => {
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data.length > 0) setWorkshops(data); } catch (e) {} };
   const loadProjects = async () => { try { const data = await fetchProjects(); if (data.length > 0) setProjects(data); } catch(e) {} };
+  
   const loadPlans = async () => {
     if (isLoadingPlans) return;
     setIsLoadingPlans(true);
     try {
-        const result = await fetchPlans(planSearchTerm, 1, 1000);
+        // Removed page/limit to load all plans as requested
+        const result = await fetchPlans(planSearchTerm);
         setPlans(result.items);
     } catch (e) {} finally { setIsLoadingPlans(false); }
   };
@@ -314,7 +316,7 @@ const App = () => {
             {view === 'DETAIL' && activeInspection && (
                 <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />
             )}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} currentPage={1} itemsPerPage={1000} onPageChange={()=>{}} />}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(isQC ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} onSelectProject={(id) => { setSelectedProjectId(id); setView('PROJECT_DETAIL'); }} />}
             {view === 'PROJECT_DETAIL' && selectedProjectId && <ProjectDetail project={projects.find(p => p.id === selectedProjectId)!} inspections={inspections} onBack={() => setView('PROJECTS')} />}

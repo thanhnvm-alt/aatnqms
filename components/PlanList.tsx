@@ -23,9 +23,6 @@ interface PlanListProps {
   onSearch: (term: string) => void;
   isLoading: boolean;
   totalItems: number;
-  currentPage: number;
-  itemsPerPage: number;
-  onPageChange: (page: number) => void;
   defaultTemplate?: CheckItem[];
   onViewPlan?: (item: PlanItem) => void; 
 }
@@ -65,9 +62,6 @@ export const PlanList: React.FC<PlanListProps> = ({
   onSearch,
   isLoading,
   totalItems,
-  currentPage,
-  itemsPerPage,
-  onPageChange,
   defaultTemplate = [],
   onViewPlan
 }) => {
@@ -81,8 +75,6 @@ export const PlanList: React.FC<PlanListProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
-
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   // --- LOGIC: Advanced Search & Grouping ---
 
@@ -492,32 +484,6 @@ export const PlanList: React.FC<PlanListProps> = ({
             </div>
         )}
       </div>
-
-      {/* Pagination - Fixed at bottom */}
-      {totalPages > 1 && (
-        <div className="shrink-0 h-12 flex items-center justify-center gap-4 bg-white border-t border-slate-200 px-4 z-20 shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)]">
-             <button 
-                disabled={currentPage === 1} 
-                onClick={() => onPageChange(currentPage - 1)}
-                className="w-8 h-8 flex items-center justify-center bg-slate-50 text-blue-600 rounded-lg disabled:opacity-30 border border-slate-100 shadow-sm active:bg-blue-50 transition-colors"
-            >
-                <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex flex-col items-center">
-                <span className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">Trang {currentPage} / {totalPages}</span>
-                <div className="w-full h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                    <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${(currentPage / totalPages) * 100}%` }}></div>
-                </div>
-            </div>
-            <button 
-                disabled={currentPage === totalPages} 
-                onClick={() => onPageChange(currentPage + 1)}
-                className="w-8 h-8 flex items-center justify-center bg-slate-50 text-blue-600 rounded-lg disabled:opacity-30 border border-slate-100 shadow-sm active:bg-blue-50 transition-colors"
-            >
-                <ChevronRight className="w-4 h-4" />
-            </button>
-        </div>
-      )}
     </div>
   );
 };

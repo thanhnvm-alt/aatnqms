@@ -267,8 +267,8 @@ export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
 };
 export const getPlans = async (filter: { search?: string; page?: number; limit?: number }) => {
   if (!isTursoConfigured) return { items: [], total: 0 };
-  const { search = '', page = 1, limit = 50 } = filter;
-  const offset = (page - 1) * limit;
+  const { search = '', page, limit } = filter;
+  
   let sql = `SELECT * FROM plans`;
   let args: any[] = [];
   if (search) {
@@ -276,8 +276,17 @@ export const getPlans = async (filter: { search?: string; page?: number; limit?:
     const t = `%${search}%`;
     args = [t, t, t, t];
   }
-  const countRes = await turso.execute({ sql: `SELECT COUNT(*) as total FROM (${sql})`, args });
-  const dataRes = await turso.execute({ sql: `${sql} ORDER BY created_at DESC LIMIT ? OFFSET ?`, args: [...args, limit, offset] });
+  
+  sql += ` ORDER BY created_at DESC`;
+  
+  if (limit !== undefined && page !== undefined) {
+    const offset = (page - 1) * limit;
+    sql += ` LIMIT ? OFFSET ?`;
+    args.push(limit, offset);
+  }
+
+  const countRes = await turso.execute({ sql: `SELECT COUNT(*) as total FROM plans ${search ? 'WHERE ma_ct LIKE ? OR ten_hang_muc LIKE ? OR headcode LIKE ? OR ma_nha_may LIKE ?' : ''}`, args: search ? args.slice(0, 4) : [] });
+  const dataRes = await turso.execute({ sql, args });
   return { items: dataRes.rows as unknown as PlanItem[], total: Number(countRes.rows[0].total) };
 };
 export const importPlansBatch = async (plans: PlanItem[]) => {
