@@ -102,6 +102,7 @@ const App = () => {
                 try {
                     const parsedUser = JSON.parse(localData);
                     setUser(parsedUser);
+                    // Refine default view logic: QC defaults to LIST
                     setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
                 } catch (e) {}
             }
@@ -131,6 +132,7 @@ const App = () => {
       setUser(safeUser as User); 
       const storage = remember ? localStorage : sessionStorage;
       storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+      // Refine default view logic: QC defaults to LIST
       setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
   };
 
@@ -357,7 +359,7 @@ const App = () => {
             />
         )}
 
-        {/* Mobile Bottom Navigation - Tối ưu cho QC */}
+        {/* Mobile Bottom Navigation - Tối ưu cho QC theo yêu cầu */}
         <div className="lg:hidden bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-around p-1 fixed bottom-0 w-full z-[90] h-16 shadow-lg">
             {!isQC ? (
                 <>
@@ -369,9 +371,11 @@ const App = () => {
                 </>
             ) : (
                 <>
-                    <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}><List className="w-6 h-6" /><span className="text-[10px] font-black uppercase mt-1">Danh sách</span></button>
-                    <div className="relative -top-4"><button onClick={headerActions.onCreate} className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-xl flex items-center justify-center text-white border-4 border-white"><Plus className="w-6 h-6" /></button></div>
-                    <button onClick={() => setView('SETTINGS')} className={`flex flex-col items-center justify-center w-full ${view === 'SETTINGS' ? 'text-blue-600' : 'text-slate-400'}`}><UserCircle className="w-6 h-6" /><span className="text-[10px] font-black uppercase mt-1">Cá nhân</span></button>
+                    {/* QC Navigation: Chỉ hiển thị duy nhất Danh sách theo yêu cầu */}
+                    <button onClick={() => setView('LIST')} className={`flex flex-col items-center justify-center w-full ${view === 'LIST' ? 'text-blue-600' : 'text-slate-400'}`}>
+                        <List className="w-6 h-6" />
+                        <span className="text-[10px] font-black uppercase mt-1 tracking-tight">Danh sách</span>
+                    </button>
                 </>
             )}
         </div>

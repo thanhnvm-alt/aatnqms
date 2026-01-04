@@ -55,6 +55,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const filterMenuRef = useRef<HTMLDivElement>(null);
   const moduleMenuRef = useRef<HTMLDivElement>(null);
 
+  const isQC = userRole === 'QC';
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) setShowFilterMenu(false);
@@ -154,16 +156,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           String(item.headcode || '').toLowerCase().includes(term);
         
         if (!matchesSearch) return false;
-        if (filter === 'MY_REPORTS' && (item.inspectorName || '').toLowerCase() !== currentUserName?.toLowerCase()) return false;
-        if (filter === 'FLAGGED' && item.status !== InspectionStatus.FLAGGED) return false;
-        if (filter === 'HIGH_PRIORITY' && item.priority !== Priority.HIGH) return false;
-        if (filter === 'DRAFT' && item.status !== InspectionStatus.DRAFT) return false;
-        if (startDate && item.date < startDate) return false;
-        if (endDate && item.date > endDate) return false;
+
+        // Skip filters for QC role as per requirement "only search visible"
+        if (!isQC) {
+          if (filter === 'MY_REPORTS' && (item.inspectorName || '').toLowerCase() !== currentUserName?.toLowerCase()) return false;
+          if (filter === 'FLAGGED' && item.status !== InspectionStatus.FLAGGED) return false;
+          if (filter === 'HIGH_PRIORITY' && item.priority !== Priority.HIGH) return false;
+          if (filter === 'DRAFT' && item.status !== InspectionStatus.DRAFT) return false;
+          if (startDate && item.date < startDate) return false;
+          if (endDate && item.date > endDate) return false;
+        }
+        
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, searchTerm, filter, startDate, endDate, currentUserName, selectedModule]);
+  }, [inspections, searchTerm, filter, startDate, endDate, currentUserName, selectedModule, isQC]);
 
   const groupedItems = useMemo(() => {
     const groups: { [key: string]: Inspection[] } = {};
@@ -214,69 +221,73 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         </div>
       )}
 
-      {/* Header Bar - Refined for visual match and mobile optimization */}
+      {/* Header Bar */}
       <div className="bg-white px-3 py-3 border-b border-slate-200 shadow-sm z-30 shrink-0 lg:px-6">
         <div className="flex flex-wrap items-center gap-2 lg:gap-3 w-full">
             
-            {/* 1. Module Filter Dropdown */}
-            <div className="relative shrink-0" ref={moduleMenuRef}>
-                <button 
-                    onClick={() => setShowModuleMenu(!showModuleMenu)}
-                    className="h-10 px-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-sm min-w-[100px] active:scale-95 transition-all"
-                >
-                    <span className="text-[11px] font-black text-slate-800 uppercase truncate max-w-[80px]">{currentModuleName}</span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold">{currentModuleStats}</span>
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
-                    </div>
-                </button>
+            {/* 1. Module Filter Dropdown - Hidden for QC */}
+            {!isQC && (
+                <div className="relative shrink-0" ref={moduleMenuRef}>
+                    <button 
+                        onClick={() => setShowModuleMenu(!showModuleMenu)}
+                        className="h-10 px-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-sm min-w-[100px] active:scale-95 transition-all"
+                    >
+                        <span className="text-[11px] font-black text-slate-800 uppercase truncate max-w-[80px]">{currentModuleName}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold">{currentModuleStats}</span>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
+                        </div>
+                    </button>
 
-                {showModuleMenu && (
-                    <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left max-h-[60vh] overflow-y-auto no-scrollbar">
-                        <button onClick={() => { onModuleChange?.('ALL'); setShowModuleMenu(false); }} className={`w-full text-left px-4 py-3 flex items-center justify-between hover:bg-slate-50 border-b border-slate-50 ${selectedModule === 'ALL' ? 'bg-blue-50' : ''}`}><span className={`text-xs font-black uppercase ${selectedModule === 'ALL' ? 'text-blue-600' : 'text-slate-700'}`}>TẤT CẢ</span><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">{moduleStats['ALL']}</span></button>
-                        {ALL_MODULES.map((mod) => (
-                            <button key={mod.id} onClick={() => { onModuleChange?.(mod.id); setShowModuleMenu(false); }} className={`w-full text-left px-4 py-3 flex items-center justify-between hover:bg-slate-50 ${selectedModule === mod.id ? 'bg-blue-50' : ''}`}><span className={`text-xs font-bold uppercase truncate pr-2 ${selectedModule === mod.id ? 'text-blue-600' : 'text-slate-600'}`}>{mod.label}</span><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${moduleStats[mod.id] > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>{moduleStats[mod.id] || 0}</span></button>
-                        ))}
-                    </div>
-                )}
-            </div>
+                    {showModuleMenu && (
+                        <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left max-h-[60vh] overflow-y-auto no-scrollbar">
+                            <button onClick={() => { onModuleChange?.('ALL'); setShowModuleMenu(false); }} className={`w-full text-left px-4 py-3 flex items-center justify-between hover:bg-slate-50 border-b border-slate-50 ${selectedModule === 'ALL' ? 'bg-blue-50' : ''}`}><span className={`text-xs font-black uppercase ${selectedModule === 'ALL' ? 'text-blue-600' : 'text-slate-700'}`}>TẤT CẢ</span><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">{moduleStats['ALL']}</span></button>
+                            {ALL_MODULES.map((mod) => (
+                                <button key={mod.id} onClick={() => { onModuleChange?.(mod.id); setShowModuleMenu(false); }} className={`w-full text-left px-4 py-3 flex items-center justify-between hover:bg-slate-50 ${selectedModule === mod.id ? 'bg-blue-50' : ''}`}><span className={`text-xs font-bold uppercase truncate pr-2 ${selectedModule === mod.id ? 'text-blue-600' : 'text-slate-600'}`}>{mod.label}</span><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${moduleStats[mod.id] > 0 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>{moduleStats[mod.id] || 0}</span></button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
-            {/* 2. Status Filter Dropdown */}
-            <div className="relative shrink-0" ref={filterMenuRef}>
-                 <button 
-                    onClick={() => setShowFilterMenu(!showFilterMenu)} 
-                    className={`h-10 px-3 flex items-center justify-between gap-3 rounded-xl border shadow-sm transition-all active:scale-95 min-w-[110px] ${filter !== 'ALL' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white text-slate-700 border-slate-200'}`}
-                 >
-                    <div className="flex items-center gap-2 overflow-hidden">
-                        <ListFilter className="w-4 h-4 shrink-0 opacity-40" />
-                        <span className="text-[11px] font-black uppercase truncate max-w-[80px]">{activeFilterLabel}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${filter !== 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{activeFilterCount}</span>
-                        <ChevronDown className="w-3.5 h-3.5 opacity-30" />
-                    </div>
-                 </button>
-                 
-                 {showFilterMenu && (
-                    <div className="absolute left-0 lg:left-auto lg:right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left lg:origin-top-right">
-                        {filterOptions.map((opt) => (
-                            <button
-                                key={opt.key}
-                                onClick={() => { setFilter(opt.key); setShowFilterMenu(false); }}
-                                className={`w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between ${filter === opt.key ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'}`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    {opt.icon || <div className="w-4 h-4" />}
-                                    <span className="uppercase">{opt.label}</span>
-                                </div>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${filter === opt.key ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                    {opt.count}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                 )}
-            </div>
+            {/* 2. Status Filter Dropdown - Hidden for QC */}
+            {!isQC && (
+                <div className="relative shrink-0" ref={filterMenuRef}>
+                    <button 
+                        onClick={() => setShowFilterMenu(!showFilterMenu)} 
+                        className={`h-10 px-3 flex items-center justify-between gap-3 rounded-xl border shadow-sm transition-all active:scale-95 min-w-[110px] ${filter !== 'ALL' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white text-slate-700 border-slate-200'}`}
+                    >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <ListFilter className="w-4 h-4 shrink-0 opacity-40" />
+                            <span className="text-[11px] font-black uppercase truncate max-w-[80px]">{activeFilterLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${filter !== 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{activeFilterCount}</span>
+                            <ChevronDown className="w-3.5 h-3.5 opacity-30" />
+                        </div>
+                    </button>
+                    
+                    {showFilterMenu && (
+                        <div className="absolute left-0 lg:left-auto lg:right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left lg:origin-top-right">
+                            {filterOptions.map((opt) => (
+                                <button
+                                    key={opt.key}
+                                    onClick={() => { setFilter(opt.key); setShowFilterMenu(false); }}
+                                    className={`w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between ${filter === opt.key ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        {opt.icon || <div className="w-4 h-4" />}
+                                        <span className="uppercase">{opt.label}</span>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${filter === opt.key ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        {opt.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* 3. Search Input */}
             <div className="relative group flex-1 min-w-[200px]">
@@ -292,15 +303,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               </div>
             </div>
             
-            {/* 4. Date Filter - Compact design as shown in image */}
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-10 w-full lg:w-auto min-w-[280px] group hover:border-blue-300 transition-colors shrink-0">
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-full cursor-pointer py-1" />
-                <div className="flex items-center px-1 shrink-0">
-                    <Calendar className="w-4 h-4 text-slate-300" />
-                    <span className="text-slate-200 mx-2 font-light">|</span>
+            {/* 4. Date Filter - Hidden for QC */}
+            {!isQC && (
+                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-10 w-full lg:w-auto min-w-[280px] group hover:border-blue-300 transition-colors shrink-0">
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-full cursor-pointer py-1" />
+                    <div className="flex items-center px-1 shrink-0">
+                        <Calendar className="w-4 h-4 text-slate-300" />
+                        <span className="text-slate-200 mx-2 font-light">|</span>
+                    </div>
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-full text-right cursor-pointer py-1" />
                 </div>
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-full text-right cursor-pointer py-1" />
-            </div>
+            )}
         </div>
       </div>
 
@@ -310,7 +323,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           <div className="py-20 text-center flex flex-col items-center text-slate-400 bg-white/50 rounded-[2rem] border border-dashed border-slate-200 mx-1">
             <Briefcase className="w-12 h-12 text-slate-300 mb-4" />
             <p className="font-black uppercase text-slate-600">Không tìm thấy dữ liệu</p>
-            {selectedModule !== 'ALL' && <p className="text-xs mt-2">Đang lọc theo: {currentModuleName}</p>}
+            {!isQC && selectedModule !== 'ALL' && <p className="text-xs mt-2">Đang lọc theo: {currentModuleName}</p>}
           </div>
         ) : (
           pagedProjectCodes.map(projectCode => {
