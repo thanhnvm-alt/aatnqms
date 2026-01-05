@@ -19,12 +19,10 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-/* Added ViewState type used in components and App.tsx to track navigation state */
 export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D';
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D';
 
-/* Added UserRole for stricter role definitions used in UserManagement and Turso services */
 export type UserRole = 'ADMIN' | 'MANAGER' | 'QA' | 'QC';
 
 export type UserRoleName = UserRole | string;
@@ -41,7 +39,7 @@ export interface Role {
   name: string;
   description: string;
   permissions: ModulePermission[];
-  allowedModules?: ModuleId[]; // Giữ lại để tương thích ngược
+  allowedModules?: ModuleId[];
   isSystem?: boolean;
 }
 
@@ -64,7 +62,6 @@ export interface User {
   notes?: string;
 }
 
-// ... các interface khác giữ nguyên
 export interface NCRComment {
   id: string;
   userId: string;
@@ -130,6 +127,7 @@ export interface Inspection {
   productionName?: string;
   productionConfirmedDate?: string;
   confirmedDate?: string;
+  comments?: NCRComment[];
 }
 
 export interface Project {
@@ -168,7 +166,6 @@ export interface PlanItem {
   created_at?: number;
 }
 
-/* Added PlanEntity for database row representation used in plansService and utils */
 export interface PlanEntity {
   id: number;
   headcode: string;
@@ -185,7 +182,6 @@ export interface PlanEntity {
   created_at: number;
 }
 
-/* Added PlanResponse for frontend data transformation used in utils */
 export interface PlanResponse {
   id: number;
   headcode: string;
