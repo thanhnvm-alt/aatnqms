@@ -7,7 +7,9 @@ import {
   Users, Building2, Hash, Edit3, Save, X, Loader2, ExternalLink, 
   Locate, Image as ImageIcon, Camera, Plus, Maximize2,
   TrendingUp, Activity, Filter, Layers, MessageSquare, 
-  ChevronRight, AlertCircle, FileSearch, CheckCircle, ArrowRight
+  ChevronRight, AlertCircle, FileSearch, CheckCircle, ArrowRight,
+  // Added missing ChevronDown import
+  ChevronDown
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { updateProject } from '../services/apiService';
@@ -17,6 +19,7 @@ interface ProjectDetailProps {
   project: Project;
   inspections: Inspection[];
   onBack: () => void;
+  onUpdate?: () => void;
 }
 
 const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#94a3b8'];
@@ -40,7 +43,7 @@ const resizeImage = (base64Str: string, maxWidth = 1200): Promise<string> => {
   });
 };
 
-export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialProject, inspections, onBack }) => {
+export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialProject, inspections, onBack, onUpdate }) => {
   const [project, setProject] = useState(initialProject);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,7 +75,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
   const pieData = [{ name: 'Pass', value: stats.completed }, { name: 'Fail', value: stats.flagged }, { name: 'Draft', value: stats.drafts }].filter(d => d.value > 0);
 
   const handleEditClick = () => {
-      setEditForm({ pm: project.pm, pc: project.pc, qa: project.qa, location: project.location, startDate: project.startDate, endDate: project.endDate, status: project.status, description: project.description, progress: project.progress, images: project.images || [] });
+      setEditForm({ 
+        pm: project.pm || '', 
+        pc: project.pc || '', 
+        qa: project.qa || '', 
+        location: project.location || '', 
+        startDate: project.startDate || '', 
+        endDate: project.endDate || '', 
+        status: project.status || 'Planning', 
+        description: project.description || '', 
+        progress: project.progress || 0, 
+        images: project.images || [] 
+      });
       setIsEditing(true);
   };
 
@@ -90,23 +104,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
           await updateProject(updated); 
           setProject(updated); 
           setIsEditing(false); 
+          if (onUpdate) onUpdate();
       }
       catch (error) { 
           console.error("❌ Project Save Failed:", error);
-          alert("Lỗi khi lưu thông tin dự án. Vui lòng kiểm tra kết nối hệ thống."); 
+          alert("Lỗi khi lưu thông tin dự án."); 
       } finally { 
           setIsSaving(false); 
       }
   };
 
   const InfoRow = ({ icon: Icon, label, value, colorClass = "bg-slate-100 text-slate-600", mapsLink = false }: any) => (
-      <div className="flex items-start gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}><Icon className="w-5 h-5" /></div>
+      <div className="flex items-start gap-4 p-2.5 rounded-2xl hover:bg-slate-50 transition-colors">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${colorClass}`}><Icon className="w-5 h-5" /></div>
           <div className="flex-1 overflow-hidden">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
               <div className="flex items-center gap-2">
                   <p className="text-sm font-bold text-slate-900 truncate leading-tight uppercase">{value || '---'}</p>
-                  {mapsLink && value && <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`, '_blank')} className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-1 shrink-0"><ExternalLink className="w-3 h-3" /> Maps</button>}
+                  {mapsLink && value && (
+                      <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`, '_blank')} className="text-[10px] font-black text-blue-600 hover:text-blue-800 flex items-center gap-1 shrink-0 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                        <ExternalLink className="w-3 h-3" /> MAPS
+                      </button>
+                  )}
               </div>
           </div>
       </div>
@@ -130,85 +149,86 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar pb-24">
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-             <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                 <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-3"><Activity className="w-5 h-5 text-blue-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Metadata</h3></div>
-                 <div className="space-y-6">
-                     <InfoRow icon={Hash} label="Mã Dự Án" value={project.ma_ct} colorClass="bg-slate-50 text-slate-400" />
-                     <InfoRow icon={User} label="Project Manager" value={project.pm} colorClass="bg-blue-50 text-blue-600" />
-                     <InfoRow icon={Users} label="PC / Phụ trách" value={project.pc} colorClass="bg-indigo-50 text-indigo-600" />
-                     <InfoRow icon={ShieldCheck} label="QA / QC Lead" value={project.qa} colorClass="bg-emerald-50 text-emerald-600" />
-                     <InfoRow icon={Calendar} label="Thời gian thực hiện" value={`${project.startDate} - ${project.endDate}`} colorClass="bg-orange-50 text-orange-600" />
-                     <InfoRow icon={MapPin} label="Vị trí công trình" value={project.location} mapsLink={true} colorClass="bg-purple-50 text-purple-600" />
+             {/* Project Info Table */}
+             <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
+                 <div className="flex items-center gap-2 mb-2 border-b border-slate-50 pb-3"><Activity className="w-5 h-5 text-blue-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">BAN QUẢN LÝ DỰ ÁN</h3></div>
+                 <div className="space-y-1">
+                     <InfoRow icon={Hash} label="Mã Dự Án" value={project.ma_ct} colorClass="bg-slate-100 text-slate-500" />
+                     <InfoRow icon={User} label="Project Manager (PM)" value={project.pm} colorClass="bg-blue-100 text-blue-600" />
+                     <InfoRow icon={Users} label="Project Coordinator (PC)" value={project.pc} colorClass="bg-indigo-100 text-indigo-600" />
+                     <InfoRow icon={ShieldCheck} label="QA / QC Head" value={project.qa} colorClass="bg-emerald-100 text-emerald-600" />
+                     <InfoRow icon={Calendar} label="Thời gian thực hiện" value={`${project.startDate || '---'} đến ${project.endDate || '---'}`} colorClass="bg-orange-100 text-orange-600" />
+                     <InfoRow icon={MapPin} label="Địa điểm công trình" value={project.location} mapsLink={true} colorClass="bg-purple-100 text-purple-600" />
                  </div>
              </div>
 
+             {/* Description Card */}
              <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col h-full">
-                 <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-3"><Layers className="w-5 h-5 text-indigo-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Overview</h3></div>
-                 <p className="flex-1 text-sm text-slate-600 leading-relaxed font-medium italic whitespace-pre-wrap">{project.description || 'Chưa có mô tả chi tiết.'}</p>
+                 <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-3"><Layers className="w-5 h-5 text-indigo-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">TỔNG QUAN HẠNG MỤC</h3></div>
+                 <p className="flex-1 text-sm text-slate-600 leading-relaxed font-medium italic whitespace-pre-wrap px-2">{project.description || 'Chưa có thông tin mô tả chi tiết cho dự án này.'}</p>
                  <div className="mt-6 pt-6 border-t border-slate-100">
                      <div className="flex justify-between items-center mb-3"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5 text-blue-500" /> Tiến độ thi công</span><span className="text-lg font-black text-blue-700">{project.progress}%</span></div>
                      <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner border border-slate-200/50"><div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000" style={{ width: `${project.progress}%` }}></div></div>
                  </div>
              </div>
 
+             {/* Stats Card */}
              <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center">
-                 <div className="flex items-center gap-2 mb-6 border-b border-slate-50 pb-3 w-full"><PieChartIcon className="w-5 h-5 text-emerald-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Quality Dashboard</h3></div>
+                 <div className="flex items-center gap-2 mb-6 border-b border-slate-50 pb-3 w-full"><PieChartIcon className="w-5 h-5 text-emerald-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">CHỈ SỐ CHẤT LƯỢNG</h3></div>
                  <div className="flex flex-col items-center w-full">
-                     <div className="w-44 h-44 relative">
-                        <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieData} innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value" stroke="none">{pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><Tooltip /></PieChart></ResponsiveContainer>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-3xl font-black text-slate-800 leading-none">{stats.passRate}%</span><span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mt-1">QC Pass</span></div>
+                     <div className="w-40 h-40 relative">
+                        <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieData} innerRadius={55} outerRadius={75} paddingAngle={5} dataKey="value" stroke="none">{pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><Tooltip /></PieChart></ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-3xl font-black text-slate-800 leading-none">{stats.passRate}%</span><span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mt-1">PASS RATE</span></div>
                      </div>
-                     <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-8 w-full px-4">
-                         <div className="flex items-center gap-2.5 p-2 bg-green-50 rounded-xl border border-green-100"><div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm"></div><span className="text-[10px] font-black text-slate-600 uppercase">{stats.completed} Đạt</span></div>
-                         <div className="flex items-center gap-2.5 p-2 bg-red-50 rounded-xl border border-red-100"><div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div><span className="text-[10px] font-black text-slate-600 uppercase">{stats.flagged} Lỗi</span></div>
-                         <div className="flex items-center gap-2.5 p-2 bg-orange-50 rounded-xl border border-orange-100"><div className="w-2.5 h-2.5 rounded-full bg-orange-400 shadow-sm"></div><span className="text-[10px] font-black text-slate-600 uppercase">{stats.drafts} Nháp</span></div>
-                         <div className="flex items-center gap-2.5 p-2 bg-slate-100 rounded-xl border border-slate-200"><div className="w-2.5 h-2.5 rounded-full bg-slate-400"></div><span className="text-[10px] font-black text-slate-600 uppercase">{stats.total} Tổng</span></div>
+                     <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-8 w-full">
+                         <div className="flex items-center gap-2 p-2 bg-green-50 rounded-xl border border-green-100"><div className="w-2 h-2 rounded-full bg-green-500"></div><span className="text-[9px] font-black text-slate-600 uppercase">{stats.completed} ĐẠT</span></div>
+                         <div className="flex items-center gap-2 p-2 bg-red-50 rounded-xl border border-red-100"><div className="w-2 h-2 rounded-full bg-red-500"></div><span className="text-[9px] font-black text-slate-600 uppercase">{stats.flagged} LỖI</span></div>
+                         <div className="flex items-center gap-2 p-2 bg-orange-50 rounded-xl border border-orange-100"><div className="w-2 h-2 rounded-full bg-orange-400"></div><span className="text-[9px] font-black text-slate-600 uppercase">{stats.drafts} NHÁP</span></div>
+                         <div className="flex items-center gap-2 p-2 bg-slate-100 rounded-xl border border-slate-200"><div className="w-2 h-2 rounded-full bg-slate-400"></div><span className="text-[9px] font-black text-slate-600 uppercase">{stats.total} TỔNG</span></div>
                      </div>
                  </div>
              </div>
          </div>
 
+         {/* Gallery Section */}
          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
-             <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-3"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><ImageIcon className="w-4 h-4 text-blue-500" /> Gallery ({project.images?.length || 0})</h3><button onClick={handleEditClick} className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-2 rounded-xl hover:bg-blue-100 transition-all uppercase tracking-widest border border-blue-100">Quản lý Ảnh</button></div>
+             <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-3"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><ImageIcon className="w-4 h-4 text-blue-500" /> HÌNH ÁNH DỰ ÁN ({project.images?.length || 0})</h3><button onClick={handleEditClick} className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-2 rounded-xl hover:bg-blue-100 transition-all uppercase tracking-widest border border-blue-100">Cập nhật ảnh</button></div>
              {project.images && project.images.length > 0 ? (
                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">{project.images.map((img, idx) => (<div key={idx} onClick={() => setLightboxState({ images: project.images || [], index: idx })} className="relative group aspect-square rounded-[1.5rem] overflow-hidden border border-slate-200 shadow-sm bg-slate-50 cursor-zoom-in"><img src={img} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={`G${idx}`} /><div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><div className="p-2 bg-white/20 backdrop-blur-md rounded-full border border-white/20"><Maximize2 className="text-white w-5 h-5" /></div></div></div>))}</div>
-             ) : (<div className="p-16 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-200"><ImageIcon className="w-12 h-12 mb-3 opacity-20" /><p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Album dự án còn trống</p></div>)}
+             ) : (<div className="p-16 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-200"><ImageIcon className="w-12 h-12 mb-3 opacity-20" /><p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Chưa có hình ảnh hiện trường</p></div>)}
          </div>
 
+         {/* Inspection History */}
          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/40"><div className="flex items-center gap-3"><div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100"><Filter className="w-5 h-5" /></div><div><h3 className="font-black text-slate-900 text-sm uppercase tracking-tight">Project Inspection History</h3><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Lịch sử đánh giá chi tiết</p></div></div><span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1.5 rounded-xl shadow-lg shadow-blue-200 uppercase tracking-widest">{projectInspections.length} Bản ghi</span></div>
+             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/40"><div className="flex items-center gap-3"><div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100"><Filter className="w-5 h-5" /></div><div><h3 className="font-black text-slate-900 text-sm uppercase tracking-tight">Nhật ký kiểm tra dự án</h3><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Dữ liệu kiểm tra thực tế tại công trình/nhà máy</p></div></div><span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1.5 rounded-xl shadow-lg shadow-blue-200 uppercase tracking-widest">{projectInspections.length} Phiếu</span></div>
              <div className="divide-y divide-slate-100">
                  {projectInspections.length > 0 ? (projectInspections.map(ins => {
-                         const failedCount = ins.items.filter(i => i.status === CheckStatus.FAIL).length;
                          const ncrCount = ins.items.filter(i => i.ncr).length;
-                         return (<div key={ins.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50/80 transition-all group relative"><div className="flex items-start gap-4 flex-1"><div className={`p-3 rounded-2xl shadow-sm border transition-all ${ins.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' : ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{ins.status === InspectionStatus.FLAGGED ? <AlertCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}</div><div className="overflow-hidden space-y-1.5"><div className="flex items-center gap-2"><p className="text-sm font-black text-slate-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight truncate max-w-[200px] md:max-w-md">{ins.ten_hang_muc || 'Unnamed Component'}</p>{ncrCount > 0 && (<span className="flex items-center gap-1 bg-red-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm"><AlertTriangle className="w-2.5 h-2.5" /> NCR {ncrCount}</span>)}</div><div className="text-[10px] text-slate-500 font-bold flex flex-wrap items-center gap-y-2 gap-x-4 uppercase tracking-tighter"><span className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm"><Clock className="w-3 h-3 text-blue-500"/> {ins.date}</span><span className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm"><User className="w-3 h-3 text-indigo-500"/> {ins.inspectorName}</span></div></div></div><div className="mt-4 sm:mt-0 sm:ml-4 flex items-center justify-between sm:justify-end gap-3 shrink-0"><div className={`px-3 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-widest shadow-sm ${ins.status === InspectionStatus.APPROVED ? 'bg-blue-600 text-white border-blue-600 shadow-blue-200' : ins.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 'bg-white text-slate-600 border-slate-200'}`}>{ins.status}</div><div className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-2xl shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-90 group-hover:translate-x-1"><ArrowRight className="w-5 h-5" /></div></div></div>);
-                 })) : (<div className="p-20 text-center flex flex-col items-center justify-center space-y-3 bg-slate-50/50"><div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200"><FileSearch className="w-8 h-8 text-slate-200" /></div><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Không có dữ liệu kiểm tra</p></div>)}
+                         return (<div key={ins.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50/80 transition-all group relative border-l-4 border-transparent hover:border-blue-500"><div className="flex items-start gap-4 flex-1"><div className={`p-3 rounded-2xl shadow-sm border transition-all ${ins.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' : ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{ins.status === InspectionStatus.FLAGGED ? <AlertCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}</div><div className="overflow-hidden space-y-1.5"><div className="flex items-center gap-2"><p className="text-sm font-black text-slate-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight truncate max-w-[200px] md:max-w-md">{ins.ten_hang_muc || 'Hạng mục kiểm tra'}</p>{ncrCount > 0 && (<span className="flex items-center gap-1 bg-red-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm"><AlertTriangle className="w-2.5 h-2.5" /> NCR {ncrCount}</span>)}</div><div className="text-[10px] text-slate-500 font-bold flex flex-wrap items-center gap-y-2 gap-x-4 uppercase tracking-tighter"><span className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm"><Clock className="w-3 h-3 text-blue-500"/> {ins.date}</span><span className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm"><User className="w-3 h-3 text-indigo-500"/> {ins.inspectorName}</span></div></div></div><div className="mt-4 sm:mt-0 sm:ml-4 flex items-center justify-between sm:justify-end gap-3 shrink-0"><div className={`px-3 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-widest shadow-sm ${ins.status === InspectionStatus.APPROVED ? 'bg-blue-600 text-white border-blue-600 shadow-blue-200' : ins.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 'bg-white text-slate-600 border-slate-200'}`}>{ins.status}</div><div className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-2xl shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-90 group-hover:translate-x-1"><ArrowRight className="w-5 h-5" /></div></div></div>);
+                 })) : (<div className="p-20 text-center flex flex-col items-center justify-center space-y-3 bg-slate-50/50"><div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200"><FileSearch className="w-8 h-8 text-slate-200" /></div><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Không tìm thấy dữ liệu kiểm tra liên quan</p></div>)}
              </div>
          </div>
       </div>
 
       {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
 
+      {/* Full Editor Modal */}
       {isEditing && (
-          <div className="fixed inset-0 z-50 bg-[#0f172a]/60 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 overflow-hidden">
-              <div className="bg-white w-full max-w-lg md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-full md:h-auto md:max-h-[90vh] animate-in zoom-in-95 duration-200">
-                  {/* Header Style from Screenshot */}
+          <div className="fixed inset-0 z-50 bg-[#0f172a]/70 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 overflow-hidden">
+              <div className="bg-white w-full max-w-2xl md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-full md:h-auto md:max-h-[95vh] animate-in zoom-in-95 duration-200">
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                       <div className="flex items-center gap-3">
                           <Edit3 className="w-5 h-5 text-blue-600" />
-                          <h3 className="font-black text-slate-800 uppercase tracking-tighter text-sm">EDIT PROJECT INFO</h3>
+                          <h3 className="font-black text-slate-800 uppercase tracking-tighter text-sm">THÔNG TIN CHI TIẾT DỰ ÁN</h3>
                       </div>
-                      <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform">
-                          <X className="w-6 h-6"/>
-                      </button>
+                      <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform"><X className="w-6 h-6"/></button>
                   </div>
 
                   <div className="p-6 overflow-y-auto space-y-6 no-scrollbar flex-1 bg-white">
-                      {/* Row 1: Status & Progress */}
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">STATUS</label>
-                              <div className="relative group">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TRẠNG THÁI DỰ ÁN</label>
+                              <div className="relative">
                                   <select 
                                       value={editForm.status} 
                                       onChange={e => setEditForm({...editForm, status: e.target.value as any})} 
@@ -219,11 +239,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                                       <option value="On Hold">On Hold</option>
                                       <option value="Completed">Completed</option>
                                   </select>
-                                  <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
                               </div>
                           </div>
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PROGRESS (%)</label>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TIẾN ĐỘ THI CÔNG (%)</label>
                               <input 
                                   type="number" min="0" max="100" 
                                   value={editForm.progress} 
@@ -233,165 +253,71 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                           </div>
                       </div>
 
-                      {/* Row 2: PM Name */}
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PM NAME</label>
-                          <input 
-                              type="text" 
-                              value={editForm.pm || ''} 
-                              onChange={e => setEditForm({...editForm, pm: e.target.value.toUpperCase()})} 
-                              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all uppercase" 
-                              placeholder="UNASSIGNED" 
-                          />
-                      </div>
-
-                      {/* Row 3: PC & QA Name */}
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PC NAME</label>
-                              <input 
-                                  type="text" 
-                                  value={editForm.pc || ''} 
-                                  onChange={e => setEditForm({...editForm, pc: e.target.value})} 
-                                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
-                              />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QA NAME</label>
-                              <input 
-                                  type="text" 
-                                  value={editForm.qa || ''} 
-                                  onChange={e => setEditForm({...editForm, qa: e.target.value})} 
-                                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
-                              />
+                      <div className="space-y-4">
+                          <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-50 pb-2">NHÂN SỰ PHỤ TRÁCH</h4>
+                          <div className="space-y-3">
+                              <div className="space-y-1">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Project Manager (PM)</label>
+                                  <input type="text" value={editForm.pm || ''} onChange={e => setEditForm({...editForm, pm: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none uppercase" placeholder="Nhập tên PM..." />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                      <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Coordinator (PC)</label>
+                                      <input type="text" value={editForm.pc || ''} onChange={e => setEditForm({...editForm, pc: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none uppercase" placeholder="Nhập tên PC..." />
+                                  </div>
+                                  <div className="space-y-1">
+                                      <label className="text-[9px] font-black text-slate-400 uppercase ml-1">QA Lead</label>
+                                      <input type="text" value={editForm.qa || ''} onChange={e => setEditForm({...editForm, qa: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none uppercase" placeholder="Nhập tên QA..." />
+                                  </div>
+                              </div>
                           </div>
                       </div>
 
-                      {/* Row 4: Location */}
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">LOCATION</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ĐỊA ĐIỂM THI CÔNG</label>
                           <div className="flex gap-2">
-                              <input 
-                                  type="text" 
-                                  value={editForm.location || ''} 
-                                  onChange={e => setEditForm({...editForm, location: e.target.value})} 
-                                  className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all" 
-                                  placeholder="Coordinates or address" 
-                              />
-                              <button 
-                                  onClick={handleGetLocation} 
-                                  disabled={isGettingLocation}
-                                  className="p-3 bg-blue-100 text-blue-600 rounded-2xl active:scale-90 transition-transform shadow-sm flex items-center justify-center disabled:opacity-50"
-                              >
-                                  {isGettingLocation ? <Loader2 className="w-5 h-5 animate-spin"/> : <Locate className="w-5 h-5" />}
-                              </button>
+                              <div className="relative flex-1">
+                                <input type="text" value={editForm.location || ''} onChange={e => setEditForm({...editForm, location: e.target.value})} className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all" placeholder="Địa chỉ / Tọa độ Google Maps" />
+                                <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                              </div>
+                              <button onClick={handleGetLocation} disabled={isGettingLocation} className="p-3 bg-blue-100 text-blue-600 rounded-2xl active:scale-90 shadow-sm flex items-center justify-center disabled:opacity-50">{isGettingLocation ? <Loader2 className="w-5 h-5 animate-spin"/> : <Locate className="w-5 h-5" />}</button>
                           </div>
                       </div>
 
-                      {/* Row 5: Dates */}
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">START DATE</label>
-                              <div className="relative">
-                                  <input 
-                                      type="date" 
-                                      value={editForm.startDate} 
-                                      onChange={e => setEditForm({...editForm, startDate: e.target.value})} 
-                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
-                                  />
-                                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                              </div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NGÀY BẮT ĐẦU</label>
+                              <div className="relative"><input type="date" value={editForm.startDate} onChange={e => setEditForm({...editForm, startDate: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" /><Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" /></div>
                           </div>
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">END DATE</label>
-                              <div className="relative">
-                                  <input 
-                                      type="date" 
-                                      value={editForm.endDate} 
-                                      onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
-                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
-                                  />
-                                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                              </div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NGÀY KẾT THÚC (DỰ KIẾN)</label>
+                              <div className="relative"><input type="date" value={editForm.endDate} onChange={e => setEditForm({...editForm, endDate: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" /><Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" /></div>
                           </div>
                       </div>
 
-                      {/* Row 6: Description */}
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">DESCRIPTION</label>
-                          <textarea 
-                              value={editForm.description || ''} 
-                              onChange={e => setEditForm({...editForm, description: e.target.value})} 
-                              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium h-32 resize-none focus:ring-4 focus:ring-blue-100 outline-none transition-all" 
-                              placeholder="Project notes..." 
-                          />
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÔ TẢ CHI TIẾT DỰ ÁN</label>
+                          <textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium h-32 resize-none focus:ring-4 focus:ring-blue-100 outline-none transition-all" placeholder="Ghi chú thêm về phạm vi công việc, yêu cầu kỹ thuật đặc biệt..." />
                       </div>
 
-                      {/* Image Management */}
                       <div className="space-y-2 pt-2 border-t border-slate-50">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">GALLERY IMAGES ({editForm.images?.length || 0})</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QUẢN LÝ ALBUM ẢNH DỰ ÁN ({editForm.images?.length || 0})</label>
                           <div className="grid grid-cols-4 gap-2">
                               {editForm.images?.map((img, i) => (
                                   <div key={i} className="relative aspect-square group">
                                       <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-100 shadow-sm" />
-                                      <button 
-                                          onClick={() => setEditForm({...editForm, images: editForm.images?.filter((_, idx) => idx !== i)})} 
-                                          className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-all"
-                                      >
-                                          <X className="w-3 h-3" />
-                                      </button>
+                                      <button onClick={() => setEditForm({...editForm, images: editForm.images?.filter((_, idx) => idx !== i)})} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-all"><X className="w-3 h-3" /></button>
                                   </div>
                               ))}
-                              <button 
-                                  onClick={() => modalFileInputRef.current?.click()} 
-                                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all bg-slate-50/50"
-                              >
-                                  <Camera className="w-6 h-6 mb-1 opacity-40" />
-                                  <span className="text-[8px] font-black">UPLOAD</span>
-                              </button>
+                              <button onClick={() => modalFileInputRef.current?.click()} className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all bg-slate-50/50"><Camera className="w-6 h-6 mb-1 opacity-40" /><span className="text-[8px] font-black uppercase">Tải ảnh</span></button>
                           </div>
                       </div>
-
-                      <input 
-                        type="file" 
-                        ref={modalFileInputRef} 
-                        className="hidden" 
-                        multiple 
-                        accept="image/*" 
-                        onChange={async (e) => { 
-                          const files = e.target.files; 
-                          if (files) { 
-                            const processed = await Promise.all(
-                              Array.from(files).map((f: File) => 
-                                new Promise<string>((res) => { 
-                                  const r = new FileReader(); 
-                                  r.onload = async () => res(await resizeImage(r.result as string)); 
-                                  r.readAsDataURL(f); 
-                                })
-                              )
-                            ); 
-                            setEditForm(prev => ({...prev, images: [...(prev.images || []), ...processed]})); 
-                          } 
-                        }} 
-                      />
+                      <input type="file" ref={modalFileInputRef} className="hidden" multiple accept="image/*" onChange={async (e) => { const files = e.target.files; if (files) { const processed = await Promise.all(Array.from(files).map((f: File) => new Promise<string>((res) => { const r = new FileReader(); r.onload = async () => res(await resizeImage(r.result as string)); r.readAsDataURL(f); }))); setEditForm(prev => ({...prev, images: [...(prev.images || []), ...processed]})); } }} />
                   </div>
 
-                  {/* Footer Style from Screenshot */}
                   <div className="p-5 border-t border-slate-100 bg-slate-50/30 flex justify-end gap-6 shrink-0">
-                      <button 
-                          onClick={() => setIsEditing(false)} 
-                          className="px-4 py-2 text-slate-800 text-xs font-black uppercase tracking-widest hover:text-red-600 transition-colors"
-                      >
-                          CANCEL
-                      </button>
-                      <button 
-                          onClick={handleSave} 
-                          disabled={isSaving} 
-                          className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/30 active:scale-95 flex items-center gap-2 transition-all hover:bg-blue-700 disabled:opacity-50"
-                      >
-                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-                          SAVE CHANGES
-                      </button>
+                      <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-slate-800 text-xs font-black uppercase tracking-widest hover:text-red-600 transition-colors">Hủy bỏ</button>
+                      <button onClick={handleSave} disabled={isSaving} className="px-10 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/30 active:scale-95 flex items-center gap-2 transition-all hover:bg-blue-700 disabled:opacity-50">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Lưu cập nhật</button>
                   </div>
               </div>
           </div>

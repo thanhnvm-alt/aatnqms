@@ -20,7 +20,9 @@ import {
   ChevronDown,
   ShieldCheck,
   Bell,
-  UserCircle
+  UserCircle,
+  // Added Hammer icon for DEFECTS module
+  Hammer
 } from 'lucide-react';
 
 interface HomeMenuProps {
@@ -62,6 +64,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({ title, icon, onClick, color = "
   </div>
 );
 
+// Added DEFECTS property to ICON_MAP to match ModuleId type definition
 const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'IQC': <PackageCheck className="w-6 h-6"/>,
     'SQC_MAT': <Truck className="w-6 h-6"/>,
@@ -75,9 +78,11 @@ const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'PROJECTS': <LayoutGrid className="w-6 h-6"/>,
     'OEM': <UserCheck className="w-6 h-6"/>,
     'SETTINGS': null,
-    'CONVERT_3D': <Box className="w-6 h-6"/>
+    'CONVERT_3D': <Box className="w-6 h-6"/>,
+    'DEFECTS': <Hammer className="w-6 h-6"/>
 };
 
+// Added DEFECTS property to COLOR_MAP to match ModuleId type definition
 const COLOR_MAP: Record<ModuleId, string> = {
     'IQC': "text-blue-600",
     'SQC_MAT': "text-teal-600",
@@ -91,7 +96,8 @@ const COLOR_MAP: Record<ModuleId, string> = {
     'PROJECTS': "text-blue-500",
     'OEM': "text-green-600",
     'SETTINGS': "text-slate-600",
-    'CONVERT_3D': "text-purple-600"
+    'CONVERT_3D': "text-purple-600",
+    'DEFECTS': "text-orange-600"
 };
 
 export const HomeMenu: React.FC<HomeMenuProps> = ({ onNavigate, currentUser, onLogout, onOpenSettings, onOpenProfile }) => {

@@ -1,15 +1,14 @@
 
 import { NextRequest } from 'next/server';
-import { plansService } from '@/services/plansService';
-import { PlanUpdateSchema } from '@/lib/validations';
-import { successResponse, errorResponse, generateRequestId } from '@/lib/api-response';
-import { ValidationError } from '@/lib/errors';
+import { plansService } from '../../../../services/plansService';
+import { PlanUpdateSchema } from '../../../../lib/validations';
+import { successResponse, errorResponse, generateRequestId } from '../../../../lib/api-response';
+import { ValidationError } from '../../../../lib/errors';
 
 interface RouteParams {
   params: { id: string };
 }
 
-// Helper to validate ID
 const validateId = (idStr: string) => {
   const id = parseInt(idStr);
   if (isNaN(id)) throw new ValidationError("ID không hợp lệ");
@@ -33,7 +32,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const id = validateId(params.id);
     const body = await request.json();
 
-    // Validate partial update
     const validation = PlanUpdateSchema.safeParse(body);
     if (!validation.success) {
       throw new ValidationError("Dữ liệu cập nhật không hợp lệ", validation.error.flatten().fieldErrors);

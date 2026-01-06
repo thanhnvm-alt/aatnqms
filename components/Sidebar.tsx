@@ -9,7 +9,10 @@ import {
   Settings, 
   LogOut,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  AlertTriangle,
+  Hammer,
+  BookOpen
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,20 +29,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, onNavigate, user, onLogo
   const menuItems = [
     { id: 'PROJECTS', label: 'QUẢN LÝ DỰ ÁN', icon: Briefcase },
     { id: 'PLAN', label: 'KẾ HOẠCH', icon: FileSpreadsheet },
-    { id: 'LIST', label: 'DANH SÁCH', icon: List },
-    { id: 'DASHBOARD', label: 'BÁO CÁO', icon: LayoutDashboard },
+    { id: 'LIST', label: 'DANH SÁCH KIỂM TRA', icon: List },
+    { id: 'NCR_LIST', label: 'DANH SÁCH NCR', icon: AlertTriangle },
+    { id: 'DEFECT_LIBRARY', label: 'THƯ VIỆN LỖI', icon: BookOpen },
+    { id: 'DASHBOARD', label: 'BÁO CÁO TỔNG HỢP', icon: LayoutDashboard },
     { id: 'SETTINGS', label: 'CÀI ĐẶT', icon: Settings },
   ].filter(item => {
     if (user.role === 'QC') {
-      // QC chỉ được thấy Danh sách và Cài đặt
-      return item.id === 'LIST' || item.id === 'SETTINGS';
+      return item.id === 'LIST' || item.id === 'NCR_LIST' || item.id === 'DEFECT_LIBRARY' || item.id === 'SETTINGS';
     }
     return true;
   });
 
   return (
     <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-64'}`}>
-      {/* Logo Area */}
       <div className="p-6 flex items-center justify-between">
         {!collapsed && (
           <div className="flex items-center gap-2">
@@ -67,11 +70,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, onNavigate, user, onLogo
         </button>
       )}
 
-      {/* Navigation */}
       <nav className="flex-1 px-3 space-y-1 mt-4">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = view === item.id || (item.id === 'SETTINGS' && view === 'SETTINGS');
+          const isActive = view === item.id || (item.id === 'SETTINGS' && view === 'SETTINGS') || (item.id === 'DEFECT_LIBRARY' && view === 'DEFECT_DETAIL');
           return (
             <button
               key={item.id}
@@ -92,7 +94,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, onNavigate, user, onLogo
         })}
       </nav>
 
-      {/* User Area */}
       <div className="p-4 border-t border-slate-800 space-y-4">
         <div className={`flex items-center gap-3 ${collapsed ? 'justify-center' : 'px-2'}`}>
             <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-700 shrink-0">

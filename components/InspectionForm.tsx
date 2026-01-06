@@ -1,19 +1,18 @@
 
-// ... keep existing imports ...
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR } from '../types';
+import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR, DefectLibraryItem } from '../types';
 import { INITIAL_CHECKLIST_TEMPLATE } from '../constants';
-import { Button } from './Button';
-import { generateItemSuggestion, generateNCRSuggestions } from '../services/geminiService';
-import { fetchPlans } from '../services/apiService'; 
-import { ImageEditorModal } from './ImageEditorModal';
+import { fetchPlans, fetchDefectLibrary } from '../services/apiService'; 
+import { generateNCRSuggestions } from '../services/geminiService';
 import { 
-  Save, ArrowLeft, Camera, Image as ImageIcon, FileSpreadsheet, X, Trash2, 
-  Box, Factory, Hash, Plus, PenTool, Eraser, PlusCircle, Building2, 
-  Layers, User as UserIcon, Images, Sparkles, Loader2, Maximize2, QrCode, Zap,
-  ChevronDown, ChevronRight, List, AlertTriangle, FileWarning, Calendar, CheckCircle2,
-  BrainCircuit, ArrowRight, ClipboardList, MapPin, ShieldCheck
+  Save, ArrowLeft, Image as ImageIcon, X, Trash2, 
+  Plus, PlusCircle, Layers, QrCode,
+  // Added ChevronRight to fix 'Cannot find name ChevronRight' error
+  ChevronDown, ChevronRight, AlertTriangle, Calendar, ClipboardList, 
+  Hash, Box, Loader2, PenTool, Eraser, Edit2, Check, Maximize2,
+  Sparkles, Camera, Clock, Info, CheckCircle, XCircle
 } from 'lucide-react';
+import { ImageEditorModal } from './ImageEditorModal';
 // @ts-ignore
 import jsQR from 'jsqr';
 
@@ -35,399 +34,92 @@ const resizeImage = (base64Str: string, maxWidth = 1200): Promise<string> => {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
-      if (width > height) {
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-      } else {
-        if (height > maxWidth) {
-          width = Math.round((width * maxWidth) / height);
-          height = maxWidth;
-        }
-      }
-      canvas.width = width;
-      canvas.height = height;
+      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
+      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
+      canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      } else {
-        resolve(base64Str);
-      }
+      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
+      else resolve(base64Str);
     };
     img.onerror = () => resolve(base64Str);
   });
 };
 
 export const InspectionForm: React.FC<InspectionFormProps> = ({ 
-  onSave, 
-  onCancel, 
-  initialData, 
-  template = INITIAL_CHECKLIST_TEMPLATE,
-  plans = [],
-  workshops = [],
-  user
+  onSave, onCancel, initialData, template = INITIAL_CHECKLIST_TEMPLATE,
+  plans = [], workshops = [], user
 }) => {
-  // ... keep existing state ...
-  const [showPlanModal, setShowPlanModal] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const prodCanvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
-  const [itemLoadingStates, setItemLoadingStates] = useState<Record<string, boolean>>({});
-  const [isSearchingPlan, setIsSearchingPlan] = useState(false);
-  const currentSearchRef = useRef<string>(''); 
-  
-  const [ncrModalItem, setNcrModalItem] = useState<{ itemId: string, itemLabel: string, ncrData?: NCR } | null>(null);
-  const [ncrFormData, setNcrFormData] = useState<Partial<NCR>>({});
-  const [isAnalyzingNCR, setIsAnalyzingNCR] = useState(false);
-
-  const [editorState, setEditorState] = useState<{ itemId: string; images: string[]; index: number } | null>(null);
-
-  const [qcSignMode, setQcSignMode] = useState<'VIEW' | 'EDIT'>(initialData?.signature ? 'VIEW' : 'EDIT');
-  const [prodSignMode, setProdSignMode] = useState<'VIEW' | 'EDIT'>(initialData?.productionSignature ? 'VIEW' : 'EDIT');
-
-  const [showScanner, setShowScanner] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const scannerCanvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(0);
-
-  const formType = initialData?.type || 'SITE';
-
-  const getModuleLabel = () => {
-      switch(formType) {
-          case 'IQC': return 'IQC - Vật tư đầu vào';
-          case 'SQC_MAT': return 'SQC - Gia công Vật tư';
-          case 'SQC_BTP': return 'SQC - Gia công BTP';
-          case 'FSR': return 'FSR - Duyệt mẫu đầu tiên';
-          case 'PQC': return 'PQC - KIỂM TRA SẢN XUẤT';
-          case 'SITE': return 'SITE - CÔNG TRÌNH';
-          default: return 'SITE - CÔNG TRÌNH';
-      }
-  }
-
   const [formData, setFormData] = useState<Partial<Inspection>>(() => {
-    const baseState = {
-      ma_ct: '',
-      ten_ct: '',
-      inspectorName: user?.name || '', 
-      priority: Priority.MEDIUM,
-      date: new Date().toISOString().split('T')[0],
-      items: JSON.parse(JSON.stringify(template)),
-      status: InspectionStatus.DRAFT,
-      images: [],
-      ten_hang_muc: '',
-      ma_nha_may: '',
-      headcode: '',
-      workshop: '',
-      inspectionStage: '',
-      dvt: 'PCS',
-      so_luong_ipo: 0,
-      inspectedQuantity: 0,
-      passedQuantity: 0,
-      failedQuantity: 0,
-      signature: undefined, 
-      productionSignature: undefined,
-      productionName: '',
-      type: formType as any,
-    };
-
-    if (initialData) {
-      return {
-        ...baseState,
-        ...JSON.parse(JSON.stringify(initialData)),
-        inspectorName: initialData.inspectorName || user?.name || baseState.inspectorName,
-        items: initialData.items ? JSON.parse(JSON.stringify(initialData.items)) : baseState.items
-      };
-    }
+    const baseState = { ma_ct: '', ten_ct: '', inspectorName: user?.name || '', priority: Priority.MEDIUM, date: new Date().toISOString().split('T')[0], items: JSON.parse(JSON.stringify(template)), status: InspectionStatus.DRAFT, images: [], ten_hang_muc: '', ma_nha_may: '', headcode: '', workshop: '', inspectionStage: '', dvt: 'PCS', so_luong_ipo: 0, inspectedQuantity: 0, passedQuantity: 0, failedQuantity: 0, type: (initialData?.type || 'PQC') as any, signature: '', productionSignature: '', productionName: '' };
+    if (initialData) return { ...baseState, ...JSON.parse(JSON.stringify(initialData)), items: initialData.items ? JSON.parse(JSON.stringify(initialData.items)) : baseState.items };
     return baseState;
   });
 
-  const availableStages = useMemo(() => {
-    if (!formData.workshop) return [];
-    const selectedWs = workshops.find(ws => ws.name === formData.workshop);
-    return selectedWs?.stages || [];
-  }, [formData.workshop, workshops]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const ncrImageInputRef = useRef<HTMLInputElement>(null);
+  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAiConsulting, setIsAiConsulting] = useState(false);
+  const [isSearchingPlan, setIsSearchingPlan] = useState(false);
+  const [ncrModalItem, setNcrModalItem] = useState<{ itemId: string, itemLabel: string, ncrData?: NCR } | null>(null);
+  const [ncrFormData, setNcrFormData] = useState<Partial<NCR>>({});
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [editingCategory, setEditingCategory] = useState<{name: string, value: string} | null>(null);
+  const [editingImageIdx, setEditingImageIdx] = useState<number | null>(null);
+  const qcCanvasRef = useRef<HTMLCanvasElement>(null);
+  const prodCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawingQC, setIsDrawingQC] = useState(false);
+  const [isDrawingProd, setIsDrawingProd] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>(0);
 
-  useEffect(() => {
-    const inspected = formData.inspectedQuantity || 0;
-    const failed = formData.failedQuantity || 0;
-    const passed = Math.max(0, inspected - failed);
-    
-    if (passed !== formData.passedQuantity) {
-        setFormData(prev => ({ ...prev, passedQuantity: passed }));
-    }
-  }, [formData.inspectedQuantity, formData.failedQuantity]);
+  useEffect(() => { fetchDefectLibrary().then(setDefectLibrary); }, []);
 
-  const groupedItems = useMemo((): Record<string, CheckItem[]> => {
-    const groups: { [key: string]: CheckItem[] } = {};
-    (formData.items || []).forEach(item => {
-        const cat = item.category || 'KHÁC';
-        if (!groups[cat]) groups[cat] = [];
-        groups[cat].push(item);
-    });
-    return groups;
-  }, [formData.items]);
-
-  const fillFormData = (match: PlanItem) => {
-      setFormData(prev => ({
-        ...prev,
-        ma_nha_may: match.ma_nha_may, 
-        headcode: match.headcode,
-        ten_ct: match.ten_ct,
-        ten_hang_muc: match.ten_hang_muc,
-        ma_ct: match.ma_ct,
-        dvt: match.dvt || prev.dvt, 
-        so_luong_ipo: match.so_luong_ipo || prev.so_luong_ipo,
+  const handleDefectSelection = (def: DefectLibraryItem) => {
+      setNcrFormData(prev => ({
+          ...prev,
+          defect_code: def.code,
+          issueDescription: def.description,
+          severity: def.severity,
+          solution: def.suggestedAction || prev.solution
       }));
+      setShowLibraryModal(false);
   };
 
-  const handleFactoryCodeChange = async (code: string) => {
-    setFormData(prev => ({ ...prev, ma_nha_may: code }));
-    const trimmedCode = code.trim();
-    currentSearchRef.current = trimmedCode; 
-
-    if (!trimmedCode) return;
-    const len = trimmedCode.length;
-    if (len !== 9 && len !== 12) return;
-
-    const localMatch = plans.find(p => 
-        (len === 9 && String(p.headcode || '').trim().toLowerCase() === trimmedCode.toLowerCase()) ||
-        (len === 12 && String(p.ma_nha_may || '').trim().toLowerCase() === trimmedCode.toLowerCase())
-    );
-
-    if (localMatch) {
-        fillFormData(localMatch);
-        return;
-    }
-
-    setIsSearchingPlan(true);
-    try {
-        const result = await fetchPlans(trimmedCode, 1, 10);
-        if (currentSearchRef.current !== trimmedCode) return;
-        const serverMatch = result.items.find(p => 
-            (len === 9 && String(p.headcode || '').trim().toLowerCase() === trimmedCode.toLowerCase()) ||
-            (len === 12 && String(p.ma_nha_may || '').trim().toLowerCase() === trimmedCode.toLowerCase())
-        );
-        if (serverMatch) fillFormData(serverMatch);
-    } catch (e) {
-        console.error("Auto-fill error:", e);
-    } finally {
-        if (currentSearchRef.current === trimmedCode) setIsSearchingPlan(false);
-    }
+  const startDrawing = (e: React.MouseEvent | React.TouchEvent, canvasRef: React.RefObject<HTMLCanvasElement>, setDrawing: (v: boolean) => void) => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000';
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left;
+    const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top;
+    ctx.beginPath(); ctx.moveTo(x, y); setDrawing(true);
   };
 
-  const updateItem = (id: string, updates: Partial<CheckItem | { images: string[] | undefined }>) => {
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items?.map(item => item.id === id ? { ...item, ...updates } : item)
-    }));
+  const draw = (e: React.MouseEvent | React.TouchEvent, canvasRef: React.RefObject<HTMLCanvasElement>, isDrawing: boolean) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left;
+    const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top;
+    ctx.lineTo(x, y); ctx.stroke();
   };
 
-  const handleItemStatusChange = (item: CheckItem, status: CheckStatus) => {
-      updateItem(item.id, { status });
-      if (status === CheckStatus.FAIL && !item.ncr) handleOpenNCR(item);
+  const clearCanvas = (canvasRef: React.RefObject<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); }
   };
-
-  const handleOpenNCR = (item: CheckItem) => {
-      setNcrModalItem({ itemId: item.id, itemLabel: item.label, ncrData: item.ncr });
-      setNcrFormData(item.ncr || {
-          issueDescription: item.notes || '',
-          responsiblePerson: '',
-          rootCause: '',
-          solution: '',
-          status: 'OPEN',
-          createdDate: new Date().toISOString().split('T')[0],
-          imagesBefore: [],
-          imagesAfter: []
-      });
-  };
-
-  const handleAutoFillNCR = async () => {
-      if (!ncrFormData.issueDescription) { alert("Vui lòng nhập mô tả lỗi"); return; }
-      if (!ncrModalItem) return;
-      setIsAnalyzingNCR(true);
-      try {
-          const suggestion = await generateNCRSuggestions(ncrFormData.issueDescription, ncrModalItem.itemLabel);
-          setNcrFormData(prev => ({ ...prev, rootCause: suggestion.rootCause, solution: suggestion.solution }));
-      } catch (e) { alert("Lỗi khi phân tích NCR: " + (e as Error).message); } finally { setIsAnalyzingNCR(false); }
-  };
-
-  const handleSaveNCR = () => {
-      if (!ncrModalItem || !ncrFormData.issueDescription) { alert("Vui lòng nhập mô tả lỗi"); return; }
-      const newNCR: NCR = {
-          id: ncrModalItem.ncrData?.id || `NCR-${Date.now()}`,
-          createdDate: ncrFormData.createdDate || new Date().toISOString().split('T')[0],
-          issueDescription: ncrFormData.issueDescription,
-          rootCause: ncrFormData.rootCause,
-          solution: ncrFormData.solution,
-          responsiblePerson: ncrFormData.responsiblePerson,
-          deadline: ncrFormData.deadline,
-          status: ncrFormData.status || 'OPEN',
-          imagesBefore: ncrFormData.imagesBefore || [],
-          imagesAfter: ncrFormData.imagesAfter || []
-      };
-      updateItem(ncrModalItem.itemId, { ncr: newNCR, status: CheckStatus.FAIL });
-      setNcrModalItem(null); setNcrFormData({});
-  };
-
-  const handleAddNCRPhoto = (type: 'BEFORE' | 'AFTER') => { setActiveUploadId(`NCR_${type}`); fileInputRef.current?.click(); };
-  const handleRemoveNCRPhoto = (type: 'BEFORE' | 'AFTER', index: number) => {
-      if (type === 'BEFORE') setNcrFormData(prev => ({ ...prev, imagesBefore: prev.imagesBefore?.filter((_, i) => i !== index) }));
-      else setNcrFormData(prev => ({ ...prev, imagesAfter: prev.imagesAfter?.filter((_, i) => i !== index) }));
-  };
-
-  const updateCategoryName = (oldName: string, newName: string) => {
-      if (oldName === newName) return;
-      setFormData(prev => ({ ...prev, items: prev.items?.map(item => item.category === oldName ? { ...item, category: newName } : item) }));
-  };
-
-  const handleAddItemToCategory = (category: string) => {
-      const newItem: CheckItem = { id: `custom_${Date.now()}`, category: category, label: '', status: CheckStatus.PENDING, notes: '' };
-      setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
-  };
-
-  const handleAddNewCategory = () => {
-      const newItem: CheckItem = { id: `new_cat_${Date.now()}`, category: 'DANH MỤC MỚI', label: '', status: CheckStatus.PENDING, notes: '' };
-      setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
-  };
-
-  const handleAIItemSuggest = async (itemId: string) => {
-    const item = formData.items?.find(i => i.id === itemId);
-    if (!item) return;
-    setItemLoadingStates(prev => ({ ...prev, [itemId]: true }));
-    try {
-      const suggestion = await generateItemSuggestion(item, `${formData.ma_ct} - ${formData.ten_hang_muc}`);
-      updateItem(itemId, { notes: suggestion });
-    } catch (error) { console.error("AI Suggestion failed:", error); } finally { setItemLoadingStates(prev => ({ ...prev, [itemId]: false })); }
-  };
-
-  const handleRemoveItem = (id: string) => { setFormData(prev => ({ ...prev, items: prev.items?.filter(item => item.id !== id) })); };
-  const handleRemoveCategory = (category: string) => {
-      if (window.confirm(`Bạn có chắc muốn xóa toàn bộ danh mục "${category}"?`)) {
-          setFormData(prev => ({ ...prev, items: prev.items?.filter(item => item.category !== category) }));
-      }
-  };
-
-  const handleSave = () => {
-    if (!formData.ma_ct || !formData.ten_hang_muc || !formData.inspectorName) { alert("Vui lòng điền đầy đủ thông tin bắt buộc"); return; }
-    let score = 0;
-    if (formData.inspectedQuantity && formData.inspectedQuantity > 0) {
-        score = Math.round(((formData.passedQuantity || 0) / formData.inspectedQuantity) * 100);
-    } else {
-        const total = formData.items?.length || 1;
-        const passed = formData.items?.filter(i => i.status === CheckStatus.PASS).length || 0;
-        score = Math.round((passed / total) * 100);
-    }
-    const hasFailures = (formData.failedQuantity && formData.failedQuantity > 0) || formData.items?.some(i => i.status === CheckStatus.FAIL);
-    const status = hasFailures ? InspectionStatus.FLAGGED : InspectionStatus.COMPLETED;
-    onSave({ ...formData as Inspection, id: formData.id || `INS-${Date.now()}`, score, status: formData.status === InspectionStatus.DRAFT ? status : formData.status || status });
-  };
-
-  const handleAddPhoto = () => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); };
-  const handleAddItemPhoto = (itemId: string) => { setActiveUploadId(itemId); fileInputRef.current?.click(); };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const validImages = await Promise.all((Array.from(files) as File[]).map(async (file: File) => {
-        if (!file.type.startsWith('image/')) return null;
-        const reader = new FileReader();
-        return new Promise<string | null>((resolve) => {
-            reader.onloadend = async () => resolve(await resizeImage(reader.result as string));
-            reader.readAsDataURL(file);
-        });
-    }));
-    const imgs = validImages.filter((img): img is string => img !== null);
-    if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...imgs] }));
-    else if (activeUploadId === 'NCR_BEFORE') setNcrFormData(prev => ({ ...prev, imagesBefore: [...(prev.imagesBefore || []), ...imgs] }));
-    else if (activeUploadId === 'NCR_AFTER') setNcrFormData(prev => ({ ...prev, imagesAfter: [...(prev.imagesAfter || []), ...imgs] }));
-    else if (activeUploadId) {
-        const currentItem = formData.items?.find(i => i.id === activeUploadId);
-        updateItem(activeUploadId, { images: [...(currentItem?.images || []), ...imgs] });
-    }
-    setActiveUploadId(null); if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleRemoveProductPhoto = (index: number) => { setFormData(prev => ({ ...prev, images: prev.images?.filter((_, i) => i !== index) })); };
-  const handleRemoveItemPhoto = (itemId: string, indexToRemove: number) => {
-    const currentItem = formData.items?.find(i => i.id === itemId);
-    if (currentItem?.images) updateItem(itemId, { images: currentItem.images.filter((_, idx) => idx !== indexToRemove) });
-  };
-
-  const handleOpenImageEditor = (itemId: string, images: string[], index: number) => { setEditorState({ itemId, images, index }); };
-  const handleSaveEditedImage = (index: number, updatedImage: string) => {
-    if (!editorState) return;
-    const { itemId } = editorState;
-    if (itemId === 'MAIN_GALLERY') {
-      setFormData(prev => { const newImages = [...(prev.images || [])]; newImages[index] = updatedImage; return { ...prev, images: newImages }; });
-    } else {
-      setFormData(prev => ({ ...prev, items: prev.items?.map(item => item.id === itemId ? { ...item, images: item.images?.map((img, i) => i === index ? updatedImage : img) } : item) }));
-    }
-    setEditorState(prev => prev ? { ...prev, images: prev.images.map((img, i) => i === index ? updatedImage : img) } : null);
-  };
-
-  const handleSelectPlan = (item: PlanItem) => { fillFormData(item); setShowPlanModal(false); };
-
-  const startDrawing = (canvas: HTMLCanvasElement | null, e: React.MouseEvent | React.TouchEvent) => {
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
-    const { x, y } = getPos(e, canvas); ctx.beginPath(); ctx.moveTo(x, y); setIsDrawing(true);
-  };
-  const draw = (canvas: HTMLCanvasElement | null, e: React.MouseEvent | React.TouchEvent) => {
-      if (!isDrawing || !canvas) return;
-      if ('touches' in e) e.preventDefault();
-      const ctx = canvas.getContext('2d');
-      if (ctx) { const { x, y } = getPos(e, canvas); ctx.lineTo(x, y); ctx.stroke(); }
-  };
-  const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
-      const rect = canvas.getBoundingClientRect();
-      const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-      return { x: clientX - rect.left, y: clientY - rect.top };
-  };
-  const stopDrawing = (type: 'QC' | 'PROD') => {
-      if (isDrawing) {
-          setIsDrawing(false);
-          const canvas = type === 'QC' ? canvasRef.current : prodCanvasRef.current;
-          if (canvas) {
-              if (type === 'QC') setFormData(prev => ({ ...prev, signature: canvas.toDataURL() }));
-              else setFormData(prev => ({ ...prev, productionSignature: canvas.toDataURL(), productionConfirmedDate: new Date().toISOString().split('T')[0] }));
-          }
-      }
-  };
-  const handleClearSignature = (type: 'QC' | 'PROD') => {
-      if (type === 'QC') {
-          setFormData(prev => ({ ...prev, signature: undefined })); setQcSignMode('EDIT');
-          const ctx = canvasRef.current?.getContext('2d'); if (ctx) ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-      } else {
-          setFormData(prev => ({ ...prev, productionSignature: undefined, productionConfirmedDate: undefined })); setProdSignMode('EDIT');
-          const ctx = prodCanvasRef.current?.getContext('2d'); if (ctx) ctx.clearRect(0, 0, prodCanvasRef.current!.width, prodCanvasRef.current!.height);
-      }
-  };
-
-  const failRate = formData.inspectedQuantity ? Math.round(((formData.failedQuantity || 0) / formData.inspectedQuantity) * 100) : 0;
-  const passRate = formData.inspectedQuantity ? Math.round(((formData.passedQuantity || 0) / formData.inspectedQuantity) * 100) : 0;
 
   useEffect(() => {
     let stream: MediaStream | null = null;
     if (showScanner) {
       const startCamera = async () => {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (videoRef.current && stream) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.setAttribute('playsinline', 'true');
-              videoRef.current.play();
-              requestRef.current = requestAnimationFrame(tick);
-          }
-        } catch (err) { alert('Camera access denied'); setShowScanner(false); }
+        try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); if (videoRef.current && stream) { videoRef.current.srcObject = stream; videoRef.current.setAttribute('playsinline', 'true'); videoRef.current.play(); requestRef.current = requestAnimationFrame(tick); } }
+        catch (err) { alert('Không thể truy cập camera.'); setShowScanner(false); }
       };
       startCamera();
     }
@@ -436,533 +128,222 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   const tick = () => {
     if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = scannerCanvasRef.current;
-      const video = videoRef.current;
-      if (canvas) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) { handleFactoryCodeChange(code.data.trim()); setShowScanner(false); return; }
+      const canvas = canvasRef.current; const video = videoRef.current;
+      if (canvas) { canvas.height = video.videoHeight; canvas.width = video.videoWidth; const ctx = canvas.getContext('2d');
+        if (ctx) { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) { handleAutoFillFromCode(code.data.trim()); setShowScanner(false); return; }
         }
       }
     }
     if (showScanner) requestRef.current = requestAnimationFrame(tick);
   };
 
+  const handleAutoFillFromCode = async (code: string) => {
+      const cleanCode = (code || '').trim(); if (!cleanCode) return; const len = cleanCode.length;
+      let found: PlanItem | undefined = plans.find(p => (len === 9 && String(p.headcode || '').toLowerCase() === cleanCode.toLowerCase()) || (len === 13 && String(p.ma_nha_may || '').toLowerCase() === cleanCode.toLowerCase()));
+      if (!found) { setIsSearchingPlan(true); try { const result = await fetchPlans(cleanCode, 1, 5); if (result.items && result.items.length > 0) { found = result.items.find(p => (len === 9 && String(p.headcode || '').toLowerCase() === cleanCode.toLowerCase()) || (len === 13 && String(p.ma_nha_may || '').toLowerCase() === cleanCode.toLowerCase())); } } catch (err) { console.error(err); } finally { setIsSearchingPlan(false); } }
+      if (found) { setFormData(prev => ({ ...prev, ma_nha_may: found!.ma_nha_may, headcode: found!.headcode || (len === 9 ? cleanCode : ''), ma_ct: found!.ma_ct, ten_ct: found!.ten_ct, ten_hang_muc: found!.ten_hang_muc, dvt: found!.dvt || 'PCS', so_luong_ipo: found!.so_luong_ipo })); }
+      else { setFormData(prev => ({ ...prev, ma_nha_may: cleanCode })); }
+  };
+
+  const handleMaNhaMayChange = (e: React.ChangeEvent<HTMLInputElement>) => { const value = e.target.value; setFormData(prev => ({ ...prev, ma_nha_may: value })); const cleanValue = value.trim(); if (cleanValue.length === 9 || cleanValue.length === 13) { handleAutoFillFromCode(cleanValue); } };
+
+  const handleQuantityChange = (field: string, valueStr: string) => {
+    const val = valueStr === '' ? 0 : parseFloat(valueStr);
+    setFormData(prev => { const next = { ...prev };
+        if (field === 'so_luong_ipo') next.so_luong_ipo = val;
+        else if (field === 'inspectedQuantity') { next.inspectedQuantity = val; next.passedQuantity = Math.max(0, val - (prev.failedQuantity || 0)); }
+        else if (field === 'passedQuantity') { next.passedQuantity = val; next.failedQuantity = Math.max(0, (prev.inspectedQuantity || 0) - val); }
+        else if (field === 'failedQuantity') { next.failedQuantity = val; next.passedQuantity = Math.max(0, (prev.inspectedQuantity || 0) - val); }
+        return next;
+    });
+  };
+
+  const availableStages = useMemo(() => { if (!formData.workshop) return []; const workshop = workshops.find(w => w.name === formData.workshop); return workshop?.stages || []; }, [formData.workshop, workshops]);
+
+  const availableDefects = useMemo(() => {
+      const stage = formData.inspectionStage || '';
+      return defectLibrary.filter(d => (!stage || d.stage.toLowerCase() === stage.toLowerCase()) && (!librarySearch || d.code.toLowerCase().includes(librarySearch.toLowerCase()) || d.description.toLowerCase().includes(librarySearch.toLowerCase()) || d.name.toLowerCase().includes(librarySearch.toLowerCase())));
+  }, [defectLibrary, formData.inspectionStage, librarySearch]);
+
+  const updateItem = (id: string, updates: Partial<CheckItem>) => { setFormData(prev => ({ ...prev, items: prev.items?.map(item => item.id === id ? { ...item, ...updates } : item) })); };
+
+  const handleAddItem = (categoryName?: string) => {
+    let finalCategory = categoryName || prompt("Nhập tên danh mục mới:", "CHUNG") || "CHUNG";
+    const label = prompt("Nhập tên hạng mục kiểm tra:") || "Hạng mục mới";
+    const newItem: CheckItem = { id: `item_${Date.now()}`, category: finalCategory.toUpperCase(), label, status: CheckStatus.PENDING, notes: '' };
+    setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
+  };
+
+  const handleDeleteItem = (id: string) => { if (window.confirm("Xóa hạng mục này?")) { setFormData(prev => ({ ...prev, items: prev.items?.filter(i => i.id !== id) })); } };
+
+  const handleUpdateCategoryName = (oldName: string) => { if (!editingCategory || !editingCategory.value.trim()) return; const newName = editingCategory.value.toUpperCase(); setFormData(prev => ({ ...prev, items: prev.items?.map(item => item.category === oldName ? { ...item, category: newName } : item) })); setEditingCategory(null); };
+
+  const handleDeleteCategory = (categoryName: string) => { if (window.confirm(`Xóa toàn bộ danh mục "${categoryName}"?`)) { setFormData(prev => ({ ...prev, items: prev.items?.filter(item => item.category !== categoryName) })); } };
+
+  const handleItemStatusChange = (item: CheckItem, status: CheckStatus) => { updateItem(item.id, { status }); if (status === CheckStatus.FAIL && !item.ncr) handleOpenNCR(item); };
+
+  const handleOpenNCR = (item: CheckItem) => {
+      setNcrModalItem({ itemId: item.id, itemLabel: item.label, ncrData: item.ncr });
+      setNcrFormData(item.ncr || { issueDescription: item.notes || '', responsiblePerson: '', rootCause: '', solution: '', status: 'OPEN', createdDate: new Date().toISOString().split('T')[0], deadline: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0], imagesBefore: [], imagesAfter: [] });
+  };
+
+  const handleAiConsult = async () => {
+    if (!ncrFormData.issueDescription) { alert("Vui lòng nhập mô tả lỗi."); return; }
+    setIsAiConsulting(true); try { const result = await generateNCRSuggestions(ncrFormData.issueDescription, ncrModalItem?.itemLabel || ''); setNcrFormData(prev => ({ ...prev, rootCause: result.rootCause, solution: result.solution })); }
+    catch (err) { alert("Lỗi kết nối AI."); } finally { setIsAiConsulting(false); }
+  };
+
+  const handleSaveNCR = () => {
+      if (!ncrModalItem || !ncrFormData.issueDescription) { alert("Vui lòng nhập mô tả lỗi"); return; }
+      const newNCR: NCR = { id: ncrModalItem.ncrData?.id || `NCR-${Date.now()}`, defect_code: ncrFormData.defect_code, createdDate: ncrFormData.createdDate || new Date().toISOString().split('T')[0], issueDescription: ncrFormData.issueDescription, rootCause: ncrFormData.rootCause || '', solution: ncrFormData.solution || '', responsiblePerson: ncrFormData.responsiblePerson || '', deadline: ncrFormData.deadline, status: ncrFormData.status || 'OPEN', severity: ncrFormData.severity || 'MINOR', imagesBefore: ncrFormData.imagesBefore || [], imagesAfter: ncrFormData.imagesAfter || [] };
+      updateItem(ncrModalItem.itemId, { ncr: newNCR, status: CheckStatus.FAIL }); setNcrModalItem(null); setNcrFormData({});
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files; if (!files || files.length === 0) return;
+    const processed = await Promise.all(Array.from(files).map(async (file: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(file);}))));
+    if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processed] }));
+    setActiveUploadId(null); if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleNCRImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files; if (!files || files.length === 0) return;
+      const processed = await Promise.all(Array.from(files).map(async (file: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(file);}))));
+      setNcrFormData(prev => ({ ...prev, imagesBefore: [...(prev.imagesBefore || []), ...processed] })); if (ncrImageInputRef.current) ncrImageInputRef.current.value = '';
+  };
+
+  const groupedItems = useMemo(() => { const groups: Record<string, CheckItem[]> = {}; formData.items?.forEach(item => { if (!groups[item.category]) groups[item.category] = []; groups[item.category].push(item); }); return groups; }, [formData.items]);
+
+  const selectedDefectInfo = useMemo(() => { if (!ncrFormData.defect_code) return null; return defectLibrary.find(d => d.code === ncrFormData.defect_code); }, [defectLibrary, ncrFormData.defect_code]);
+
+  const stats = useMemo(() => { const total = formData.inspectedQuantity || 0; const passed = formData.passedQuantity || 0; const failed = formData.failedQuantity || 0; const passPct = total > 0 ? Math.round((passed / total) * 100) : 0; const failPct = total > 0 ? Math.round((failed / total) * 100) : 0; return { passPct, failPct }; }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
+
+  const handleSave = () => {
+    if (!formData.ma_nha_may || !formData.ten_hang_muc) { alert("Vui lòng nhập đủ thông tin bắt buộc (*)"); return; }
+    setIsSaving(true); const qcSign = qcCanvasRef.current?.toDataURL(); const prodSign = prodCanvasRef.current?.toDataURL();
+    const total = formData.items?.length || 0; const passed = formData.items?.filter(i => i.status === CheckStatus.PASS).length || 0; const score = total > 0 ? Math.round((passed / total) * 100) : 0;
+    const finalInspection: Inspection = { ...formData as Inspection, id: formData.id || `INS-${Date.now()}`, score, status: (formData.failedQuantity || 0) > 0 ? InspectionStatus.FLAGGED : InspectionStatus.COMPLETED, signature: qcSign, productionSignature: prodSign };
+    onSave(finalInspection);
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col relative">
+    <div className="bg-slate-50 h-full flex flex-col relative overflow-hidden">
       <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-      
-      {/* Scanner & NCR Modals ... (keeping mostly same but wrapped) */}
+
       {showScanner && (
-        <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
-            <button onClick={() => setShowScanner(false)} className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
-            <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[2.5rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.4)]">
-                <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-                <canvas ref={scannerCanvasRef} className="hidden" />
-            </div>
-            <p className="text-blue-400 mt-10 font-bold text-xs uppercase tracking-[0.2em] animate-pulse">Scanning QR...</p>
+        <div className="fixed inset-0 z-[160] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
+            <button onClick={() => setShowScanner(false)} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
+            <div className="text-center mb-8"><h3 className="text-white font-black text-xl uppercase tracking-widest mb-1">Quét mã sản phẩm</h3><p className="text-slate-400 text-sm">Di chuyển camera đến mã Headcode hoặc Mã nhà máy</p></div>
+            <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[3rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.4)]"><video ref={videoRef} className="w-full h-full object-cover" muted playsInline /><canvas ref={canvasRef} className="hidden" /><div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_15px_red] animate-pulse"></div></div>
         </div>
       )}
 
-      {editorState && (
-        <ImageEditorModal 
-          images={editorState.images}
-          initialIndex={editorState.index}
-          onSave={handleSaveEditedImage}
-          onClose={() => setEditorState(null)}
-        />
+      {editingImageIdx !== null && (
+          <ImageEditorModal images={formData.images || []} initialIndex={editingImageIdx} onSave={(idx, updatedImage) => setFormData(prev => ({ ...prev, images: prev.images?.map((img, i) => i === idx ? updatedImage : img) }))} onClose={() => setEditingImageIdx(null)} />
       )}
 
-      {ncrModalItem && (
-          <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
-                  {/* ... NCR Modal Content ... */}
-                  <div className="px-6 py-4 bg-[#DC2626] text-white flex justify-between items-start shrink-0">
-                      <div className="flex gap-3">
-                          <div className="mt-1"><AlertTriangle className="w-6 h-6" /></div>
-                          <div>
-                              <h3 className="font-black text-lg leading-none uppercase tracking-tight">PHIẾU NCR - SỰ KHÔNG PHÙ HỢP</h3>
-                              <p className="text-sm font-medium opacity-90 mt-1 truncate max-w-[200px]">{ncrModalItem.itemLabel}</p>
-                          </div>
-                      </div>
-                      <button onClick={() => setNcrModalItem(null)} className="text-white/80 hover:text-white transition-colors active:scale-90"><X className="w-6 h-6"/></button>
-                  </div>
-                  
-                  <div className="p-6 space-y-5 overflow-y-auto no-scrollbar">
-                      {/* Description Section */}
-                      <div>
-                          <div className="flex justify-between items-end mb-2">
-                              <label className="text-xs font-bold text-slate-500 uppercase">MÔ TẢ LỖI *</label>
-                              <button 
-                                onClick={handleAutoFillNCR}
-                                disabled={isAnalyzingNCR}
-                                className="text-[10px] font-black text-purple-600 bg-purple-50 hover:bg-purple-100 px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                              >
-                                {isAnalyzingNCR ? <Loader2 className="w-3 h-3 animate-spin"/> : <BrainCircuit className="w-3 h-3"/>}
-                                {isAnalyzingNCR ? 'Đang phân tích...' : 'AI Phân tích & Đề xuất'}
-                              </button>
-                          </div>
-                          <textarea 
-                              value={ncrFormData.issueDescription || ''}
-                              onChange={e => setNcrFormData({...ncrFormData, issueDescription: e.target.value})}
-                              className="w-full px-4 py-3 border border-red-200 rounded-xl bg-red-50 text-slate-800 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none font-medium"
-                              rows={3}
-                              placeholder="Mô tả chi tiết vấn đề..."
-                          />
-                      </div>
-
-                      {/* Responsibility & Deadline */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                              <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">NGƯỜI CHỊU TRÁCH NHIỆM</label>
-                              <input 
-                                type="text"
-                                value={ncrFormData.responsiblePerson || ''}
-                                onChange={e => setNcrFormData({...ncrFormData, responsiblePerson: e.target.value})}
-                                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                placeholder="Tên nhân viên/Bộ phận"
-                              />
-                          </div>
-                          <div>
-                              <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">HẠN XỬ LÝ</label>
-                              <input 
-                                type="date"
-                                value={ncrFormData.deadline || ''}
-                                onChange={e => setNcrFormData({...ncrFormData, deadline: e.target.value})}
-                                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                              />
-                          </div>
-                      </div>
-
-                      {/* Images Section */}
-                      <div className="grid grid-cols-2 gap-4 py-2">
-                          {/* Before Images */}
-                          <div className="space-y-3">
-                              <div className="flex justify-between items-center">
-                                  <label className="text-[10px] font-black text-red-500 uppercase flex items-center gap-1.5"><FileWarning className="w-4 h-4" /> TRƯỚC XỬ LÝ</label>
-                                  <button onClick={() => handleAddNCRPhoto('BEFORE')} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition-colors"><PlusCircle className="w-5 h-5"/></button>
-                              </div>
-                              <div className="border-2 border-dashed border-red-200 rounded-xl p-2 min-h-[80px] bg-red-50/30">
-                                  <div className="flex flex-wrap gap-2">
-                                      {ncrFormData.imagesBefore && ncrFormData.imagesBefore.length > 0 ? (
-                                          ncrFormData.imagesBefore.map((img, idx) => (
-                                              <div key={idx} className="relative w-16 h-16 group"><img src={img} className="w-full h-full object-cover rounded-lg shadow-sm" /><button onClick={() => handleRemoveNCRPhoto('BEFORE', idx)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-md"><X className="w-3 h-3"/></button></div>
-                                          ))
-                                      ) : (<div className="w-full h-16 flex items-center justify-center text-red-300 text-xs font-medium cursor-pointer" onClick={() => handleAddNCRPhoto('BEFORE')}>Trống</div>)}
-                                  </div>
-                              </div>
-                          </div>
-                          {/* After Images */}
-                          <div className="space-y-3">
-                              <div className="flex justify-between items-center">
-                                  <label className="text-[10px] font-black text-green-600 uppercase flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> SAU XỬ LÝ</label>
-                                  <button onClick={() => handleAddNCRPhoto('AFTER')} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition-colors"><PlusCircle className="w-5 h-5"/></button>
-                              </div>
-                              <div className="border-2 border-dashed border-green-200 rounded-xl p-2 min-h-[80px] bg-green-50/30">
-                                  <div className="flex flex-wrap gap-2">
-                                      {ncrFormData.imagesAfter && ncrFormData.imagesAfter.length > 0 ? (
-                                          ncrFormData.imagesAfter.map((img, idx) => (
-                                              <div key={idx} className="relative w-16 h-16 group"><img src={img} className="w-full h-full object-cover rounded-lg shadow-sm" /><button onClick={() => handleRemoveNCRPhoto('AFTER', idx)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-md"><X className="w-3 h-3"/></button></div>
-                                          ))
-                                      ) : (<div className="w-full h-16 flex items-center justify-center text-green-300 text-xs font-medium cursor-pointer" onClick={() => handleAddNCRPhoto('AFTER')}>Trống</div>)}
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-
-                      {/* Root Cause & Solution */}
-                      <div>
-                          <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">NGUYÊN NHÂN GỐC RỄ</label>
-                          <textarea 
-                              value={ncrFormData.rootCause || ''}
-                              onChange={e => setNcrFormData({...ncrFormData, rootCause: e.target.value})}
-                              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-slate-50"
-                              rows={2}
-                              placeholder="Tại sao lỗi này xảy ra?"
-                          />
-                      </div>
-                      <div>
-                          <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">BIỆN PHÁP KHẮC PHỤC</label>
-                          <textarea 
-                              value={ncrFormData.solution || ''}
-                              onChange={e => setNcrFormData({...ncrFormData, solution: e.target.value})}
-                              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-slate-50"
-                              rows={2}
-                              placeholder="Hướng xử lý..."
-                          />
-                      </div>
-                  </div>
-
-                  <div className="p-5 border-t border-slate-100 bg-white flex gap-4 justify-end shrink-0">
-                      <button 
-                        onClick={() => setNcrModalItem(null)}
-                        className="px-6 py-2 text-slate-500 hover:text-slate-800 font-bold text-sm transition-colors"
-                      >
-                        Hủy bỏ
-                      </button>
-                      <button 
-                        onClick={handleSaveNCR}
-                        disabled={isAnalyzingNCR}
-                        className="bg-[#DC2626] hover:bg-red-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-lg shadow-red-500/30 active:scale-95 transition-all"
-                      >
-                        Lưu NCR
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* Show Plan Modal */}
-      {showPlanModal && (
-          <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80%] flex flex-col overflow-hidden animate-in zoom-in duration-300">
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                      <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-green-600"/> Chọn Kế Hoạch</h3>
-                      <button onClick={() => setShowPlanModal(false)} className="p-2 text-slate-400 active:scale-90"><X className="w-5 h-5"/></button>
-                  </div>
-                  <div className="overflow-y-auto p-2 space-y-2 no-scrollbar flex-1 min-h-0">
-                      {plans.filter(p => p.status === 'PENDING').map(item => (
-                          <div key={item.ma_nha_may} onClick={() => handleSelectPlan(item)} className="p-3 hover:bg-blue-50 border border-slate-100 rounded-xl cursor-pointer active:scale-95 transition-transform">
-                              <div className="flex justify-between items-center mb-1">
-                                  <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{item.ma_ct}</span>
-                                  <div className="flex gap-1">
-                                    <span className="text-[10px] md:text-xs font-bold text-blue-600 font-mono bg-blue-50 px-1.5 py-0.5 rounded">{item.ma_nha_may}</span>
-                                  </div>
-                              </div>
-                              <div className="font-bold text-slate-800 text-sm leading-tight">{item.ten_hang_muc}</div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* Main Header */}
-      <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-40 shadow-sm shrink-0">
-        <button onClick={onCancel} className="p-2 text-slate-500 hover:text-slate-800 active:scale-90 transition-transform"><ArrowLeft className="w-5 h-5"/></button>
-        <div className="flex flex-col items-center overflow-hidden">
-            <h2 className="text-sm font-black text-slate-800 uppercase tracking-tighter truncate max-w-[200px]">{initialData?.id ? 'SỬA PHIẾU' : 'TẠO PHIẾU MỚI'}</h2>
-            <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full uppercase tracking-tighter">{getModuleLabel()}</span>
-            </div>
-        </div>
-        <button onClick={handleSave} className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-500/30 active:scale-90 transition-transform"><Save className="w-5 h-5"/></button>
+      <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 z-40 shadow-sm shrink-0">
+        <button onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform"><ArrowLeft className="w-6 h-6"/></button>
+        <div className="text-center"><h2 className="text-sm font-black text-slate-800 uppercase tracking-tight">TẠO PHIẾU MỚI</h2><div className="mt-0.5"><span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[9px] font-black uppercase border border-blue-100">KIỂM TRA CHẤT LƯỢNG</span></div></div>
+        <button onClick={handleSave} disabled={isSaving} className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all">{isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}</button>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 p-3 md:p-6 space-y-4 pb-20 md:pb-8 no-scrollbar bg-slate-50">
-        
-        {/* 1. IMAGES SECTION */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-             <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <Images className="w-4 h-4" /> Hình ảnh hiện trường ({formData.images?.length || 0})
-             </h3>
-          </div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex flex-wrap gap-3">
-                {formData.images && formData.images.map((img, idx) => (
-                  <div key={idx} className="relative w-20 h-20 md:w-24 md:h-24 group">
-                    <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-200 shadow-sm transition-transform active:scale-95" alt={`Img ${idx}`} />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl">
-                        <button onClick={(e) => { e.stopPropagation(); handleOpenImageEditor('MAIN_GALLERY', formData.images!, idx); }} className="p-1 bg-white rounded-lg shadow text-blue-600 mr-1"><Maximize2 className="w-4 h-4"/></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleRemoveProductPhoto(idx); }} className="p-1 bg-red-500 text-white rounded-lg shadow"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                ))}
-                <button onClick={handleAddPhoto} className="w-20 h-20 md:w-24 md:h-24 rounded-xl border-2 border-dashed border-blue-300 flex flex-col items-center justify-center text-blue-500 bg-blue-50/30 hover:bg-blue-50 transition-all active:scale-95 group">
-                  <Plus className="w-6 h-6 mb-1 group-hover:scale-110 transition-transform" />
-                  <span className="text-[8px] font-black uppercase">Thêm ảnh</span>
-                </button>
-              </div>
-          </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32">
+        {/* Basic Info Section (Already implemented) */}
+        <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1"><Box className="w-4 h-4 text-blue-600" /><h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest">THÔNG TIN NGUỒN</h3></div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="space-y-1"><label className="text-[11px] font-black text-slate-400 uppercase ml-1">MÃ NHÀ MÁY *</label><div className="relative group"><input value={formData.ma_nha_may} onChange={handleMaNhaMayChange} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-700 focus:bg-white outline-none transition-all pr-12 shadow-sm" placeholder="Mã NM hoặc Headcode..."/><div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">{isSearchingPlan && <Loader2 className="w-5 h-5 text-blue-500 animate-spin mr-1" /><button onClick={() => setShowScanner(true)} className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50"><QrCode className="w-5 h-5"/></button></div></div></div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Mã dự án *</label><input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tên sản phẩm *</label><input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" /></div>
+                </div>
+            </div>
         </div>
 
-        {/* 2. SOURCE INFO SECTION */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-           <h3 className="text-sm font-black text-blue-600 uppercase tracking-tight flex items-center gap-2 border-b border-slate-100 pb-2">
-               <Box className="w-4 h-4" /> Thông tin nguồn
-           </h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Mã Nhà Máy *</label>
-                    <div className="flex gap-2 relative">
-                      <input value={formData.ma_nha_may} onChange={e => handleFactoryCodeChange(e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-700 text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập mã..." />
-                      {isSearchingPlan && <div className="absolute right-12 top-1/2 -translate-y-1/2"><Loader2 className="w-4 h-4 animate-spin text-blue-500" /></div>}
-                      <button onClick={() => setShowScanner(true)} className="p-2.5 bg-blue-100 text-blue-600 rounded-xl shadow-sm active:scale-95 shrink-0 hover:bg-blue-200 transition-colors"><QrCode className="w-5 h-5" /></button>
-                    </div>
-                </div>
-                <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Mã Công Trình *</label>
-                    <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập mã CT..." />
-                </div>
-                <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Tên Công Trình</label>
-                    <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập tên CT..." />
-                </div>
-                <div className="md:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1 mb-1 block">Tên Sản Phẩm *</label>
-                    <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl font-medium text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" placeholder="Nhập tên SP..." />
-                </div>
-           </div>
-        </div>
-
-        {/* 3. INSPECTION INFO SECTION (Matching the screenshot layout) */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-           <h3 className="text-sm font-black text-orange-600 uppercase tracking-tight flex items-center gap-2 border-b border-slate-100 pb-2">
-             <ClipboardList className="w-4 h-4" /> Thông tin kiểm tra
-           </h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Row 1 */}
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">Xưởng / Kho / Phòng</label>
-                    <div className="relative">
-                        <select 
-                            value={formData.workshop || ''} 
-                            onChange={e => setFormData(prev => ({ ...prev, workshop: e.target.value, inspectionStage: '' }))}
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none appearance-none transition-all focus:ring-2 focus:ring-orange-100"
-                        >
-                            <option value="">-- Chọn Xưởng --</option>
-                            {workshops.map(ws => (
-                                <option key={ws.id} value={ws.name}>{ws.name} ({ws.code})</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    </div>
-                </div>
-
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">Công đoạn sản xuất</label>
-                    <div className="relative">
-                        {availableStages.length > 0 ? (
-                            <select 
-                                value={formData.inspectionStage || ''} 
-                                onChange={e => setFormData(prev => ({ ...prev, inspectionStage: e.target.value }))}
-                                disabled={!formData.workshop}
-                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none appearance-none disabled:opacity-50 transition-all focus:ring-2 focus:ring-orange-100"
-                            >
-                                <option value="">-- Chọn công đoạn --</option>
-                                {availableStages.map(stage => (
-                                    <option key={stage} value={stage}>{stage}</option>
-                                ))}
-                            </select>
-                        ) : (
-                            <input 
-                                type="text"
-                                value={formData.inspectionStage || ''} 
-                                onChange={e => setFormData(prev => ({ ...prev, inspectionStage: e.target.value }))}
-                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-orange-100"
-                                placeholder="Nhập công đoạn..."
-                            />
-                        )}
-                        {availableStages.length > 0 && <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />}
-                    </div>
-                </div>
-
-                {/* Row 2 */}
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">QC Thực hiện *</label>
-                    <input 
-                        type="text" 
-                        value={formData.inspectorName || ''} 
-                        onChange={e => setFormData(prev => ({ ...prev, inspectorName: e.target.value.toUpperCase() }))}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none uppercase transition-all focus:ring-2 focus:ring-orange-100"
-                        placeholder="TÊN QC..."
-                    />
-                </div>
-
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide ml-1">Ngày kiểm tra</label>
-                    <div className="relative">
-                        <input 
-                            type="date" 
-                            value={formData.date || ''} 
-                            onChange={e => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:bg-white outline-none transition-all focus:ring-2 focus:ring-orange-100"
-                        />
-                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    </div>
-                </div>
-           </div>
-        </div>
-
-        {/* 4. QUANTITIES SECTION */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-           <h3 className="text-sm font-black text-indigo-900 uppercase tracking-tight flex items-center gap-2 border-b border-slate-100 pb-2">
-               <Hash className="w-4 h-4" /> Số lượng kiểm tra
-           </h3>
-           <div className="grid grid-cols-2 gap-4">
-                <div>
-                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">SL Đơn hàng (IPO)</label>
-                     <div className="relative">
-                        <input type="number" inputMode="numeric" value={formData.so_luong_ipo} onChange={e => setFormData({...formData, so_luong_ipo: parseInt(e.target.value)||0})} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl font-black text-slate-900 text-sm focus:ring-2 focus:ring-indigo-100 outline-none" />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{formData.dvt}</span>
-                     </div>
-                </div>
-                <div>
-                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">SL Kiểm tra</label>
-                     <input type="number" inputMode="numeric" value={formData.inspectedQuantity} onChange={e => setFormData({...formData, inspectedQuantity: parseInt(e.target.value)||0})} className="w-full px-3 py-2.5 border border-blue-200 bg-blue-50/30 rounded-xl font-black text-blue-700 text-sm focus:ring-2 focus:ring-blue-100 outline-none" />
-                </div>
-                <div>
-                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 flex justify-between"><span>SL Đạt</span><span className="text-green-600">{passRate}%</span></label>
-                     <input type="number" inputMode="numeric" value={formData.passedQuantity} readOnly className="w-full px-3 py-2.5 border border-green-200 bg-green-50/20 rounded-xl font-black text-green-700 text-sm focus:outline-none" />
-                </div>
-                <div>
-                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 flex justify-between"><span>SL Lỗi</span><span className="text-red-600">{failRate}%</span></label>
-                     <input type="number" inputMode="numeric" value={formData.failedQuantity} onChange={e => setFormData({...formData, failedQuantity: parseInt(e.target.value)||0})} className="w-full px-3 py-2.5 border border-red-200 bg-red-50/20 rounded-xl font-black text-red-600 text-sm focus:ring-2 focus:ring-red-100 outline-none" />
-                </div>
-           </div>
-        </div>
-        
-        {/* 5. CHECK ITEMS */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1 border-b-2 border-slate-800 pb-1">
-             <h3 className="text-xs font-black text-slate-900 uppercase tracking-tighter">Chi tiết hạng mục ({formData.items?.length || 0})</h3>
-             <button onClick={handleAddNewCategory} className="text-[9px] bg-slate-900 text-white px-3 py-1.5 rounded-lg font-bold uppercase shadow-sm flex items-center gap-1 active:scale-95 transition-transform">
-                <PlusCircle className="w-3 h-3"/> Thêm mục
-             </button>
-          </div>
-          
-          <div className="space-y-4">
-            {Object.entries(groupedItems).map(([category, items]: [string, CheckItem[]]) => (
-                <div key={category} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="p-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2">
-                        <input 
-                            defaultValue={category}
-                            onBlur={(e) => updateCategoryName(category, e.target.value.toUpperCase())}
-                            className="bg-transparent text-xs font-black text-slate-700 uppercase focus:bg-white rounded px-2 flex-1 min-w-0 outline-none focus:ring-1 focus:ring-blue-300"
-                        />
-                        <div className="flex gap-1 shrink-0">
-                            <button onClick={() => handleAddItemToCategory(category)} className="bg-white border border-slate-300 text-slate-600 hover:text-blue-600 px-2 py-1 rounded-lg text-[9px] font-bold uppercase shadow-sm"><Plus className="w-3 h-3" /></button>
-                            <button onClick={() => handleRemoveCategory(category)} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                        {items.map((item) => (
-                            <div key={item.id} className="p-3 hover:bg-slate-50 transition-colors group">
-                                <div className="flex justify-between items-start mb-2 gap-2">
-                                    <input value={item.label} onChange={(e) => updateItem(item.id, { label: e.target.value })} className="flex-1 min-w-0 text-sm font-bold text-slate-800 bg-transparent border-b border-transparent focus:border-blue-300 focus:bg-white rounded-sm outline-none transition-colors" placeholder="Hạng mục..." />
-                                    <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex flex-wrap gap-1 pb-1">
-                                        {Object.values(CheckStatus).filter(v => v !== CheckStatus.PENDING).map(v => (
-                                            <button key={v} onClick={() => handleItemStatusChange(item, v)} className={`flex-1 py-2 px-2 rounded-lg text-[10px] font-black uppercase whitespace-nowrap border transition-all active:scale-95 ${item.status === v ? (v === CheckStatus.PASS ? 'bg-green-600 text-white border-green-600 shadow-md' : v === CheckStatus.FAIL ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-amber-500 text-white border-amber-500 shadow-md') : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>{v}</button>
-                                        ))}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1 min-w-0">
-                                            <input value={item.notes} onChange={e => updateItem(item.id, { notes: e.target.value })} className="w-full pl-3 pr-8 py-2 text-xs border border-slate-200 rounded-lg outline-none bg-slate-50 focus:bg-white focus:border-blue-300 transition-all" placeholder="Ghi chú..." />
-                                            {item.status === CheckStatus.FAIL && <button onClick={() => handleAIItemSuggest(item.id)} className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-500 hover:text-purple-700 animate-pulse"><Sparkles className="w-3.5 h-3.5" /></button>}
+        {/* Checklist Section */}
+        <div className="space-y-3">
+            <div className="flex items-center justify-between px-1"><h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">CHI TIẾT HẠNG MỤC ({formData.items?.length || 0})</h3><button onClick={() => handleAddItem()} className="bg-slate-900 text-white px-3 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1.5 active:scale-95 transition-all shadow-sm"><PlusCircle className="w-3 h-3" /> Hạng mục</button></div>
+            <div className="space-y-6">
+                {Object.entries(groupedItems).map(([cat, items]: [string, CheckItem[]]) => (
+                    <div key={cat} className="space-y-3 animate-in slide-in-from-bottom duration-300">
+                        <div className="flex items-center justify-between bg-slate-100/80 px-4 py-2 rounded-xl border border-slate-200 shadow-sm"><span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">{cat}</span><button onClick={() => handleAddItem(cat)} className="text-[8px] font-black text-blue-600 uppercase hover:bg-white px-2 py-1 rounded-lg transition-all active:scale-95"><Plus className="w-3 h-3"/> Thêm mục</button></div>
+                        <div className="space-y-3">{items.map(item => (
+                                <div key={item.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                                    <div className="p-4 space-y-3">
+                                        <div className="flex justify-between items-start gap-4">
+                                            <div className="flex-1"><input value={item.label} onChange={e => updateItem(item.id, { label: e.target.value })} className="w-full px-2 py-1 text-sm font-bold text-slate-800 bg-slate-50/50 outline-none rounded transition-all" /></div>
+                                            <div className="flex gap-1.5 shrink-0 items-center"><button onClick={() => handleOpenNCR(item)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><AlertTriangle className="w-4 h-4"/></button><button onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button></div>
                                         </div>
-                                        <button onClick={() => handleAddItemPhoto(item.id)} className={`p-2 rounded-lg border transition-colors shrink-0 ${item.images?.length ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300 hover:text-blue-500'}`}><Camera className="w-4 h-4"/></button>
+                                        <div className="flex gap-1.5">
+                                            <button onClick={() => handleItemStatusChange(item, CheckStatus.PASS)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${item.status === CheckStatus.PASS ? 'bg-green-600 border-green-600 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>ĐẠT</button>
+                                            <button onClick={() => handleItemStatusChange(item, CheckStatus.FAIL)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${item.status === CheckStatus.FAIL ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>HỎNG</button>
+                                        </div>
                                     </div>
-                                    {item.images && item.images.length > 0 && <div className="flex flex-wrap gap-2 pt-2">{item.images.map((img, i) => <div key={i} className="w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200"><img src={img} className="w-full h-full object-cover" /></div>)}</div>}
                                 </div>
-                            </div>
-                        ))}
+                            ))}</div>
                     </div>
-                </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Signatures */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight border-b border-slate-100 pb-2 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-green-600"/> Xác nhận
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* QC Signature */}
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">QC Kiểm tra</label>
-                        {formData.signature && (
-                            <button onClick={() => handleClearSignature('QC')} className="text-[10px] text-red-500 hover:underline flex items-center gap-1">
-                                <Eraser className="w-3 h-3"/> Ký lại
-                            </button>
-                        )}
-                    </div>
-                    <div className={`border-2 border-dashed ${formData.signature ? 'border-green-200 bg-green-50/30' : 'border-slate-300 bg-slate-50'} rounded-xl h-32 relative overflow-hidden touch-none`}>
-                        {qcSignMode === 'VIEW' && formData.signature ? (
-                            <img src={formData.signature} className="w-full h-full object-contain" alt="QC Sign" />
-                        ) : (
-                            <>
-                                <canvas
-                                    ref={canvasRef}
-                                    className="w-full h-full cursor-crosshair"
-                                    onMouseDown={(e) => startDrawing(canvasRef.current, e)}
-                                    onMouseMove={(e) => draw(canvasRef.current, e)}
-                                    onMouseUp={() => stopDrawing('QC')}
-                                    onMouseLeave={() => stopDrawing('QC')}
-                                    onTouchStart={(e) => startDrawing(canvasRef.current, e)}
-                                    onTouchMove={(e) => draw(canvasRef.current, e)}
-                                    onTouchEnd={() => stopDrawing('QC')}
-                                    width={400}
-                                    height={160}
-                                />
-                                {!isDrawing && !formData.signature && (
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
-                                        <span className="bg-white/50 px-2 py-1 rounded">Ký tên tại đây</span>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                    <p className="text-center text-xs font-bold text-slate-700 uppercase">{formData.inspectorName || 'Tên QC'}</p>
-                </div>
-
-                {/* Production Signature */}
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Đại diện Sản xuất</label>
-                        {formData.productionSignature && (
-                            <button onClick={() => handleClearSignature('PROD')} className="text-[10px] text-red-500 hover:underline flex items-center gap-1">
-                                <Eraser className="w-3 h-3"/> Ký lại
-                            </button>
-                        )}
-                    </div>
-                    <div className={`border-2 border-dashed ${formData.productionSignature ? 'border-blue-200 bg-blue-50/30' : 'border-slate-300 bg-slate-50'} rounded-xl h-32 relative overflow-hidden touch-none`}>
-                        {prodSignMode === 'VIEW' && formData.productionSignature ? (
-                            <img src={formData.productionSignature} className="w-full h-full object-contain" alt="Prod Sign" />
-                        ) : (
-                            <>
-                                <canvas
-                                    ref={prodCanvasRef}
-                                    className="w-full h-full cursor-crosshair"
-                                    onMouseDown={(e) => startDrawing(prodCanvasRef.current, e)}
-                                    onMouseMove={(e) => draw(prodCanvasRef.current, e)}
-                                    onMouseUp={() => stopDrawing('PROD')}
-                                    onMouseLeave={() => stopDrawing('PROD')}
-                                    onTouchStart={(e) => startDrawing(prodCanvasRef.current, e)}
-                                    onTouchMove={(e) => draw(prodCanvasRef.current, e)}
-                                    onTouchEnd={() => stopDrawing('PROD')}
-                                    width={400}
-                                    height={160}
-                                />
-                                {!isDrawing && !formData.productionSignature && (
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
-                                        <span className="bg-white/50 px-2 py-1 rounded">Ký tên tại đây</span>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                    <input 
-                        className="w-full text-center text-xs font-bold text-slate-700 uppercase bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none placeholder:font-normal"
-                        placeholder="NHẬP TÊN NGƯỜI ĐẠI DIỆN..."
-                        value={formData.productionName || ''}
-                        onChange={(e) => setFormData({...formData, productionName: e.target.value})}
-                    />
-                </div>
+                ))}
             </div>
         </div>
-        
+
+        {/* Signature Section */}
+        <div className="space-y-4">
+            <div className="flex items-center gap-2 px-1"><PenTool className="w-4 h-4 text-blue-600" /><h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest">XÁC NHẬN CHỮ KÝ</h3></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2"><div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">1. QC Kiểm tra</label><button onClick={() => clearCanvas(qcCanvasRef)} className="text-[9px] font-black text-red-500 uppercase flex items-center gap-1"><Eraser className="w-3 h-3"/> Xóa</button></div><div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl h-40 overflow-hidden shadow-inner"><canvas ref={qcCanvasRef} width={400} height={200} className="w-full h-full cursor-crosshair touch-none" style={{ touchAction: 'none' }} onMouseDown={e => startDrawing(e, qcCanvasRef, setIsDrawingQC)} onMouseMove={e => draw(e, qcCanvasRef, isDrawingQC)} onMouseUp={() => setIsDrawingQC(false)} onTouchStart={e => startDrawing(e, qcCanvasRef, setIsDrawingQC)} onTouchMove={e => draw(e, qcCanvasRef, isDrawingQC)} onTouchEnd={() => setIsDrawingQC(false)} /></div></div>
+                <div className="space-y-2"><div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">2. Sản xuất ký</label><button onClick={() => clearCanvas(prodCanvasRef)} className="text-[9px] font-black text-red-500 uppercase flex items-center gap-1"><Eraser className="w-3 h-3"/> Xóa</button></div><div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl h-40 overflow-hidden shadow-inner"><canvas ref={prodCanvasRef} width={400} height={200} className="w-full h-full cursor-crosshair touch-none" style={{ touchAction: 'none' }} onMouseDown={e => startDrawing(e, prodCanvasRef, setIsDrawingProd)} onMouseMove={e => draw(e, prodCanvasRef, isDrawingProd)} onMouseUp={() => setIsDrawingProd(false)} onTouchStart={e => startDrawing(e, prodCanvasRef, setIsDrawingProd)} onTouchMove={e => draw(e, prodCanvasRef, isDrawingProd)} onTouchEnd={() => setIsDrawingProd(false)} /></div></div>
+            </div>
+        </div>
       </div>
+
+      {/* NCR Modal with Library Linking */}
+      {ncrModalItem && (
+          <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                  <div className="px-6 py-4 bg-red-600 text-white flex justify-between items-center shrink-0"><div className="flex gap-3 items-center"><AlertTriangle className="w-6 h-6" /><h3 className="font-black text-lg uppercase tracking-tight leading-none">PHIẾU LỖI (NCR)</h3></div><button onClick={() => setNcrModalItem(null)}><X className="w-6 h-6"/></button></div>
+                  <div className="p-6 space-y-5 overflow-y-auto no-scrollbar">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between cursor-pointer active:scale-95 transition-all" onClick={() => setShowLibraryModal(true)}>
+                          <div className="flex items-center gap-3 overflow-hidden"><Layers className="w-6 h-6 text-blue-600 shrink-0" /><div className="overflow-hidden"><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Liên kết Thư viện lỗi</p><p className="text-xs font-bold text-blue-900 truncate">{ncrFormData.defect_code ? `${ncrFormData.defect_code}${selectedDefectInfo ? ` - ${selectedDefectInfo.name}` : ''}` : 'Bấm để tra cứu lỗi mẫu'}</p></div></div>
+                          <Plus className="w-5 h-5 text-blue-400 shrink-0" />
+                      </div>
+                      
+                      {selectedDefectInfo && (
+                          <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                               <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase">Tham chiếu Đúng</p>{selectedDefectInfo.correctImage ? <img src={selectedDefectInfo.correctImage} className="w-full aspect-video object-cover rounded-lg border"/> : <div className="aspect-video bg-slate-100 rounded-lg flex items-center justify-center text-slate-300"><ImageIcon className="w-4 h-4"/></div>}</div>
+                               <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase">Tham chiếu Sai</p>{selectedDefectInfo.incorrectImage ? <img src={selectedDefectInfo.incorrectImage} className="w-full aspect-video object-cover rounded-lg border border-red-100"/> : <div className="aspect-video bg-slate-100 rounded-lg flex items-center justify-center text-slate-300"><ImageIcon className="w-4 h-4"/></div>}</div>
+                          </div>
+                      )}
+
+                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Mô tả lỗi *</label><textarea value={ncrFormData.issueDescription || ''} onChange={e => setNcrFormData({...ncrFormData, issueDescription: e.target.value})} className="w-full px-4 py-3 border border-red-100 rounded-xl bg-red-50/30 text-sm font-bold text-slate-800 outline-none resize-none" rows={2} placeholder="Mô tả cụ thể..."/></div>
+                      <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Người phụ trách</label><input value={ncrFormData.responsiblePerson || ''} onChange={e => setNcrFormData({...ncrFormData, responsiblePerson: e.target.value})} className="w-full px-4 py-2 border rounded-xl text-xs font-bold" /></div>
+                          <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Mức độ</label><select value={ncrFormData.severity || 'MINOR'} onChange={e => setNcrFormData({...ncrFormData, severity: e.target.value as any})} className="w-full px-4 py-2 border rounded-xl text-xs font-bold bg-white"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-100"><p className="text-[9px] font-black text-blue-600 uppercase tracking-widest italic">Hỗ trợ bởi Gemini AI</p><button onClick={handleAiConsult} disabled={isAiConsulting} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase active:scale-95 disabled:opacity-50">{isAiConsulting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} AI Phân tích</button></div>
+                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Biện pháp xử lý</label><textarea value={ncrFormData.solution || ''} onChange={e => setNcrFormData({...ncrFormData, solution: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none resize-none" rows={2} placeholder="Hướng khắc phục..."/></div>
+                  </div>
+                  <div className="p-4 border-t bg-slate-50 flex justify-end gap-3 shrink-0"><button onClick={() => setNcrModalItem(null)} className="px-6 py-2 text-xs font-black uppercase text-slate-500">Hủy</button><button onClick={handleSaveNCR} className="bg-red-600 text-white px-8 py-2.5 rounded-xl text-xs font-black uppercase shadow-lg active:scale-95 transition-all">Lưu NCR</button></div>
+              </div>
+          </div>
+      )}
+
+      {/* Library Selection Modal */}
+      {showLibraryModal && (
+          <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in duration-200">
+                  <div className="p-5 bg-blue-600 text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-tight">Tra cứu thư viện lỗi</h3><button onClick={() => setShowLibraryModal(false)}><X className="w-6 h-6"/></button></div>
+                  <div className="p-4 border-b"><input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl text-xs outline-none shadow-inner" placeholder="Tìm theo mã hoặc tên lỗi..."/></div>
+                  <div className="flex-1 overflow-y-auto p-2 no-scrollbar">{availableDefects.map(def => (
+                          <div key={def.id} onClick={() => handleDefectSelection(def)} className="p-4 hover:bg-blue-50 border-b border-slate-50 cursor-pointer transition-all active:scale-[0.98] group flex justify-between items-center">
+                              <div className="overflow-hidden flex-1"><div className="flex items-center gap-2"><span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{def.code}</span><span className="text-[10px] font-black text-slate-400 uppercase truncate">{def.name}</span></div><p className="text-sm font-bold text-slate-800 mt-1 leading-snug">{def.description}</p></div>
+                              <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-600 transition-colors shrink-0 ml-4" />
+                          </div>
+                      ))}</div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

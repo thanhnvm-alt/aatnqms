@@ -163,6 +163,24 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
   const openGallery = (images: string[], index: number) => {
     setLightboxState({ images, index });
   };
+
+  const handleSaveEditedImage = async (index: number, updatedImage: string) => {
+      const currentImages = [...(inspection.images || [])];
+      currentImages[index] = updatedImage;
+      const updatedInspection = { ...inspection, images: currentImages };
+      try {
+          await saveInspectionToSheet(updatedInspection);
+          setInspection(updatedInspection);
+          // Sync with lightbox state to show updated version immediately
+          if (lightboxState) {
+              const newGalleryImgs = [...lightboxState.images];
+              newGalleryImgs[index] = updatedImage;
+              setLightboxState({ ...lightboxState, images: newGalleryImgs });
+          }
+      } catch (err) {
+          alert("Lỗi khi lưu ảnh đã sửa.");
+      }
+  };
   
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -334,6 +352,14 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
     } catch (err) { alert("Lỗi khi gửi bình luận."); }
   };
 
+  const handleSaveNCRImage = async (ncrId: string, type: 'BEFORE' | 'AFTER', index: number, updatedImage: string) => {
+    if (!selectedNCR) return;
+    const currentList = type === 'BEFORE' ? [...(selectedNCR.data.imagesBefore || [])] : [...(selectedNCR.data.imagesAfter || [])];
+    currentList[index] = updatedImage;
+    const updateObj = type === 'BEFORE' ? { imagesBefore: currentList } : { imagesAfter: currentList };
+    await updateNCRInInspection(ncrId, updateObj);
+  };
+
   return (
     <div className="space-y-0 h-full flex flex-col pb-20 md:pb-0 bg-slate-50 relative">
       <input type="file" ref={ncrAfterFileRef} className="hidden" multiple accept="image/*" onChange={handleAddAfterImage} />
@@ -408,7 +434,10 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                               <div className="flex flex-wrap gap-2">
                                   {selectedNCR.data.imagesBefore && selectedNCR.data.imagesBefore.length > 0 ? (
                                       selectedNCR.data.imagesBefore.map((img, idx) => (
-                                          <img key={idx} src={img} onClick={() => openGallery(selectedNCR.data.imagesBefore || [], idx)} className="w-16 h-16 rounded-xl object-cover border border-red-100 cursor-zoom-in shadow-sm" />
+                                          <div key={idx} className="relative group/img cursor-zoom-in" onClick={() => openGallery(selectedNCR.data.imagesBefore || [], idx)}>
+                                              <img src={img} className="w-16 h-16 rounded-xl object-cover border border-red-100 shadow-sm transition-transform hover:scale-105" />
+                                              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl flex items-center justify-center"><PenTool className="text-white w-4 h-4" /></div>
+                                          </div>
                                       ))
                                   ) : <span className="text-xs text-slate-400 italic">Trống</span>}
                               </div>
@@ -423,10 +452,11 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                               <div className="flex flex-wrap gap-2 min-h-[64px]">
                                   {selectedNCR.data.imagesAfter && selectedNCR.data.imagesAfter.length > 0 ? (
                                       selectedNCR.data.imagesAfter.map((img, idx) => (
-                                          <div key={idx} className="relative group">
-                                              <img src={img} onClick={() => openGallery(selectedNCR.data.imagesAfter || [], idx)} className="w-16 h-16 rounded-xl object-cover border border-green-100 cursor-zoom-in shadow-sm" />
+                                          <div key={idx} className="relative group/img">
+                                              <img src={img} onClick={() => openGallery(selectedNCR.data.imagesAfter || [], idx)} className="w-16 h-16 rounded-xl object-cover border border-green-100 cursor-zoom-in shadow-sm transition-transform hover:scale-105" />
+                                              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl pointer-events-none flex items-center justify-center"><PenTool className="text-white w-4 h-4" /></div>
                                               {!isNCRLocked && (
-                                                  <button onClick={() => handleRemoveAfterImage(idx)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-2 h-2"/></button>
+                                                  <button onClick={() => handleRemoveAfterImage(idx)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity shadow-sm"><X className="w-2 h-2"/></button>
                                               )}
                                           </div>
                                       ))
@@ -442,7 +472,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                                 value={selectedNCR.data.rootCause || ''}
                                 onChange={e => handleUpdateNCRField('rootCause', e.target.value)}
                                 disabled={isNCRLocked}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70"
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 shadow-inner"
                                 rows={2}
                                 placeholder="..."
                               />
@@ -453,7 +483,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                                 value={selectedNCR.data.solution || ''}
                                 onChange={e => handleUpdateNCRField('solution', e.target.value)}
                                 disabled={isNCRLocked}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70"
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-70 shadow-inner"
                                 rows={2}
                                 placeholder="..."
                               />
@@ -467,11 +497,11 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                           <div className="space-y-4 mb-4">
                               {selectedNCR.data.comments?.map((comment) => (
                                   <div key={comment.id} className="flex gap-3 text-sm">
-                                      <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-8 h-8 rounded-xl border border-slate-200 bg-slate-100 shrink-0" alt="" />
+                                      <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-8 h-8 rounded-xl border border-slate-200 bg-slate-100 shrink-0 object-cover" alt="" />
                                       <div className="bg-slate-50 p-3 rounded-2xl rounded-tl-none border border-slate-100 flex-1">
                                           <div className="flex justify-between items-center mb-1">
-                                              <span className="font-black text-slate-800 text-[11px] uppercase">{comment.userName}</span>
-                                              <span className="text-[9px] font-bold text-slate-400">{new Date(comment.createdAt).toLocaleDateString('vi-VN')} {new Date(comment.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}</span>
+                                              <span className="font-black text-slate-800 text-[11px] uppercase tracking-tighter">{comment.userName}</span>
+                                              <span className="text-[9px] font-bold text-slate-400">{new Date(comment.createdAt).toLocaleDateString('vi-VN')}</span>
                                           </div>
                                           <p className="text-slate-700 text-xs font-medium whitespace-pre-wrap">{comment.content}</p>
                                           {comment.attachments && comment.attachments.length > 0 && (
@@ -485,7 +515,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                                   </div>
                               ))}
                               {(!selectedNCR.data.comments || selectedNCR.data.comments.length === 0) && (
-                                  <p className="text-center text-xs text-slate-300 font-bold uppercase tracking-widest py-4 italic">Chưa có bình luận nào.</p>
+                                  <p className="text-center text-xs text-slate-300 font-bold uppercase tracking-widest py-4 italic">Chưa có thảo luận nào.</p>
                               )}
                           </div>
                       </div>
@@ -531,7 +561,23 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
 
       {/* Advanced Gallery / Editor Modal */}
       {lightboxState && (
-        <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />
+        <ImageEditorModal 
+            images={lightboxState.images} 
+            initialIndex={lightboxState.index} 
+            onClose={() => setLightboxState(null)} 
+            readOnly={isApproved && isQC}
+            onSave={(idx, updatedImage) => {
+                if (selectedNCR) {
+                    // Xử lý lưu ảnh cho NCR
+                    // Fixed: Replaced 'initialNcr' with 'selectedNCR.data'
+                    const type = selectedNCR.data.imagesBefore?.includes(lightboxState.images[idx]) ? 'BEFORE' : 'AFTER';
+                    handleSaveNCRImage(selectedNCR.data.id, type, idx, updatedImage);
+                } else {
+                    // Xử lý lưu ảnh cho Báo cáo hiện trường (Main images)
+                    handleSaveEditedImage(idx, updatedImage);
+                }
+            }}
+        />
       )}
 
       {/* Toolbar / Header */}
@@ -575,6 +621,25 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                 <div className="mt-2 flex flex-wrap justify-center sm:justify-start items-center gap-3 text-slate-500">
                     <div className="flex items-center gap-1.5 text-xs font-medium"><Calendar className="w-3.5 h-3.5" />{inspection.date}</div>
                     <div className="flex items-center gap-1.5 text-xs font-medium"><UserIcon className="w-3.5 h-3.5" />{inspection.inspectorName}</div>
+                </div>
+            </div>
+
+            {/* Gallery Preview Row */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2"><ImageIcon className="w-4 h-4 text-slate-400"/><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Hình ảnh hiện trường ({inspection.images?.length || 0})</h3></div>
+                    <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-tighter italic">Tap để xem & vẽ ghi chú</span>
+                </div>
+                <div className="bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
+                    <div className="flex gap-4">
+                        {inspection.images?.map((img, idx) => (
+                            <div key={idx} onClick={() => openGallery(inspection.images || [], idx)} className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl border border-slate-100 overflow-hidden shrink-0 relative group/img cursor-zoom-in shadow-sm hover:shadow-md transition-all">
+                                <img src={img} className="w-full h-full object-cover transition-transform group-hover/img:scale-105" alt={`QC_${idx}`} />
+                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                            </div>
+                        ))}
+                        {(!inspection.images || inspection.images.length === 0) && <div className="w-full py-10 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest border-2 border-dashed border-slate-100 rounded-2xl">Không có ảnh đính kèm</div>}
+                    </div>
                 </div>
             </div>
 
@@ -684,7 +749,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                 </div>
             </div>
 
-            {/* General Report Comments Section - Di chuyển xuống cuối cùng */}
+            {/* General Report Comments Section */}
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden mt-6">
                 <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
                     <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100"><MessageSquare className="w-5 h-5" /></div>
@@ -715,7 +780,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection: 
                                                 {comment.attachments.map((att, idx) => (
                                                     <div key={idx} className="relative group/img cursor-zoom-in" onClick={() => openGallery(comment.attachments || [], idx)}>
                                                         <img src={att} className="w-20 h-20 object-cover rounded-xl border border-slate-200 shadow-sm transition-transform group-hover/img:scale-105" />
-                                                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl flex items-center justify-center"><Maximize2 className="text-white w-4 h-4" /></div>
+                                                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl flex items-center justify-center"><PenTool className="text-white w-4 h-4" /></div>
                                                     </div>
                                                 ))}
                                             </div>

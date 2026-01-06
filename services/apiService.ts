@@ -1,5 +1,5 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role } from '../types';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem } from '../types';
 import * as db from './tursoService';
 
 export interface PagedResult<T> {
@@ -38,16 +38,38 @@ export const fetchInspections = async (filters: {
       type: filters.type
   });
 
-  return { 
-      items: result.items, 
-      total: result.total, 
-      page: filters.page, 
-      limit: filters.limit 
-  };
+  return { items: result.items, total: result.total, page: filters.page, limit: filters.limit };
 };
 
 export const fetchInspectionById = async (id: string): Promise<Inspection | null> => {
     return await db.getInspectionById(id);
+};
+
+export const fetchNcrs = async (params: { inspection_id?: string, status?: string, page?: number, limit?: number } = {}): Promise<PagedResult<any>> => {
+    const result = await db.getNcrs(params);
+    return { items: result, total: result.length, page: params.page, limit: params.limit };
+};
+
+export const fetchDefects = async (params: { search?: string, status?: string } = {}): Promise<PagedResult<Defect>> => {
+    const result = await db.getDefects(params);
+    return { items: result, total: result.length };
+};
+
+// Defect Library APIs - Updated with Stats and History
+export const fetchDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
+    return await db.getDefectLibraryWithStats();
+};
+
+export const fetchDefectUsageHistory = async (defectCode: string) => {
+    return await db.getDefectUsageHistory(defectCode);
+};
+
+export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
+    await db.saveDefectLibraryItem(item);
+};
+
+export const deleteDefectLibraryItem = async (id: string) => {
+    await db.deleteDefectLibraryItem(id);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
@@ -59,41 +81,22 @@ export const deleteInspectionFromSheet = async (id: string) => {
   await db.deleteInspection(id);
 };
 
-export const fetchProjects = async (): Promise<Project[]> => {
-  const plansData = await db.getPlans({ search: '' }); 
-  const dbProjects = await db.getProjects();
+/**
+ * Lấy danh sách dự án rút gọn có đồng bộ từ Plans
+ */
+export const fetchProjectsSummary = async (search: string = ""): Promise<Project[]> => {
+  // 1. Đồng bộ trước khi lấy (Tối ưu: có thể chỉ sync 1 lần khi App khởi động, nhưng đây là yêu cầu)
+  await db.syncProjectsFromPlans();
   
-  const distinctPlanProjects = new Map<string, PlanItem>();
-  plansData.items.forEach(p => {
-    if (!distinctPlanProjects.has(p.ma_ct)) {
-      distinctPlanProjects.set(p.ma_ct, p);
-    }
-  });
+  // 2. Lấy từ bảng projects có lọc search
+  return await db.getProjectsSummary(search);
+};
 
-  const combined: Project[] = Array.from(distinctPlanProjects.values()).map(p => {
-    const existing = dbProjects.find(dp => dp.ma_ct === p.ma_ct);
-    if (existing) return existing;
-    return {
-      id: `proj_${p.ma_ct}`,
-      code: p.ma_ct,
-      name: p.ten_ct,
-      ma_ct: p.ma_ct,
-      ten_ct: p.ten_ct,
-      status: 'In Progress',
-      startDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-      endDate: 'TBD',
-      pm: 'Unassigned',
-      pc: '',
-      qa: '',
-      thumbnail: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=600',
-      progress: 0,
-      description: '',
-      location: '',
-      images: []
-    };
-  });
-
-  return combined;
+/**
+ * Lấy chi tiết dự án (Lazy load)
+ */
+export const fetchProjectDetailByMaCt = async (ma_ct: string): Promise<Project | null> => {
+    return await db.getProjectDetail(ma_ct);
 };
 
 export const updateProject = async (project: Project) => {
@@ -107,9 +110,7 @@ export const deleteUser = async (id: string) => { await db.deleteUser(id); };
 export const importUsers = async (users: User[]) => { await db.importUsers(users); };
 
 export const importInspections = async (inspections: Inspection[]) => {
-  for (const inspection of inspections) {
-    await db.saveInspection(inspection);
-  }
+  for (const inspection of inspections) { await db.saveInspection(inspection); }
 };
 
 export const fetchWorkshops = async () => await db.getWorkshops();

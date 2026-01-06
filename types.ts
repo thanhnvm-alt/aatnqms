@@ -19,9 +19,9 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL';
 
-export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D';
+export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'QA' | 'QC';
 
@@ -74,6 +74,8 @@ export interface NCRComment {
 
 export interface NCR {
   id: string;
+  inspection_id?: string;
+  defect_code?: string; // Liên kết tới defect_library
   createdDate: string;
   issueDescription: string;
   rootCause: string;
@@ -81,9 +83,45 @@ export interface NCR {
   responsiblePerson: string;
   deadline?: string;
   status: string;
+  severity?: 'MINOR' | 'MAJOR' | 'CRITICAL';
   imagesBefore: string[];
   imagesAfter: string[];
   comments?: NCRComment[];
+}
+
+export interface DefectLibraryItem {
+  id: string;
+  code: string;
+  name: string; // Tên lỗi
+  stage: string;
+  category: string;
+  description: string;
+  severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
+  suggestedAction?: string;
+  correctImage?: string; // Ảnh mẫu đúng
+  incorrectImage?: string; // Ảnh mẫu sai
+  createdBy?: string;
+  createdAt?: number;
+}
+
+export interface Defect {
+  id: string;
+  inspectionId: string;
+  itemId: string;
+  defectCode: string;
+  category: string;
+  description: string;
+  status: string;
+  severity: string;
+  inspectorName: string;
+  date: string;
+  ma_ct: string;
+  ten_ct: string;
+  images: string[];
+  rootCause?: string;
+  solution?: string;
+  responsiblePerson?: string;
+  deadline?: string;
 }
 
 export interface CheckItem {
