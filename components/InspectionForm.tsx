@@ -7,7 +7,6 @@ import { generateNCRSuggestions } from '../services/geminiService';
 import { 
   Save, ArrowLeft, Image as ImageIcon, X, Trash2, 
   Plus, PlusCircle, Layers, QrCode,
-  // Added ChevronRight to fix 'Cannot find name ChevronRight' error
   ChevronDown, ChevronRight, AlertTriangle, Calendar, ClipboardList, 
   Hash, Box, Loader2, PenTool, Eraser, Edit2, Check, Maximize2,
   Sparkles, Camera, Clock, Info, CheckCircle, XCircle
@@ -250,11 +249,21 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32">
-        {/* Basic Info Section (Already implemented) */}
         <div className="space-y-3">
             <div className="flex items-center gap-2 px-1"><Box className="w-4 h-4 text-blue-600" /><h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest">THÔNG TIN NGUỒN</h3></div>
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <div className="space-y-1"><label className="text-[11px] font-black text-slate-400 uppercase ml-1">MÃ NHÀ MÁY *</label><div className="relative group"><input value={formData.ma_nha_may} onChange={handleMaNhaMayChange} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-700 focus:bg-white outline-none transition-all pr-12 shadow-sm" placeholder="Mã NM hoặc Headcode..."/><div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">{isSearchingPlan && <Loader2 className="w-5 h-5 text-blue-500 animate-spin mr-1" /><button onClick={() => setShowScanner(true)} className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50"><QrCode className="w-5 h-5"/></button></div></div></div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-black text-slate-400 uppercase ml-1">MÃ NHÀ MÁY *</label>
+                  <div className="relative group">
+                    <input value={formData.ma_nha_may} onChange={handleMaNhaMayChange} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-700 focus:bg-white outline-none transition-all pr-12 shadow-sm" placeholder="Mã NM hoặc Headcode..."/>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      {isSearchingPlan && <Loader2 className="w-5 h-5 text-blue-500 animate-spin mr-1" />}
+                      <button onClick={() => setShowScanner(true)} className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50">
+                        <QrCode className="w-5 h-5"/>
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Mã dự án *</label><input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" /></div>
                     <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tên sản phẩm *</label><input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" /></div>
@@ -262,7 +271,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
         </div>
 
-        {/* Checklist Section */}
         <div className="space-y-3">
             <div className="flex items-center justify-between px-1"><h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">CHI TIẾT HẠNG MỤC ({formData.items?.length || 0})</h3><button onClick={() => handleAddItem()} className="bg-slate-900 text-white px-3 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1.5 active:scale-95 transition-all shadow-sm"><PlusCircle className="w-3 h-3" /> Hạng mục</button></div>
             <div className="space-y-6">
@@ -288,7 +296,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
         </div>
 
-        {/* Signature Section */}
         <div className="space-y-4">
             <div className="flex items-center gap-2 px-1"><PenTool className="w-4 h-4 text-blue-600" /><h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest">XÁC NHẬN CHỮ KÝ</h3></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -298,7 +305,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         </div>
       </div>
 
-      {/* NCR Modal with Library Linking */}
       {ncrModalItem && (
           <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -329,7 +335,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           </div>
       )}
 
-      {/* Library Selection Modal */}
       {showLibraryModal && (
           <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in duration-200">
