@@ -9,7 +9,7 @@ import {
   Plus, FileDown, SlidersHorizontal, MapPin, Hash, FolderOpen, 
   ChevronLeft, Briefcase, Loader2, Upload, ArrowRight, RefreshCw,
   User, UserCircle, LogOut, Settings as SettingsIcon, ShieldCheck,
-  ListFilter, QrCode, FileUp, FileSpreadsheet, Factory, UserCheck
+  ListFilter, QrCode, FileUp, FileSpreadsheet, Factory, UserCheck, Tag, Box
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -62,18 +62,23 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   }, []);
 
   const inspectors = useMemo(() => {
-    const unique = new Set(inspections.map(i => i.inspectorName).filter(Boolean));
+    const safeInsps = Array.isArray(inspections) ? inspections : [];
+    const unique = new Set(safeInsps.filter(i => i && i.inspectorName).map(i => i.inspectorName));
     return Array.from(unique).sort();
   }, [inspections]);
 
   const workshops = useMemo(() => {
-    const unique = new Set(inspections.map(i => i.workshop).filter(Boolean));
+    const safeInsps = Array.isArray(inspections) ? inspections : [];
+    const unique = new Set(safeInsps.filter(i => i && i.workshop).map(i => i.workshop));
     return Array.from(unique).sort();
   }, [inspections]);
 
   const filteredInspections = useMemo(() => {
-    return inspections
+    const safeInsps = Array.isArray(inspections) ? inspections : [];
+    return safeInsps
       .filter(item => {
+        if (!item) return false; // CRITICAL FIX: Skip null items
+        
         if (selectedModule && selectedModule !== 'ALL' && item.type !== selectedModule) return false;
         const term = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm || 
@@ -250,22 +255,42 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{groupItems.length} Phiếu đánh giá</p>
                     </div>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''} opacity-40`} />
                 </div>
                 {isExpanded && (
                   <div className="p-2 space-y-2 bg-slate-50/50">
                     {groupItems.map(item => (
                       <div key={item.id} onClick={() => onSelect(item.id)} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between active:scale-[0.99] hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
                         <div className="flex-1 overflow-hidden">
-                          <h4 className="font-bold text-slate-800 text-sm truncate uppercase tracking-tight group-hover:text-blue-700 transition-colors">{item.ten_hang_muc}</h4>
-                          <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3 mt-2">
-                             <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {item.date}</span>
-                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest border ${item.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-100' : item.status === 'FLAGGED' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>{item.status}</span>
-                             {item.workshop && <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase flex items-center gap-1"><Factory className="w-2.5 h-2.5" /> {item.workshop}</span>}
-                             <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1"><UserCheck className="w-2.5 h-2.5" /> {item.inspectorName}</span>
+                          <div className="flex items-center gap-2 mb-1.5">
+                              {item.ma_nha_may && (
+                                  <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1 shrink-0">
+                                      <Tag className="w-3 h-3" /> {item.ma_nha_may}
+                                  </span>
+                              )}
+                              <h4 className="font-black text-slate-800 text-[13px] truncate uppercase tracking-tight group-hover:text-blue-700 transition-colors">
+                                  {item.ten_hang_muc || 'HẠNG MỤC CHƯA ĐẶT TÊN'}
+                              </h4>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3">
+                             <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                 <Clock className="w-3.5 h-3.5"/> {item.date}
+                             </span>
+                             <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border shadow-sm ${item.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-100' : item.status === 'FLAGGED' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
+                                 {item.status}
+                             </span>
+                             {item.workshop && (
+                                 <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase flex items-center gap-1 border border-slate-200">
+                                     <Factory className="w-2.5 h-2.5" /> {item.workshop}
+                                 </span>
+                             )}
+                             <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1">
+                                 <UserCheck className="w-2.5 h-2.5" /> {item.inspectorName}
+                             </span>
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 ml-2 group-hover:text-blue-500 transition-colors" />
+                        <ChevronRight className="w-4 h-4 text-slate-300 ml-2 group-hover:text-blue-500 transition-colors shrink-0" />
                       </div>
                     ))}
                   </div>

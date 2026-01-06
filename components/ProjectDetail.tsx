@@ -51,10 +51,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
   const modalFileInputRef = useRef<HTMLInputElement>(null);
 
   const projectInspections = useMemo(() => {
+    const safeInsps = Array.isArray(inspections) ? inspections : [];
     const pCode = String(project.code || '').trim().toLowerCase();
     const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
-    return inspections
+    return safeInsps
       .filter(i => {
+          if (!i) return false;
           const iMaCt = String(i.ma_ct || '').trim().toLowerCase();
           const iTenCt = String(i.ten_ct || '').trim().toLowerCase();
           return iMaCt === pMaCt || (pCode && iMaCt.includes(pCode)) || (pCode && iTenCt.includes(pCode));
@@ -64,9 +66,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
 
   const stats = useMemo(() => {
     const total = projectInspections.length;
-    const completed = projectInspections.filter(i => i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED).length;
-    const flagged = projectInspections.filter(i => i.status === InspectionStatus.FLAGGED).length;
-    const drafts = projectInspections.filter(i => i.status === InspectionStatus.DRAFT).length;
+    const completed = projectInspections.filter(i => i && (i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED)).length;
+    const flagged = projectInspections.filter(i => i && i.status === InspectionStatus.FLAGGED).length;
+    const drafts = projectInspections.filter(i => i && i.status === InspectionStatus.DRAFT).length;
     return { total, completed, flagged, drafts, passRate: total > 0 ? Math.round((completed / (completed + flagged)) * 100) || 0 : 0 };
   }, [projectInspections]);
 
@@ -186,7 +188,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/40"><div className="flex items-center gap-3"><div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100"><Filter className="w-5 h-5" /></div><div><h3 className="font-black text-slate-900 text-sm uppercase tracking-tight">Lịch sử đánh giá chất lượng</h3><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Truy xuất dữ liệu kiểm tra chi tiết</p></div></div><span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1.5 rounded-xl shadow-lg shadow-blue-200 uppercase tracking-widest">{projectInspections.length} Bản ghi</span></div>
              <div className="divide-y divide-slate-100">
                  {projectInspections.length > 0 ? (projectInspections.map(ins => {
-                         const ncrCount = ins.items.filter(i => i.ncr).length;
+                         if (!ins) return null;
+                         const ncrCount = (ins.items || []).filter(i => i && i.ncr).length;
                          return (<div key={ins.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50/80 transition-all group relative border-l-4 border-transparent hover:border-blue-500"><div className="flex items-start gap-4 flex-1"><div className={`p-3 rounded-2xl shadow-sm border transition-all ${ins.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' : ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{ins.status === InspectionStatus.FLAGGED ? <AlertCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}</div><div className="overflow-hidden space-y-1.5"><div className="flex items-center gap-2"><p className="text-sm font-black text-slate-800 group-hover:text-blue-700 transition-colors uppercase tracking-tight truncate max-w-[200px] md:max-w-md">{ins.ten_hang_muc || 'Mục chưa đặt tên'}</p>{ncrCount > 0 && (<span className="flex items-center gap-1 bg-red-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm"><AlertTriangle className="w-2.5 h-2.5" /> NCR {ncrCount}</span>)}</div><div className="text-[10px] text-slate-500 font-bold flex flex-wrap items-center gap-y-2 gap-x-4 uppercase tracking-tighter"><span className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm"><Clock className="w-3 h-3 text-blue-500"/> {ins.date}</span><span className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm"><User className="w-3 h-3 text-indigo-500"/> {ins.inspectorName}</span></div></div></div><div className="mt-4 sm:mt-0 sm:ml-4 flex items-center justify-between sm:justify-end gap-3 shrink-0"><div className={`px-3 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-widest shadow-sm ${ins.status === InspectionStatus.APPROVED ? 'bg-blue-600 text-white border-blue-600 shadow-blue-200' : ins.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 'bg-white text-slate-600 border-slate-200'}`}>{ins.status}</div><div className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-2xl shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-90 group-hover:translate-x-1"><ArrowRight className="w-5 h-5" /></div></div></div>);
                  })) : (<div className="p-20 text-center flex flex-col items-center justify-center space-y-3 bg-slate-50/50"><div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200"><FileSearch className="w-8 h-8 text-slate-200" /></div><p className="text-xs font-black text-slate-400 uppercase tracking-widest">Không có dữ liệu kiểm tra</p></div>)}
              </div>

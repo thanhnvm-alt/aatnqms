@@ -34,7 +34,7 @@ const COLORS = {
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogout, onNavigate }) => {
-  const safeInspections = Array.isArray(inspections) ? inspections : [];
+  const safeInspections = useMemo(() => (Array.isArray(inspections) ? inspections : []).filter(i => i !== null && i !== undefined), [inspections]);
 
   const stats = useMemo(() => {
     const total = safeInspections.length;
@@ -58,7 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
   const projectData = useMemo(() => {
     const projectScores: Record<string, { total: number; count: number }> = {};
     safeInspections.forEach(i => {
-      if (i.status === InspectionStatus.DRAFT) return;
+      if (!i || i.status === InspectionStatus.DRAFT) return;
       const project = String(i.ma_ct || 'Unknown');
       if (!projectScores[project]) projectScores[project] = { total: 0, count: 0 };
       projectScores[project].total += (i.score || 0);
@@ -76,7 +76,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
 
   const recentCritical = useMemo(() => {
     return safeInspections
-      .filter(i => i.status === InspectionStatus.FLAGGED)
+      .filter(i => i && i.status === InspectionStatus.FLAGGED)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
   }, [safeInspections]);
@@ -221,7 +221,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                                 </div>
                             </div>
                         </div>
-                        <button className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all shadow-sm active:scale-90 group-hover:translate-x-1">
+                        <button onClick={() => onNavigate?.('DETAIL')} className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-300 transition-all shadow-sm active:scale-90 group-hover:translate-x-1">
                             <ArrowRight className="w-5 h-5" />
                         </button>
                     </div>

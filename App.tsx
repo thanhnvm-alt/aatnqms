@@ -31,6 +31,7 @@ import { DefectLibrary } from './components/DefectLibrary';
 import { DefectList } from './components/DefectList';
 import { DefectDetail } from './components/DefectDetail';
 import { QRScannerModal } from './components/QRScannerModal';
+import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -49,7 +50,8 @@ import {
   importPlans, 
   importInspections, 
   fetchProjects,
-  fetchProjectByCode
+  fetchProjectByCode,
+  fetchProjectsSummary
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
@@ -85,8 +87,6 @@ const App = () => {
   const [showModuleSelector, setShowModuleSelector] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
 
-  const isQC = user?.role === 'QC';
-
   useEffect(() => {
     const init = async () => {
         try {
@@ -116,7 +116,11 @@ const App = () => {
       if (Array.isArray(data) && data.length > 0) {
           setUsers(prev => {
               const combined = [...MOCK_USERS];
-              data.forEach(dbUser => { if (!combined.find(u => u.username.toLowerCase() === dbUser.username.toLowerCase())) combined.push(dbUser); });
+              data.forEach(dbUser => { 
+                if (dbUser && dbUser.username && !combined.find(u => u.username.toLowerCase() === dbUser.username.toLowerCase())) {
+                  combined.push(dbUser); 
+                }
+              });
               return combined;
           });
       }
@@ -136,15 +140,14 @@ const App = () => {
   useEffect(() => { if (user && isDbReady) { loadInspections(); loadProjects(); loadPlans(); } }, [user, isDbReady, planSearchTerm]);
 
   const checkConn = async () => { try { const status = await checkApiConnection(); setConnectionError(!status.ok); } catch (e) { setConnectionError(true); } };
-  const loadTemplates = async () => { try { const data = await fetchTemplates(); if (Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
-  const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data.length > 0) setWorkshops(data); } catch (e) {} };
+  const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
+  const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data && data.length > 0) setWorkshops(data); } catch (e) {} };
   
   const loadProjects = async () => { 
     if (!isDbReady) return;
     try { 
-        // Sử dụng fetchProjects thông minh (hợp nhất metadata + summary)
         const data = await fetchProjects(); 
-        if (data.length > 0) setProjects(data); 
+        if (data && data.length > 0) setProjects(data); 
     } catch(e) {} 
   };
   
@@ -173,24 +176,33 @@ const App = () => {
   };
 
   const handleSelectProject = async (maCt: string) => {
-      // Tìm kiếm dự án trong mảng projects đã tải sẵn (đã được fetchProjects xử lý hợp nhất)
-      const found = projects.find(p => p.ma_ct === maCt);
+      const safeProjs = Array.isArray(projects) ? projects : [];
+      const found = safeProjs.find(p => p && p.ma_ct === maCt);
       if (found) {
           setActiveProject(found);
           setView('PROJECT_DETAIL');
       } else {
-          // Fallback nếu không có trong state: Tải trực tiếp từ API
           setIsDetailLoading(true);
           try {
-              const freshProject = await fetchProjectByCode(maCt);
-              if (freshProject) {
-                  setActiveProject(freshProject);
+              const list = await fetchProjectsSummary(maCt);
+              const safeList = Array.isArray(list) ? list : [];
+              const freshFound = safeList.find(p => p && p.ma_ct === maCt);
+              
+              if (freshFound) {
+                  setActiveProject(freshFound);
                   setView('PROJECT_DETAIL');
               } else {
-                  alert("Không tìm thấy thông tin dự án: " + maCt);
+                  const freshProject = await fetchProjectByCode(maCt);
+                  if (freshProject) {
+                      setActiveProject(freshProject);
+                      setView('PROJECT_DETAIL');
+                  } else {
+                      alert("Không tìm thấy dự án hoặc lỗi kết nối: " + maCt);
+                  }
               }
           } catch (e) {
-              alert("Lỗi tải dữ liệu dự án.");
+              console.error("Select project failed:", e);
+              alert("Lỗi kết nối cơ sở dữ liệu. Vui lòng thử lại sau.");
           } finally {
               setIsDetailLoading(false);
           }
@@ -211,9 +223,12 @@ const App = () => {
 
   const handleQrScan = (scannedCode: string) => {
     setShowQrScanner(false);
-    let foundPlan = plans.find(p => 
-      String(p.headcode).toLowerCase() === scannedCode.toLowerCase() || 
-      String(p.ma_nha_may).toLowerCase() === scannedCode.toLowerCase()
+    const safePlans = Array.isArray(plans) ? plans : [];
+    const foundPlan = safePlans.find(p => 
+      p && (
+        String(p.headcode || '').toLowerCase() === scannedCode.toLowerCase() || 
+        String(p.ma_nha_may || '').toLowerCase() === scannedCode.toLowerCase()
+      )
     );
     if (foundPlan) {
       setInitialFormState({
@@ -251,7 +266,7 @@ const App = () => {
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo hệ thống...</p></div>;
 
   return (
-    <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none">
+    <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
       <div className="hidden lg:block h-full shrink-0"><Sidebar view={view} onNavigate={setView} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} /></div>
       <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && (
@@ -264,7 +279,7 @@ const App = () => {
         )}
 
         <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} {...headerActions} />
-        <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4rem)] lg:pb-0">
+        <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onImportInspections={async (p) => { await importInspections(p); loadInspections(); }} onRefresh={loadInspections} onModuleChange={setCurrentModule} />}
             {view === 'FORM' && <InspectionForm initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
@@ -274,11 +289,13 @@ const App = () => {
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
-            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(isQC ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
+            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={handleSelectProject} />}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onUpdate={loadProjects} onBack={() => { setView('PROJECTS'); setActiveProject(null); }} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
+        
+        <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
 
         {showQrScanner && (

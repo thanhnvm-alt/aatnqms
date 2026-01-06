@@ -75,10 +75,12 @@ export const PlanList: React.FC<PlanListProps> = ({
   // --- LOGIC: Advanced Search & Grouping ---
 
   const filteredItems = useMemo(() => {
+    const safeItems = Array.isArray(items) ? items : [];
     const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
-    if (!safeSearchTerm) return items;
+    if (!safeSearchTerm) return safeItems;
     
-    return items.filter(item => {
+    return safeItems.filter(item => {
+        if (!item) return false;
         return (
             (String(item.ma_ct || '').toLowerCase().includes(safeSearchTerm)) ||
             (String(item.ten_ct || '').toLowerCase().includes(safeSearchTerm)) ||
@@ -93,8 +95,8 @@ export const PlanList: React.FC<PlanListProps> = ({
   const groupedItems = useMemo(() => {
       const groups: Record<string, PlanItem[]> = {};
       filteredItems.forEach(item => {
+          if (!item) return;
           const ma_ct = String(item.ma_ct || '');
-          // LOGIC: Nếu ma_ct bắt đầu bằng "CT" thì group theo mã, ngược lại group theo tên công trình
           const key = ma_ct.toUpperCase().startsWith('CT') ? ma_ct : (item.ten_ct || 'KHÁC');
           if (!groups[key]) groups[key] = [];
           groups[key].push(item);
@@ -102,7 +104,6 @@ export const PlanList: React.FC<PlanListProps> = ({
       return groups;
   }, [filteredItems]);
 
-  // Tự động mở rộng khi tìm kiếm, mặc định khi load (searchTerm trống) sẽ là Set trống (thu gọn)
   useEffect(() => {
       if (searchTerm) {
           setExpandedGroups(new Set(Object.keys(groupedItems)));
@@ -210,7 +211,8 @@ export const PlanList: React.FC<PlanListProps> = ({
   };
 
   const getInspectionStatus = (ma_nha_may: string) => {
-      const found = inspections.filter(i => i.ma_nha_may === ma_nha_may);
+      if (!ma_nha_may || !Array.isArray(inspections)) return null;
+      const found = inspections.filter(i => i && i.ma_nha_may === ma_nha_may);
       if (found.length === 0) return null;
       const latest = found.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
       return latest;
@@ -330,6 +332,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                     // Group Statistics
                     const totalGroupItems = groupItems.length;
                     const inspectedCount = groupItems.filter(item => {
+                        if (!item) return false;
                         const status = getInspectionStatus(item.ma_nha_may)?.status;
                         return status === InspectionStatus.COMPLETED || status === InspectionStatus.APPROVED || status === InspectionStatus.FLAGGED;
                     }).length;
@@ -366,6 +369,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                             {isExpanded && (
                                 <div className="bg-slate-50/50 p-2 grid grid-cols-1 gap-2 border-t border-slate-100">
                                     {groupItems.map((item, idx) => {
+                                        if (!item) return null;
                                         const inspection = getInspectionStatus(item.ma_nha_may);
                                         const isDone = inspection?.status === InspectionStatus.COMPLETED || inspection?.status === InspectionStatus.APPROVED;
                                         const hasIssue = inspection?.status === InspectionStatus.FLAGGED;

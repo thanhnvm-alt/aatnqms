@@ -1,8 +1,7 @@
-
 import { createClient, Client } from "@libsql/client/web";
 
 /**
- * TURSO DATABASE CONFIGURATION
+ * TURSO DATABASE CONFIGURATION - WEB OPTIMIZED
  */
 
 const FALLBACK_URL = 'libsql://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io';
@@ -17,24 +16,27 @@ const getSafeValue = (val: any, fallback: string) => {
     return String(val).trim();
 };
 
-let url = getSafeValue(envUrl, FALLBACK_URL);
-const authToken = getSafeValue(envToken, FALLBACK_TOKEN);
+let rawUrl = getSafeValue(envUrl, FALLBACK_URL);
+let authToken = getSafeValue(envToken, FALLBACK_TOKEN);
 
-// CRITICAL: Web client yêu cầu https:// hoặc wss:// thay vì libsql://
-if (url.startsWith("libsql://")) {
-    url = url.replace("libsql://", "https://");
+// CRITICAL: Web client trình duyệt yêu cầu https:// thay vì libsql:// 
+// để tránh lỗi "Failed to fetch" (do trình duyệt không hiểu protocol libsql)
+let finalUrl = rawUrl;
+if (finalUrl.startsWith("libsql://")) {
+    finalUrl = finalUrl.replace("libsql://", "https://");
 }
 
-export const isTursoConfigured = url.length > 0 && !url.includes("placeholder");
+// Xóa trailing slash nếu có
+finalUrl = finalUrl.replace(/\/$/, "");
+
+export const isTursoConfigured = finalUrl.length > 0 && !finalUrl.includes("placeholder");
 
 if (isTursoConfigured) {
-  console.log("✅ Turso Database link verified.");
-} else {
-  console.warn("ℹ️ Turso DB not configured. App running in restricted mode.");
+  console.log("📡 Turso DB connecting to:", finalUrl.substring(0, 20) + "...");
 }
 
 export const turso: Client = createClient({
-  url: isTursoConfigured ? url : "https://placeholder-db.turso.io", 
+  url: finalUrl, 
   authToken: authToken,
-  intMode: "number", // Ngăn chặn lỗi BigInt không thể stringify trên iOS
+  intMode: "number", 
 });

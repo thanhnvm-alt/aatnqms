@@ -10,7 +10,7 @@ import {
 interface ProjectListProps {
   projects: Project[];
   inspections: Inspection[];
-  onSelectProject: (maCt: string) => void;
+  onSelectProject: (id: string) => void;
 }
 
 const STATUS_COLORS = {
@@ -44,31 +44,37 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
   }, []);
 
   const statusCounts = useMemo(() => {
+    const safeProjs = Array.isArray(projects) ? projects : [];
     return {
-      All: projects.length,
-      'In Progress': projects.filter(p => p.status === 'In Progress').length,
-      'Completed': projects.filter(p => p.status === 'Completed').length,
-      'On Hold': projects.filter(p => p.status === 'On Hold').length,
-      'Planning': projects.filter(p => p.status === 'Planning').length,
+      All: safeProjs.length,
+      'In Progress': safeProjs.filter(p => p && p.status === 'In Progress').length,
+      'Completed': safeProjs.filter(p => p && p.status === 'Completed').length,
+      'On Hold': safeProjs.filter(p => p && p.status === 'On Hold').length,
+      'Planning': safeProjs.filter(p => p && p.status === 'Planning').length,
     };
   }, [projects]);
 
   const filteredProjects = useMemo(() => {
+    const safeProjs = Array.isArray(projects) ? projects : [];
     const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
-    return projects.filter(p => {
+    return safeProjs.filter(p => {
+      if (!p) return false; // CRITICAL FIX: Skip null projects
+      
       const matchesSearch = !safeSearchTerm || 
-                            p.name.toLowerCase().includes(safeSearchTerm) || 
-                            p.code.toLowerCase().includes(safeSearchTerm) ||
-                            p.ma_ct.toLowerCase().includes(safeSearchTerm);
+                            (p.name && p.name.toLowerCase().includes(safeSearchTerm)) || 
+                            (p.code && p.code.toLowerCase().includes(safeSearchTerm)) ||
+                            (p.ma_ct && p.ma_ct.toLowerCase().includes(safeSearchTerm));
       const matchesFilter = filter === 'All' || p.status === filter;
       return matchesSearch && matchesFilter;
     });
   }, [projects, searchTerm, filter]);
 
   const getProjectStats = (maCt: string) => {
-      const pInsps = inspections.filter(i => String(i.ma_ct).trim().toLowerCase() === String(maCt).trim().toLowerCase());
+      if (!maCt) return { total: 0, passed: 0, passRate: 0 };
+      const safeInsps = Array.isArray(inspections) ? inspections : [];
+      const pInsps = safeInsps.filter(i => i && String(i.ma_ct).trim().toLowerCase() === String(maCt).trim().toLowerCase());
       const total = pInsps.length;
-      const passed = pInsps.filter(i => i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED).length;
+      const passed = pInsps.filter(i => i && (i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED)).length;
       const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
       return { total, passed, passRate };
   };
@@ -77,10 +83,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      {/* Refined Search & Filter Header */}
       <div className="bg-white px-4 py-4 border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3 w-full">
-          {/* Search Input Container */}
           <div className="relative group flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
             <input 
@@ -88,7 +92,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
               placeholder="Tìm tên dự án, mã công trình..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 focus:ring-4 focus:ring-blue-100 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner uppercase"
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm text-slate-700 focus:ring-4 focus:ring-blue-100 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner"
             />
             {searchTerm && (
               <button 
@@ -100,7 +104,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
             )}
           </div>
 
-          {/* Filter Dropdown List */}
           <div className="relative shrink-0" ref={filterRef}>
             <button 
               onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -162,7 +165,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
         </div>
       </div>
 
-      {/* Grid Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar pb-24">
         {filteredProjects.length === 0 ? (
           <div className="py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200 mx-2 flex flex-col items-center">
@@ -175,12 +177,12 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map(project => {
               const displayImage = (project.images && project.images.length > 0) ? project.images[0] : project.thumbnail;
-              const { total, passed, passRate } = getProjectStats(project.ma_ct);
+              const { total, passRate } = getProjectStats(project.ma_ct);
               
               return (
                 <div 
-                  key={project.ma_ct} 
-                  onClick={() => onSelectProject(project.ma_ct)}
+                  key={project.id} 
+                  onClick={() => onSelectProject(project.id)}
                   className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300"
                 >
                   <div className="h-48 relative overflow-hidden bg-slate-900 shrink-0">
@@ -194,7 +196,6 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                             {STATUS_ICONS[project.status] || STATUS_ICONS['Planning']} {project.status}
                         </div>
                     </div>
-                    {/* Overall Pass Rate Overlay */}
                     <div className="absolute bottom-4 right-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-3 py-2 text-white flex items-center gap-2 shadow-xl">
                         <div className="flex flex-col items-end">
                             <span className="text-[8px] font-black uppercase opacity-60">QC Pass</span>
@@ -205,26 +206,26 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                   </div>
                   
                   <div className="p-6 flex-1 flex flex-col space-y-4">
-                    <div className="flex-1 overflow-hidden">
-                        <h3 className="text-base font-black text-slate-800 leading-tight uppercase tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">{project.name || project.ma_ct}</h3>
+                    <div className="flex-1">
+                        <h3 className="text-base font-black text-slate-800 leading-tight uppercase tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">{project.name}</h3>
                         
                         <div className="flex items-center gap-4 mb-4 border-b border-slate-50 pb-3">
-                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
-                                <Target className="w-3.5 h-3.5 text-blue-500 shrink-0" /> {project.pm || 'No PM'}
+                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                <Target className="w-3.5 h-3.5 text-blue-500" /> {project.pm || 'No PM'}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">
+                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                 <ClipboardList className="w-3.5 h-3.5 text-indigo-500" /> {total} QC
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Mã dự án</p>
-                                <p className="text-xs font-bold text-slate-700 truncate">{project.ma_ct}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
+                                <p className="text-xs font-bold text-slate-700">{project.startDate || '---'}</p>
                             </div>
                             <div className="space-y-1">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tiến độ</p>
-                                <p className="text-xs font-bold text-slate-700">{project.progress || 0}%</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
+                                <p className="text-xs font-bold text-slate-700">{project.endDate || '---'}</p>
                             </div>
                         </div>
                     </div>
@@ -232,9 +233,10 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                     <div className="pt-2">
                         <div className="flex justify-between items-center mb-1.5">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><BarChart3 className="w-3 h-3 text-indigo-500" /> Project Progress</span>
+                            <span className="text-[10px] font-black text-blue-600">{project.progress}%</span>
                         </div>
                         <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shadow-inner">
-                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000" style={{ width: `${project.progress || 0}%` }}></div>
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000 group-hover:from-indigo-600 group-hover:to-blue-600" style={{ width: `${project.progress}%` }}></div>
                         </div>
                     </div>
                   </div>
