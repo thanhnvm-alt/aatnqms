@@ -94,13 +94,25 @@ export const fetchProjectsSummary = async (search: string = ""): Promise<Project
     return await db.getProjectsSummary(search);
 };
 
+export const fetchProjectByCode = async (maCt: string): Promise<Project | null> => {
+    const projects = await fetchProjects();
+    return projects.find(p => p.ma_ct === maCt) || null;
+};
+
 export const fetchProjects = async (): Promise<Project[]> => {
+  // 1. Lấy metadata đầy đủ từ bảng projects
   const dbProjects = await db.getProjects();
-  if (dbProjects.length > 0) return dbProjects;
   
-  // Fallback if no specific projects metadata: derive from inspections
+  // 2. Lấy danh sách tóm tắt từ inspections
   const derived = await db.getProjectsSummary("");
-  return derived;
+  
+  // 3. Hợp nhất: Ưu tiên metadata trong bảng projects, nếu không có thì dùng tóm tắt
+  const finalProjects = derived.map(summary => {
+      const metadata = dbProjects.find(p => p.ma_ct === summary.ma_ct);
+      return metadata ? { ...summary, ...metadata } : summary;
+  });
+
+  return finalProjects;
 };
 
 export const updateProject = async (project: Project) => {

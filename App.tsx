@@ -48,7 +48,8 @@ import {
   saveTemplate, 
   importPlans, 
   importInspections, 
-  fetchProjectsSummary 
+  fetchProjects,
+  fetchProjectByCode
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
@@ -138,10 +139,11 @@ const App = () => {
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data.length > 0) setWorkshops(data); } catch (e) {} };
   
-  const loadProjects = async (search: string = "") => { 
+  const loadProjects = async () => { 
     if (!isDbReady) return;
     try { 
-        const data = await fetchProjectsSummary(search); 
+        // Sử dụng fetchProjects thông minh (hợp nhất metadata + summary)
+        const data = await fetchProjects(); 
         if (data.length > 0) setProjects(data); 
     } catch(e) {} 
   };
@@ -171,13 +173,28 @@ const App = () => {
   };
 
   const handleSelectProject = async (maCt: string) => {
-      setIsDetailLoading(true);
-      try {
-          const list = await fetchProjectsSummary(maCt);
-          const found = list.find(p => p.ma_ct === maCt);
-          if (found) { setActiveProject(found); setView('PROJECT_DETAIL'); }
-          else alert("Không tìm thấy dự án.");
-      } catch (error) { alert("Lỗi tải dữ liệu dự án."); } finally { setIsDetailLoading(false); }
+      // Tìm kiếm dự án trong mảng projects đã tải sẵn (đã được fetchProjects xử lý hợp nhất)
+      const found = projects.find(p => p.ma_ct === maCt);
+      if (found) {
+          setActiveProject(found);
+          setView('PROJECT_DETAIL');
+      } else {
+          // Fallback nếu không có trong state: Tải trực tiếp từ API
+          setIsDetailLoading(true);
+          try {
+              const freshProject = await fetchProjectByCode(maCt);
+              if (freshProject) {
+                  setActiveProject(freshProject);
+                  setView('PROJECT_DETAIL');
+              } else {
+                  alert("Không tìm thấy thông tin dự án: " + maCt);
+              }
+          } catch (e) {
+              alert("Lỗi tải dữ liệu dự án.");
+          } finally {
+              setIsDetailLoading(false);
+          }
+      }
   };
 
   const handleEditInspection = async (id: string) => {

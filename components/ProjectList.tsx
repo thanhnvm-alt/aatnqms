@@ -10,7 +10,7 @@ import {
 interface ProjectListProps {
   projects: Project[];
   inspections: Inspection[];
-  onSelectProject: (id: string) => void;
+  onSelectProject: (maCt: string) => void;
 }
 
 const STATUS_COLORS = {
@@ -88,7 +88,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
               placeholder="Tìm tên dự án, mã công trình..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm text-slate-700 focus:ring-4 focus:ring-blue-100 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner"
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 focus:ring-4 focus:ring-blue-100 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner uppercase"
             />
             {searchTerm && (
               <button 
@@ -179,8 +179,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
               
               return (
                 <div 
-                  key={project.id} 
-                  onClick={() => onSelectProject(project.id)}
+                  key={project.ma_ct} 
+                  onClick={() => onSelectProject(project.ma_ct)}
                   className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300"
                 >
                   <div className="h-48 relative overflow-hidden bg-slate-900 shrink-0">
@@ -205,26 +205,26 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                   </div>
                   
                   <div className="p-6 flex-1 flex flex-col space-y-4">
-                    <div className="flex-1">
-                        <h3 className="text-base font-black text-slate-800 leading-tight uppercase tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">{project.name}</h3>
+                    <div className="flex-1 overflow-hidden">
+                        <h3 className="text-base font-black text-slate-800 leading-tight uppercase tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">{project.name || project.ma_ct}</h3>
                         
                         <div className="flex items-center gap-4 mb-4 border-b border-slate-50 pb-3">
-                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                <Target className="w-3.5 h-3.5 text-blue-500" /> {project.pm || 'No PM'}
+                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
+                                <Target className="w-3.5 h-3.5 text-blue-500 shrink-0" /> {project.pm || 'No PM'}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">
                                 <ClipboardList className="w-3.5 h-3.5 text-indigo-500" /> {total} QC
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                <p className="text-xs font-bold text-slate-700">{project.startDate || '---'}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Mã dự án</p>
+                                <p className="text-xs font-bold text-slate-700 truncate">{project.ma_ct}</p>
                             </div>
                             <div className="space-y-1">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                <p className="text-xs font-bold text-slate-700">{project.endDate || '---'}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tiến độ</p>
+                                <p className="text-xs font-bold text-slate-700">{project.progress || 0}%</p>
                             </div>
                         </div>
                     </div>
@@ -232,10 +232,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                     <div className="pt-2">
                         <div className="flex justify-between items-center mb-1.5">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><BarChart3 className="w-3 h-3 text-indigo-500" /> Project Progress</span>
-                            <span className="text-[10px] font-black text-blue-600">{project.progress}%</span>
                         </div>
                         <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shadow-inner">
-                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000 group-hover:from-indigo-600 group-hover:to-blue-600" style={{ width: `${project.progress}%` }}></div>
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000" style={{ width: `${project.progress || 0}%` }}></div>
                         </div>
                     </div>
                   </div>
