@@ -1,15 +1,11 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Inspection, InspectionStatus, Priority, ModuleId, User as UserType } from '../types';
+import { Inspection, InspectionStatus, Priority, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
 import { QRScannerModal } from './QRScannerModal';
 import { 
-  Building2, Calendar, AlertCircle, CheckCircle2, Search, Filter, X, 
-  ChevronDown, ArrowUp, LayoutGrid, Clock, ChevronRight, Layers, Zap,
-  Plus, FileDown, SlidersHorizontal, MapPin, Hash, FolderOpen, 
-  ChevronLeft, Briefcase, Loader2, Upload, ArrowRight, RefreshCw,
-  User, UserCircle, LogOut, Settings as SettingsIcon, ShieldCheck,
-  ListFilter, QrCode, FileUp, FileSpreadsheet, Factory, UserCheck, Tag, Box
+  Search, Filter, X, ChevronDown, ChevronRight, Layers, 
+  RefreshCw, QrCode, FileDown, FolderOpen, Clock, Tag, 
+  UserCheck, Briefcase, Loader2, Calendar, FileText
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -21,18 +17,18 @@ interface InspectionListProps {
   onImportInspections?: (inspections: Inspection[]) => Promise<void>;
   onRefresh?: () => void;
   currentUserName?: string;
+  isLoading?: boolean;
 }
 
 const PROJECTS_PER_PAGE = 10;
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
   inspections, onSelect, userRole, selectedModule, onModuleChange, 
-  onImportInspections, onRefresh, currentUserName
+  onRefresh, currentUserName, isLoading
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'FLAGGED' | 'HIGH_PRIORITY' | 'DRAFT' | 'MY_REPORTS'>('ALL');
   const [selectedInspector, setSelectedInspector] = useState<string>('ALL');
-  const [selectedWorkshop, setSelectedWorkshop] = useState<string>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,14 +36,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   
   const [showModuleMenu, setShowModuleMenu] = useState(false);
   const [showInspectorMenu, setShowInspectorMenu] = useState(false);
-  const [showWorkshopMenu, setShowWorkshopMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  
   const [showScanner, setShowScanner] = useState(false);
   
   const moduleMenuRef = useRef<HTMLDivElement>(null);
   const inspectorMenuRef = useRef<HTMLDivElement>(null);
-  const workshopMenuRef = useRef<HTMLDivElement>(null);
 
   const isQC = userRole === 'QC';
 
@@ -55,7 +48,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (moduleMenuRef.current && !moduleMenuRef.current.contains(event.target as Node)) setShowModuleMenu(false);
       if (inspectorMenuRef.current && !inspectorMenuRef.current.contains(event.target as Node)) setShowInspectorMenu(false);
-      if (workshopMenuRef.current && !workshopMenuRef.current.contains(event.target as Node)) setShowWorkshopMenu(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -67,18 +59,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     return Array.from(unique).sort();
   }, [inspections]);
 
-  const workshops = useMemo(() => {
-    const safeInsps = Array.isArray(inspections) ? inspections : [];
-    const unique = new Set(safeInsps.filter(i => i && i.workshop).map(i => i.workshop));
-    return Array.from(unique).sort();
-  }, [inspections]);
-
   const filteredInspections = useMemo(() => {
     const safeInsps = Array.isArray(inspections) ? inspections : [];
     return safeInsps
       .filter(item => {
-        if (!item) return false; // CRITICAL FIX: Skip null items
-        
+        if (!item) return false;
         if (selectedModule && selectedModule !== 'ALL' && item.type !== selectedModule) return false;
         const term = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm || 
@@ -86,13 +71,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           String(item.ten_ct || '').toLowerCase().includes(term) ||
           String(item.inspectorName || '').toLowerCase().includes(term) ||
           String(item.ten_hang_muc || '').toLowerCase().includes(term) ||
-          String(item.ma_nha_may || '').toLowerCase().includes(term) ||
-          String(item.headcode || '').toLowerCase().includes(term);
+          String(item.ma_nha_may || '').toLowerCase().includes(term);
         if (!matchesSearch) return false;
         if (startDate && item.date < startDate) return false;
         if (endDate && item.date > endDate) return false;
         if (selectedInspector !== 'ALL' && item.inspectorName !== selectedInspector) return false;
-        if (selectedWorkshop !== 'ALL' && item.workshop !== selectedWorkshop) return false;
         if (!isQC) {
             if (filter === 'MY_REPORTS' && (item.inspectorName || '').toLowerCase() !== currentUserName?.toLowerCase()) return false;
             if (filter === 'FLAGGED' && item.status !== InspectionStatus.FLAGGED) return false;
@@ -102,7 +85,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, searchTerm, filter, selectedInspector, selectedWorkshop, startDate, endDate, currentUserName, selectedModule, isQC]);
+  }, [inspections, searchTerm, filter, selectedInspector, startDate, endDate, currentUserName, selectedModule, isQC]);
 
   const groupedItems = useMemo(() => {
     const groups: { [key: string]: Inspection[] } = {};
@@ -144,49 +127,55 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     ? 'TẤT CẢ MODULE' 
     : ALL_MODULES.find(m => m.id === selectedModule)?.label || selectedModule;
 
-  const hasActiveFilters = searchTerm || filter !== 'ALL' || selectedInspector !== 'ALL' || selectedWorkshop !== 'ALL' || startDate || endDate;
-
   const clearFilters = () => {
     setSearchTerm('');
     setFilter('ALL');
     setSelectedInspector('ALL');
-    setSelectedWorkshop('ALL');
     setStartDate('');
     setEndDate('');
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
-      <div className="bg-white px-3 py-3 border-b border-slate-200 shadow-sm z-30 shrink-0 lg:px-6">
-        <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          <div className="relative group flex-1 min-w-[200px] md:min-w-[300px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input 
-              type="text" placeholder="Tìm Mã NM, Sản phẩm, QC..." value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-12 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
-            />
-            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              <button onClick={() => setShowScanner(true)} className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50"><QrCode className="w-4 h-4" /></button>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
+      {/* Fixed Sub-Header for Search & Actions */}
+      <div className="bg-white border-b border-slate-200 z-40 sticky top-0 shadow-sm px-4 py-3 shrink-0">
+        <div className="max-w-7xl mx-auto space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text" placeholder="Tìm Mã NM, Sản phẩm, QC..." value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-10 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
+              />
+              <button 
+                onClick={() => setShowScanner(true)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-white text-blue-600 rounded-lg shadow-sm border border-slate-100 active:scale-90"
+              >
+                <QrCode className="w-4 h-4" />
+              </button>
             </div>
+            <button onClick={onRefresh} className="p-2.5 text-slate-500 bg-slate-100 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
+                <RefreshCw className="w-5 h-5" />
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-2 items-center">
-              <button onClick={handleExport} disabled={isExporting} className="h-10 px-3 rounded-xl flex items-center gap-2 bg-indigo-50 text-indigo-600 border border-indigo-100 active:scale-95 transition-all">
-                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileDown className="w-4 h-4" />}
-                  <span className="text-[10px] font-black uppercase hidden sm:inline">Xuất Excel</span>
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              <button onClick={handleExport} disabled={isExporting} className="whitespace-nowrap px-3 py-1.5 rounded-lg flex items-center gap-2 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase border border-indigo-100 shadow-sm active:scale-95 transition-all">
+                  {isExporting ? <Loader2 className="w-3 h-3 animate-spin"/> : <FileDown className="w-3.5 h-3.5" />}
+                  <span>Xuất Excel</span>
               </button>
 
               {!isQC && (
                   <div className="relative" ref={moduleMenuRef}>
-                      <button onClick={() => setShowModuleMenu(!showModuleMenu)} className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all ${selectedModule && selectedModule !== 'ALL' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border-slate-200'}`}>
-                          <Layers className="w-3.5 h-3.5" />
-                          <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{currentModuleName}</span>
+                      <button onClick={() => setShowModuleMenu(!showModuleMenu)} className={`whitespace-nowrap px-3 py-1.5 rounded-lg flex items-center gap-2 border text-[10px] font-black uppercase transition-all shadow-sm ${selectedModule && selectedModule !== 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                          <Layers className="w-3 h-3" />
+                          <span className="truncate max-w-[100px]">{currentModuleName}</span>
                       </button>
                       {showModuleMenu && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 overflow-y-auto max-h-60 no-scrollbar animate-in fade-in zoom-in-95 origin-top-left">
+                          <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left max-h-[60vh] overflow-y-auto shadow-2xl">
                               <button onClick={() => { onModuleChange?.('ALL'); setShowModuleMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase hover:bg-slate-50">TẤT CẢ MODULE</button>
-                              {ALL_MODULES.map((mod) => (
+                              {ALL_MODULES.filter(m => m.group === 'QC' || m.group === 'QA').map((mod) => (
                                   <button key={mod.id} onClick={() => { onModuleChange?.(mod.id); setShowModuleMenu(false); }} className={`w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-slate-50 ${selectedModule === mod.id ? 'text-blue-600 bg-blue-50' : 'text-slate-600'}`}>{mod.label}</button>
                               ))}
                           </div>
@@ -195,13 +184,13 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               )}
 
               <div className="relative" ref={inspectorMenuRef}>
-                  <button onClick={() => setShowInspectorMenu(!showInspectorMenu)} className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all ${selectedInspector !== 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border-slate-200'}`}>
+                  <button onClick={() => setShowInspectorMenu(!showInspectorMenu)} className={`whitespace-nowrap px-3 py-1.5 rounded-lg flex items-center gap-2 border text-[10px] font-black uppercase transition-all shadow-sm ${selectedInspector !== 'ALL' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
                       <UserCheck className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{selectedInspector === 'ALL' ? 'QC THỰC HIỆN' : selectedInspector}</span>
+                      <span className="truncate max-w-[100px]">{selectedInspector === 'ALL' ? 'QC THỰC HIỆN' : selectedInspector}</span>
                   </button>
                   {showInspectorMenu && (
-                      <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 overflow-y-auto max-h-60 no-scrollbar">
-                          <button onClick={() => { setSelectedInspector('ALL'); setShowInspectorMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase hover:bg-slate-50">TẤT CẢ QC</button>
+                      <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 z-50 max-h-[60vh] overflow-y-auto">
+                          <button onClick={() => { setSelectedInspector('ALL'); setShowInspectorMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase hover:bg-slate-50 border-b border-slate-50">TẤT CẢ QC</button>
                           {inspectors.map((name) => (
                               <button key={name} onClick={() => { setSelectedInspector(name); setShowInspectorMenu(false); }} className={`w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-slate-50`}>{name}</button>
                           ))}
@@ -209,102 +198,99 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   )}
               </div>
 
-              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 h-10 shrink-0">
-                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-600 outline-none" />
-                  <ArrowRight className="w-3 h-3 text-slate-300 mx-1" />
-                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-600 outline-none" />
-              </div>
-
-              {hasActiveFilters && (
-                  <button onClick={clearFilters} className="h-10 w-10 flex items-center justify-center text-red-500 bg-red-50 rounded-xl border border-red-100 active:scale-95 transition-all">
-                      <RefreshCw className="w-4 h-4" />
-                  </button>
+              {(searchTerm || selectedInspector !== 'ALL' || startDate || endDate) && (
+                <button onClick={clearFilters} className="whitespace-nowrap px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-[10px] font-black uppercase border border-red-100 flex items-center gap-1">
+                  <X className="w-3 h-3"/> Xóa lọc
+                </button>
               )}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 p-3 lg:p-6 no-scrollbar pb-24">
-        <div className="flex items-center justify-between mb-2 px-1">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hiển thị {filteredInspections.length} bản ghi phù hợp</p>
-        </div>
-
-        {pagedProjectCodes.length === 0 ? (
-          <div className="py-20 text-center flex flex-col items-center text-slate-400 bg-white/50 rounded-[2rem] border border-dashed border-slate-200 mx-1">
-            <Briefcase className="w-12 h-12 text-slate-300 mb-4" />
-            <p className="font-black uppercase text-slate-600">Không tìm thấy dữ liệu</p>
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+        {isLoading ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-400">
+            <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
+            <p className="font-black uppercase tracking-widest text-[10px]">Đang tải báo cáo...</p>
+          </div>
+        ) : pagedProjectCodes.length === 0 ? (
+          <div className="py-20 text-center flex flex-col items-center justify-center bg-white rounded-[2rem] border border-dashed border-slate-200 mx-1">
+            <Briefcase className="w-12 h-12 text-slate-300 mb-4 opacity-50" />
+            <p className="font-black uppercase text-slate-400 text-xs tracking-widest">Không có báo cáo phù hợp</p>
           </div>
         ) : (
-          pagedProjectCodes.map(projectCode => {
-            const groupItems = groupedItems[projectCode];
-            const isExpanded = expandedGroups.has(projectCode);
-            const firstItem = groupItems[0];
-            
-            return (
-              <div key={projectCode} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-shadow hover:shadow-md">
-                <div onClick={() => setExpandedGroups(prev => {const next = new Set(prev); if (next.has(projectCode)) next.delete(projectCode); else next.add(projectCode); return next;})} className={`p-4 cursor-pointer flex items-center justify-between transition-colors ${isExpanded ? 'bg-blue-50/30' : 'bg-white hover:bg-slate-50'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl transition-colors ${isExpanded ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
-                        <FolderOpen className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-black text-sm text-slate-900 uppercase tracking-tight truncate max-w-[150px] lg:max-w-md">{projectCode}</h3>
-                        {firstItem.ten_ct && <span className="text-[10px] text-slate-400 font-bold hidden sm:inline">— {firstItem.ten_ct}</span>}
+          <div className="max-w-7xl mx-auto space-y-4 pb-20">
+            {pagedProjectCodes.map(projectCode => {
+              const groupItems = groupedItems[projectCode];
+              const isExpanded = expandedGroups.has(projectCode);
+              const firstItem = groupItems[0];
+              
+              return (
+                <div key={projectCode} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all hover:shadow-md">
+                  <div 
+                    onClick={() => setExpandedGroups(prev => {const next = new Set(prev); if (next.has(projectCode)) next.delete(projectCode); else next.add(projectCode); return next;})} 
+                    className={`p-4 cursor-pointer flex items-center justify-between transition-colors ${isExpanded ? 'bg-blue-50/50' : 'bg-white active:bg-slate-50'}`}
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                          <FolderOpen className="w-5 h-5" />
                       </div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{groupItems.length} Phiếu đánh giá</p>
+                      <div className="overflow-hidden">
+                        <h3 className="font-black text-sm text-slate-900 uppercase tracking-tight truncate leading-tight">{projectCode}</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 truncate">{firstItem.ten_ct || 'Tên công trình chưa cập nhật'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[9px] font-black bg-slate-200/50 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">{groupItems.length}</span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                   </div>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''} opacity-40`} />
-                </div>
-                {isExpanded && (
-                  <div className="p-2 space-y-2 bg-slate-50/50">
-                    {groupItems.map(item => (
-                      <div key={item.id} onClick={() => onSelect(item.id)} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between active:scale-[0.99] hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
-                        <div className="flex-1 overflow-hidden">
-                          <div className="flex items-center gap-2 mb-1.5">
-                              {item.ma_nha_may && (
-                                  <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1 shrink-0">
-                                      <Tag className="w-3 h-3" /> {item.ma_nha_may}
-                                  </span>
-                              )}
-                              <h4 className="font-black text-slate-800 text-[13px] truncate uppercase tracking-tight group-hover:text-blue-700 transition-colors">
-                                  {item.ten_hang_muc || 'HẠNG MỤC CHƯA ĐẶT TÊN'}
-                              </h4>
+                  
+                  {isExpanded && (
+                    <div className="divide-y divide-slate-100 border-t border-slate-100">
+                      {groupItems.map(item => (
+                        <div key={item.id} onClick={() => onSelect(item.id)} className="p-4 bg-white active:bg-blue-50 transition-all cursor-pointer flex items-center justify-between group">
+                          <div className="flex-1 min-w-0 pr-4">
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                {item.ma_nha_may && (
+                                    <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1 shrink-0 shadow-sm">
+                                        <Tag className="w-3 h-3" /> {item.ma_nha_may}
+                                    </span>
+                                )}
+                                <h4 className="font-black text-slate-800 text-[13px] truncate uppercase tracking-tight leading-tight flex-1">
+                                    {item.ten_hang_muc || 'Hạng mục QC'}
+                                </h4>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                               <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border shadow-sm ${item.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-200' : item.status === 'FLAGGED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                                   {item.status}
+                               </span>
+                               <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                   <Clock className="w-3 h-3"/> {item.date}
+                               </span>
+                               <span className="text-[9px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1">
+                                   <UserCheck className="w-3 h-3" /> {item.inspectorName}
+                               </span>
+                            </div>
                           </div>
-                          
-                          <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3">
-                             <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                 <Clock className="w-3.5 h-3.5"/> {item.date}
-                             </span>
-                             <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border shadow-sm ${item.status === 'APPROVED' ? 'bg-green-50 text-green-700 border-green-100' : item.status === 'FLAGGED' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
-                                 {item.status}
-                             </span>
-                             {item.workshop && (
-                                 <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase flex items-center gap-1 border border-slate-200">
-                                     <Factory className="w-2.5 h-2.5" /> {item.workshop}
-                                 </span>
-                             )}
-                             <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase flex items-center gap-1">
-                                 <UserCheck className="w-2.5 h-2.5" /> {item.inspectorName}
-                             </span>
-                          </div>
+                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 ml-2 group-hover:text-blue-500 transition-colors shrink-0" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {sortedProjectCodes.length > PROJECTS_PER_PAGE && (
-          <div className="flex justify-center gap-4 pt-4 pb-10">
-              <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-2.5 bg-white border border-slate-200 rounded-xl disabled:opacity-30 active:scale-90"><ChevronLeft className="w-5 h-5" /></button>
-              <div className="flex items-center px-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-400 uppercase">Trang {currentPage}</div>
-              <button disabled={currentPage >= Math.ceil(sortedProjectCodes.length / PROJECTS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="p-2.5 bg-white border border-slate-200 rounded-xl disabled:opacity-30 active:scale-90"><ChevronRight className="w-5 h-5" /></button>
+          <div className="flex justify-center gap-4 py-6">
+              <button disabled={currentPage === 1} onClick={() => {setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo(0,0);}} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-sm disabled:opacity-30 active:scale-90"><ChevronDown className="w-6 h-6 rotate-90" /></button>
+              <div className="flex items-center px-6 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-500 uppercase tracking-widest shadow-sm">Trang {currentPage}</div>
+              <button disabled={currentPage >= Math.ceil(sortedProjectCodes.length / PROJECTS_PER_PAGE)} onClick={() => {setCurrentPage(p => p + 1); window.scrollTo(0,0);}} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-sm disabled:opacity-30 active:scale-90"><ChevronDown className="w-6 h-6 -rotate-90" /></button>
           </div>
         )}
       </div>

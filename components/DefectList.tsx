@@ -1,12 +1,9 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Defect, User } from '../types';
 import { fetchDefects } from '../services/apiService';
 import { 
-    AlertTriangle, Search, Filter, Clock, CheckCircle2, 
-    ArrowRight, Loader2, Calendar, User as UserIcon, 
-    FileText, ShieldAlert, Hash, Hammer, Tag, ChevronRight,
-    Camera
+    Search, Clock, CheckCircle2, Loader2, Calendar, 
+    ChevronRight, Tag, Hash, Hammer, Camera, AlertCircle
 } from 'lucide-react';
 
 interface DefectListProps {
@@ -63,146 +60,119 @@ export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDef
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
       {/* Header */}
-      <div className="bg-white p-4 md:p-6 border-b border-slate-200 shadow-sm shrink-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border-b border-slate-200 shadow-sm shrink-0 z-40 sticky top-0 px-4 py-4">
+          <div className="max-w-7xl mx-auto space-y-4">
               <div>
-                  <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-                      <Hammer className="w-8 h-8 text-orange-600" />
-                      DANH SÁCH LỖI (DEFECTS)
+                  <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2.5">
+                      <Hammer className="w-7 h-7 text-orange-600" />
+                      DEFECT TRACKER
                   </h1>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Hệ thống giám sát sai lỗi kỹ thuật • Real-time</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-0.5">Giám sát lỗi kỹ thuật real-time</p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative group">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500" />
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input 
                         type="text" placeholder="Tìm mã lỗi, dự án, mô tả..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium w-full md:w-80 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-inner"
+                        className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-orange-100/50 transition-all shadow-inner"
                       />
                   </div>
                   <select 
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value as any)}
-                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-tight outline-none cursor-pointer hover:border-blue-300 transition-all shadow-sm"
+                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none cursor-pointer hover:border-orange-300 transition-all shadow-sm"
                   >
-                      <option value="ALL">Tất cả lỗi</option>
-                      <option value="OPEN">Mới phát hiện</option>
-                      <option value="IN_PROGRESS">Đang sửa chữa</option>
-                      <option value="CLOSED">Đã khắc phục</option>
+                      <option value="ALL">Tất cả trạng thái</option>
+                      <option value="OPEN">Mới ghi nhận</option>
+                      <option value="IN_PROGRESS">Đang xử lý</option>
+                      <option value="CLOSED">Đã hoàn thành</option>
                   </select>
               </div>
           </div>
       </div>
 
-      {/* Table Area */}
-      <div className="flex-1 overflow-auto p-4 md:p-6 no-scrollbar">
+      {/* Main List Area */}
+      <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
           {isLoading ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                  <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
-                  <p className="font-black uppercase tracking-widest text-xs">Đang truy xuất dữ liệu lỗi...</p>
+                  <Loader2 className="w-10 h-10 animate-spin text-orange-500 mb-4" />
+                  <p className="font-black uppercase tracking-widest text-[9px]">Đang đồng bộ dữ liệu...</p>
               </div>
           ) : filteredDefects.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300">
+              <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300">
                   <div className="p-16 bg-white rounded-[4rem] border-2 border-dashed border-slate-200 shadow-inner flex flex-col items-center">
-                      <CheckCircle2 className="w-24 h-24 opacity-10 mb-4 text-green-500" />
-                      <p className="font-black uppercase tracking-[0.3em] text-sm">Không ghi nhận sai lỗi nào</p>
-                      <p className="text-xs font-medium text-slate-400 mt-2">Hệ thống đang hoạt động ổn định</p>
+                      <CheckCircle2 className="w-16 h-16 opacity-10 mb-4 text-green-500" />
+                      <p className="font-black uppercase tracking-[0.2em] text-[10px] text-slate-400">Không ghi nhận sai lỗi</p>
                   </div>
               </div>
           ) : (
-              <div className="max-w-7xl mx-auto bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                  <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[1000px]">
-                          <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px]">
-                              <tr>
-                                  <th className="px-6 py-4 w-48">Mã Lỗi / Code</th>
-                                  <th className="px-6 py-4 w-44">Dự án</th>
-                                  <th className="px-6 py-4">Mô tả chi tiết & Hình ảnh</th>
-                                  <th className="px-6 py-4 w-32 text-center">Ngày ghi nhận</th>
-                                  <th className="px-6 py-4 w-32 text-center">Mức độ</th>
-                                  <th className="px-6 py-4 w-32 text-center">Trạng thái</th>
-                                  <th className="px-6 py-4 w-16"></th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                              {filteredDefects.map((defect) => (
-                                  <tr 
-                                      key={defect.id} 
-                                      onClick={() => onSelectDefect(defect)}
-                                      className="hover:bg-orange-50/30 transition-colors cursor-pointer group animate-in fade-in duration-300"
-                                  >
-                                      <td className="px-6 py-4">
-                                          <div className="flex items-center gap-3">
-                                              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-600 group-hover:text-white transition-all">
-                                                  <Tag className="w-4 h-4" />
-                                              </div>
-                                              <div>
-                                                  <span className="font-black text-slate-900 text-xs tracking-tight block">{defect.defectCode}</span>
-                                                  <span className="text-[9px] font-mono text-slate-400">#{defect.id.substring(0,8)}</span>
-                                              </div>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-4">
-                                          <div className="flex items-center gap-1.5 font-black text-[10px] text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 w-fit uppercase">
-                                              <Hash className="w-3 h-3" />
-                                              {defect.ma_ct}
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-4">
-                                          <div className="flex items-center gap-3 overflow-hidden">
-                                              {defect.images && defect.images.length > 0 ? (
-                                                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shrink-0">
-                                                      <img src={defect.images[0]} className="w-full h-full object-cover" />
-                                                  </div>
-                                              ) : (
-                                                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 shrink-0">
-                                                      <Camera className="w-4 h-4" />
-                                                  </div>
-                                              )}
-                                              <p className="text-xs font-bold text-slate-700 leading-tight line-clamp-1 italic max-w-md">
-                                                  {defect.description}
-                                              </p>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-4 text-center">
-                                          <span className="text-[10px] font-bold text-slate-500 font-mono">{defect.date}</span>
-                                      </td>
-                                      <td className="px-6 py-4 text-center">
-                                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(defect.severity)}`}>
-                                              {defect.severity || 'MINOR'}
-                                          </span>
-                                      </td>
-                                      <td className="px-6 py-4 text-center">
-                                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border shadow-sm ${getStatusStyle(defect.status)}`}>
-                                              {defect.status}
-                                          </span>
-                                      </td>
-                                      <td className="px-6 py-4 text-center">
-                                          <div className="p-2 text-slate-300 group-hover:text-orange-600 transition-colors group-hover:translate-x-1 transition-transform">
-                                              <ChevronRight className="w-5 h-5" />
-                                          </div>
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-                  {/* Summary Footer */}
-                  <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          Ghi nhận {filteredDefects.length} sự vụ sai lỗi kỹ thuật
-                      </p>
-                      <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest">
-                          <div className="flex items-center gap-1.5">
-                              <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                              <span className="text-slate-500">Tổng lỗi: {defects.length}</span>
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
+                  {filteredDefects.map((defect) => (
+                      <div 
+                          key={defect.id} 
+                          onClick={() => onSelectDefect(defect)}
+                          className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:shadow-md hover:border-orange-300 group"
+                      >
+                          <div className="p-4 flex-1 space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-2.5">
+                                      <div className="p-2 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-600 group-hover:text-white transition-all shadow-sm">
+                                          <Tag className="w-4 h-4" />
+                                      </div>
+                                      <div>
+                                          <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">{defect.defectCode}</span>
+                                          <span className="text-[9px] font-mono text-slate-400 tracking-tighter">#{defect.id.substring(0,8)}</span>
+                                      </div>
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(defect.severity)}`}>
+                                      {defect.severity || 'MINOR'}
+                                  </span>
+                              </div>
+
+                              <div className="flex gap-3">
+                                  {defect.images && defect.images.length > 0 ? (
+                                      <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm">
+                                          <img src={defect.images[0]} className="w-full h-full object-cover" />
+                                      </div>
+                                  ) : (
+                                      <div className="w-16 h-16 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200 shrink-0 border border-slate-100">
+                                          <Camera className="w-6 h-6" />
+                                      </div>
+                                  )}
+                                  <div className="flex-1 overflow-hidden">
+                                      <p className="text-[11px] font-bold text-slate-700 leading-snug line-clamp-3 italic">
+                                          "{defect.description}"
+                                      </p>
+                                  </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-50 mt-1">
+                                  <div className="flex items-center gap-1.5">
+                                      <Hash className="w-3 h-3 text-blue-500" />
+                                      <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase tracking-tighter truncate max-w-[100px] border border-blue-100">{defect.ma_ct}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                      <Calendar className="w-3 h-3 text-slate-400" />
+                                      <span className="text-[9px] font-bold text-slate-500 font-mono">{defect.date}</span>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div className={`px-4 py-2.5 border-t flex items-center justify-between transition-colors ${defect.status === 'CLOSED' ? 'bg-green-50/50 border-green-100' : 'bg-orange-50/50 border-orange-100'}`}>
+                              <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(defect.status)}`}>
+                                  {defect.status}
+                              </span>
+                              <div className="flex items-center gap-1 text-orange-600 text-[9px] font-black uppercase tracking-tighter">
+                                  Xem thêm <ChevronRight className="w-3 h-3" />
+                              </div>
                           </div>
                       </div>
-                  </div>
+                  ))}
               </div>
           )}
       </div>

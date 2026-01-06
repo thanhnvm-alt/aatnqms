@@ -1,4 +1,5 @@
 
+
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -76,6 +77,8 @@ export interface NCRComment {
 export interface NCR {
   id: string;
   inspection_id?: string;
+  // Fixed: Added itemId property to match database records and fix type errors in services
+  itemId?: string;
   defect_code?: string; // Liên kết tới defect_library
   createdDate: string;
   issueDescription: string;
@@ -155,7 +158,7 @@ export interface Inspection {
   workshop?: string;
   inspectionStage?: string;
   dvt?: string;
-  so_luong_ipo?: number;
+  so_luong_ipo: number;
   inspectedQuantity?: number;
   passedQuantity?: number;
   failedQuantity?: number;

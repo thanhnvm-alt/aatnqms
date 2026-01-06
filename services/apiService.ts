@@ -1,4 +1,3 @@
-
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem } from '../types';
 import * as db from './tursoService';
 
@@ -58,6 +57,10 @@ export const fetchNcrs = async (params: { inspection_id?: string, status?: strin
         page: params.page,
         limit: params.limit
     };
+};
+
+export const fetchNcrById = async (id: string): Promise<NCR | null> => {
+    return await db.getNcrById(id);
 };
 
 export const fetchDefects = async (params: { search?: string, status?: string } = {}): Promise<PagedResult<Defect>> => {

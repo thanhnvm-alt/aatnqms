@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR, DefectLibraryItem } from '../types';
 import { INITIAL_CHECKLIST_TEMPLATE } from '../constants';
@@ -10,7 +9,7 @@ import {
   Plus, PlusCircle, Layers, QrCode,
   ChevronDown, AlertTriangle, Calendar, ClipboardList, 
   Hash, Box, Loader2, PenTool, Eraser, Edit2, Check, Maximize2,
-  Sparkles, Camera, Clock
+  Sparkles, Camera, Clock, Info, User as UserIcon, Search
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -93,14 +92,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
   const [editingCategory, setEditingCategory] = useState<{name: string, value: string} | null>(null);
-  
   const [editingImageIdx, setEditingImageIdx] = useState<number | null>(null);
 
   const qcCanvasRef = useRef<HTMLCanvasElement>(null);
   const prodCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawingQC, setIsDrawingQC] = useState(false);
   const [isDrawingProd, setIsDrawingProd] = useState(false);
-
   const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
@@ -112,7 +109,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#000000';
     const rect = canvas.getBoundingClientRect();
@@ -205,15 +202,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             next.so_luong_ipo = val;
         } else if (field === 'inspectedQuantity') {
             next.inspectedQuantity = val;
-            // SL Đạt = Tổng - Lỗi
             next.passedQuantity = Math.max(0, val - (prev.failedQuantity || 0));
         } else if (field === 'passedQuantity') {
             next.passedQuantity = val;
-            // SL Lỗi = Tổng - Đạt
             next.failedQuantity = Math.max(0, (prev.inspectedQuantity || 0) - val);
         } else if (field === 'failedQuantity') {
             next.failedQuantity = val;
-            // SL Đạt = Tổng - Lỗi
             next.passedQuantity = Math.max(0, (prev.inspectedQuantity || 0) - val);
         }
         return next;
@@ -296,7 +290,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           solution: '',
           status: 'OPEN',
           createdDate: new Date().toISOString().split('T')[0],
-          deadline: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0], // 3 days default
+          deadline: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
           imagesBefore: [],
           imagesAfter: []
       });
@@ -416,10 +410,10 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const getModuleLabel = () => {
     const mod = formData.type || 'PQC';
     switch(mod) {
-        case 'IQC': return 'IQC - KIỂM TRA VẬT TƯ';
-        case 'PQC': return 'PQC - KIỂM TRA SẢN XUẤT';
-        case 'FQC': return 'FQC - KIỂM TRA THÀNH PHẨM';
-        case 'SITE': return 'SITE - KIỂM TRA CÔNG TRÌNH';
+        case 'IQC': return 'IQC - VẬT LIỆU';
+        case 'PQC': return 'PQC - SẢN XUẤT';
+        case 'FQC': return 'FQC - THÀNH PHẨM';
+        case 'SITE': return 'SITE - CÔNG TRÌNH';
         default: return `${mod} - KIỂM TRA`;
     }
   };
@@ -435,8 +429,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             handleAutoFillFromCode(data);
             setShowScanner(false);
           }}
-          title="Quét mã QR sản phẩm"
-          subtitle="Quét Headcode hoặc Mã nhà máy để tự điền thông tin"
+          title="Quét QR Sản Phẩm"
+          subtitle="Tự động điền thông tin Headcode/Mã NM"
         />
       )}
 
@@ -449,447 +443,498 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           />
       )}
 
-      <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 z-40 shadow-sm shrink-0">
-        <button onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform"><ArrowLeft className="w-6 h-6"/></button>
-        <div className="text-center">
-            <h2 className="text-sm font-black text-slate-800 uppercase tracking-tight">TẠO PHIẾU MỚI</h2>
-            <div className="mt-0.5"><span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[9px] font-black uppercase border border-blue-100">{getModuleLabel()}</span></div>
+      {/* Sticky Header Optimized for Mobile */}
+      <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 z-[100] shadow-sm shrink-0 h-16">
+        <button onClick={onCancel} className="p-2.5 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform"><ArrowLeft className="w-6 h-6"/></button>
+        <div className="text-center overflow-hidden">
+            <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight leading-none">PHIẾU KIỂM TRA MỚI</h2>
+            <div className="mt-1"><span className="px-2 py-0.5 bg-blue-600 text-white rounded-md text-[8px] font-black uppercase border border-blue-700 shadow-sm">{getModuleLabel()}</span></div>
         </div>
         <button onClick={handleSave} disabled={isSaving} className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all">
           {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32">
-        
-        <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1">
-                <ImageIcon className="w-4 h-4 text-slate-400" />
-                <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest">HÌNH ÁNH HIỆN TRƯỜNG ({formData.images?.length || 0})</h3>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-3">
-                <button 
-                  onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }}
-                  className="w-20 h-20 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 flex flex-col items-center justify-center text-blue-500 active:scale-95 transition-all"
-                >
-                    <Plus className="w-6 h-6" />
-                    <span className="text-[8px] font-black mt-1 uppercase">Thêm ảnh</span>
-                </button>
-                {formData.images?.map((img, idx) => (
-                    <div key={idx} className="relative w-20 h-20 group cursor-pointer" onClick={() => setEditingImageIdx(idx)}>
-                        <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-100 shadow-sm transition-transform group-hover:scale-110 group-hover:opacity-100" />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
-                            <PenTool className="text-white w-4 h-4" />
-                        </div>
-                        <button onClick={(e) => { e.stopPropagation(); setFormData(prev => ({...prev, images: prev.images?.filter((_, i) => i !== idx)})); }} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
-                    </div>
-                ))}
-            </div>
+      <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
+        <div className="max-w-3xl mx-auto p-4 space-y-6 pb-32">
+          
+          {/* Visual Evidence Section */}
+          <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                  <Camera className="w-4 h-4 text-slate-400" />
+                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">HÌNH ÁNH HIỆN TRƯỜNG ({formData.images?.length || 0})</h3>
+              </div>
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap gap-3">
+                  <button 
+                    onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }}
+                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/50 flex flex-col items-center justify-center text-blue-500 active:scale-95 transition-all shadow-inner"
+                  >
+                      <Plus className="w-6 h-6" />
+                      <span className="text-[8px] font-black mt-1 uppercase">Thêm</span>
+                  </button>
+                  {formData.images?.map((img, idx) => (
+                      <div key={idx} className="relative w-20 h-20 group cursor-pointer" onClick={() => setEditingImageIdx(idx)}>
+                          <img src={img} className="w-full h-full object-cover rounded-2xl border border-slate-100 shadow-sm transition-all group-hover:scale-105" />
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
+                              <PenTool className="text-white w-4 h-4" />
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); setFormData(prev => ({...prev, images: prev.images?.filter((_, i) => i !== idx)})); }} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-1 shadow-md opacity-100"><X className="w-3 h-3"/></button>
+                      </div>
+                  ))}
+              </div>
+          </section>
+
+          {/* Core Info Section */}
+          <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                  <Box className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">THÔNG TIN ĐỐI TƯỢNG</h3>
+              </div>
+              <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ NHÀ MÁY / HEADCODE *</label>
+                      <div className="relative group">
+                          <input value={formData.ma_nha_may} onChange={handleMaNhaMayChange} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-black text-slate-800 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all pr-12 shadow-inner" placeholder="9 hoặc 13 ký tự..."/>
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                              {isSearchingPlan && <Loader2 className="w-5 h-5 text-blue-500 animate-spin mr-1" />}
+                              <button onClick={() => setShowScanner(true)} className="p-2.5 bg-white text-blue-600 rounded-xl shadow-md border border-slate-100 active:scale-90 transition-all"><QrCode className="w-5 h-5"/></button>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN SẢN PHẨM *</label>
+                      <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:bg-white outline-none transition-all shadow-inner" placeholder="Tên SP..."/>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ CÔNG TRÌNH *</label>
+                          <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-800 focus:bg-white outline-none transition-all shadow-inner" placeholder="Mã CT..."/>
+                      </div>
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN CÔNG TRÌNH</label>
+                          <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:bg-white outline-none transition-all shadow-inner truncate" placeholder="Tên CT..."/>
+                      </div>
+                  </div>
+              </div>
+          </section>
+
+          {/* Logistics Section */}
+          <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                  <ClipboardList className="w-4 h-4 text-orange-600" />
+                  <h3 className="text-[10px] font-black text-orange-600 uppercase tracking-widest">ĐỊA ĐIỂM & CÔNG ĐOẠN</h3>
+              </div>
+              <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">XƯỞNG / KHO</label>
+                          <div className="relative">
+                              <select value={formData.workshop || ''} onChange={e => setFormData({...formData, workshop: e.target.value, inspectionStage: ''})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black text-slate-800 outline-none appearance-none shadow-inner">
+                                  <option value="">-- Chọn --</option>
+                                  {workshops.map(ws => <option key={ws.id} value={ws.name}>{ws.name}</option>)}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          </div>
+                      </div>
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CÔNG ĐOẠN</label>
+                          <div className="relative">
+                              <select value={formData.inspectionStage || ''} onChange={e => setFormData({...formData, inspectionStage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black text-slate-800 outline-none appearance-none shadow-inner">
+                                  <option value="">-- Chọn --</option>
+                                  {availableStages.map(stage => <option key={stage} value={stage}>{stage}</option>)}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          </div>
+                      </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NGÀY KIỂM TRA</label>
+                          <div className="relative">
+                              <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-800 focus:bg-white outline-none transition-all shadow-inner" />
+                              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          </div>
+                      </div>
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QC THỰC HIỆN</label>
+                          <input value={formData.inspectorName} readOnly className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-2xl text-xs font-black text-slate-500 uppercase cursor-not-allowed shadow-inner" />
+                      </div>
+                  </div>
+              </div>
+          </section>
+
+          {/* Quantities Section */}
+          <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                  <Hash className="w-4 h-4 text-indigo-600" />
+                  <h3 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">SỐ LƯỢNG (DVT: {formData.dvt})</h3>
+              </div>
+              <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">SL ĐƠN HÀNG (IPO)</label>
+                          <input 
+                              type="number" step="any"
+                              value={formData.so_luong_ipo} 
+                              onChange={e => handleQuantityChange('so_luong_ipo', e.target.value)} 
+                              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-base font-black text-slate-900 focus:bg-white outline-none transition-all shadow-inner" 
+                          />
+                      </div>
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest block ml-1">SL KIỂM TRA</label>
+                          <input 
+                              type="number" step="any"
+                              value={formData.inspectedQuantity} 
+                              onChange={e => handleQuantityChange('inspectedQuantity', e.target.value)} 
+                              className="w-full px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl text-base font-black text-blue-700 focus:bg-white outline-none transition-all shadow-inner" 
+                          />
+                      </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                      <div className="space-y-1.5">
+                          <div className="flex justify-between items-center ml-1">
+                              <label className="text-[10px] font-black text-green-600 uppercase tracking-widest">SL ĐẠT</label>
+                              <span className="text-[10px] font-black text-green-500 bg-green-50 px-1.5 rounded-full">{stats.passPct}%</span>
+                          </div>
+                          <input 
+                              type="number" step="any"
+                              value={formData.passedQuantity} 
+                              onChange={e => handleQuantityChange('passedQuantity', e.target.value)} 
+                              className="w-full px-4 py-3 bg-green-50 border border-green-200 rounded-2xl text-base font-black text-green-700 focus:bg-white outline-none transition-all shadow-inner" 
+                          />
+                      </div>
+                      <div className="space-y-1.5">
+                          <div className="flex justify-between items-center ml-1">
+                              <label className="text-[10px] font-black text-red-600 uppercase tracking-widest">SL LỖI</label>
+                              <span className="text-[10px] font-black text-red-500 bg-red-50 px-1.5 rounded-full">{stats.failPct}%</span>
+                          </div>
+                          <input 
+                              type="number" step="any"
+                              value={formData.failedQuantity} 
+                              onChange={e => handleQuantityChange('failedQuantity', e.target.value)} 
+                              className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-base font-black text-red-700 focus:bg-white outline-none transition-all shadow-inner" 
+                          />
+                      </div>
+                  </div>
+              </div>
+          </section>
+
+          {/* Items Checklist Section */}
+          <section className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-slate-800" />
+                      <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">TIÊU CHÍ KIỂM TRA ({formData.items?.length || 0})</h3>
+                  </div>
+                  <button onClick={() => handleAddItem()} className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+                      <PlusCircle className="w-3.5 h-3.5" /> Thêm nhóm
+                  </button>
+              </div>
+
+              <div className="space-y-8">
+                  {Object.entries(groupedItems).map(([cat, items]: [string, CheckItem[]]) => (
+                      <div key={cat} className="space-y-4 animate-in slide-in-from-bottom duration-300">
+                          <div className="flex items-center justify-between bg-slate-200/50 px-4 py-2.5 rounded-2xl border border-slate-300 shadow-sm">
+                              <div className="flex items-center gap-2 flex-1 overflow-hidden">
+                                  {editingCategory?.name === cat ? (
+                                      <div className="flex items-center gap-1 w-full max-w-xs">
+                                          <input 
+                                              autoFocus
+                                              value={editingCategory.value} 
+                                              onChange={e => setEditingCategory({...editingCategory, value: e.target.value})}
+                                              onKeyDown={e => e.key === 'Enter' && handleUpdateCategoryName(cat)}
+                                              className="px-3 py-1 text-[11px] font-black uppercase text-blue-700 border-2 border-blue-400 rounded-xl outline-none w-full bg-white"
+                                          />
+                                          <button onClick={() => handleUpdateCategoryName(cat)} className="p-1.5 text-green-600 bg-white rounded-xl shadow-sm border border-green-100 active:scale-90"><Check className="w-4 h-4"/></button>
+                                          <button onClick={() => setEditingCategory(null)} className="p-1.5 text-slate-400 bg-white rounded-xl shadow-sm border border-slate-100 active:scale-90"><X className="w-4 h-4"/></button>
+                                      </div>
+                                  ) : (
+                                      <>
+                                          <span className="text-[11px] font-black uppercase text-slate-700 tracking-widest truncate">{cat}</span>
+                                          <div className="flex items-center gap-1">
+                                              <button onClick={(e) => { e.stopPropagation(); setEditingCategory({name: cat, value: cat}); }} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 className="w-3 h-3"/></button>
+                                              <button onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3 h-3"/></button>
+                                          </div>
+                                      </>
+                                  )}
+                              </div>
+                              <button 
+                                  onClick={() => handleAddItem(cat)}
+                                  className="flex items-center gap-1 text-[10px] font-black text-blue-600 uppercase hover:bg-white px-3 py-1.5 rounded-xl transition-all active:scale-95"
+                              >
+                                  <Plus className="w-3.5 h-3.5"/> Thêm mục
+                              </button>
+                          </div>
+
+                          <div className="space-y-4">
+                              {items.map(item => (
+                                  <div key={item.id} className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden shadow-sm">
+                                      <div className="p-4 space-y-4">
+                                          <div className="flex justify-between items-start gap-4">
+                                              <div className="flex-1">
+                                                  <textarea 
+                                                      value={item.label} 
+                                                      onChange={e => updateItem(item.id, { label: e.target.value })}
+                                                      className="w-full px-1 py-0.5 text-sm font-bold text-slate-800 bg-transparent border-b border-dashed border-slate-200 focus:border-blue-500 outline-none transition-all resize-none min-h-[1.5rem]"
+                                                      rows={1}
+                                                      onInput={(e) => { 
+                                                          const target = e.target as HTMLTextAreaElement;
+                                                          target.style.height = 'auto';
+                                                          target.style.height = target.scrollHeight + 'px';
+                                                      }}
+                                                      placeholder="Mô tả tiêu chí..."
+                                                  />
+                                              </div>
+                                              <div className="flex gap-1.5 shrink-0 items-center">
+                                                  <button onClick={(e) => { e.stopPropagation(); handleOpenNCR(item); }} className={`p-2 rounded-xl transition-all active:scale-90 ${item.ncr ? 'bg-red-600 text-white shadow-md' : 'text-red-500 bg-red-50 hover:bg-red-100'}`} title="Phiếu NCR"><AlertTriangle className="w-4.5 h-4.5"/></button>
+                                                  <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} className="p-2 text-slate-300 hover:text-red-500 active:scale-90 transition-all"><Trash2 className="w-4.5 h-4.5"/></button>
+                                              </div>
+                                          </div>
+                                          
+                                          <div className="flex gap-2">
+                                              <button 
+                                                  onClick={() => handleItemStatusChange(item, CheckStatus.PASS)}
+                                                  className={`flex-1 py-3.5 rounded-2xl text-[10px] font-black uppercase border-2 transition-all active:scale-95 ${item.status === CheckStatus.PASS ? 'bg-green-600 border-green-600 text-white shadow-lg shadow-green-100' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                                              >ĐẠT</button>
+                                              <button 
+                                                  onClick={() => handleItemStatusChange(item, CheckStatus.FAIL)}
+                                                  className={`flex-1 py-3.5 rounded-2xl text-[10px] font-black uppercase border-2 transition-all active:scale-95 ${item.status === CheckStatus.FAIL ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-100' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                                              >LỖI</button>
+                                              <button 
+                                                  onClick={() => handleItemStatusChange(item, CheckStatus.CONDITIONAL)}
+                                                  className={`flex-1 py-3.5 rounded-2xl text-[10px] font-black uppercase border-2 transition-all active:scale-95 ${item.status === CheckStatus.CONDITIONAL ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-100' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                                              >COND.</button>
+                                          </div>
+
+                                          <div className="relative group">
+                                              <Edit2 className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-300 group-focus-within:text-blue-500" />
+                                              <textarea 
+                                                value={item.notes}
+                                                onChange={e => updateItem(item.id, { notes: e.target.value })}
+                                                placeholder="Ghi chú chi tiết cho mục này..."
+                                                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 focus:bg-white focus:ring-4 focus:ring-blue-100/50 outline-none resize-none shadow-inner"
+                                                rows={1}
+                                              />
+                                          </div>
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </section>
+
+          {/* Signature Section */}
+          <section className="space-y-4 pt-6 border-t border-slate-200">
+              <div className="flex items-center gap-2 px-1">
+                  <PenTool className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">XÁC NHẬN CHỮ KÝ</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+                  <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">QC INSPECTOR</label>
+                          <button onClick={() => clearCanvas(qcCanvasRef)} className="text-[9px] font-black text-red-500 uppercase flex items-center gap-1 active:scale-90"><Eraser className="w-3 h-3"/> Xóa</button>
+                      </div>
+                      <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2rem] h-48 relative overflow-hidden shadow-inner">
+                          <canvas 
+                              ref={qcCanvasRef} width={400} height={200} className="w-full h-full cursor-crosshair touch-none" 
+                              style={{ touchAction: 'none' }}
+                              onMouseDown={e => startDrawing(e, qcCanvasRef, setIsDrawingQC)}
+                              onMouseMove={e => draw(e, qcCanvasRef, isDrawingQC)}
+                              onMouseUp={() => setIsDrawingQC(false)}
+                              onMouseLeave={() => setIsDrawingQC(false)}
+                              onTouchStart={e => startDrawing(e, qcCanvasRef, setIsDrawingQC)}
+                              onTouchMove={e => draw(e, qcCanvasRef, isDrawingQC)}
+                              onTouchEnd={() => setIsDrawingQC(false)}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
+                              <PenTool className="w-20 h-20 text-black" />
+                          </div>
+                      </div>
+                      <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{formData.inspectorName}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">ĐẠI DIỆN SẢN XUẤT</label>
+                          <button onClick={() => clearCanvas(prodCanvasRef)} className="text-[9px] font-black text-red-500 uppercase flex items-center gap-1 active:scale-90"><Eraser className="w-3 h-3"/> Xóa</button>
+                      </div>
+                      <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2rem] h-48 relative overflow-hidden shadow-inner">
+                          <canvas 
+                              ref={prodCanvasRef} width={400} height={200} className="w-full h-full cursor-crosshair touch-none" 
+                              style={{ touchAction: 'none' }}
+                              onMouseDown={e => startDrawing(e, prodCanvasRef, setIsDrawingProd)}
+                              onMouseMove={e => draw(e, prodCanvasRef, isDrawingProd)}
+                              onMouseUp={() => setIsDrawingProd(false)}
+                              onMouseLeave={() => setIsDrawingProd(false)}
+                              onTouchStart={e => startDrawing(e, prodCanvasRef, setIsDrawingProd)}
+                              onTouchMove={e => draw(e, prodCanvasRef, isDrawingProd)}
+                              onTouchEnd={() => setIsDrawingProd(false)}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
+                              <PenTool className="w-20 h-20 text-black" />
+                          </div>
+                      </div>
+                      <div className="relative">
+                          <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                          <input 
+                              value={formData.productionName || ''} 
+                              onChange={e => setFormData({...formData, productionName: e.target.value.toUpperCase()})}
+                              className="w-full text-center pl-8 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-700 outline-none uppercase placeholder:text-slate-300 shadow-sm"
+                              placeholder="NHẬP TÊN NGƯỜI KÝ..."
+                          />
+                      </div>
+                  </div>
+              </div>
+          </section>
+
         </div>
-
-        <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1">
-                <Box className="w-4 h-4 text-blue-600" />
-                <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest">THÔNG TIN NGUỒN</h3>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <div className="space-y-1">
-                    <label className="text-[11px] font-black text-slate-400 uppercase ml-1">MÃ NHÀ MÁY *</label>
-                    <div className="relative group">
-                        <input value={formData.ma_nha_may} onChange={handleMaNhaMayChange} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-700 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all pr-12 shadow-sm" placeholder="Nhập 9 ký tự (Headcode) hoặc 13 ký tự (Mã NM)..."/>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                            {isSearchingPlan && <Loader2 className="w-5 h-5 text-blue-500 animate-spin mr-1" />}
-                            <button onClick={() => setShowScanner(true)} className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50"><QrCode className="w-5 h-5"/></button>
-                        </div>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Mã công trình *</label>
-                        <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:bg-white outline-none transition-all" placeholder="Nhập mã CT..."/>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tên công trình</label>
-                        <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:bg-white outline-none transition-all" placeholder="Nhập tên CT..."/>
-                    </div>
-                </div>
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tên sản phẩm *</label>
-                    <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:bg-white outline-none transition-all" placeholder="Nhập tên SP..."/>
-                </div>
-            </div>
-        </div>
-
-        <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1">
-                <ClipboardList className="w-4 h-4 text-orange-600" />
-                <h3 className="text-[11px] font-black text-orange-600 uppercase tracking-widest">THÔNG TIN KIỂM TRA</h3>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Xưởng / Kho / Phòng</label>
-                        <div className="relative">
-                            <select value={formData.workshop || ''} onChange={e => setFormData({...formData, workshop: e.target.value, inspectionStage: ''})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none appearance-none">
-                                <option value="">-- Chọn Xưởng --</option>
-                                {workshops.map(ws => <option key={ws.id} value={ws.name}>{ws.name}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Công đoạn sản xuất</label>
-                        <div className="relative">
-                            <select value={formData.inspectionStage || ''} onChange={e => setFormData({...formData, inspectionStage: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none appearance-none">
-                                <option value="">-- Chọn Công Đoạn --</option>
-                                {availableStages.map(stage => <option key={stage} value={stage}>{stage}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">QC thực hiện *</label>
-                        <input value={formData.inspectorName} readOnly className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed uppercase" />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Ngày kiểm tra</label>
-                        <div className="relative">
-                            <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:bg-white outline-none transition-all" />
-                            <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1">
-                <Hash className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">SỐ LƯỢNG KIỂM TRA</h3>
-            </div>
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">SL đơn hàng (IPO)</label>
-                        <div className="relative">
-                            <input 
-                                type="number" step="any"
-                                value={formData.so_luong_ipo} 
-                                onChange={e => handleQuantityChange('so_luong_ipo', e.target.value)} 
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:bg-white outline-none transition-all" 
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">{formData.dvt}</span>
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">SL kiểm tra</label>
-                        <input 
-                            type="number" step="any"
-                            value={formData.inspectedQuantity} 
-                            onChange={e => handleQuantityChange('inspectedQuantity', e.target.value)} 
-                            className="w-full px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl text-sm font-black text-blue-600 focus:bg-white outline-none transition-all" 
-                        />
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <div className="flex justify-between items-center ml-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase">SL đạt</label>
-                            <span className="text-[9px] font-black text-green-600">{stats.passPct}%</span>
-                        </div>
-                        <input 
-                            type="number" step="any"
-                            value={formData.passedQuantity} 
-                            onChange={e => handleQuantityChange('passedQuantity', e.target.value)} 
-                            className="w-full px-4 py-2.5 bg-green-50 border border-green-100 rounded-xl text-sm font-black text-green-600 focus:bg-white outline-none transition-all" 
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <div className="flex justify-between items-center ml-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase">SL lỗi</label>
-                            <span className="text-[9px] font-black text-red-600">{stats.failPct}%</span>
-                        </div>
-                        <input 
-                            type="number" step="any"
-                            value={formData.failedQuantity} 
-                            onChange={e => handleQuantityChange('failedQuantity', e.target.value)} 
-                            className="w-full px-4 py-2.5 bg-red-100 border border-red-200 rounded-xl text-sm font-black text-red-700 focus:bg-white outline-none transition-all" 
-                        />
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
-                    <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">CHI TIẾT HẠNG MỤC ({formData.items?.length || 0})</h3>
-                </div>
-                <button onClick={() => handleAddItem()} className="bg-slate-900 text-white px-3 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1.5 active:scale-95 transition-all shadow-sm">
-                    <PlusCircle className="w-3 h-3" /> Danh mục mới
-                </button>
-            </div>
-
-            <div className="space-y-6">
-                {Object.entries(groupedItems).map(([cat, items]: [string, CheckItem[]]) => (
-                    <div key={cat} className="space-y-3 animate-in slide-in-from-bottom duration-300">
-                        <div className="flex items-center justify-between bg-slate-100/80 px-4 py-2 rounded-xl group/cat border border-slate-200 shadow-sm">
-                            <div className="flex items-center gap-2 flex-1 overflow-hidden">
-                                {editingCategory?.name === cat ? (
-                                    <div className="flex items-center gap-1 w-full max-w-xs">
-                                        <input 
-                                            autoFocus
-                                            value={editingCategory.value} 
-                                            onChange={e => setEditingCategory({...editingCategory, value: e.target.value})}
-                                            onKeyDown={e => e.key === 'Enter' && handleUpdateCategoryName(cat)}
-                                            className="px-2 py-0.5 text-[10px] font-black uppercase text-blue-600 border border-blue-400 rounded outline-none w-full"
-                                        />
-                                        <button onClick={() => handleUpdateCategoryName(cat)} className="p-1 text-green-600 bg-white rounded shadow-sm border border-green-100"><Check className="w-3 h-3"/></button>
-                                        <button onClick={() => setEditingCategory(null)} className="p-1 text-slate-400 bg-white rounded shadow-sm border border-slate-100"><X className="w-3 h-3"/></button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest truncate">{cat}</span>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={(e) => { e.stopPropagation(); setEditingCategory({name: cat, value: cat}); }} className="p-1 text-slate-400 hover:text-blue-600 transition-colors"><Edit2 className="w-3 h-3"/></button>
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3 h-3"/></button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                            <button 
-                                onClick={() => handleAddItem(cat)}
-                                className="flex items-center gap-1 text-[8px] font-black text-blue-600 uppercase hover:bg-white px-2 py-1 rounded-lg transition-all active:scale-95"
-                            >
-                                <Plus className="w-3 h-3"/> Thêm mục
-                            </button>
-                        </div>
-
-                        <div className="space-y-3">
-                            {items.map(item => (
-                                <div key={item.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                                    <div className="p-4 space-y-3">
-                                        <div className="flex justify-between items-start gap-4">
-                                            <div className="flex-1">
-                                                <input 
-                                                    value={item.label} 
-                                                    onChange={e => updateItem(item.id, { label: e.target.value })}
-                                                    className="w-full px-2 py-1 text-sm font-bold text-slate-800 bg-slate-50/50 border-b border-transparent focus:border-blue-500 focus:bg-white outline-none rounded transition-all"
-                                                    placeholder="Tên hạng mục..."
-                                                />
-                                            </div>
-                                            <div className="flex gap-1.5 shrink-0 items-center">
-                                                <button onClick={(e) => { e.stopPropagation(); handleOpenNCR(item); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Ghi nhận lỗi"><AlertTriangle className="w-4 h-4"/></button>
-                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition-colors" title="Xóa hạng mục"><Trash2 className="w-4 h-4"/></button>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-1.5">
-                                            <button 
-                                                onClick={() => handleItemStatusChange(item, CheckStatus.PASS)}
-                                                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${item.status === CheckStatus.PASS ? 'bg-green-600 border-green-600 text-white shadow-lg shadow-green-200' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
-                                            >ĐẠT</button>
-                                            <button 
-                                                onClick={() => handleItemStatusChange(item, CheckStatus.FAIL)}
-                                                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${item.status === CheckStatus.FAIL ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-200' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
-                                            >HỎNG</button>
-                                            <button 
-                                                onClick={() => handleItemStatusChange(item, CheckStatus.CONDITIONAL)}
-                                                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${item.status === CheckStatus.CONDITIONAL ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
-                                            >CÓ ĐIỀU KIỆN</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-
-        <div className="space-y-4">
-            <div className="flex items-center gap-2 px-1">
-                <PenTool className="w-4 h-4 text-blue-600" />
-                <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-widest">XÁC NHẬN CHỮ KÝ (VẼ TỰ DO)</h3>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black text-slate-500 uppercase ml-1">1. QC Kiểm tra</label>
-                        <button onClick={() => clearCanvas(qcCanvasRef)} className="text-[9px] font-black text-red-500 uppercase flex items-center gap-1"><Eraser className="w-3 h-3"/> Xóa</button>
-                    </div>
-                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl h-40 relative overflow-hidden shadow-inner">
-                        <canvas 
-                            ref={qcCanvasRef} width={400} height={200} className="w-full h-full cursor-crosshair touch-none" 
-                            style={{ touchAction: 'none' }}
-                            onMouseDown={e => startDrawing(e, qcCanvasRef, setIsDrawingQC)}
-                            onMouseMove={e => draw(e, qcCanvasRef, isDrawingQC)}
-                            onMouseUp={() => setIsDrawingQC(false)}
-                            onMouseLeave={() => setIsDrawingQC(false)}
-                            onTouchStart={e => startDrawing(e, qcCanvasRef, setIsDrawingQC)}
-                            onTouchMove={e => draw(e, qcCanvasRef, isDrawingQC)}
-                            onTouchEnd={() => setIsDrawingQC(false)}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]">
-                            <PenTool className="w-20 h-20 text-black" />
-                        </div>
-                    </div>
-                    <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formData.inspectorName}</p>
-                </div>
-
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black text-slate-500 uppercase ml-1">2. Đại diện Sản xuất</label>
-                        <button onClick={() => clearCanvas(prodCanvasRef)} className="text-[9px] font-black text-red-500 uppercase flex items-center gap-1"><Eraser className="w-3 h-3"/> Xóa</button>
-                    </div>
-                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl h-40 relative overflow-hidden shadow-inner">
-                        <canvas 
-                            ref={prodCanvasRef} width={400} height={200} className="w-full h-full cursor-crosshair touch-none" 
-                            style={{ touchAction: 'none' }}
-                            onMouseDown={e => startDrawing(e, prodCanvasRef, setIsDrawingProd)}
-                            onMouseMove={e => draw(e, prodCanvasRef, isDrawingProd)}
-                            onMouseUp={() => setIsDrawingProd(false)}
-                            onMouseLeave={() => setIsDrawingProd(false)}
-                            onTouchStart={e => startDrawing(e, prodCanvasRef, setIsDrawingProd)}
-                            onTouchMove={e => draw(e, prodCanvasRef, isDrawingProd)}
-                            onTouchEnd={() => setIsDrawingProd(false)}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]">
-                            <PenTool className="w-20 h-20 text-black" />
-                        </div>
-                    </div>
-                    <input 
-                        value={formData.productionName || ''} 
-                        onChange={e => setFormData({...formData, productionName: e.target.value.toUpperCase()})}
-                        className="w-full text-center px-2 py-1.5 bg-transparent border-b border-slate-200 text-[10px] font-black text-slate-700 outline-none uppercase placeholder:text-slate-300"
-                        placeholder="NHẬP HỌ TÊN NGƯỜI KÝ..."
-                    />
-                </div>
-            </div>
-        </div>
-
       </div>
 
+      {/* Floating Save Hint for Mobile */}
+      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-500 pointer-events-none lg:hidden">
+          <div className="px-4 py-2 bg-slate-900/80 backdrop-blur-md text-white rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-2 border border-white/10 shadow-2xl">
+              <Info className="w-3 h-3 text-blue-400" /> Bấm nút Save ở góc trên để lưu phiếu
+          </div>
+      </div>
+
+      {/* NCR Form Modal (Reuse but optimize) */}
       {ncrModalItem && (
-          <div className="fixed inset-0 z-[130] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-xl h-full md:h-auto md:max-h-[90vh] md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
                   <div className="px-6 py-4 bg-red-600 text-white flex justify-between items-center shrink-0">
                       <div className="flex gap-3 items-center">
                           <AlertTriangle className="w-6 h-6" />
-                          <h3 className="font-black text-lg uppercase tracking-tight leading-none">PHIẾU LỖI (NCR)</h3>
+                          <h3 className="font-black text-lg uppercase tracking-tight leading-none">PHIẾU NCR LỖI</h3>
                       </div>
-                      <button onClick={() => setNcrModalItem(null)}><X className="w-6 h-6"/></button>
+                      <button onClick={() => setNcrModalItem(null)} className="p-2 active:scale-90"><X className="w-7 h-7"/></button>
                   </div>
-                  <div className="p-6 space-y-5 overflow-y-auto no-scrollbar">
-                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between cursor-pointer active:scale-95 transition-all" onClick={() => setShowLibraryModal(true)}>
+                  <div className="p-6 space-y-6 overflow-y-auto no-scrollbar flex-1 pb-32 md:pb-6 bg-slate-50/50">
+                      <div className="bg-blue-600 p-4 rounded-2xl text-white shadow-lg active:scale-95 transition-all cursor-pointer flex items-center justify-between" onClick={() => setShowLibraryModal(true)}>
                           <div className="flex items-center gap-3 overflow-hidden">
-                              <Layers className="w-6 h-6 text-blue-600 shrink-0" />
+                              <Layers className="w-6 h-6 shrink-0" />
                               <div className="overflow-hidden">
-                                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Chọn từ thư viện lỗi</p>
-                                  <p className="text-xs font-bold text-blue-900 truncate">
-                                      {ncrFormData.defect_code ? `${ncrFormData.defect_code}${selectedDefectInfo ? ` - ${selectedDefectInfo.name}` : ''}` : 'Bấm để tra cứu lỗi mẫu'}
+                                  <p className="text-[9px] font-black uppercase tracking-widest opacity-70">Thư viện lỗi chuẩn</p>
+                                  <p className="text-xs font-black truncate">
+                                      {ncrFormData.defect_code ? `${ncrFormData.defect_code} - ${selectedDefectInfo?.name || ''}` : 'CHỌN LỖI TỪ THƯ VIỆN'}
                                   </p>
                               </div>
                           </div>
-                          <Plus className="w-5 h-5 text-blue-400 shrink-0" />
+                          <Plus className="w-5 h-5 shrink-0" />
                       </div>
 
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Mô tả lỗi *</label>
-                          <textarea value={ncrFormData.issueDescription || ''} onChange={e => setNcrFormData({...ncrFormData, issueDescription: e.target.value})} className="w-full px-4 py-3 border border-red-100 rounded-xl bg-red-50/30 text-sm font-bold text-slate-800 outline-none resize-none" rows={3} placeholder="Mô tả cụ thể sự không phù hợp..."/>
+                      <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÔ TẢ LỖI PHÁT HIỆN *</label>
+                          <textarea value={ncrFormData.issueDescription || ''} onChange={e => setNcrFormData({...ncrFormData, issueDescription: e.target.value})} className="w-full px-5 py-4 border-2 border-red-100 rounded-2xl bg-white text-sm font-bold text-slate-800 outline-none resize-none focus:border-red-500 shadow-sm" rows={3} placeholder="Mô tả cụ thể sai hỏng..."/>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Người phụ trách</label>
-                              <input value={ncrFormData.responsiblePerson || ''} onChange={e => setNcrFormData({...ncrFormData, responsiblePerson: e.target.value})} className="w-full px-4 py-2 border rounded-xl text-xs font-bold" placeholder="Nhập tên..."/>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NGƯỜI CHỊU TRÁCH NHIỆM</label>
+                              <input value={ncrFormData.responsiblePerson || ''} onChange={e => setNcrFormData({...ncrFormData, responsiblePerson: e.target.value.toUpperCase()})} className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-xs font-black uppercase bg-white shadow-inner" placeholder="TÊN NHÂN SỰ..."/>
                           </div>
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hạn xử lý</label>
-                              <input type="date" value={ncrFormData.deadline || ''} onChange={e => setNcrFormData({...ncrFormData, deadline: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-bold font-mono"/>
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Mức độ</label>
-                              <select value={ncrFormData.severity || 'MINOR'} onChange={e => setNcrFormData({...ncrFormData, severity: e.target.value as any})} className="w-full px-4 py-2 border rounded-xl text-xs font-bold bg-white">
-                                  <option value="MINOR">MINOR</option>
-                                  <option value="MAJOR">MAJOR</option>
-                                  <option value="CRITICAL">CRITICAL</option>
-                              </select>
+                          <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">HẠN XỬ LÝ (DEADLINE)</label>
+                              <input type="date" value={ncrFormData.deadline || ''} onChange={e => setNcrFormData({...ncrFormData, deadline: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-xs font-black font-mono bg-white shadow-inner"/>
                           </div>
                       </div>
 
                       <div className="space-y-3">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Hình ảnh trước xử lý</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">HÌNH ÁNH TRỰC QUAN</label>
                           <div className="flex flex-wrap gap-3">
                                 <button 
                                     onClick={() => ncrImageInputRef.current?.click()}
-                                    className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
+                                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-red-200 bg-red-50/30 flex flex-col items-center justify-center text-red-400 hover:bg-red-50 active:scale-95 transition-all shadow-inner"
                                 >
-                                    <Camera className="w-5 h-5" />
-                                    <span className="text-[8px] font-black mt-1">THÊM ẢNH</span>
+                                    <Camera className="w-6 h-6" />
+                                    <span className="text-[8px] font-black mt-1 uppercase">THÊM ẢNH</span>
                                 </button>
                                 {ncrFormData.imagesBefore?.map((img, idx) => (
-                                    <div key={idx} className="relative w-16 h-16 group">
-                                        <img src={img} className="w-full h-full object-cover rounded-xl border" />
-                                        <button onClick={() => setNcrFormData(prev => ({...prev, imagesBefore: prev.imagesBefore?.filter((_, i) => i !== idx)}))} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-3 h-3"/></button>
+                                    <div key={idx} className="relative w-20 h-20 group">
+                                        <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-white shadow-md" />
+                                        <button onClick={() => setNcrFormData(prev => ({...prev, imagesBefore: prev.imagesBefore?.filter((_, i) => i !== idx)}))} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow-lg active:scale-90"><X className="w-3.5 h-3.5"/></button>
                                     </div>
                                 ))}
                                 <input type="file" ref={ncrImageInputRef} multiple accept="image/*" className="hidden" onChange={handleNCRImagesUpload} />
                           </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-2 border-t border-slate-100">
-                          <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest italic">Sử dụng Gemini AI để phân tích lỗi?</p>
-                          <button 
-                            onClick={handleAiConsult}
-                            disabled={isAiConsulting}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-100 transition-all active:scale-95 disabled:opacity-50"
-                          >
-                            {isAiConsulting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                            AI Tư vấn lỗi
-                          </button>
-                      </div>
+                      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                          <div className="flex justify-between items-center">
+                              <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5"><Sparkles className="w-4 h-4"/> TRỢ LÝ AI PHÂN TÍCH</h4>
+                              <button 
+                                onClick={handleAiConsult}
+                                disabled={isAiConsulting}
+                                className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg active:scale-95 disabled:opacity-50 transition-all"
+                              >
+                                {isAiConsulting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Bắt đầu tư vấn'}
+                              </button>
+                          </div>
 
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Nguyên nhân gốc rễ</label>
-                          <textarea value={ncrFormData.rootCause || ''} onChange={e => setNcrFormData({...ncrFormData, rootCause: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none resize-none" rows={2} placeholder="Phân tích nguyên nhân..."/>
-                      </div>
-
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Biện pháp xử lý</label>
-                          <textarea value={ncrFormData.solution || ''} onChange={e => setNcrFormData({...ncrFormData, solution: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-xs font-bold text-slate-700 outline-none resize-none" rows={2} placeholder="Nhập hướng khắc phục..."/>
+                          <div className="space-y-3">
+                              <div className="space-y-1">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (AI suggested)</label>
+                                  <textarea value={ncrFormData.rootCause || ''} onChange={e => setNcrFormData({...ncrFormData, rootCause: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-700 outline-none resize-none min-h-[60px]" placeholder="Phân tích tại sao xảy ra lỗi..."/>
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Biện pháp khắc phục (Action Plan)</label>
+                                  <textarea value={ncrFormData.solution || ''} onChange={e => setNcrFormData({...ncrFormData, solution: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-700 outline-none resize-none min-h-[60px]" placeholder="Các bước xử lý tiếp theo..."/>
+                              </div>
+                          </div>
                       </div>
                   </div>
-                  <div className="p-4 border-t bg-slate-50 flex justify-end gap-3 shrink-0">
-                      <button onClick={() => setNcrModalItem(null)} className="px-6 py-2 text-xs font-black uppercase text-slate-500">Hủy</button>
-                      <button onClick={handleSaveNCR} className="bg-red-600 text-white px-8 py-2.5 rounded-xl text-xs font-black uppercase shadow-lg active:scale-95 transition-all">Lưu NCR</button>
+                  <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] sticky bottom-0 z-50">
+                      <button onClick={() => setNcrModalItem(null)} className="px-6 py-3 text-xs font-black uppercase text-slate-400 tracking-widest active:scale-95">HỦY BỎ</button>
+                      <button onClick={handleSaveNCR} className="bg-red-600 text-white flex-1 md:flex-none px-12 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-red-500/30 active:scale-95 transition-all">XÁC NHẬN NCR</button>
                   </div>
               </div>
           </div>
       )}
 
+      {/* Library Modal (Reuse but clean) */}
       {showLibraryModal && (
-          <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in duration-200">
-                  <div className="p-5 bg-blue-600 text-white flex justify-between items-center">
-                      <h3 className="font-black uppercase tracking-tight">Tra cứu thư viện lỗi</h3>
-                      <button onClick={() => setShowLibraryModal(false)}><X className="w-6 h-6"/></button>
+          <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-300">
+              <div className="bg-white rounded-none md:rounded-[3rem] shadow-2xl w-full max-w-lg h-full md:h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+                  <div className="p-5 bg-blue-700 text-white flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-2">
+                          <Layers className="w-6 h-6" />
+                          <h3 className="font-black uppercase tracking-tighter">THƯ VIỆN SAI LỖI</h3>
+                      </div>
+                      <button onClick={() => setShowLibraryModal(false)} className="p-2 active:scale-90"><X className="w-7 h-7"/></button>
                   </div>
-                  <div className="p-4 border-b">
-                      <input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border rounded-xl text-xs outline-none" placeholder="Tìm kiếm lỗi nhanh..."/>
+                  <div className="p-4 border-b bg-slate-50 shrink-0">
+                      <div className="relative">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input 
+                            value={librarySearch} 
+                            onChange={e => setLibrarySearch(e.target.value)} 
+                            className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-inner outline-none focus:ring-4 focus:ring-blue-100" 
+                            placeholder="Tìm kiếm lỗi chuẩn nhanh..."
+                          />
+                      </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2 no-scrollbar">
+                  <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-2 bg-slate-50/50">
                       {availableDefects.map(def => (
-                          <div key={def.id} onClick={() => { setNcrFormData({...ncrFormData, defect_code: def.code, issueDescription: def.description, severity: def.severity, solution: def.suggestedAction}); setShowLibraryModal(false); }} className="p-4 hover:bg-blue-50 border-b border-slate-50 cursor-pointer transition-all active:scale-[0.98]">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{def.code}</span>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{def.name}</span>
+                          <div key={def.id} onClick={() => { setNcrFormData({...ncrFormData, defect_code: def.code, issueDescription: def.description, severity: def.severity, solution: def.suggestedAction}); setShowLibraryModal(false); }} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-[0.98] transition-all hover:border-blue-300 group">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 shadow-sm">{def.code}</span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{def.category}</span>
                               </div>
-                              <p className="text-sm font-bold text-slate-800 mt-1 leading-snug">{def.description}</p>
+                              <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-700 transition-colors">{def.name}</h4>
+                              <p className="text-xs font-medium text-slate-500 mt-2 leading-relaxed line-clamp-2 italic">"{def.description}"</p>
                           </div>
                       ))}
+                      {availableDefects.length === 0 && (
+                          <div className="py-20 text-center text-slate-400 flex flex-col items-center">
+                              <Info className="w-10 h-10 mb-2 opacity-20" />
+                              <p className="text-xs font-black uppercase tracking-widest">Không tìm thấy mã lỗi</p>
+                          </div>
+                      )}
                   </div>
               </div>
           </div>

@@ -9,7 +9,8 @@ import {
     BrainCircuit, ClipboardList, Send, Paperclip, X, Loader2,
     FileWarning, MessageSquare, Plus
 } from 'lucide-react';
-import { saveInspectionToSheet, fetchInspectionById } from '../services/apiService';
+import { saveInspectionToSheet, fetchInspectionById, fetchNcrById } from '../services/apiService';
+import { saveNcrMapped } from '../services/tursoService';
 import { ImageEditorModal } from './ImageEditorModal';
 
 interface NCRDetailProps {
@@ -50,26 +51,21 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
   const isLocked = ncr.status === 'CLOSED';
 
-  const updateNCRInDb = async (updates: Partial<NCR>) => {
-      if (!ncr.inspection_id) return;
-      const fullInspection = await fetchInspectionById(ncr.inspection_id);
-      if (!fullInspection) return;
-
-      const updatedItems = fullInspection.items.map(item => {
-          if (item.ncr && item.ncr.id === ncr.id) {
-              return { ...item, ncr: { ...item.ncr, ...updates } };
-          }
-          return item;
-      });
-
-      const updatedInspection = { ...fullInspection, items: updatedItems };
+  /**
+   * Lưu thay đổi của NCR trực tiếp vào bảng ncrs.
+   */
+  const updateNCRDirectly = async (updates: Partial<NCR>) => {
+      if (!ncr.id || !ncr.inspection_id) return;
+      
+      const updatedNcrObj = { ...ncr, ...updates };
       try {
-          await saveInspectionToSheet(updatedInspection);
-          const newNcr = { ...ncr, ...updates };
-          setNcr(newNcr);
+          // Sử dụng hàm saveNcrMapped từ tursoService (qua API layer nếu cần, ở đây gọi trực tiếp cho nhanh)
+          await saveNcrMapped(ncr.inspection_id, updatedNcrObj, user.name);
+          setNcr(updatedNcrObj);
           if (onUpdate) onUpdate();
       } catch (e) {
-          alert("Lỗi khi cập nhật NCR");
+          console.error("Update NCR direct failed:", e);
+          alert("Lỗi khi cập nhật NCR trực tiếp.");
       }
   };
 
@@ -86,7 +82,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
         attachments: commentAttachments
     };
     try {
-        await updateNCRInDb({ comments: [...(ncr.comments || []), commentObj] });
+        await updateNCRDirectly({ comments: [...(ncr.comments || []), commentObj] });
         setNewComment('');
         setCommentAttachments([]);
     } catch (err) { alert("Lỗi khi gửi bình luận."); } finally { setIsSubmitting(false); }
@@ -100,12 +96,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           r.onload = async () => res(await resizeImage(r.result as string)); 
           r.readAsDataURL(file);
       })));
-      await updateNCRInDb({ imagesAfter: [...(ncr.imagesAfter || []), ...processed] });
+      await updateNCRDirectly({ imagesAfter: [...(ncr.imagesAfter || []), ...processed] });
   };
 
   const handleUpdateStatus = async (newStatus: string) => {
       if (window.confirm(`Xác nhận chuyển trạng thái sang ${newStatus}?`)) {
-          await updateNCRInDb({ status: newStatus });
+          await updateNCRDirectly({ status: newStatus });
       }
   };
 

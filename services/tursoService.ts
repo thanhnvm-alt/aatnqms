@@ -1,5 +1,6 @@
+
 import { turso, isTursoConfigured } from "./tursoConfig";
-import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem } from "../types";
+import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem, NCRComment } from "../types";
 
 /**
  * Initialize all database tables and perform migrations.
@@ -86,7 +87,7 @@ export const initDatabase = async () => {
     console.log("✅ Database tables verified and initialized.");
   } catch (e) {
     console.error("❌ Turso initialization error:", e);
-    throw e; // Ném lỗi để App.tsx xử lý
+    throw e; 
   }
 };
 
@@ -99,8 +100,6 @@ export const testConnection = async () => {
     return false;
   }
 };
-
-// ... (Các hàm CRUD khác giữ nguyên nhưng thêm kiểm tra isTursoConfigured)
 
 export const getInspectionsPaginated = async (params: { page?: number, limit?: number, search?: string, status?: string, type?: string }) => {
     if (!isTursoConfigured) return { items: [], total: 0 };
@@ -138,11 +137,58 @@ export const getInspectionsPaginated = async (params: { page?: number, limit?: n
     };
 };
 
+/**
+ * Lấy chi tiết phiếu kiểm tra và thực hiện "Hydration" các NCR liên quan từ bảng ncrs.
+ */
 export const getInspectionById = async (id: string): Promise<Inspection | null> => {
     if (!isTursoConfigured) return null;
+    
+    // 1. Lấy dữ liệu Inspection cơ bản
     const res = await turso.execute({ sql: "SELECT data FROM inspections WHERE id = ?", args: [id] });
     if (res.rows.length === 0) return null;
-    return JSON.parse(res.rows[0].data as string);
+    
+    const inspection: Inspection = JSON.parse(res.rows[0].data as string);
+
+    // 2. Lấy tất cả NCR liên kết với phiếu này
+    const ncrRes = await turso.execute({ 
+        sql: "SELECT * FROM ncrs WHERE inspection_id = ? AND deleted_at IS NULL", 
+        args: [id] 
+    });
+
+    // 3. Hydrate: Gắn ngược NCR vào các items tương ứng
+    if (ncrRes.rows.length > 0) {
+        const ncrsByItem: Record<string, NCR> = {};
+        ncrRes.rows.forEach(row => {
+            const itemId = row.item_id as string;
+            ncrsByItem[itemId] = {
+                id: row.id as string,
+                inspection_id: row.inspection_id as string,
+                itemId: row.item_id as string,
+                createdDate: new Date((row.created_at as number) * 1000).toISOString().split('T')[0],
+                issueDescription: row.description as string,
+                rootCause: (row.root_cause as string) || '',
+                solution: (row.corrective_action as string) || '',
+                responsiblePerson: (row.responsible_person as string) || '',
+                deadline: (row.deadline as string) || '',
+                status: row.status as string,
+                severity: row.severity as any,
+                imagesBefore: JSON.parse((row.images_before_json as string) || '[]'),
+                imagesAfter: JSON.parse((row.images_after_json as string) || '[]'),
+                comments: JSON.parse((row.comments_json as string) || '[]'),
+            };
+        });
+
+        if (inspection.items) {
+            inspection.items = inspection.items.map(item => {
+                if (ncrsByItem[item.id]) {
+                    return { ...item, ncr: ncrsByItem[item.id] };
+                }
+                return item;
+            });
+        }
+    }
+
+    return inspection;
 };
 
 export const getProjects = async (): Promise<Project[]> => {
@@ -188,14 +234,56 @@ export const getProjectsSummary = async (search: string = ""): Promise<Project[]
     }
 };
 
+/**
+ * Lưu phiếu kiểm tra và tự động tách dữ liệu NCR sang bảng ncrs.
+ */
 export const saveInspection = async (inspection: Inspection) => {
     if (!isTursoConfigured) return;
     const now = Math.floor(Date.now() / 1000);
+    
+    // Tạo bản sao để tránh làm hỏng dữ liệu gốc trên UI
+    const inspectionData = JSON.parse(JSON.stringify(inspection));
+    const ncrPromises: Promise<any>[] = [];
+
+    // Tách và lưu NCR
+    if (inspectionData.items) {
+        for (const item of inspectionData.items) {
+            if (item.ncr) {
+                const ncr = item.ncr;
+                // Đảm bảo NCR có link tới inspection và item
+                ncr.inspection_id = inspectionData.id;
+                ncr.itemId = item.id;
+                
+                ncrPromises.push(saveNcrMapped(inspectionData.id, ncr, inspectionData.inspectorName));
+                
+                // CRITICAL: Xóa đối tượng ncr khỏi JSON của item để không lưu thừa vào bảng inspections
+                delete item.ncr;
+            }
+        }
+    }
+
+    // Thực hiện lưu tất cả NCR
+    await Promise.all(ncrPromises);
+
+    // Lưu dữ liệu phiếu (đã làm sạch NCR)
     await turso.execute({
         sql: `INSERT INTO inspections (id, data, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, status, type, score)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, status = excluded.status, score = excluded.score`,
-        args: [inspection.id, JSON.stringify(inspection), now, now, inspection.inspectorName, inspection.ma_ct, inspection.ten_ct, inspection.ma_nha_may, inspection.ten_hang_muc, inspection.workshop, inspection.status, inspection.type, inspection.score]
+        args: [
+            inspectionData.id, 
+            JSON.stringify(inspectionData), 
+            now, now, 
+            inspection.inspectorName, 
+            inspection.ma_ct, 
+            inspection.ten_ct, 
+            inspection.ma_nha_may, 
+            inspection.ten_hang_muc, 
+            inspection.workshop, 
+            inspection.status, 
+            inspection.type, 
+            inspection.score
+        ]
     });
 };
 
@@ -223,12 +311,71 @@ export const saveWorkshop = async (ws: Workshop) => { if (!isTursoConfigured) re
 export const deleteWorkshop = async (id: string) => { if (!isTursoConfigured) return; await turso.execute({ sql: "DELETE FROM workshops WHERE id = ?", args: [id] }); };
 export const getTemplates = async (): Promise<Record<string, CheckItem[]>> => { if (!isTursoConfigured) return {}; const res = await turso.execute("SELECT moduleId, data FROM templates"); const result: Record<string, CheckItem[]> = {}; res.rows.forEach(r => { result[r.moduleId as string] = JSON.parse(r.data as string); }); return result; };
 export const saveTemplate = async (moduleId: string, items: CheckItem[]) => { if (!isTursoConfigured) return; const now = Math.floor(Date.now() / 1000); await turso.execute({ sql: `INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`, args: [moduleId, JSON.stringify(items), now] }); };
-export const getNcrs = async (params: { inspection_id?: string, status?: string, page?: number, limit?: number }): Promise<NCR[]> => { if (!isTursoConfigured) return []; const { inspection_id, status, page = 1, limit = 50 } = params; const offset = (page - 1) * limit; let sql = `SELECT * FROM ncrs WHERE deleted_at IS NULL`; let args: any[] = []; if (inspection_id) { sql += ` AND inspection_id = ?`; args.push(inspection_id); } if (status && status !== 'ALL') { sql += ` AND status = ?`; args.push(status); } sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`; args.push(limit, offset); const res = await turso.execute({ sql, args }); return res.rows.map(row => ({ id: row.id as string, inspection_id: row.inspection_id as string, createdDate: new Date((row.created_at as number) * 1000).toISOString().split('T')[0], issueDescription: row.description as string, rootCause: (row.root_cause as string) || '', solution: (row.corrective_action as string) || '', responsiblePerson: (row.responsible_person as string) || '', deadline: (row.deadline as string) || '', status: row.status as string, severity: row.severity as any, imagesBefore: JSON.parse((row.images_before_json as string) || '[]'), imagesAfter: JSON.parse((row.images_after_json as string) || '[]'), comments: JSON.parse((row.comments_json as string) || '[]'), itemId: row.item_id as string })); };
+
+/**
+ * Tối ưu hóa: Lấy danh sách NCR không kèm theo hình ảnh để tăng tốc độ tải.
+ */
+export const getNcrs = async (params: { inspection_id?: string, status?: string, page?: number, limit?: number }): Promise<NCR[]> => { 
+    if (!isTursoConfigured) return []; 
+    const { inspection_id, status, page = 1, limit = 50 } = params; 
+    const offset = (page - 1) * limit; 
+    
+    // Chỉ lấy các trường văn bản, không lấy các trường JSON nặng
+    let sql = `SELECT id, inspection_id, item_id, defect_code, severity, status, description, root_cause, corrective_action, responsible_person, deadline, created_by, created_at, updated_at 
+               FROM ncrs WHERE deleted_at IS NULL`; 
+    let args: any[] = []; 
+    if (inspection_id) { sql += ` AND inspection_id = ?`; args.push(inspection_id); } 
+    if (status && status !== 'ALL') { sql += ` AND status = ?`; args.push(status); } 
+    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`; args.push(limit, offset); 
+    
+    const res = await turso.execute({ sql, args }); 
+    return res.rows.map(row => ({ 
+        id: row.id as string, 
+        inspection_id: row.inspection_id as string, 
+        createdDate: new Date((row.created_at as number) * 1000).toISOString().split('T')[0], 
+        issueDescription: row.description as string, 
+        rootCause: (row.root_cause as string) || '', 
+        solution: (row.corrective_action as string) || '', 
+        responsiblePerson: (row.responsible_person as string) || '', 
+        deadline: (row.deadline as string) || '', 
+        status: row.status as string, 
+        severity: row.severity as any, 
+        imagesBefore: [], 
+        imagesAfter: [], 
+        comments: [], 
+        itemId: row.item_id as string 
+    })); 
+};
+
+/**
+ * Lấy chi tiết đầy đủ của một NCR (bao gồm cả hình ảnh và bình luận).
+ */
+export const getNcrById = async (id: string): Promise<NCR | null> => {
+    if (!isTursoConfigured) return null;
+    const res = await turso.execute({ sql: "SELECT * FROM ncrs WHERE id = ?", args: [id] });
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+        id: row.id as string,
+        inspection_id: row.inspection_id as string,
+        createdDate: new Date((row.created_at as number) * 1000).toISOString().split('T')[0],
+        issueDescription: row.description as string,
+        rootCause: (row.root_cause as string) || '',
+        solution: (row.corrective_action as string) || '',
+        responsiblePerson: (row.responsible_person as string) || '',
+        deadline: (row.deadline as string) || '',
+        status: row.status as string,
+        severity: row.severity as any,
+        imagesBefore: JSON.parse((row.images_before_json as string) || '[]'),
+        imagesAfter: JSON.parse((row.images_after_json as string) || '[]'),
+        comments: JSON.parse((row.comments_json as string) || '[]'),
+        itemId: row.item_id as string
+    };
+};
+
 export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => { if (!isTursoConfigured) return []; const res = await turso.execute("SELECT * FROM defect_library ORDER BY COALESCE(defect_code, id) ASC"); return res.rows.map(row => ({ id: row.id as string, code: (row.defect_code as string) || (row.id as string), name: (row.name as string) || '', stage: (row.stage as string) || 'Chung', category: (row.category as string) || 'Khác', description: (row.description as string) || '', severity: (row.severity as any) || 'MINOR', suggestedAction: (row.suggested_action as string) || '', correctImage: (row.correct_image as string) || '', incorrectImage: (row.incorrect_image as string) || '', createdBy: (row.created_by as string) || 'System', createdAt: (row.created_at as number) || Math.floor(Date.now() / 1000) })); };
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => { if (!isTursoConfigured) return; const now = Math.floor(Date.now() / 1000); await turso.execute({ sql: `INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, correct_image, incorrect_image, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET defect_code = excluded.defect_code, name = excluded.name, stage = excluded.stage, category = excluded.category, description = excluded.description, severity = excluded.severity, suggested_action = excluded.suggested_action, correct_image = excluded.correct_image, incorrect_image = excluded.incorrect_image`, args: [item.id, item.code, item.name || '', item.stage, item.category, item.description, item.severity, item.suggestedAction || '', item.correctImage || '', item.incorrectImage || '', item.createdBy || 'System', item.createdAt || now] }); };
 export const deleteDefectLibraryItem = async (id: string) => { if (!isTursoConfigured) return; await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: [id] }); };
-
-// Fix: Added missing getDefects, importUsers, and saveNcrMapped functions
 
 /**
  * Fetch defects by joining NCRs with Inspections to get project context.
@@ -307,7 +454,7 @@ export const importUsers = async (users: User[]) => {
 };
 
 /**
- * Save NCR data with mapped fields for the database.
+ * Lưu dữ liệu NCR với ánh xạ trường cho database.
  */
 export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
     if (!isTursoConfigured) return '';
@@ -332,7 +479,7 @@ export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: 
         args: [
             id, 
             inspection_id, 
-            (ncr as any).itemId || '', 
+            ncr.itemId || '', 
             ncr.defect_code || '', 
             ncr.severity || 'MINOR', 
             ncr.status || 'OPEN', 

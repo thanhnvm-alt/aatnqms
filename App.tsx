@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect } from './types';
 import { 
@@ -281,7 +280,7 @@ const App = () => {
         <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} {...headerActions} />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
-            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onImportInspections={async (p) => { await importInspections(p); loadInspections(); }} onRefresh={loadInspections} onModuleChange={setCurrentModule} />}
+            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onImportInspections={async (p) => { await importInspections(p); loadInspections(); }} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
             {view === 'FORM' && <InspectionForm initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
             {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
