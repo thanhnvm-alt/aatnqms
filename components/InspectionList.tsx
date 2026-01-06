@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Inspection, InspectionStatus, Priority, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
@@ -5,8 +6,9 @@ import { QRScannerModal } from './QRScannerModal';
 import { 
   Search, Filter, X, ChevronDown, ChevronRight, Layers, 
   RefreshCw, QrCode, FileDown, FolderOpen, Clock, Tag, 
-  UserCheck, Briefcase, Loader2, Calendar, FileText
+  UserCheck, Briefcase, Loader2, Calendar, FileText, Camera
 } from 'lucide-react';
+import { fetchInspectionById, saveInspectionToSheet } from '../services/apiService';
 
 interface InspectionListProps {
   inspections: Inspection[];
@@ -21,6 +23,25 @@ interface InspectionListProps {
 }
 
 const PROJECTS_PER_PAGE = 10;
+
+const resizeImage = (base64Str: string, maxWidth = 1200): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
+      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
+      else resolve(base64Str);
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+};
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
   inspections, onSelect, userRole, selectedModule, onModuleChange, 
@@ -39,6 +60,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   
+  const [isQuickCapturing, setIsQuickCapturing] = useState<string | null>(null);
+  const quickCameraRef = useRef<HTMLInputElement>(null);
+
   const moduleMenuRef = useRef<HTMLDivElement>(null);
   const inspectorMenuRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +147,36 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       } catch (e) { alert("Lỗi khi xuất file Excel"); } finally { setIsExporting(false); }
   };
 
+  const handleQuickCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!isQuickCapturing || !e.target.files?.length) return;
+      const file = e.target.files[0];
+      const inspectionId = isQuickCapturing;
+      
+      try {
+          setIsQuickCapturing('PROCESSING');
+          const base64 = await new Promise<string>((res) => {
+              const r = new FileReader(); 
+              r.onload = () => res(r.result as string); 
+              r.readAsDataURL(file);
+          });
+          const resized = await resizeImage(base64);
+          
+          // Fetch full data, update, and save
+          const fullData = await fetchInspectionById(inspectionId);
+          if (fullData) {
+              fullData.images = [...(fullData.images || []), resized];
+              await saveInspectionToSheet(fullData);
+              if (onRefresh) onRefresh();
+              alert("Đã lưu hình ảnh bổ sung thành công.");
+          }
+      } catch (err) {
+          alert("Lỗi khi lưu ảnh nhanh.");
+      } finally {
+          setIsQuickCapturing(null);
+          if (quickCameraRef.current) quickCameraRef.current.value = '';
+      }
+  };
+
   const currentModuleName = selectedModule === 'ALL' || !selectedModule 
     ? 'TẤT CẢ MODULE' 
     : ALL_MODULES.find(m => m.id === selectedModule)?.label || selectedModule;
@@ -137,6 +191,18 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
+      <input type="file" accept="image/*" capture="environment" ref={quickCameraRef} className="hidden" onChange={handleQuickCapture} />
+      
+      {/* Quick Capture Processing Loader */}
+      {isQuickCapturing === 'PROCESSING' && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                  <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Đang tải ảnh lên...</p>
+              </div>
+          </div>
+      )}
+
       {/* Fixed Sub-Header for Search & Actions */}
       <div className="bg-white border-b border-slate-200 z-40 sticky top-0 shadow-sm px-4 py-3 shrink-0">
         <div className="max-w-7xl mx-auto space-y-3">
@@ -275,7 +341,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                </span>
                             </div>
                           </div>
-                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
+                          <div className="flex items-center gap-3">
+                              {/* Quick Camera Action */}
+                              <button 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsQuickCapturing(item.id);
+                                    quickCameraRef.current?.click();
+                                }}
+                                className="p-2.5 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-100 transition-all active:scale-90"
+                                title="Chụp ảnh nhanh bổ sung"
+                              >
+                                  <Camera className="w-4.5 h-4.5" />
+                              </button>
+                              <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
+                          </div>
                         </div>
                       ))}
                     </div>

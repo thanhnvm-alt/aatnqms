@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR, DefectLibraryItem } from '../types';
 import { INITIAL_CHECKLIST_TEMPLATE } from '../constants';
@@ -81,7 +82,11 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const ncrImageInputRef = useRef<HTMLInputElement>(null);
+  const ncrCameraInputRef = useRef<HTMLInputElement>(null);
+  
+  // activeUploadId can be 'MAIN', or an item ID like 'site_1'
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAiConsulting, setIsAiConsulting] = useState(false);
@@ -92,7 +97,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
   const [editingCategory, setEditingCategory] = useState<{name: string, value: string} | null>(null);
-  const [editingImageIdx, setEditingImageIdx] = useState<number | null>(null);
+  const [editingImageIdx, setEditingImageIdx] = useState<{ type: 'MAIN' | 'ITEM', itemId?: string, index: number } | null>(null);
 
   const qcCanvasRef = useRef<HTMLCanvasElement>(null);
   const prodCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -246,7 +251,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       category: finalCategory.toUpperCase(),
       label,
       status: CheckStatus.PENDING,
-      notes: ''
+      notes: '',
+      images: []
     };
     setFormData(prev => ({ ...prev, items: [...(prev.items || []), newItem] }));
   };
@@ -338,10 +344,30 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const processed = await Promise.all(Array.from(files).map(async (file: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(file);}))));
-    if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processed] }));
-    setActiveUploadId(null); if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!files || files.length === 0 || !activeUploadId) return;
+    
+    const processed = await Promise.all(Array.from(files).map(async (file: File) => 
+        await resizeImage(await new Promise<string>(res => {
+            const r = new FileReader(); 
+            r.onload = () => res(r.result as string); 
+            r.readAsDataURL(file);
+        }))
+    ));
+
+    if (activeUploadId === 'MAIN') {
+        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processed] }));
+    } else {
+        // Assume activeUploadId is the item ID
+        const itemId = activeUploadId;
+        setFormData(prev => ({
+            ...prev,
+            items: prev.items?.map(item => item.id === itemId ? { ...item, images: [...(item.images || []), ...processed] } : item)
+        }));
+    }
+    
+    setActiveUploadId(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
   const handleNCRImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -353,13 +379,24 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           imagesBefore: [...(prev.imagesBefore || []), ...processed]
       }));
       if (ncrImageInputRef.current) ncrImageInputRef.current.value = '';
+      if (ncrCameraInputRef.current) ncrCameraInputRef.current.value = '';
   };
 
   const handleUpdateImage = (index: number, updatedImage: string) => {
-    setFormData(prev => ({
-        ...prev,
-        images: prev.images?.map((img, i) => i === index ? updatedImage : img)
-    }));
+    if (!editingImageIdx) return;
+    
+    if (editingImageIdx.type === 'MAIN') {
+        setFormData(prev => ({
+            ...prev,
+            images: prev.images?.map((img, i) => i === index ? updatedImage : img)
+        }));
+    } else if (editingImageIdx.type === 'ITEM' && editingImageIdx.itemId) {
+        const itemId = editingImageIdx.itemId;
+        setFormData(prev => ({
+            ...prev,
+            items: prev.items?.map(item => item.id === itemId ? { ...item, images: item.images?.map((img, i) => i === index ? updatedImage : img) } : item)
+        }));
+    }
   };
 
   const groupedItems = useMemo(() => {
@@ -420,7 +457,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   return (
     <div className="bg-slate-50 h-full flex flex-col relative overflow-hidden">
+      {/* Hidden inputs for Image Management */}
       <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+      <input type="file" accept="image/*" capture="environment" ref={cameraInputRef} onChange={handleFileChange} className="hidden" />
 
       {showScanner && (
         <QRScannerModal 
@@ -436,8 +475,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
       {editingImageIdx !== null && (
           <ImageEditorModal 
-            images={formData.images || []} 
-            initialIndex={editingImageIdx} 
+            images={editingImageIdx.type === 'MAIN' ? (formData.images || []) : (formData.items?.find(i => i.id === editingImageIdx.itemId)?.images || [])} 
+            initialIndex={editingImageIdx.index} 
             onSave={handleUpdateImage} 
             onClose={() => setEditingImageIdx(null)} 
           />
@@ -466,14 +505,22 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
               </div>
               <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap gap-3">
                   <button 
+                    onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }}
+                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 flex flex-col items-center justify-center text-indigo-600 active:scale-95 transition-all shadow-inner"
+                  >
+                      <Camera className="w-6 h-6" />
+                      <span className="text-[8px] font-black mt-1 uppercase">Chụp</span>
+                  </button>
+                  <button 
                     onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }}
                     className="w-20 h-20 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/50 flex flex-col items-center justify-center text-blue-500 active:scale-95 transition-all shadow-inner"
                   >
                       <Plus className="w-6 h-6" />
-                      <span className="text-[8px] font-black mt-1 uppercase">Thêm</span>
+                      <span className="text-[8px] font-black mt-1 uppercase">Thư viện</span>
                   </button>
+
                   {formData.images?.map((img, idx) => (
-                      <div key={idx} className="relative w-20 h-20 group cursor-pointer" onClick={() => setEditingImageIdx(idx)}>
+                      <div key={idx} className="relative w-20 h-20 group cursor-pointer" onClick={() => setEditingImageIdx({ type: 'MAIN', index: idx })}>
                           <img src={img} className="w-full h-full object-cover rounded-2xl border border-slate-100 shadow-sm transition-all group-hover:scale-105" />
                           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
                               <PenTool className="text-white w-4 h-4" />
@@ -708,11 +755,44 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                               >COND.</button>
                                           </div>
 
+                                          {/* Item-level images */}
+                                          <div className="space-y-2">
+                                              <div className="flex items-center justify-between">
+                                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ảnh minh chứng tiêu chí</label>
+                                                  <div className="flex gap-2">
+                                                      <button 
+                                                          onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}
+                                                          className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-100 active:scale-90 transition-all"
+                                                          title="Chụp ảnh cho mục này"
+                                                      >
+                                                          <Camera className="w-3.5 h-3.5" />
+                                                      </button>
+                                                      <button 
+                                                          onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}
+                                                          className="p-1.5 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 active:scale-90 transition-all"
+                                                          title="Tải ảnh từ thư viện"
+                                                      >
+                                                          <ImageIcon className="w-3.5 h-3.5" />
+                                                      </button>
+                                                  </div>
+                                              </div>
+                                              {item.images && item.images.length > 0 ? (
+                                                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                                      {item.images.map((img, idx) => (
+                                                          <div key={idx} className="relative w-16 h-16 shrink-0 group cursor-pointer" onClick={() => setEditingImageIdx({ type: 'ITEM', itemId: item.id, index: idx })}>
+                                                              <img src={img} className="w-full h-full object-cover rounded-xl border border-slate-100 shadow-sm" />
+                                                              <button onClick={(e) => { e.stopPropagation(); updateItem(item.id, { images: item.images?.filter((_, i) => i !== idx) }); }} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-md"><X className="w-2.5 h-2.5"/></button>
+                                                          </div>
+                                                      ))}
+                                                  </div>
+                                              ) : null}
+                                          </div>
+
                                           <div className="relative group">
                                               <Edit2 className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-300 group-focus-within:text-blue-500" />
                                               <textarea 
                                                 value={item.notes}
-                                                onChange={e => updateItem(item.id, { notes: e.target.value })}
+                                                onChange={(e) => updateItem(item.id, { notes: e.target.value })}
                                                 placeholder="Ghi chú chi tiết cho mục này..."
                                                 className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 focus:bg-white focus:ring-4 focus:ring-blue-100/50 outline-none resize-none shadow-inner"
                                                 rows={1}
@@ -847,12 +927,21 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                       <div className="space-y-3">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">HÌNH ÁNH TRỰC QUAN</label>
                           <div className="flex flex-wrap gap-3">
+                                {/* NCR Camera Capture */}
+                                <button 
+                                    onClick={() => ncrCameraInputRef.current?.click()}
+                                    className="w-20 h-20 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 flex flex-col items-center justify-center text-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all shadow-inner"
+                                >
+                                    <Camera className="w-6 h-6" />
+                                    <span className="text-[8px] font-black mt-1 uppercase">CHỤP ÁNH</span>
+                                </button>
+                                
                                 <button 
                                     onClick={() => ncrImageInputRef.current?.click()}
                                     className="w-20 h-20 rounded-2xl border-2 border-dashed border-red-200 bg-red-50/30 flex flex-col items-center justify-center text-red-400 hover:bg-red-50 active:scale-95 transition-all shadow-inner"
                                 >
-                                    <Camera className="w-6 h-6" />
-                                    <span className="text-[8px] font-black mt-1 uppercase">THÊM ẢNH</span>
+                                    <ImageIcon className="w-6 h-6" />
+                                    <span className="text-[8px] font-black mt-1 uppercase">THƯ VIỆN</span>
                                 </button>
                                 {ncrFormData.imagesBefore?.map((img, idx) => (
                                     <div key={idx} className="relative w-20 h-20 group">
@@ -861,6 +950,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                     </div>
                                 ))}
                                 <input type="file" ref={ncrImageInputRef} multiple accept="image/*" className="hidden" onChange={handleNCRImagesUpload} />
+                                <input type="file" ref={ncrCameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={handleNCRImagesUpload} />
                           </div>
                       </div>
 
@@ -898,7 +988,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
       {/* Library Modal (Reuse but clean) */}
       {showLibraryModal && (
-          <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-300">
+          <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-200">
               <div className="bg-white rounded-none md:rounded-[3rem] shadow-2xl w-full max-w-lg h-full md:h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95">
                   <div className="p-5 bg-blue-700 text-white flex justify-between items-center shrink-0">
                       <div className="flex items-center gap-2">
