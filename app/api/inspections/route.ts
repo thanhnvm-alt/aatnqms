@@ -1,8 +1,8 @@
 
 import { NextRequest } from 'next/server';
-import { saveInspection } from '../../../services/tursoService';
-import { buildSuccessResponse, buildErrorResponse } from '../../../lib/api-response';
-import { getAuthUser } from '../../../lib/auth';
+import { saveInspection } from '@/services/tursoService';
+import { buildSuccessResponse, buildErrorResponse } from '@/lib/api-response';
+import { getAuthUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
 
     if (!id || !data) return buildErrorResponse('Missing fields', 'INVALID_PARAMS', null, 400);
 
+    // Sử dụng service logic đã được chuẩn hóa (tự động tách NCR sang table riêng)
     const inspectionToSave = { ...data, id };
     await saveInspection(inspectionToSave);
 

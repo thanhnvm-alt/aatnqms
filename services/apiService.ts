@@ -38,7 +38,12 @@ export const fetchInspections = async (filters: {
       type: filters.type
   });
 
-  return { items: result.items, total: result.total, page: filters.page, limit: filters.limit };
+  return { 
+      items: result.items, 
+      total: result.total, 
+      page: filters.page, 
+      limit: filters.limit 
+  };
 };
 
 export const fetchInspectionById = async (id: string): Promise<Inspection | null> => {
@@ -47,21 +52,25 @@ export const fetchInspectionById = async (id: string): Promise<Inspection | null
 
 export const fetchNcrs = async (params: { inspection_id?: string, status?: string, page?: number, limit?: number } = {}): Promise<PagedResult<any>> => {
     const result = await db.getNcrs(params);
-    return { items: result, total: result.length, page: params.page, limit: params.limit };
+    return {
+        items: result,
+        total: result.length,
+        page: params.page,
+        limit: params.limit
+    };
 };
 
 export const fetchDefects = async (params: { search?: string, status?: string } = {}): Promise<PagedResult<Defect>> => {
     const result = await db.getDefects(params);
-    return { items: result, total: result.length };
+    return {
+        items: result,
+        total: result.length
+    };
 };
 
-// Defect Library APIs - Updated with Stats and History
+// Defect Library APIs
 export const fetchDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
-    return await db.getDefectLibraryWithStats();
-};
-
-export const fetchDefectUsageHistory = async (defectCode: string) => {
-    return await db.getDefectUsageHistory(defectCode);
+    return await db.getDefectLibrary();
 };
 
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
@@ -81,22 +90,17 @@ export const deleteInspectionFromSheet = async (id: string) => {
   await db.deleteInspection(id);
 };
 
-/**
- * Lấy danh sách dự án rút gọn có đồng bộ từ Plans
- */
 export const fetchProjectsSummary = async (search: string = ""): Promise<Project[]> => {
-  // 1. Đồng bộ trước khi lấy (Tối ưu: có thể chỉ sync 1 lần khi App khởi động, nhưng đây là yêu cầu)
-  await db.syncProjectsFromPlans();
-  
-  // 2. Lấy từ bảng projects có lọc search
-  return await db.getProjectsSummary(search);
+    return await db.getProjectsSummary(search);
 };
 
-/**
- * Lấy chi tiết dự án (Lazy load)
- */
-export const fetchProjectDetailByMaCt = async (ma_ct: string): Promise<Project | null> => {
-    return await db.getProjectDetail(ma_ct);
+export const fetchProjects = async (): Promise<Project[]> => {
+  const dbProjects = await db.getProjects();
+  if (dbProjects.length > 0) return dbProjects;
+  
+  // Fallback if no specific projects metadata: derive from inspections
+  const derived = await db.getProjectsSummary("");
+  return derived;
 };
 
 export const updateProject = async (project: Project) => {
@@ -110,7 +114,9 @@ export const deleteUser = async (id: string) => { await db.deleteUser(id); };
 export const importUsers = async (users: User[]) => { await db.importUsers(users); };
 
 export const importInspections = async (inspections: Inspection[]) => {
-  for (const inspection of inspections) { await db.saveInspection(inspection); }
+  for (const inspection of inspections) {
+    await db.saveInspection(inspection);
+  }
 };
 
 export const fetchWorkshops = async () => await db.getWorkshops();

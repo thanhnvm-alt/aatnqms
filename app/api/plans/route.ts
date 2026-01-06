@@ -1,16 +1,17 @@
 
 import { NextRequest } from 'next/server';
-import { plansService } from '../../../services/plansService';
-import { PlanSchema, PaginationSchema } from '../../../lib/validations';
-import { successResponse, errorResponse, generateRequestId, buildErrorResponse } from '../../../lib/api-response';
-import { ValidationError } from '../../../lib/errors';
-import { getAuthUser } from '../../../lib/auth';
+import { plansService } from '@/services/plansService';
+import { PlanSchema, PaginationSchema } from '@/lib/validations';
+import { successResponse, errorResponse, generateRequestId, buildErrorResponse } from '@/lib/api-response';
+import { ValidationError } from '@/lib/errors';
+import { getAuthUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const requestId = generateRequestId();
   try {
+    // Xác thực cơ bản
     const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
     const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
     
+    // Chỉ Admin và Manager được phép tạo kế hoạch
     if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
       return buildErrorResponse('Forbidden', 'FORBIDDEN', null, 403);
     }

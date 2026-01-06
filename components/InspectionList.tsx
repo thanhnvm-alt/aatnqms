@@ -15,27 +15,20 @@ import jsQR from 'jsqr';
 
 interface InspectionListProps {
   inspections: Inspection[];
-  allInspections?: Inspection[];
   onSelect: (id: string) => void;
-  currentModuleLabel?: string;
   userRole?: string;
   selectedModule?: string;
   onModuleChange?: (module: string) => void;
-  visibleModules?: { id: string; label: string }[];
   onImportInspections?: (inspections: Inspection[]) => Promise<void>;
   onRefresh?: () => void;
   currentUserName?: string;
-  currentUser?: UserType;
-  onLogout?: () => void;
-  onNavigateSettings?: (tab: 'PROFILE' | 'TEMPLATE' | 'USERS' | 'WORKSHOPS') => void;
 }
 
 const PROJECTS_PER_PAGE = 10;
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, allInspections = [], onSelect, currentModuleLabel = "Module", 
-  userRole, selectedModule, onModuleChange, onImportInspections, onRefresh, 
-  currentUserName, currentUser, onLogout, onNavigateSettings 
+  inspections, onSelect, userRole, selectedModule, onModuleChange, 
+  onImportInspections, onRefresh, currentUserName
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'FLAGGED' | 'HIGH_PRIORITY' | 'DRAFT' | 'MY_REPORTS'>('ALL');
@@ -46,21 +39,16 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   
-  // UI States
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showModuleMenu, setShowModuleMenu] = useState(false);
   const [showInspectorMenu, setShowInspectorMenu] = useState(false);
   const [showWorkshopMenu, setShowWorkshopMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   
-  // QR Scanner State
   const [showScanner, setShowScanner] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   
-  const filterMenuRef = useRef<HTMLDivElement>(null);
   const moduleMenuRef = useRef<HTMLDivElement>(null);
   const inspectorMenuRef = useRef<HTMLDivElement>(null);
   const workshopMenuRef = useRef<HTMLDivElement>(null);
@@ -70,7 +58,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) setShowFilterMenu(false);
       if (moduleMenuRef.current && !moduleMenuRef.current.contains(event.target as Node)) setShowModuleMenu(false);
       if (inspectorMenuRef.current && !inspectorMenuRef.current.contains(event.target as Node)) setShowInspectorMenu(false);
       if (workshopMenuRef.current && !workshopMenuRef.current.contains(event.target as Node)) setShowWorkshopMenu(false);
@@ -79,7 +66,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // --- Data Extraction for Filters ---
   const inspectors = useMemo(() => {
     const unique = new Set(inspections.map(i => i.inspectorName).filter(Boolean));
     return Array.from(unique).sort();
@@ -90,7 +76,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     return Array.from(unique).sort();
   }, [inspections]);
 
-  // --- QR Scanner Logic ---
   useEffect(() => {
     let stream: MediaStream | null = null;
     if (showScanner) {
@@ -129,8 +114,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const code = jsQR(imageData.data, imageData.width, imageData.height);
           if (code && code.data) {
-             const scannedData = code.data.trim();
-             setSearchTerm(scannedData);
+             setSearchTerm(code.data.trim());
              setShowScanner(false);
              return;
           }
@@ -181,13 +165,28 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const sortedProjectCodes = useMemo(() => Object.keys(groupedItems).sort((a, b) => groupedItems[b].length - groupedItems[a].length), [groupedItems]);
   const pagedProjectCodes = useMemo(() => sortedProjectCodes.slice((currentPage - 1) * PROJECTS_PER_PAGE, currentPage * PROJECTS_PER_PAGE), [sortedProjectCodes, currentPage]);
 
-  const filterOptions = [
-    { key: 'ALL', label: 'Tất cả trạng thái', icon: undefined },
-    { key: 'FLAGGED', label: 'Cần xử lý', icon: <AlertCircle className="w-3 h-3 text-red-500" /> },
-    { key: 'HIGH_PRIORITY', label: 'Khẩn cấp', icon: <Zap className="w-3 h-3 text-orange-500" /> },
-    { key: 'DRAFT', label: 'Bản nháp', icon: <FileDown className="w-3 h-3 text-slate-400" /> },
-    { key: 'MY_REPORTS', label: 'Của tôi', icon: <User className="w-3 h-3 text-blue-500" /> },
-  ] as const;
+  const handleExport = async () => {
+      setIsExporting(true);
+      try {
+          // @ts-ignore
+          const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+          const exportData = filteredInspections.map(item => ({
+              'Mã dự án': item.ma_ct,
+              'Tên công trình': item.ten_ct,
+              'Mã nhà máy': item.ma_nha_may,
+              'Tên hạng mục': item.ten_hang_muc,
+              'Người kiểm tra': item.inspectorName,
+              'Ngày kiểm tra': item.date,
+              'Điểm số': item.score,
+              'Trạng thái': item.status,
+              'Xưởng': item.workshop
+          }));
+          const ws = XLSX.utils.json_to_sheet(exportData);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Inspections");
+          XLSX.writeFile(wb, `Bao_cao_QC_AATN_${new Date().toISOString().split('T')[0]}.xlsx`);
+      } catch (e) { alert("Lỗi khi xuất file Excel"); } finally { setIsExporting(false); }
+  };
 
   const currentModuleName = selectedModule === 'ALL' || !selectedModule 
     ? 'TẤT CẢ MODULE' 
@@ -206,39 +205,35 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-50">
-      {/* Optimized Unified Toolbar */}
       <div className="bg-white px-3 py-3 border-b border-slate-200 shadow-sm z-30 shrink-0 lg:px-6">
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          
-          {/* Search Bar */}
           <div className="relative group flex-1 min-w-[200px] md:min-w-[300px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-blue-500 transition-colors" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input 
               type="text" placeholder="Tìm Mã NM, Sản phẩm, QC..." value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-12 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
+              className="w-full pl-10 pr-12 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
             />
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {searchTerm && <button onClick={() => setSearchTerm('')} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"><X className="w-4 h-4"/></button>}
               <button onClick={() => setShowScanner(true)} className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 active:scale-90 transition-all border border-blue-100/50"><QrCode className="w-4 h-4" /></button>
             </div>
           </div>
 
-          {/* Filters Row */}
           <div className="flex flex-wrap gap-2 items-center">
+              <button onClick={handleExport} disabled={isExporting} className="h-10 px-3 rounded-xl flex items-center gap-2 bg-indigo-50 text-indigo-600 border border-indigo-100 active:scale-95 transition-all">
+                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileDown className="w-4 h-4" />}
+                  <span className="text-[10px] font-black uppercase hidden sm:inline">Xuất Excel</span>
+              </button>
+
               {!isQC && (
                   <div className="relative" ref={moduleMenuRef}>
-                      <button 
-                          onClick={() => setShowModuleMenu(!showModuleMenu)}
-                          className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all active:scale-95 ${selectedModule && selectedModule !== 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'}`}
-                      >
-                          <Layers className={`w-3.5 h-3.5 ${selectedModule && selectedModule !== 'ALL' ? 'text-white' : 'text-slate-400'}`} />
+                      <button onClick={() => setShowModuleMenu(!showModuleMenu)} className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all ${selectedModule && selectedModule !== 'ALL' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border-slate-200'}`}>
+                          <Layers className="w-3.5 h-3.5" />
                           <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{currentModuleName}</span>
-                          <ChevronDown className="w-3 h-3 opacity-40" />
                       </button>
                       {showModuleMenu && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left max-h-60 overflow-y-auto no-scrollbar">
-                              <button onClick={() => { onModuleChange?.('ALL'); setShowModuleMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50">TẤT CẢ MODULE</button>
+                          <div className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 overflow-y-auto max-h-60 no-scrollbar animate-in fade-in zoom-in-95 origin-top-left">
+                              <button onClick={() => { onModuleChange?.('ALL'); setShowModuleMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase hover:bg-slate-50">TẤT CẢ MODULE</button>
                               {ALL_MODULES.map((mod) => (
                                   <button key={mod.id} onClick={() => { onModuleChange?.(mod.id); setShowModuleMenu(false); }} className={`w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-slate-50 ${selectedModule === mod.id ? 'text-blue-600 bg-blue-50' : 'text-slate-600'}`}>{mod.label}</button>
                               ))}
@@ -248,40 +243,24 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               )}
 
               <div className="relative" ref={inspectorMenuRef}>
-                  <button onClick={() => setShowInspectorMenu(!showInspectorMenu)} className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all active:scale-95 ${selectedInspector !== 'ALL' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200'}`}>
+                  <button onClick={() => setShowInspectorMenu(!showInspectorMenu)} className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all ${selectedInspector !== 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border-slate-200'}`}>
                       <UserCheck className="w-3.5 h-3.5" />
                       <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{selectedInspector === 'ALL' ? 'QC THỰC HIỆN' : selectedInspector}</span>
                   </button>
                   {showInspectorMenu && (
-                      <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left max-h-60 overflow-y-auto no-scrollbar">
-                          <button onClick={() => { setSelectedInspector('ALL'); setShowInspectorMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50">TẤT CẢ QC</button>
+                      <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 overflow-y-auto max-h-60 no-scrollbar">
+                          <button onClick={() => { setSelectedInspector('ALL'); setShowInspectorMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase hover:bg-slate-50">TẤT CẢ QC</button>
                           {inspectors.map((name) => (
-                              <button key={name} onClick={() => { setSelectedInspector(name); setShowInspectorMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-slate-50">{name}</button>
+                              <button key={name} onClick={() => { setSelectedInspector(name); setShowInspectorMenu(false); }} className={`w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-slate-50`}>{name}</button>
                           ))}
                       </div>
                   )}
               </div>
 
-              <div className="relative" ref={workshopMenuRef}>
-                  <button onClick={() => setShowWorkshopMenu(!showWorkshopMenu)} className={`h-10 px-3 rounded-xl flex items-center gap-2 border transition-all active:scale-95 ${selectedWorkshop !== 'ALL' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}`}>
-                      <Factory className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-black uppercase truncate max-w-[100px]">{selectedWorkshop === 'ALL' ? 'XƯỞNG SX' : selectedWorkshop}</span>
-                  </button>
-                  {showWorkshopMenu && (
-                      <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-left max-h-60 overflow-y-auto no-scrollbar">
-                          <button onClick={() => { setSelectedWorkshop('ALL'); setShowWorkshopMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-50">TẤT CẢ XƯỞNG</button>
-                          {workshops.map((ws) => (
-                              <button key={ws} onClick={() => { setSelectedWorkshop(ws); setShowWorkshopMenu(false); }} className="w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase hover:bg-slate-50">{ws}</button>
-                          ))}
-                      </div>
-                  )}
-              </div>
-
-              {/* Status & Date Picker */}
               <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 h-10 shrink-0">
-                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-600 outline-none cursor-pointer py-1" />
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-600 outline-none" />
                   <ArrowRight className="w-3 h-3 text-slate-300 mx-1" />
-                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-600 outline-none text-right cursor-pointer py-1" />
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-[10px] font-black text-slate-600 outline-none" />
               </div>
 
               {hasActiveFilters && (
@@ -293,7 +272,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         </div>
       </div>
 
-      {/* List Content */}
       <div className="flex-1 overflow-y-auto space-y-3 p-3 lg:p-6 no-scrollbar pb-24">
         <div className="flex items-center justify-between mb-2 px-1">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hiển thị {filteredInspections.length} bản ghi phù hợp</p>
@@ -350,7 +328,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           })
         )}
 
-        {/* Pagination */}
         {sortedProjectCodes.length > PROJECTS_PER_PAGE && (
           <div className="flex justify-center gap-4 pt-4 pb-10">
               <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-2.5 bg-white border border-slate-200 rounded-xl disabled:opacity-30 active:scale-90"><ChevronLeft className="w-5 h-5" /></button>

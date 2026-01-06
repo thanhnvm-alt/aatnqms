@@ -1,14 +1,12 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
-import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, fetchDefectUsageHistory } from '../services/apiService';
+import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops } from '../services/apiService';
 import { 
     Search, Plus, Edit2, Trash2, ShieldAlert, Hammer, 
     Tag, Filter, Loader2, X, Save, AlertTriangle, 
-    // Added AlertCircle to fix 'Cannot find name AlertCircle' error
-    AlertCircle, Layers, BookOpen, ChevronRight, Hash, ChevronDown,
-    Image as ImageIcon, CheckCircle, XCircle, Camera, Clock,
-    BarChart3, FileText, ArrowUpRight
+    Layers, BookOpen, ChevronRight, Hash, ChevronDown,
+    Image as ImageIcon, CheckCircle, XCircle, Camera
 } from 'lucide-react';
 
 interface DefectLibraryProps {
@@ -35,7 +33,7 @@ const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
 };
 
 export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => {
-  const [library, setLibrary] = useState<(DefectLibraryItem & { occurrenceCount?: number })[]>([]);
+  const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,11 +41,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DefectLibraryItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // History state
-  const [historyItem, setHistoryItem] = useState<(DefectLibraryItem & { occurrenceCount?: number }) | null>(null);
-  const [historyData, setHistoryData] = useState<any[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const correctImgRef = useRef<HTMLInputElement>(null);
   const incorrectImgRef = useRef<HTMLInputElement>(null);
@@ -84,19 +77,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
     } finally {
         setIsLoading(false);
     }
-  };
-
-  const loadHistory = async (item: DefectLibraryItem & { occurrenceCount?: number }) => {
-      setHistoryItem(item);
-      setIsLoadingHistory(true);
-      try {
-          const history = await fetchDefectUsageHistory(item.code);
-          setHistoryData(history);
-      } catch (err) {
-          console.error("Load history failed:", err);
-      } finally {
-          setIsLoadingHistory(false);
-      }
   };
 
   const availableStages = useMemo(() => {
@@ -252,7 +232,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                   <th className="px-6 py-4 w-64">Mã & Tên Lỗi</th>
                                   <th className="px-6 py-4 w-44">Thông tin gộp</th>
                                   <th className="px-6 py-4">Mô tả lỗi</th>
-                                  <th className="px-6 py-4 w-24 text-center">Tần suất</th>
                                   <th className="px-6 py-4 w-28 text-center">Thao tác</th>
                               </tr>
                           </thead>
@@ -281,15 +260,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                       </td>
                                       <td className="px-6 py-4">
                                           <p className="text-sm font-bold text-slate-700 leading-snug">{item.description}</p>
-                                          {item.suggestedAction && <p className="text-[10px] text-blue-600 font-medium mt-1 uppercase italic">Gợi ý xử lý: {item.suggestedAction}</p>}
-                                      </td>
-                                      <td className="px-6 py-4 text-center">
-                                          <button 
-                                            onClick={() => loadHistory(item)}
-                                            className={`px-3 py-1.5 rounded-xl font-black text-[10px] transition-all hover:scale-105 active:scale-95 ${item.occurrenceCount && item.occurrenceCount > 0 ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
-                                          >
-                                              {item.occurrenceCount || 0} lần
-                                          </button>
+                                          {item.suggestedAction && <p className="text-[10px] text-blue-600 font-medium mt-1 uppercase italic">Action: {item.suggestedAction}</p>}
                                       </td>
                                       <td className="px-6 py-4 text-center">
                                           {isQA ? (
@@ -310,70 +281,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
           )}
       </div>
 
-      {/* History Modal */}
-      {historyItem && (
-          <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden animate-in zoom-in duration-300">
-                  <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                      <div className="flex items-center gap-4">
-                          <div className="p-3 bg-blue-600 rounded-2xl">
-                              <BarChart3 className="w-6 h-6" />
-                          </div>
-                          <div>
-                              <h3 className="font-black text-xl uppercase tracking-tighter">Lịch sử ghi nhận lỗi</h3>
-                              <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{historyItem.code} — {historyItem.name}</p>
-                          </div>
-                      </div>
-                      <button onClick={() => setHistoryItem(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-8 h-8" /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-slate-50">
-                      {isLoadingHistory ? (
-                          <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                              <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-                              <p className="font-black uppercase tracking-widest text-xs">Đang lấy lịch sử...</p>
-                          </div>
-                      ) : historyData.length === 0 ? (
-                          <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
-                              <Clock className="w-20 h-20 opacity-10" />
-                              <p className="font-black text-xs uppercase tracking-widest">Chưa có dữ liệu thực tế nào được liên kết</p>
-                          </div>
-                      ) : (
-                          <div className="space-y-4">
-                              {historyData.map((h, idx) => (
-                                  <div key={idx} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                      <div className="flex items-start gap-4">
-                                          <div className="p-3 bg-red-50 text-red-600 rounded-2xl border border-red-100 shadow-sm shrink-0">
-                                              <AlertCircle className="w-6 h-6" />
-                                          </div>
-                                          <div className="overflow-hidden">
-                                              <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-[9px] font-black bg-slate-900 text-white px-2 py-0.5 rounded uppercase tracking-widest">{h.ma_ct}</span>
-                                                <span className="text-[10px] font-bold text-slate-400 truncate">{h.ten_ct}</span>
-                                              </div>
-                                              <h4 className="text-sm font-black text-slate-800 line-clamp-1 italic">"{h.description}"</h4>
-                                              <div className="flex items-center gap-3 mt-2">
-                                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> {h.date}</span>
-                                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${h.status === 'CLOSED' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'}`}>{h.status}</span>
-                                              </div>
-                                          </div>
-                                      </div>
-                                      <button className="flex items-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-600 rounded-2xl text-[10px] font-black uppercase border border-blue-100 hover:bg-blue-600 hover:text-white transition-all active:scale-95 group">
-                                          <FileText className="w-4 h-4" />
-                                          Xem phiếu gốc
-                                          <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                      </button>
-                                  </div>
-                              ))}
-                          </div>
-                      )}
-                  </div>
-                  <div className="p-6 bg-white border-t border-slate-100 flex justify-center shrink-0">
-                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Hệ thống truy vết sai lỗi kỹ thuật AATN</p>
-                  </div>
-              </div>
-          </div>
-      )}
-
       {/* CRUD Modal */}
       {isModalOpen && (
           <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -383,14 +290,15 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       <button onClick={() => setIsModalOpen(false)}><X className="w-6 h-6"/></button>
                   </div>
                   <div className="p-6 space-y-5 overflow-y-auto max-h-[80vh] no-scrollbar">
+                      {/* Dòng 1: Mã và Tên */}
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                               <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mã Lỗi *</label>
                               <input 
                                 value={formData.code} 
-                                onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})}
-                                className="w-full px-4 py-2.5 border rounded-xl font-black uppercase bg-slate-50 text-slate-800 outline-none focus:ring-2 focus:ring-blue-100" 
-                                placeholder="Nhập mã lỗi chuẩn..."
+                                readOnly 
+                                className="w-full px-4 py-2.5 border rounded-xl font-black uppercase bg-slate-50 text-slate-400 cursor-not-allowed" 
+                                placeholder="Tự động..."
                               />
                           </div>
                           <div className="space-y-1">
@@ -404,6 +312,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
+                      {/* Dòng 2: Gộp thông tin */}
                       <div className="grid grid-cols-3 gap-4">
                           <div className="space-y-1">
                               <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Công đoạn *</label>
@@ -438,17 +347,19 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
+                      {/* Dòng 3: Mô tả chi tiết */}
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mô tả chi tiết *</label>
                           <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-medium text-sm focus:ring-2 focus:ring-blue-100 outline-none resize-none" rows={2} placeholder="Nhập mô tả lỗi..."/>
                       </div>
 
+                      {/* Dòng 4: Hình ảnh Đúng/Sai */}
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-green-600 uppercase flex items-center gap-1.5"><CheckCircle className="w-3 h-3" /> Hình ảnh chuẩn (ĐÚNG)</label>
                               <div 
                                 onClick={() => correctImgRef.current?.click()}
-                                className="aspect-video bg-green-50 border-2 border-dashed border-green-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-100 transition-all overflow-hidden relative group shadow-inner"
+                                className="aspect-video bg-green-50 border-2 border-dashed border-green-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-100 transition-all overflow-hidden relative group"
                               >
                                   {formData.correctImage ? (
                                       <img src={formData.correctImage} className="w-full h-full object-cover" />
@@ -465,7 +376,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                               <label className="text-[10px] font-black text-red-600 uppercase flex items-center gap-1.5"><XCircle className="w-3 h-3" /> Hình ảnh sai (LỖI)</label>
                               <div 
                                 onClick={() => incorrectImgRef.current?.click()}
-                                className="aspect-video bg-red-50 border-2 border-dashed border-red-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-red-100 transition-all overflow-hidden relative group shadow-inner"
+                                className="aspect-video bg-red-50 border-2 border-dashed border-red-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-red-100 transition-all overflow-hidden relative group"
                               >
                                   {formData.incorrectImage ? (
                                       <img src={formData.incorrectImage} className="w-full h-full object-cover" />
@@ -480,6 +391,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
+                      {/* Dòng 5: Biện pháp khắc phục */}
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Biện pháp khắc phục gợi ý</label>
                           <textarea value={formData.suggestedAction} onChange={e => setFormData({...formData, suggestedAction: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-medium bg-blue-50/30 text-sm focus:ring-2 focus:ring-blue-100 outline-none resize-none" rows={2} placeholder="Nhập biện pháp xử lý chuẩn..."/>

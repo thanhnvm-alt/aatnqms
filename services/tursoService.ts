@@ -3,7 +3,7 @@ import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem } from "../types";
 
 /**
- * Initialize all database tables and perform migrations if necessary.
+ * Initialize all database tables and perform migrations.
  */
 export const initDatabase = async () => {
   if (!isTursoConfigured) return;
@@ -27,48 +27,7 @@ export const initDatabase = async () => {
         created_at INTEGER
       )`);
 
-    // 2. Projects Metadata Table
-    await turso.execute(`
-      CREATE TABLE IF NOT EXISTS projects (
-        ma_ct TEXT PRIMARY KEY,
-        name TEXT,
-        status TEXT,
-        pm TEXT,
-        progress INTEGER DEFAULT 0,
-        data TEXT,
-        updated_at INTEGER
-      )`);
-
-    // MIGRATION: Đảm bảo bảng 'projects' có đầy đủ các cột cần thiết
-    try {
-        const tableInfo = await turso.execute("PRAGMA table_info(projects)");
-        const columns = tableInfo.rows.map(row => row.name);
-        
-        const requiredColumns = [
-            { name: 'ma_ct', type: 'TEXT' },
-            { name: 'status', type: 'TEXT' },
-            { name: 'pm', type: 'TEXT' },
-            { name: 'progress', type: 'INTEGER DEFAULT 0' },
-            { name: 'data', type: 'TEXT' },
-            { name: 'updated_at', type: 'INTEGER' }
-        ];
-
-        for (const col of requiredColumns) {
-            if (!columns.includes(col.name)) {
-                console.log(`⚠️ Table 'projects' is missing '${col.name}'. Attempting migration...`);
-                try {
-                    await turso.execute(`ALTER TABLE projects ADD COLUMN ${col.name} ${col.type}`);
-                    console.log(`✅ Column '${col.name}' added to 'projects'.`);
-                } catch (alterErr) {
-                    console.error(`❌ Failed to add column '${col.name}':`, alterErr);
-                }
-            }
-        }
-    } catch (migErr) {
-        console.warn("Migration check failed:", migErr);
-    }
-
-    // 3. Inspections Table
+    // 2. Inspections Table (Enhanced with metadata columns for fast listing)
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS inspections (
         id TEXT PRIMARY KEY,
@@ -84,6 +43,30 @@ export const initDatabase = async () => {
         status TEXT,
         type TEXT,
         score INTEGER
+      )`);
+
+    // MIGRATION: Đảm bảo bảng inspections có các cột metadata mới
+    try {
+        const tableInfo = await turso.execute("PRAGMA table_info(inspections)");
+        const columns = tableInfo.rows.map(row => String(row.name).toLowerCase());
+        const missing = [
+            { name: 'ten_ct', type: 'TEXT' },
+            { name: 'ten_hang_muc', type: 'TEXT' },
+            { name: 'workshop', type: 'TEXT' }
+        ];
+        for (const col of missing) {
+            if (!columns.includes(col.name)) {
+                await turso.execute(`ALTER TABLE inspections ADD COLUMN ${col.name} ${col.type}`);
+            }
+        }
+    } catch (e) { console.warn("Migration warning:", e); }
+
+    // 3. Projects Metadata Table
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS projects (
+        ma_ct TEXT PRIMARY KEY,
+        data TEXT,
+        updated_at INTEGER
       )`);
 
     // 4. Defect Library Table
@@ -128,13 +111,13 @@ export const initDatabase = async () => {
         deleted_at INTEGER
       )`);
 
-    // Các bảng khác
+    // Các bảng hệ thống khác
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT, username TEXT UNIQUE, role TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, data TEXT, code TEXT UNIQUE, name TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER)`);
 
-    console.log("✅ Database initialized and verified.");
+    console.log("✅ Optimized Database initialized.");
   } catch (e) {
     console.error("❌ Database initialization failed:", e);
     throw e;
@@ -142,185 +125,61 @@ export const initDatabase = async () => {
 };
 
 /**
- * 1. Sao chép danh sách dự án từ bảng plans sang bảng projects
+ * TỐI ƯU: Lấy danh sách kiểm tra rút gọn (Summary)
  */
-export const syncProjectsFromPlans = async () => {
-    try {
-        const res = await turso.execute(`
-            SELECT ma_ct, ten_ct FROM plans 
-            WHERE ma_ct IS NOT NULL AND ma_ct != ''
-            GROUP BY ma_ct
-        `);
-        
-        const now = Math.floor(Date.now() / 1000);
-        
-        for (const row of res.rows) {
-            const ma_ct = String(row.ma_ct).trim();
-            const ten_ct = row.ten_ct ? String(row.ten_ct).trim() : ma_ct;
-            
-            // Sử dụng INSERT OR IGNORE và sau đó UPDATE để an toàn với cấu trúc SQLite
-            await turso.execute({
-                sql: `INSERT OR IGNORE INTO projects (ma_ct, name, status, progress, updated_at) 
-                      VALUES (?, ?, 'Planning', 0, ?)`,
-                args: [ma_ct, ten_ct, now]
-            });
-
-            await turso.execute({
-                sql: `UPDATE projects SET updated_at = ? 
-                      WHERE ma_ct = ? AND (name IS NULL OR name = '' OR name = ma_ct)`,
-                args: [now, ma_ct]
-            });
-        }
-        console.log(`✅ Synced ${res.rows.length} projects from plans.`);
-    } catch (e) {
-        console.error("❌ Sync projects failed:", e);
-        throw e;
-    }
-};
-
-/**
- * 2. Lấy danh sách dự án rút gọn
- */
-export const getProjectsSummary = async (search: string = ""): Promise<Project[]> => {
-    let sql = "SELECT ma_ct, name, status, pm, progress FROM projects";
+export const getInspectionsPaginated = async (params: { page?: number, limit?: number, search?: string, status?: string, type?: string }) => {
+    const { page = 1, limit = 50, search = '', status = '', type = '' } = params;
+    const offset = (page - 1) * limit;
+    
+    // Chỉ chọn các trường metadata cần thiết để hiển thị list, KHÔNG lấy cột 'data' (JSON)
+    let sql = `
+        SELECT 
+            id, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, 
+            created_by as inspectorName, 
+            strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as date, 
+            status, type, score 
+        FROM inspections 
+        WHERE 1=1
+    `;
     let args: any[] = [];
     
     if (search) {
-        sql += " WHERE ma_ct LIKE ? OR name LIKE ? OR pm LIKE ?";
+        sql += " AND (ma_ct LIKE ? OR ma_nha_may LIKE ? OR ten_ct LIKE ? OR ten_hang_muc LIKE ?)";
         const term = `%${search}%`;
-        args = [term, term, term];
+        args.push(term, term, term, term);
+    }
+    if (status && status !== 'ALL') {
+        sql += " AND status = ?";
+        args.push(status);
+    }
+    if (type && type !== 'ALL') {
+        sql += " AND type = ?";
+        args.push(type);
     }
     
-    sql += " ORDER BY ma_ct ASC";
+    const countSql = `SELECT COUNT(*) as total FROM (${sql})`;
+    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
     
-    try {
-        const res = await turso.execute({ sql, args });
-        return res.rows.map(row => ({
-            id: `proj_${row.ma_ct}`,
-            code: String(row.ma_ct),
-            ma_ct: String(row.ma_ct),
-            name: (row.name as string) || String(row.ma_ct),
-            ten_ct: (row.name as string) || String(row.ma_ct),
-            status: (row.status as any) || 'Planning',
-            pm: (row.pm as string) || 'Unassigned',
-            progress: Number(row.progress || 0),
-            thumbnail: '',
-            startDate: '',
-            endDate: ''
-        } as Project));
-    } catch (err) {
-        console.error("❌ Error fetching projects summary:", err);
-        return [];
-    }
+    const [dataRes, countRes] = await Promise.all([
+        turso.execute({ sql, args: [...args, limit, offset] }),
+        turso.execute({ sql: countSql, args })
+    ]);
+    
+    return {
+        items: dataRes.rows as unknown as Inspection[],
+        total: Number(countRes.rows[0]?.total || 0)
+    };
 };
 
-export const getProjectDetail = async (ma_ct: string): Promise<Project | null> => {
-    try {
-        const res = await turso.execute({ 
-            sql: "SELECT * FROM projects WHERE ma_ct = ?", 
-            args: [ma_ct] 
-        });
-        if (res.rows.length === 0) return null;
-        
-        const row = res.rows[0];
-        let project: Project;
-        
-        if (row.data) {
-            project = JSON.parse(row.data as string);
-        } else {
-            project = {
-                id: `proj_${row.ma_ct}`,
-                code: String(row.ma_ct),
-                ma_ct: String(row.ma_ct),
-                name: (row.name as string) || String(row.ma_ct),
-                ten_ct: (row.name as string) || String(row.ma_ct),
-                status: (row.status as any) || 'Planning',
-                pm: (row.pm as string) || 'Unassigned',
-                progress: Number(row.progress || 0),
-                thumbnail: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=600',
-                startDate: '',
-                endDate: '',
-                description: ''
-            };
-        }
-        return project;
-    } catch (e) {
-        console.error("Error getting project detail:", e);
-        return null;
-    }
-};
-
-export const saveProjectMetadata = async (project: Project) => {
-    const now = Math.floor(Date.now() / 1000);
-    await turso.execute({
-        sql: `INSERT INTO projects (ma_ct, name, status, pm, progress, data, updated_at) 
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(ma_ct) DO UPDATE SET 
-                name = excluded.name, 
-                status = excluded.status, 
-                pm = excluded.pm, 
-                progress = excluded.progress, 
-                data = excluded.data, 
-                updated_at = excluded.updated_at`,
-        args: [
-            project.ma_ct, 
-            project.name, 
-            project.status, 
-            project.pm, 
-            project.progress, 
-            JSON.stringify(project), 
-            now
-        ]
-    });
-};
-
-export const getDefectUsageHistory = async (defectCode: string): Promise<any[]> => {
-    const res = await turso.execute({
-        sql: `SELECT n.*, i.ma_ct, i.ten_ct, i.created_at as inspection_date 
-              FROM ncrs n 
-              JOIN inspections i ON n.inspection_id = i.id 
-              WHERE n.defect_code = ? AND n.deleted_at IS NULL
-              ORDER BY n.created_at DESC`,
-        args: [defectCode]
-    });
-    return res.rows.map(row => ({
-        id: row.id,
-        inspection_id: row.inspection_id,
-        ma_ct: row.ma_ct,
-        ten_ct: row.ten_ct,
-        date: new Date((row.created_at as number) * 1000).toISOString().split('T')[0],
-        status: row.status,
-        description: row.description
-    }));
-};
-
-export const getDefectLibraryWithStats = async (): Promise<any[]> => {
-    const res = await turso.execute(`
-        SELECT d.*, COUNT(n.id) as occurrence_count 
-        FROM defect_library d 
-        LEFT JOIN ncrs n ON d.defect_code = n.defect_code AND n.deleted_at IS NULL
-        GROUP BY d.defect_code
-        ORDER BY d.defect_code ASC
-    `);
-    return res.rows.map(row => ({
-        id: row.id as string,
-        code: row.defect_code as string,
-        name: (row.name as string) || '',
-        stage: (row.stage as string) || 'Chung',
-        category: (row.category as string) || 'Khác',
-        description: (row.description as string) || '',
-        severity: (row.severity as any) || 'MINOR',
-        suggestedAction: (row.suggested_action as string) || '',
-        correctImage: (row.correct_image as string) || '',
-        incorrectImage: (row.incorrect_image as string) || '',
-        occurrenceCount: Number(row.occurrence_count || 0)
-    }));
-};
-
+/**
+ * Lấy chi tiết đầy đủ của 1 phiếu (Bao gồm JSON data và NCRs)
+ */
 export const getInspectionById = async (id: string): Promise<Inspection | null> => {
     const res = await turso.execute({ sql: "SELECT data FROM inspections WHERE id = ?", args: [id] });
     if (res.rows.length === 0) return null;
+    
     const inspection = JSON.parse(res.rows[0].data as string) as Inspection;
+    
     const associatedNcrs = await getNcrsByInspectionId(id);
     if (associatedNcrs.length > 0) {
         inspection.items = inspection.items.map(item => {
@@ -329,12 +188,14 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             return item;
         });
     }
+    
     return inspection;
 };
 
 export const saveInspection = async (inspection: Inspection) => {
     const now = Math.floor(Date.now() / 1000);
     const userId = inspection.inspectorName || 'Unknown';
+    
     const itemsToSave = JSON.parse(JSON.stringify(inspection.items));
     if (itemsToSave && Array.isArray(itemsToSave)) {
         for (const item of itemsToSave) {
@@ -344,7 +205,9 @@ export const saveInspection = async (inspection: Inspection) => {
             }
         }
     }
+
     const inspectionDataOnly = { ...inspection, items: itemsToSave };
+
     await turso.execute({
         sql: `INSERT INTO inspections (id, data, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, status, type, score)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -362,30 +225,6 @@ export const saveInspection = async (inspection: Inspection) => {
             inspection.workshop, inspection.status, inspection.type, inspection.score
         ]
     });
-};
-
-export const getInspectionsPaginated = async (params: { page?: number, limit?: number, search?: string, status?: string, type?: string }) => {
-    const { page = 1, limit = 50, search = '', status = '', type = '' } = params;
-    const offset = (page - 1) * limit;
-    let sql = `SELECT id, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, created_by as inspectorName, 
-               strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as date, 
-               status, type, score 
-               FROM inspections WHERE 1=1`;
-    let args: any[] = [];
-    if (search) {
-        sql += " AND (ma_ct LIKE ? OR ma_nha_may LIKE ? OR ten_ct LIKE ? OR ten_hang_muc LIKE ?)";
-        const term = `%${search}%`;
-        args.push(term, term, term, term);
-    }
-    if (status) { sql += " AND status = ?"; args.push(status); }
-    if (type) { sql += " AND type = ?"; args.push(type); }
-    const countSql = `SELECT COUNT(*) as total FROM (${sql})`;
-    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
-    const [dataRes, countRes] = await Promise.all([
-        turso.execute({ sql, args: [...args, limit, offset] }),
-        turso.execute({ sql: countSql, args })
-    ]);
-    return { items: dataRes.rows as unknown as Inspection[], total: Number(countRes.rows[0]?.total || 0) };
 };
 
 export const getNcrsByInspectionId = async (inspectionId: string): Promise<NCR[]> => {
@@ -471,3 +310,54 @@ export const saveNcrMapped = async (inspectionId: string, ncrData: any, userId: 
 export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => { const res = await turso.execute("SELECT * FROM defect_library ORDER BY COALESCE(defect_code, id) ASC"); return res.rows.map(row => ({ id: row.id as string, code: (row.defect_code as string) || (row.code as string) || (row.id as string), name: (row.name as string) || '', stage: (row.stage as string) || 'Chung', category: (row.category as string) || 'Khác', description: (row.description as string) || '', severity: (row.severity as any) || 'MINOR', suggestedAction: (row.suggested_action as string) || '', correctImage: (row.correct_image as string) || '', incorrectImage: (row.incorrect_image as string) || '', createdBy: (row.created_by as string) || 'System', createdAt: (row.created_at as number) || Math.floor(Date.now() / 1000) })); };
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => { const now = Math.floor(Date.now() / 1000); await turso.execute({ sql: `INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, correct_image, incorrect_image, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET defect_code = excluded.defect_code, name = excluded.name, stage = excluded.stage, category = excluded.category, description = excluded.description, severity = excluded.severity, suggested_action = excluded.suggested_action, correct_image = excluded.correct_image, incorrect_image = excluded.incorrect_image`, args: [item.id, item.code, item.name || '', item.stage, item.category, item.description, item.severity, item.suggestedAction || '', item.correctImage || '', item.incorrectImage || '', item.createdBy || 'System', item.createdAt || now] }); };
 export const deleteDefectLibraryItem = async (id: string) => { await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: [id] }); };
+
+/**
+ * Lấy danh sách dự án đầy đủ từ bảng projects
+ */
+export const getProjects = async (): Promise<Project[]> => {
+  const res = await turso.execute("SELECT data FROM projects");
+  return res.rows.map(r => JSON.parse(r.data as string));
+};
+
+/**
+ * Lưu metadata dự án (tên, mô tả, hình ảnh, tiến độ...)
+ */
+export const saveProjectMetadata = async (project: Project) => {
+  const now = Math.floor(Date.now() / 1000);
+  await turso.execute({
+    sql: `INSERT INTO projects (ma_ct, data, updated_at) VALUES (?, ?, ?)
+          ON CONFLICT(ma_ct) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+    args: [project.ma_ct, JSON.stringify(project), now]
+  });
+};
+
+export const getProjectsSummary = async (search: string = ""): Promise<Project[]> => {
+    let sql = "SELECT ma_ct, ten_ct FROM inspections";
+    let args: any[] = [];
+    if (search) {
+        sql += " WHERE ma_ct LIKE ? OR ten_ct LIKE ?";
+        const term = `%${search}%`;
+        args = [term, term];
+    }
+    sql += " GROUP BY ma_ct";
+    
+    try {
+        const res = await turso.execute({ sql, args });
+        return res.rows.map(row => ({
+            id: `proj_${row.ma_ct}`,
+            code: String(row.ma_ct),
+            ma_ct: String(row.ma_ct),
+            name: (row.ten_ct as string) || String(row.ma_ct),
+            ten_ct: (row.ten_ct as string) || String(row.ma_ct),
+            status: 'In Progress',
+            pm: 'Unassigned',
+            progress: 0,
+            thumbnail: '',
+            startDate: '',
+            endDate: ''
+        } as Project));
+    } catch (err) {
+        console.error("Error fetching projects summary:", err);
+        return [];
+    }
+};

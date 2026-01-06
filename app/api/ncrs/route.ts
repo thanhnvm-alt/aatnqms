@@ -1,8 +1,8 @@
 
 import { NextRequest } from 'next/server';
-import { getNcrs, saveNcrMapped } from '../../../services/tursoService';
-import { buildSuccessResponse, buildErrorResponse } from '../../../lib/api-response';
-import { getAuthUser } from '../../../lib/auth';
+import { getNcrs, saveNcrMapped } from '@/services/tursoService';
+import { buildSuccessResponse, buildErrorResponse } from '@/lib/api-response';
+import { getAuthUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 

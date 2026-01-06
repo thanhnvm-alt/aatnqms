@@ -1,8 +1,8 @@
 
 import { NextRequest } from 'next/server';
-import { turso } from '../../../services/tursoConfig';
-import { buildSuccessResponse, buildErrorResponse } from '../../../lib/api-response';
-import { getAuthUser, canModifyInspection } from '../../../lib/auth';
+import { turso } from '@/services/tursoConfig';
+import { buildSuccessResponse, buildErrorResponse } from '@/lib/api-response';
+import { getAuthUser, canModifyInspection } from '@/lib/auth';
 
 interface RouteParams {
   params: { id: string };
@@ -38,6 +38,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { data } = await request.json();
     
+    // 1. Fetch current state to check status (ISO Locking)
     const current = await turso.execute({
       sql: 'SELECT data, created_by FROM inspections WHERE id = ?',
       args: [params.id]
@@ -48,6 +49,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const currentData = JSON.parse(current.rows[0].data as string);
     const ownerId = current.rows[0].created_by as string;
 
+    // 2. ISO Rule: Prevent editing of APPROVED/LOCKED records
     if (currentData.status === 'APPROVED' && user.role !== 'ADMIN') {
         return buildErrorResponse(
             'Bản ghi đã được phê duyệt và khóa. Vui lòng liên hệ Admin để thay đổi.',
@@ -57,10 +59,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         );
     }
 
+    // 3. Ownership check
     if (!canModifyInspection(user, ownerId)) {
         return buildErrorResponse('Bạn không có quyền sửa bản ghi này', 'FORBIDDEN', null, 403);
     }
 
+    // 4. Update
     await turso.execute({
       sql: 'UPDATE inspections SET data = ?, updated_at = unixepoch() WHERE id = ?',
       args: [JSON.stringify(data), params.id]
