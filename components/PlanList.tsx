@@ -1,16 +1,15 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { PlanItem, Inspection, CheckItem, InspectionStatus } from '../types';
+import { QRScannerModal } from './QRScannerModal';
 import { 
   Search, RefreshCw, FileSpreadsheet, Plus, Upload, 
   ChevronLeft, ChevronRight, Briefcase, Calendar, 
   ArrowRight, Loader2, CheckCircle2, AlertCircle, FileUp,
   FolderOpen, Tag, MoreHorizontal, Clock, ArrowUpRight,
   QrCode, X, ChevronDown, Filter, Layers, FileDown,
-  PieChart, FileText
+  PieChart, FileText, Building2
 } from 'lucide-react';
-// @ts-ignore
-import jsQR from 'jsqr';
 
 interface PlanListProps {
   items: PlanItem[];
@@ -72,9 +71,6 @@ export const PlanList: React.FC<PlanListProps> = ({
 
   // Scanner State
   const [showScanner, setShowScanner] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(0);
 
   // --- LOGIC: Advanced Search & Grouping ---
 
@@ -97,16 +93,21 @@ export const PlanList: React.FC<PlanListProps> = ({
   const groupedItems = useMemo(() => {
       const groups: Record<string, PlanItem[]> = {};
       filteredItems.forEach(item => {
-          const key = item.ma_ct || 'KHÁC';
+          const ma_ct = String(item.ma_ct || '');
+          // LOGIC: Nếu ma_ct bắt đầu bằng "CT" thì group theo mã, ngược lại group theo tên công trình
+          const key = ma_ct.toUpperCase().startsWith('CT') ? ma_ct : (item.ten_ct || 'KHÁC');
           if (!groups[key]) groups[key] = [];
           groups[key].push(item);
       });
       return groups;
   }, [filteredItems]);
 
+  // Tự động mở rộng khi tìm kiếm, mặc định khi load (searchTerm trống) sẽ là Set trống (thu gọn)
   useEffect(() => {
       if (searchTerm) {
           setExpandedGroups(new Set(Object.keys(groupedItems)));
+      } else {
+          setExpandedGroups(new Set());
       }
   }, [searchTerm, groupedItems]);
 
@@ -119,56 +120,6 @@ export const PlanList: React.FC<PlanListProps> = ({
       });
   };
 
-  // --- LOGIC: QR Scanner ---
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    if (showScanner) {
-      const startCamera = async () => {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (videoRef.current && stream) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.setAttribute('playsinline', 'true');
-              videoRef.current.play();
-              requestRef.current = requestAnimationFrame(tick);
-          }
-        } catch (err) {
-          alert('Không thể truy cập camera. Vui lòng cấp quyền.');
-          setShowScanner(false);
-        }
-      };
-      startCamera();
-    }
-    return () => {
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
-  }, [showScanner]);
-
-  const tick = () => {
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      if (canvas) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-             const scannedData = code.data.trim();
-             onSearch(scannedData);
-             setShowScanner(false);
-             return;
-          }
-        }
-      }
-    }
-    if (showScanner) requestRef.current = requestAnimationFrame(tick);
-  };
-
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -179,7 +130,6 @@ export const PlanList: React.FC<PlanListProps> = ({
       try {
         // @ts-ignore
         const XLSX = await import('https://esm.sh/xlsx@0.18.5');
-        
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
@@ -279,18 +229,15 @@ export const PlanList: React.FC<PlanListProps> = ({
       />
 
       {showScanner && (
-        <div className="fixed inset-0 z-[120] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
-            <button onClick={() => setShowScanner(false)} className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
-            <div className="text-center mb-8">
-                <h3 className="text-white font-bold text-lg uppercase tracking-widest mb-1">Quét mã tìm kiếm</h3>
-                <p className="text-slate-400 text-xs">Di chuyển camera đến mã QR/Barcode trên sản phẩm</p>
-            </div>
-            <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[2.5rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.4)]">
-                <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-                <canvas ref={canvasRef} className="hidden" />
-            </div>
-            <p className="text-blue-400 mt-10 font-bold text-xs uppercase tracking-[0.2em] animate-pulse">Scanning QR / Barcode...</p>
-        </div>
+        <QRScannerModal 
+          onClose={() => setShowScanner(false)}
+          onScan={(data) => {
+            onSearch(data);
+            setShowScanner(false);
+          }}
+          title="Quét mã tìm kế hoạch"
+          subtitle="Quét mã QR/Barcode trên sản phẩm để tìm nhanh kế hoạch sản xuất"
+        />
       )}
 
       {/* Mobile Optimized Header */}
@@ -375,7 +322,10 @@ export const PlanList: React.FC<PlanListProps> = ({
                     const groupItems = groupedItems[groupKey];
                     const isExpanded = expandedGroups.has(groupKey);
                     const firstItem = groupItems[0];
-                    const projectName = firstItem.ten_ct || '---';
+                    
+                    // Xác định tên hiển thị cho header của nhóm
+                    const ma_ct = firstItem.ma_ct || '---';
+                    const ten_ct = firstItem.ten_ct || '---';
 
                     // Group Statistics
                     const totalGroupItems = groupItems.length;
@@ -386,33 +336,35 @@ export const PlanList: React.FC<PlanListProps> = ({
                     
                     return (
                         <div key={groupKey} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                            {/* Group Header */}
+                            {/* Group Header - Hiển thị Mã CT và Tên CT */}
                             <div 
                                 onClick={() => toggleGroup(groupKey)}
                                 className={`p-3 cursor-pointer transition-colors border-b flex items-start justify-between gap-3 ${isExpanded ? 'bg-blue-50/40 border-blue-100' : 'bg-white border-slate-100'}`}
                             >
                                 <div className="flex items-start gap-2 overflow-hidden">
-                                    <FolderOpen className={`w-5 h-5 shrink-0 mt-0.5 ${isExpanded ? 'text-blue-600' : 'text-slate-400'}`} />
+                                    <div className={`p-2 rounded-lg shrink-0 ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        <Building2 className="w-4 h-4" />
+                                    </div>
                                     <div className="flex flex-col min-w-0">
                                         <h3 className="font-black text-sm text-slate-800 uppercase tracking-tight truncate">
-                                            <HighlightedText text={groupKey} highlight={searchTerm} />
+                                            <HighlightedText text={ma_ct} highlight={searchTerm} />
                                         </h3>
-                                        <p className="text-[10px] font-medium text-slate-500 truncate">
-                                            <HighlightedText text={projectName} highlight={searchTerm} />
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight truncate">
+                                            <HighlightedText text={ten_ct} highlight={searchTerm} />
                                         </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                                        {inspectedCount}/{totalGroupItems}
+                                    <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">
+                                        {inspectedCount}/{totalGroupItems} QC
                                     </span>
                                     <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
                                 </div>
                             </div>
 
-                            {/* Group Items */}
+                            {/* Group Items - Hiển thị chi tiết mã nhà máy khi mở rộng */}
                             {isExpanded && (
-                                <div className="bg-slate-50/50 p-2 grid grid-cols-1 gap-2">
+                                <div className="bg-slate-50/50 p-2 grid grid-cols-1 gap-2 border-t border-slate-100">
                                     {groupItems.map((item, idx) => {
                                         const inspection = getInspectionStatus(item.ma_nha_may);
                                         const isDone = inspection?.status === InspectionStatus.COMPLETED || inspection?.status === InspectionStatus.APPROVED;
@@ -423,17 +375,17 @@ export const PlanList: React.FC<PlanListProps> = ({
                                             <div 
                                                 key={`${item.ma_nha_may}_${idx}`} 
                                                 onClick={() => onViewPlan && onViewPlan(item)}
-                                                className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm active:scale-[0.98] transition-transform flex flex-col gap-2"
+                                                className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm active:scale-[0.98] transition-transform flex flex-col gap-2 group"
                                             >
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex flex-wrap gap-1.5 items-center">
                                                         <span className="flex items-center gap-1 text-[9px] font-black bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
-                                                            <Tag className="w-3 h-3" />
+                                                            <Tag className="w-3 h-3 text-blue-500" />
                                                             <HighlightedText text={item.ma_nha_may} highlight={searchTerm} />
                                                         </span>
                                                         {item.headcode && (
                                                             <span className="text-[9px] font-bold bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded border border-slate-100">
-                                                                <HighlightedText text={item.headcode} highlight={searchTerm} />
+                                                                HC: <HighlightedText text={item.headcode} highlight={searchTerm} />
                                                             </span>
                                                         )}
                                                     </div>
@@ -447,7 +399,6 @@ export const PlanList: React.FC<PlanListProps> = ({
                                                         <HighlightedText text={item.ten_hang_muc} highlight={searchTerm} />
                                                     </h4>
                                                     
-                                                    {/* Status Badge next to name */}
                                                     {inspection && (
                                                         <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border ${
                                                             isDone ? 'bg-green-100 text-green-700 border-green-200' : 
@@ -469,9 +420,9 @@ export const PlanList: React.FC<PlanListProps> = ({
                                                         {inspection ? (
                                                             <button 
                                                                 onClick={() => onViewInspection(inspection.id)}
-                                                                className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border shadow-sm ${
-                                                                    isDone ? 'bg-green-50 text-green-700 border-green-200' : 
-                                                                    hasIssue ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border shadow-sm transition-all hover:shadow-md ${
+                                                                    isDone ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 
+                                                                    hasIssue ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
                                                                     isDraft ? 'bg-slate-50 text-slate-600 border-slate-200' :
                                                                     'bg-white text-slate-600 border-slate-200'
                                                                 }`}
@@ -482,7 +433,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                                                         ) : (
                                                             <button 
                                                                 onClick={() => onSelect(item, defaultTemplate)}
-                                                                className="px-2 py-1 bg-blue-600 text-white rounded text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm active:scale-95 hover:bg-blue-700 transition-colors"
+                                                                className="px-3 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm active:scale-95 hover:bg-blue-700 transition-colors"
                                                             >
                                                                 <Plus className="w-3 h-3" /> Tạo phiếu
                                                             </button>

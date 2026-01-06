@@ -30,6 +30,7 @@ import { NCRList } from './components/NCRList';
 import { DefectLibrary } from './components/DefectLibrary';
 import { DefectList } from './components/DefectList';
 import { DefectDetail } from './components/DefectDetail';
+import { QRScannerModal } from './components/QRScannerModal';
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -51,8 +52,6 @@ import {
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
-// @ts-ignore
-import jsQR from 'jsqr';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
@@ -84,10 +83,6 @@ const App = () => {
   
   const [showModuleSelector, setShowModuleSelector] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const scannerCanvasRef = useRef<HTMLCanvasElement>(null);
-  const qrRequestRef = useRef<number>(0);
 
   const isQC = user?.role === 'QC';
 
@@ -161,7 +156,6 @@ const App = () => {
     if (!isDbReady) return;
     setIsLoadingInspections(true);
     try { 
-        // fetchInspections bây giờ chỉ lấy metadata rút gọn
         const data = await fetchInspections(); 
         setInspections(data.items || []); 
     } catch (e) {} finally { setIsLoadingInspections(false); }
@@ -170,7 +164,6 @@ const App = () => {
   const handleSelectInspection = async (id: string) => {
       setIsDetailLoading(true);
       try {
-          // fetchInspectionById sẽ lấy dữ liệu chi tiết đầy đủ từ DB
           const fullInspection = await fetchInspectionById(id);
           if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); }
           else alert("Không tìm thấy dữ liệu phiếu kiểm tra.");
@@ -180,7 +173,6 @@ const App = () => {
   const handleSelectProject = async (maCt: string) => {
       setIsDetailLoading(true);
       try {
-          // Lấy danh sách dự án
           const list = await fetchProjectsSummary(maCt);
           const found = list.find(p => p.ma_ct === maCt);
           if (found) { setActiveProject(found); setView('PROJECT_DETAIL'); }
@@ -200,67 +192,26 @@ const App = () => {
 
   const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
 
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    if (showQrScanner) {
-      const startCamera = async () => {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (videoRef.current && stream) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.setAttribute('playsinline', 'true');
-              videoRef.current.play();
-              qrRequestRef.current = requestAnimationFrame(tick);
-          }
-        } catch (err) {
-          alert('Không thể truy cập camera. Vui lòng cấp quyền.');
-          setShowQrScanner(false);
-        }
-      };
-      startCamera();
+  const handleQrScan = (scannedCode: string) => {
+    setShowQrScanner(false);
+    let foundPlan = plans.find(p => 
+      String(p.headcode).toLowerCase() === scannedCode.toLowerCase() || 
+      String(p.ma_nha_may).toLowerCase() === scannedCode.toLowerCase()
+    );
+    if (foundPlan) {
+      setInitialFormState({
+        ma_nha_may: foundPlan.ma_nha_may,
+        headcode: foundPlan.headcode,
+        ma_ct: foundPlan.ma_ct,
+        ten_ct: foundPlan.ten_ct,
+        ten_hang_muc: foundPlan.ten_hang_muc,
+        dvt: foundPlan.dvt,
+        so_luong_ipo: foundPlan.so_luong_ipo
+      });
+    } else {
+      setInitialFormState({ ma_nha_may: scannedCode });
     }
-    return () => {
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (qrRequestRef.current) cancelAnimationFrame(qrRequestRef.current);
-    };
-  }, [showQrScanner]);
-
-  const tick = () => {
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = scannerCanvasRef.current;
-      const video = videoRef.current;
-      if (canvas) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-             const scannedCode = code.data.trim();
-             setShowQrScanner(false);
-             let foundPlan = plans.find(p => String(p.headcode).toLowerCase() === scannedCode.toLowerCase() || String(p.ma_nha_may).toLowerCase() === scannedCode.toLowerCase());
-             if (foundPlan) {
-                setInitialFormState({
-                    ma_nha_may: foundPlan.ma_nha_may,
-                    headcode: foundPlan.headcode,
-                    ma_ct: foundPlan.ma_ct,
-                    ten_ct: foundPlan.ten_ct,
-                    ten_hang_muc: foundPlan.ten_hang_muc,
-                    dvt: foundPlan.dvt,
-                    so_luong_ipo: foundPlan.so_luong_ipo
-                });
-             } else {
-                setInitialFormState({ ma_nha_may: scannedCode });
-             }
-             setShowModuleSelector(true);
-             return;
-          }
-        }
-      }
-    }
-    if (showQrScanner) qrRequestRef.current = requestAnimationFrame(tick);
+    setShowModuleSelector(true);
   };
 
   const startCreateInspection = (moduleId: ModuleId) => {
@@ -312,6 +263,13 @@ const App = () => {
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <AIChatbox inspections={inspections} plans={plans} />
+
+        {showQrScanner && (
+          <QRScannerModal 
+            onClose={() => setShowQrScanner(false)} 
+            onScan={handleQrScan} 
+          />
+        )}
 
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

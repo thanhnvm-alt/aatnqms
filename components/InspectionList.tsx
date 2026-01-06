@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Inspection, InspectionStatus, Priority, ModuleId, User as UserType } from '../types';
 import { ALL_MODULES } from '../constants';
+import { QRScannerModal } from './QRScannerModal';
 import { 
   Building2, Calendar, AlertCircle, CheckCircle2, Search, Filter, X, 
   ChevronDown, ArrowUp, LayoutGrid, Clock, ChevronRight, Layers, Zap,
@@ -10,8 +11,6 @@ import {
   User, UserCircle, LogOut, Settings as SettingsIcon, ShieldCheck,
   ListFilter, QrCode, FileUp, FileSpreadsheet, Factory, UserCheck
 } from 'lucide-react';
-// @ts-ignore
-import jsQR from 'jsqr';
 
 interface InspectionListProps {
   inspections: Inspection[];
@@ -45,14 +44,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   
   const [showScanner, setShowScanner] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(0);
   
   const moduleMenuRef = useRef<HTMLDivElement>(null);
   const inspectorMenuRef = useRef<HTMLDivElement>(null);
   const workshopMenuRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isQC = userRole === 'QC';
 
@@ -75,54 +70,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     const unique = new Set(inspections.map(i => i.workshop).filter(Boolean));
     return Array.from(unique).sort();
   }, [inspections]);
-
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    if (showScanner) {
-      const startCamera = async () => {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (videoRef.current && stream) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.setAttribute('playsinline', 'true');
-              videoRef.current.play();
-              requestRef.current = requestAnimationFrame(tick);
-          }
-        } catch (err) {
-          alert('Không thể truy cập camera. Vui lòng cấp quyền.');
-          setShowScanner(false);
-        }
-      };
-      startCamera();
-    }
-    return () => {
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
-  }, [showScanner]);
-
-  const tick = () => {
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      if (canvas) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-             setSearchTerm(code.data.trim());
-             setShowScanner(false);
-             return;
-          }
-        }
-      }
-    }
-    if (showScanner) requestRef.current = requestAnimationFrame(tick);
-  };
 
   const filteredInspections = useMemo(() => {
     return inspections
@@ -336,6 +283,16 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           </div>
         )}
       </div>
+
+      {showScanner && (
+        <QRScannerModal 
+          onClose={() => setShowScanner(false)} 
+          onScan={(data) => {
+            setSearchTerm(data);
+            setShowScanner(false);
+          }} 
+        />
+      )}
     </div>
   );
 };

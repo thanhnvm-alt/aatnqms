@@ -4,6 +4,7 @@ import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckIte
 import { INITIAL_CHECKLIST_TEMPLATE } from '../constants';
 import { fetchPlans, fetchDefectLibrary } from '../services/apiService'; 
 import { generateNCRSuggestions } from '../services/geminiService';
+import { QRScannerModal } from './QRScannerModal';
 import { 
   Save, ArrowLeft, Image as ImageIcon, X, Trash2, 
   Plus, PlusCircle, Layers, QrCode,
@@ -12,8 +13,6 @@ import {
   Sparkles, Camera, Clock
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
-// @ts-ignore
-import jsQR from 'jsqr';
 
 interface InspectionFormProps {
   onSave: (inspection: Inspection) => void;
@@ -103,9 +102,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [isDrawingProd, setIsDrawingProd] = useState(false);
 
   const [showScanner, setShowScanner] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(0);
 
   useEffect(() => {
     fetchDefectLibrary().then(setDefectLibrary);
@@ -146,55 +142,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         const ctx = canvas.getContext('2d');
         ctx?.clearRect(0, 0, canvas.width, canvas.height);
     }
-  };
-
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    if (showScanner) {
-      const startCamera = async () => {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          if (videoRef.current && stream) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.setAttribute('playsinline', 'true');
-              videoRef.current.play();
-              requestRef.current = requestAnimationFrame(tick);
-          }
-        } catch (err) {
-          alert('Không thể truy cập camera. Vui lòng cấp quyền.');
-          setShowScanner(false);
-        }
-      };
-      startCamera();
-    }
-    return () => {
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
-  }, [showScanner]);
-
-  const tick = () => {
-    if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      if (canvas) {
-        canvas.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-             const scannedData = code.data.trim();
-             handleAutoFillFromCode(scannedData);
-             setShowScanner(false);
-             return;
-          }
-        }
-      }
-    }
-    if (showScanner) requestRef.current = requestAnimationFrame(tick);
   };
 
   const handleAutoFillFromCode = async (code: string) => {
@@ -482,19 +429,15 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
 
       {showScanner && (
-        <div className="fixed inset-0 z-[160] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
-            <button onClick={() => setShowScanner(false)} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform"><X className="w-8 h-8"/></button>
-            <div className="text-center mb-8">
-                <h3 className="text-white font-black text-xl uppercase tracking-widest mb-1">Quét mã sản phẩm</h3>
-                <p className="text-slate-400 text-sm">Di chuyển camera đến mã Headcode hoặc Mã nhà máy</p>
-            </div>
-            <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[3rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.4)]">
-                <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_15px_red] animate-pulse"></div>
-            </div>
-            <p className="text-blue-400 mt-10 font-black text-xs uppercase tracking-[0.3em] animate-pulse">Đang dò tìm mã...</p>
-        </div>
+        <QRScannerModal 
+          onClose={() => setShowScanner(false)}
+          onScan={(data) => {
+            handleAutoFillFromCode(data);
+            setShowScanner(false);
+          }}
+          title="Quét mã QR sản phẩm"
+          subtitle="Quét Headcode hoặc Mã nhà máy để tự điền thông tin"
+        />
       )}
 
       {editingImageIdx !== null && (
