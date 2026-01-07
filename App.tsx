@@ -146,7 +146,7 @@ const App = () => {
     if (!isDbReady) return;
     try { 
         const data = await fetchProjects(); 
-        if (data && data.length > 0) setProjects(data); 
+        setProjects(data || []); 
     } catch(e) {} 
   };
   
@@ -183,25 +183,15 @@ const App = () => {
       } else {
           setIsDetailLoading(true);
           try {
-              const list = await fetchProjectsSummary(maCt);
-              const safeList = Array.isArray(list) ? list : [];
-              const freshFound = safeList.find(p => p && p.ma_ct === maCt);
-              
-              if (freshFound) {
-                  setActiveProject(freshFound);
+              const freshProject = await fetchProjectByCode(maCt);
+              if (freshProject) {
+                  setActiveProject(freshProject);
                   setView('PROJECT_DETAIL');
               } else {
-                  const freshProject = await fetchProjectByCode(maCt);
-                  if (freshProject) {
-                      setActiveProject(freshProject);
-                      setView('PROJECT_DETAIL');
-                  } else {
-                      alert("Không tìm thấy dự án hoặc lỗi kết nối: " + maCt);
-                  }
+                  alert("Không tìm thấy dự án: " + maCt);
               }
           } catch (e) {
-              console.error("Select project failed:", e);
-              alert("Lỗi kết nối cơ sở dữ liệu. Vui lòng thử lại sau.");
+              alert("Lỗi kết nối cơ sở dữ liệu.");
           } finally {
               setIsDetailLoading(false);
           }

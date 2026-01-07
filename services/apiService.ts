@@ -101,16 +101,15 @@ export const fetchProjectByCode = async (maCt: string): Promise<Project | null> 
 };
 
 export const fetchProjectsSummary = async (search: string = ""): Promise<Project[]> => {
-    return await db.getProjectsSummary(search);
+    // Logic summary giờ đã được tích hợp vào getProjects
+    const all = await db.getProjects();
+    if (!search) return all;
+    const term = search.toLowerCase();
+    return all.filter(p => p.ma_ct.toLowerCase().includes(term) || p.name.toLowerCase().includes(term));
 };
 
 export const fetchProjects = async (): Promise<Project[]> => {
-  const dbProjects = await db.getProjects();
-  if (dbProjects.length > 0) return dbProjects;
-  
-  // Fallback if no specific projects metadata: derive from inspections
-  const derived = await db.getProjectsSummary("");
-  return derived;
+  return await db.getProjects();
 };
 
 export const updateProject = async (project: Project) => {
