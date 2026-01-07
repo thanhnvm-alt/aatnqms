@@ -85,8 +85,8 @@ export const deleteDefectLibraryItem = async (id: string) => {
 };
 
 /**
- * Import Defect Library from Excel file.
- * Logic processing is server-side via Next.js API.
+ * IMPORT EXCEL - SERVER AUTHORITATIVE
+ * Toàn bộ logic validation và insert đều nằm ở backend route.
  */
 export const importDefectLibrary = async (file: File): Promise<any> => {
     const formData = new FormData();
@@ -97,32 +97,37 @@ export const importDefectLibrary = async (file: File): Promise<any> => {
         body: formData
     });
     
+    const data = await response.json();
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Import failed');
+        throw new Error(data.message || 'Lỗi khi nhập dữ liệu Excel.');
     }
     
-    return await response.json();
+    return data;
 };
 
 /**
- * Export Defect Library to Excel.
- * Backend creates the file and frontend triggers download.
+ * EXPORT EXCEL - ISO COMPLIANT
+ * Chỉ thực hiện tải về nếu backend phản hồi 200 OK.
  */
 export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
     const query = new URLSearchParams(filters).toString();
     const response = await fetch(`/api/defects/export?${query}`);
     
-    if (!response.ok) throw new Error('Export failed');
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Lỗi server không xác định.' }));
+        throw new Error(errorData.message || 'Không thể xuất file Excel.');
+    }
     
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = url;
     a.download = `Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
