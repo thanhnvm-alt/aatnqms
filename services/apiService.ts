@@ -84,6 +84,47 @@ export const deleteDefectLibraryItem = async (id: string) => {
     await db.deleteDefectLibraryItem(id);
 };
 
+/**
+ * Import Defect Library from Excel file.
+ * Logic processing is server-side via Next.js API.
+ */
+export const importDefectLibrary = async (file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/defects/import', {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Import failed');
+    }
+    
+    return await response.json();
+};
+
+/**
+ * Export Defect Library to Excel.
+ * Backend creates the file and frontend triggers download.
+ */
+export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
+    const query = new URLSearchParams(filters).toString();
+    const response = await fetch(`/api/defects/export?${query}`);
+    
+    if (!response.ok) throw new Error('Export failed');
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+};
+
 export const saveInspectionToSheet = async (inspection: Inspection) => {
   await db.saveInspection(inspection);
   return { success: true };
@@ -93,15 +134,11 @@ export const deleteInspectionFromSheet = async (id: string) => {
   await db.deleteInspection(id);
 };
 
-/**
- * Lấy dự án theo mã (ma_ct)
- */
 export const fetchProjectByCode = async (maCt: string): Promise<Project | null> => {
     return await db.getProjectByCode(maCt);
 };
 
 export const fetchProjectsSummary = async (search: string = ""): Promise<Project[]> => {
-    // Logic summary giờ đã được tích hợp vào getProjects
     const all = await db.getProjects();
     if (!search) return all;
     const term = search.toLowerCase();

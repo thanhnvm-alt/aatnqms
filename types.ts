@@ -1,5 +1,3 @@
-
-
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -20,7 +18,6 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-/* Added 'DEFECT_LIST' to ViewState to resolve type errors in App.tsx */
 export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST';
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
@@ -77,9 +74,8 @@ export interface NCRComment {
 export interface NCR {
   id: string;
   inspection_id?: string;
-  // Fixed: Added itemId property to match database records and fix type errors in services
   itemId?: string;
-  defect_code?: string; // Liên kết tới defect_library
+  defect_code?: string;
   createdDate: string;
   issueDescription: string;
   rootCause: string;
@@ -95,17 +91,20 @@ export interface NCR {
 
 export interface DefectLibraryItem {
   id: string;
-  code: string;
-  name: string; // Tên lỗi
-  stage: string;
-  category: string;
-  description: string;
+  defect_code: string;
+  defect_name: string;
+  defect_group: string;
+  defect_type: string;
   severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
-  suggestedAction?: string;
-  correctImage?: string; // Ảnh mẫu đúng
-  incorrectImage?: string; // Ảnh mẫu sai
-  createdBy?: string;
-  createdAt?: number;
+  description: string;
+  applicable_process: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  suggested_action?: string;
+  correct_image?: string;
+  incorrect_image?: string;
+  created_by?: string;
+  created_at?: number;
+  updated_at?: number;
 }
 
 export interface Defect {

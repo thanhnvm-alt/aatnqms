@@ -50,7 +50,7 @@ export const initDatabase = async () => {
         score INTEGER
       )`);
 
-    // 3. Projects Metadata Table - Stores detailed project info
+    // 3. Projects Metadata Table
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS projects (
         ma_ct TEXT PRIMARY KEY,
@@ -58,12 +58,47 @@ export const initDatabase = async () => {
         updated_at INTEGER
       )`);
 
-    // 4. Các bảng hệ thống khác
-    await turso.execute(`CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT UNIQUE, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, correct_image TEXT, incorrect_image TEXT, created_by TEXT, created_at INTEGER)`);
+    // 4. Defect Library Table - Revised to match Excel requirement
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS defect_library (
+        id TEXT PRIMARY KEY,
+        defect_code TEXT UNIQUE,
+        defect_name TEXT,
+        defect_group TEXT,
+        defect_type TEXT,
+        severity TEXT,
+        description TEXT,
+        applicable_process TEXT,
+        status TEXT,
+        suggested_action TEXT,
+        correct_image TEXT,
+        incorrect_image TEXT,
+        created_by TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )`);
+
+    // Run migrations for existing table if needed
+    try {
+        const tableInfo = await turso.execute("PRAGMA table_info(defect_library)");
+        const columns = tableInfo.rows.map(row => String(row.name).toLowerCase());
+        const missing = [
+          { name: 'defect_name', type: 'TEXT' },
+          { name: 'defect_group', type: 'TEXT' },
+          { name: 'defect_type', type: 'TEXT' },
+          { name: 'applicable_process', type: 'TEXT' },
+          { name: 'status', type: 'TEXT' },
+          { name: 'updated_at', type: 'INTEGER' }
+        ];
+        for (const col of missing) { 
+          if (!columns.includes(col.name)) await turso.execute(`ALTER TABLE defect_library ADD COLUMN ${col.name} ${col.type}`); 
+        }
+    } catch (e) {}
+
     await turso.execute(`CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT, status TEXT, description TEXT, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, comments_json TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, closed_at INTEGER, deleted_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT, username TEXT UNIQUE, role TEXT, created_at INTEGER, updated_at INTEGER)`);
     
-    // Migrations
+    // Migrations for users
     try {
         const tableInfo = await turso.execute("PRAGMA table_info(users)");
         const columns = tableInfo.rows.map(row => String(row.name).toLowerCase());
@@ -91,15 +126,9 @@ export const testConnection = async () => {
   }
 };
 
-/**
- * Lấy danh sách dự án (Master Plan):
- * Kết hợp danh sách mã công trình từ Kế hoạch + Phiếu kiểm tra với Metadata chi tiết.
- */
 export const getProjects = async (): Promise<Project[]> => {
     if (!isTursoConfigured) return [];
-    
     try {
-        // 1. Lấy danh sách các mã công trình duy nhất từ Plans và Inspections
         const derivedRes = await turso.execute(`
             SELECT ma_ct, MAX(ten_ct) as ten_ct 
             FROM (
@@ -109,42 +138,17 @@ export const getProjects = async (): Promise<Project[]> => {
             ) 
             GROUP BY ma_ct
         `);
-        
-        // 2. Lấy dữ liệu Metadata đã lưu
         const metaRes = await turso.execute("SELECT ma_ct, data FROM projects");
         const metaMap: Record<string, Project> = {};
         metaRes.rows.forEach(row => {
-            try {
-                if (row.data) metaMap[row.ma_ct as string] = JSON.parse(row.data as string);
-            } catch(e) {}
+            try { if (row.data) metaMap[row.ma_ct as string] = JSON.parse(row.data as string); } catch(e) {}
         });
-        
-        // 3. Trộn dữ liệu: Ưu tiên metadata nếu có, nếu không tạo Project mặc định từ Mã/Tên công trình
         return derivedRes.rows.map(row => {
             const ma_ct = String(row.ma_ct);
             const ten_ct = String(row.ten_ct || ma_ct);
-            
-            if (metaMap[ma_ct]) {
-                return { ...metaMap[ma_ct], ma_ct }; 
-            }
-            
+            if (metaMap[ma_ct]) return { ...metaMap[ma_ct], ma_ct }; 
             return {
-                id: `proj_${ma_ct}`,
-                code: ma_ct,
-                ma_ct: ma_ct,
-                name: ten_ct,
-                ten_ct: ten_ct,
-                status: 'Planning',
-                pm: 'Chưa phân công',
-                pc: '---',
-                qa: '---',
-                location: '',
-                startDate: new Date().toISOString().split('T')[0],
-                endDate: '',
-                thumbnail: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400',
-                progress: 0,
-                description: '',
-                images: []
+                id: `proj_${ma_ct}`, code: ma_ct, ma_ct: ma_ct, name: ten_ct, ten_ct: ten_ct, status: 'Planning', pm: 'Chưa phân công', pc: '---', qa: '---', location: '', startDate: new Date().toISOString().split('T')[0], endDate: '', thumbnail: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400', progress: 0, description: '', images: []
             } as Project;
         });
     } catch (err) {
@@ -155,31 +159,16 @@ export const getProjects = async (): Promise<Project[]> => {
 
 export const getProjectByCode = async (maCt: string): Promise<Project | null> => {
     if (!isTursoConfigured) return null;
-    // Tìm trong metadata trước
     const res = await turso.execute({ sql: "SELECT data FROM projects WHERE ma_ct = ?", args: [maCt] });
     if (res.rows.length > 0) return JSON.parse(res.rows[0].data as string);
-    
-    // Nếu không có metadata, lấy thông tin thô từ plans/inspections
     const rawRes = await turso.execute({ 
         sql: "SELECT ma_ct, MAX(ten_ct) as ten_ct FROM (SELECT ma_ct, ten_ct FROM plans WHERE ma_ct = ? UNION ALL SELECT ma_ct, ten_ct FROM inspections WHERE ma_ct = ?) GROUP BY ma_ct", 
         args: [maCt, maCt] 
     });
-    
     if (rawRes.rows.length > 0) {
         const row = rawRes.rows[0];
         return {
-            id: `proj_${maCt}`,
-            code: maCt,
-            ma_ct: maCt,
-            name: String(row.ten_ct || maCt),
-            ten_ct: String(row.ten_ct || maCt),
-            status: 'Planning',
-            pm: 'Chưa phân công',
-            progress: 0,
-            thumbnail: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400',
-            startDate: '',
-            endDate: '',
-            images: []
+            id: `proj_${maCt}`, code: maCt, ma_ct: maCt, name: String(row.ten_ct || maCt), ten_ct: String(row.ten_ct || maCt), status: 'Planning', pm: 'Chưa phân công', progress: 0, thumbnail: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400', startDate: '', endDate: '', images: []
         } as Project;
     }
     return null;
@@ -195,19 +184,11 @@ export const saveProjectMetadata = async (project: Project) => {
   });
 };
 
-export const deleteProjectMetadata = async (ma_ct: string) => {
-    if (!isTursoConfigured) return;
-    await turso.execute({ sql: "DELETE FROM projects WHERE ma_ct = ?", args: [ma_ct] });
-};
-
-// --- Inspection Services ---
-
 export const saveInspection = async (inspection: Inspection) => {
     if (!isTursoConfigured) return;
     const now = Math.floor(Date.now() / 1000);
     const inspectionData = JSON.parse(JSON.stringify(inspection));
     const ncrPromises: Promise<any>[] = [];
-
     if (inspectionData.items) {
         for (const item of inspectionData.items) {
             if (item.ncr) {
@@ -220,7 +201,6 @@ export const saveInspection = async (inspection: Inspection) => {
         }
     }
     await Promise.all(ncrPromises);
-
     await turso.execute({
         sql: `INSERT INTO inspections (id, data, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, status, type, score)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -264,8 +244,6 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
     return inspection;
 };
 
-// --- Shared Helper Services ---
-
 export const getRoles = async (): Promise<Role[]> => { if (!isTursoConfigured) return []; const res = await turso.execute("SELECT data FROM roles"); return res.rows.map(r => JSON.parse(r.data as string)); };
 export const saveRole = async (role: Role) => { if (!isTursoConfigured) return; const now = Math.floor(Date.now() / 1000); await turso.execute({ sql: `INSERT INTO roles (id, data, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`, args: [role.id, JSON.stringify(role), now, now] }); };
 export const deleteRole = async (id: string) => { if (!isTursoConfigured) return; await turso.execute({ sql: "DELETE FROM roles WHERE id = ?", args: [id] }); };
@@ -302,8 +280,39 @@ export const getNcrById = async (id: string): Promise<NCR | null> => {
     return { id: row.id as string, inspection_id: row.inspection_id as string, createdDate: new Date((row.created_at as number) * 1000).toISOString().split('T')[0], issueDescription: row.description as string, rootCause: (row.root_cause as string) || '', solution: (row.corrective_action as string) || '', responsiblePerson: (row.responsible_person as string) || '', deadline: (row.deadline as string) || '', status: row.status as string, severity: row.severity as any, imagesBefore: JSON.parse((row.images_before_json as string) || '[]'), imagesAfter: JSON.parse((row.images_after_json as string) || '[]'), comments: JSON.parse((row.comments_json as string) || '[]'), itemId: row.item_id as string };
 };
 
-export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => { if (!isTursoConfigured) return []; const res = await turso.execute("SELECT * FROM defect_library ORDER BY COALESCE(defect_code, id) ASC"); return res.rows.map(row => ({ id: row.id as string, code: (row.defect_code as string) || (row.id as string), name: (row.name as string) || '', stage: (row.stage as string) || 'Chung', category: (row.category as string) || 'Khác', description: (row.description as string) || '', severity: (row.severity as any) || 'MINOR', suggestedAction: (row.suggested_action as string) || '', correctImage: (row.correct_image as string) || '', incorrectImage: (row.incorrect_image as string) || '', createdBy: (row.created_by as string) || 'System', createdAt: (row.created_at as number) || Math.floor(Date.now() / 1000) })); };
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => { if (!isTursoConfigured) return; const now = Math.floor(Date.now() / 1000); await turso.execute({ sql: `INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, correct_image, incorrect_image, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET defect_code = excluded.defect_code, name = excluded.name, stage = excluded.stage, category = excluded.category, description = excluded.description, severity = excluded.severity, suggested_action = excluded.suggested_action, correct_image = excluded.correct_image, incorrect_image = excluded.incorrect_image`, args: [item.id, item.code, item.name || '', item.stage, item.category, item.description, item.severity, item.suggestedAction || '', item.correctImage || '', item.incorrectImage || '', item.createdBy || 'System', item.createdAt || now] }); };
+export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => { 
+  if (!isTursoConfigured) return []; 
+  const res = await turso.execute("SELECT * FROM defect_library ORDER BY COALESCE(defect_code, id) ASC"); 
+  return res.rows.map(row => ({ 
+    id: row.id as string, 
+    defect_code: (row.defect_code as string) || (row.id as string), 
+    defect_name: (row.defect_name as string) || '', 
+    defect_group: (row.defect_group as string) || '', 
+    defect_type: (row.defect_type as string) || '', 
+    severity: (row.severity as any) || 'MINOR', 
+    description: (row.description as string) || '', 
+    applicable_process: (row.applicable_process as string) || '', 
+    status: (row.status as any) || 'ACTIVE',
+    suggested_action: (row.suggested_action as string) || '', 
+    correct_image: (row.correct_image as string) || '', 
+    incorrect_image: (row.incorrect_image as string) || '', 
+    created_by: (row.created_by as string) || 'System', 
+    created_at: (row.created_at as number) || Math.floor(Date.now() / 1000),
+    updated_at: (row.updated_at as number) || Math.floor(Date.now() / 1000)
+  })); 
+};
+
+export const saveDefectLibraryItem = async (item: DefectLibraryItem) => { 
+  if (!isTursoConfigured) return; 
+  const now = Math.floor(Date.now() / 1000); 
+  await turso.execute({ 
+    sql: `INSERT INTO defect_library (id, defect_code, defect_name, defect_group, defect_type, severity, description, applicable_process, status, suggested_action, correct_image, incorrect_image, created_by, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+          ON CONFLICT(id) DO UPDATE SET defect_code = excluded.defect_code, defect_name = excluded.defect_name, defect_group = excluded.defect_group, defect_type = excluded.defect_type, severity = excluded.severity, description = excluded.description, applicable_process = excluded.applicable_process, status = excluded.status, suggested_action = excluded.suggested_action, correct_image = excluded.correct_image, incorrect_image = excluded.incorrect_image, updated_at = excluded.updated_at`, 
+    args: [item.id, item.defect_code, item.defect_name, item.defect_group, item.defect_type, item.severity, item.description, item.applicable_process, item.status, item.suggested_action || '', item.correct_image || '', item.incorrect_image || '', item.created_by || 'System', item.created_at || now, now] 
+  }); 
+};
+
 export const deleteDefectLibraryItem = async (id: string) => { if (!isTursoConfigured) return; await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: [id] }); };
 
 export const getDefects = async (params: { search?: string, status?: string }): Promise<Defect[]> => {
