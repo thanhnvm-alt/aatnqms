@@ -1,4 +1,3 @@
-
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem, NCRComment } from "../types";
 
@@ -52,7 +51,7 @@ export const initDatabase = async () => {
         score INTEGER
       )`);
 
-    // Migrations
+    // Migrations for inspections
     try {
         const tableInfo = await turso.execute("PRAGMA table_info(inspections)");
         const columns = tableInfo.rows.map(row => String(row.name).toLowerCase());
@@ -66,7 +65,7 @@ export const initDatabase = async () => {
                 await turso.execute(`ALTER TABLE inspections ADD COLUMN ${col.name} ${col.type}`);
             }
         }
-    } catch (e) { console.warn("Migration warning:", e); }
+    } catch (e) { console.warn("Migration warning (inspections):", e); }
 
     // 3. Projects Table
     await turso.execute(`
@@ -80,6 +79,24 @@ export const initDatabase = async () => {
     await turso.execute(`CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT UNIQUE, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, correct_image TEXT, incorrect_image TEXT, created_by TEXT, created_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT, status TEXT, description TEXT, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, comments_json TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, closed_at INTEGER, deleted_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT, username TEXT UNIQUE, role TEXT, created_at INTEGER, updated_at INTEGER)`);
+    
+    // Migration for users table - Fix for missing columns in older schema
+    try {
+        const tableInfo = await turso.execute("PRAGMA table_info(users)");
+        const columns = tableInfo.rows.map(row => String(row.name).toLowerCase());
+        const missing = [
+            { name: 'username', type: 'TEXT' },
+            { name: 'role', type: 'TEXT' },
+            { name: 'created_at', type: 'INTEGER' },
+            { name: 'updated_at', type: 'INTEGER' }
+        ];
+        for (const col of missing) {
+            if (!columns.includes(col.name)) {
+                await turso.execute(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`);
+            }
+        }
+    } catch (e) { console.warn("Migration warning (users):", e); }
+
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, data TEXT, code TEXT UNIQUE, name TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER)`);
