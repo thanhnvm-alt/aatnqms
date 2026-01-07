@@ -85,6 +85,7 @@ const App = () => {
   
   const [showModuleSelector, setShowModuleSelector] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
+  const [pendingScannedCode, setPendingScannedCode] = useState<string | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -210,37 +211,59 @@ const App = () => {
 
   const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
 
+  /**
+   * Bước 1: Quét QR -> Lưu mã tạm -> Mở bảng chọn loại phiếu
+   */
   const handleQrScan = (scannedCode: string) => {
     setShowQrScanner(false);
-    const safePlans = Array.isArray(plans) ? plans : [];
-    const foundPlan = safePlans.find(p => 
-      p && (
-        String(p.headcode || '').toLowerCase() === scannedCode.toLowerCase() || 
-        String(p.ma_nha_may || '').toLowerCase() === scannedCode.toLowerCase()
-      )
-    );
-    if (foundPlan) {
-      setInitialFormState({
-        ma_nha_may: foundPlan.ma_nha_may,
-        headcode: foundPlan.headcode,
-        ma_ct: foundPlan.ma_ct,
-        ten_ct: foundPlan.ten_ct,
-        ten_hang_muc: foundPlan.ten_hang_muc,
-        dvt: foundPlan.dvt,
-        so_luong_ipo: foundPlan.so_luong_ipo
-      });
-    } else {
-      setInitialFormState({ ma_nha_may: scannedCode });
-    }
+    setPendingScannedCode(scannedCode);
     setShowModuleSelector(true);
   };
 
-  const startCreateInspection = (moduleId: ModuleId) => {
+  /**
+   * Bước 2: Sau khi chọn loại phiếu, tải dữ liệu từ Plans DB và mở Form
+   */
+  const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false);
+      setIsDetailLoading(true);
+      
+      let baseData: Partial<Inspection> = { ma_nha_may: pendingScannedCode || '' };
+      
+      // Tìm kiếm thông tin kế hoạch trong Database
+      if (pendingScannedCode) {
+          try {
+              const searchResult = await fetchPlans(pendingScannedCode, 1, 5);
+              const foundPlan = searchResult.items.find(p => 
+                  String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || 
+                  String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()
+              );
+              
+              if (foundPlan) {
+                  baseData = {
+                      ma_nha_may: foundPlan.ma_nha_may,
+                      headcode: foundPlan.headcode,
+                      ma_ct: foundPlan.ma_ct,
+                      ten_ct: foundPlan.ten_ct,
+                      ten_hang_muc: foundPlan.ten_hang_muc,
+                      dvt: foundPlan.dvt,
+                      so_luong_ipo: foundPlan.so_luong_ipo
+                  };
+              }
+          } catch (e) {
+              console.warn("Dữ liệu Plans chưa sẵn sàng hoặc lỗi DB, sử dụng mã thô.");
+          }
+      }
+
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
-      const baseState = initialFormState || {};
-      setInitialFormState({ ...baseState, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
+      setInitialFormState({ 
+          ...baseData, 
+          type: moduleId, 
+          items: JSON.parse(JSON.stringify(template)) 
+      });
+      
       setActiveInspection(null);
+      setPendingScannedCode(null);
+      setIsDetailLoading(false);
       setView('FORM');
   };
 
@@ -248,8 +271,15 @@ const App = () => {
 
   const headerActions = {
     onRefresh: view === 'LIST' || view === 'DASHBOARD' || view === 'NCR_LIST' || view === 'DEFECT_LIST' ? loadInspections : (view === 'PLAN' || view === 'PROJECTS' ? loadPlans : undefined),
-    onScanClick: () => setShowQrScanner(true),
-    onCreate: () => { setInitialFormState(undefined); setShowModuleSelector(true); },
+    onScanClick: () => {
+        setPendingScannedCode(null);
+        setShowQrScanner(true);
+    },
+    onCreate: () => { 
+        setPendingScannedCode(null);
+        setInitialFormState(undefined); 
+        setShowModuleSelector(true); 
+    },
   };
 
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo hệ thống...</p></div>;
@@ -311,6 +341,12 @@ const App = () => {
                             </button>
                         ))}
                     </div>
+                    {pendingScannedCode && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-2">
+                             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                             <p className="text-[10px] font-black text-blue-600 uppercase">Mã đang chờ: {pendingScannedCode}</p>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
