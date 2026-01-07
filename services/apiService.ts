@@ -9,18 +9,18 @@ export interface PagedResult<T> {
   limit?: number;
 }
 
-// Helper: Tải file binary từ API
+// Helper: Tải file binary từ API - Đã tối ưu cho Mobile
 const downloadBlob = async (apiUrl: string, fileName: string) => {
     const response = await fetch(apiUrl);
+    
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Lỗi server (${response.status}): ${errorText}`);
     }
-    const contentType = response.headers.get('Content-Type');
-    if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
-        throw new Error(`Dữ liệu không đúng định dạng Excel (.xlsx). Nhận được: ${contentType}`);
-    }
+
     const blob = await response.blob();
+    if (blob.size === 0) throw new Error("Tệp tin rỗng, không có dữ liệu để tải.");
+
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -28,17 +28,19 @@ const downloadBlob = async (apiUrl: string, fileName: string) => {
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
+    
+    // Cleanup delay để đảm bảo trình duyệt đã bắt đầu tải
     setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-    }, 150);
+    }, 200);
 };
 
 // Helper: Upload file Excel lên API
 const uploadExcel = async (apiUrl: string, file: File) => {
     const response = await fetch(apiUrl, {
         method: 'POST',
-        body: file // Gửi trực tiếp binary body cho API Route
+        body: file 
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Lỗi xử lý file Excel tại server.');
@@ -81,7 +83,7 @@ export const fetchDefects = async (params: any = {}) => ({ items: await db.getDe
 // Defect Library
 export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
-export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
+export const deleteDefectLibraryItem = async (id: string) => { await db.deleteDefectLibraryItem(id); };
 
 export const exportDefectLibrary = async () => {
     await downloadBlob('/api/defects-export', `AATN_Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`);

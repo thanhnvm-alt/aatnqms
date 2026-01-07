@@ -1,6 +1,6 @@
 
 import { createClient } from '@libsql/client';
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 
 const turso = createClient({
   url: process.env.TURSO_DATABASE_URL || 'libsql://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io',
@@ -12,37 +12,36 @@ export default async function handler(req: any, res: any) {
 
   try {
     const result = await turso.execute("SELECT * FROM plans ORDER BY id DESC");
-    const data = result.rows;
+    const rows = result.rows;
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Kế hoạch Sản xuất');
+    // Ánh xạ dữ liệu sang định dạng người dùng mong muốn (giống code cũ)
+    const exportData = rows.map((row: any) => ({
+      'STT': row.stt || '',
+      'Mã Nhà Máy': row.ma_nha_may || '',
+      'Headcode': row.headcode || '',
+      'Mã CT': row.ma_ct || '',
+      'Tên Công Trình': row.ten_ct || '',
+      'Tên Sản Phẩm': row.ten_hang_muc || '',
+      'Số lượng (IPO)': row.so_luong_ipo || 0,
+      'ĐVT': row.dvt || 'PCS',
+      'Ngày Kế Hoạch': row.plannedDate || '',
+      'Người Phụ Trách': row.assignee || '',
+      'Trạng Thái': row.status || 'PENDING'
+    }));
 
-    worksheet.columns = [
-      { header: 'STT', key: 'stt', width: 8 },
-      { header: 'Mã Nhà Máy', key: 'ma_nha_may', width: 20 },
-      { header: 'Headcode', key: 'headcode', width: 15 },
-      { header: 'Mã CT', key: 'ma_ct', width: 15 },
-      { header: 'Tên Công Trình', key: 'ten_ct', width: 35 },
-      { header: 'Tên Sản Phẩm', key: 'ten_hang_muc', width: 35 },
-      { header: 'Số lượng (IPO)', key: 'so_luong_ipo', width: 15 },
-      { header: 'ĐVT', key: 'dvt', width: 10 },
-      { header: 'Ngày Kế Hoạch', key: 'plannedDate', width: 15 },
-      { header: 'Người Phụ Trách', key: 'assignee', width: 20 },
-      { header: 'Trạng Thái', key: 'status', width: 15 }
-    ];
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Kế hoạch");
 
-    data.forEach((item: any) => {
-      worksheet.addRow(item);
-    });
+    // Tạo Buffer binary
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-
-    const buffer = await workbook.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=AATN_Plans_${Date.now()}.xlsx`);
-    return res.send(new Uint8Array(buffer as any));
+    
+    return res.send(excelBuffer);
   } catch (error: any) {
+    console.error("Export Plans Error:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 }
