@@ -9,11 +9,43 @@ export interface PagedResult<T> {
   limit?: number;
 }
 
-export const checkApiConnection = async () => {
-  const ok = await db.testConnection();
-  return { ok };
+// Helper: Tải file binary từ API
+const downloadBlob = async (apiUrl: string, fileName: string) => {
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Lỗi server (${response.status}): ${errorText}`);
+    }
+    const contentType = response.headers.get('Content-Type');
+    if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
+        throw new Error(`Dữ liệu không đúng định dạng Excel (.xlsx). Nhận được: ${contentType}`);
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }, 150);
 };
 
+// Helper: Upload file Excel lên API
+const uploadExcel = async (apiUrl: string, file: File) => {
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        body: file // Gửi trực tiếp binary body cho API Route
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Lỗi xử lý file Excel tại server.');
+    return data;
+};
+
+export const checkApiConnection = async () => ({ ok: await db.testConnection() });
 export const fetchRoles = async () => await db.getRoles();
 export const saveRole = async (role: Role) => { await db.saveRole(role); return role; };
 export const deleteRole = async (id: string) => { await db.deleteRole(id); };
@@ -23,179 +55,55 @@ export const fetchPlans = async (search: string = '', page?: number, limit?: num
   return { items: result.items, total: result.total, page, limit };
 };
 
-export const fetchInspections = async (filters: { 
-    status?: string; 
-    search?: string; 
-    type?: string; 
-    page?: number; 
-    limit?: number 
-} = {}): Promise<PagedResult<Inspection>> => {
-  const result = await db.getInspectionsPaginated({
-      page: filters.page,
-      limit: filters.limit,
-      search: filters.search,
-      status: filters.status,
-      type: filters.type
-  });
-
-  return { 
-      items: result.items, 
-      total: result.total, 
-      page: filters.page, 
-      limit: filters.limit 
-  };
+export const exportPlans = async () => {
+    await downloadBlob('/api/plans-export', `AATN_Plans_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
-export const fetchInspectionById = async (id: string): Promise<Inspection | null> => {
-    return await db.getInspectionById(id);
+export const importPlansExcel = async (file: File) => {
+    return await uploadExcel('/api/plans-import', file);
 };
 
-export const fetchNcrs = async (params: { inspection_id?: string, status?: string, page?: number, limit?: number } = {}): Promise<PagedResult<any>> => {
+export const fetchInspections = async (filters: any = {}): Promise<PagedResult<Inspection>> => {
+  const result = await db.getInspectionsPaginated(filters);
+  return { items: result.items, total: result.total, page: filters.page, limit: filters.limit };
+};
+
+export const fetchInspectionById = async (id: string) => await db.getInspectionById(id);
+
+export const fetchNcrs = async (params: any = {}): Promise<PagedResult<any>> => {
     const result = await db.getNcrs(params);
-    return {
-        items: result,
-        total: result.length,
-        page: params.page,
-        limit: params.limit
-    };
+    return { items: result, total: result.length };
 };
 
-export const fetchNcrById = async (id: string): Promise<NCR | null> => {
-    return await db.getNcrById(id);
+export const fetchNcrById = async (id: string) => await db.getNcrById(id);
+export const fetchDefects = async (params: any = {}) => ({ items: await db.getDefects(params), total: 0 });
+
+// Defect Library
+export const fetchDefectLibrary = async () => await db.getDefectLibrary();
+export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
+export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
+
+export const exportDefectLibrary = async () => {
+    await downloadBlob('/api/defects-export', `AATN_Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
-export const fetchDefects = async (params: { search?: string, status?: string } = {}): Promise<PagedResult<Defect>> => {
-    const result = await db.getDefects(params);
-    return {
-        items: result,
-        total: result.length
-    };
+export const importDefectLibrary = async (file: File) => {
+    return await uploadExcel('/api/defects-import', file);
 };
 
-// Defect Library APIs
-export const fetchDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
-    return await db.getDefectLibrary();
-};
-
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
-    await db.saveDefectLibraryItem(item);
-};
-
-export const deleteDefectLibraryItem = async (id: string) => {
-    await db.deleteDefectLibraryItem(id);
-};
-
-export const importDefectLibrary = async (file: File): Promise<any> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await fetch('/api/defects/import', {
-        method: 'POST',
-        body: formData
-    });
-    
-    const data = await response.json();
-    if (!response.ok) {
-        throw new Error(data.message || 'Lỗi hệ thống khi nhập dữ liệu ISO.');
-    }
-    
-    return data;
-};
-
-/**
- * EXPORT EXCEL - SERVER AUTHORITATIVE
- * Cập nhật đường dẫn api/defects-export để tương thích với Vercel Serverless Functions
- */
-export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
-    const query = new URLSearchParams(filters).toString();
-    const apiUrl = `/api/defects-export?${query}`;
-    
-    try {
-        const response = await fetch(apiUrl);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            let message = `Lỗi kết nối API (${response.status})`;
-            try {
-                const errJson = JSON.parse(errorText);
-                message = errJson.message || message;
-            } catch(e) {}
-            throw new Error(message);
-        }
-        
-        const contentType = response.headers.get('Content-Type');
-        if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
-            throw new Error(`Dữ liệu không đúng định dạng. Server trả về: ${contentType || 'không xác định'}`);
-        }
-
-        const blob = await response.blob();
-        if (blob.size === 0) {
-            throw new Error('Tệp Excel rỗng.');
-        }
-
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = `AATN_Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        
-        setTimeout(() => {
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        }, 150);
-    } catch (e: any) {
-        console.error("[ISO-EXPORT-API-ERROR]", e);
-        throw e;
-    }
-};
-
-export const saveInspectionToSheet = async (inspection: Inspection) => {
-  await db.saveInspection(inspection);
-  return { success: true };
-};
-
-export const deleteInspectionFromSheet = async (id: string) => {
-  await db.deleteInspection(id);
-};
-
-export const fetchProjectByCode = async (maCt: string): Promise<Project | null> => {
-    return await db.getProjectByCode(maCt);
-};
-
-export const fetchProjectsSummary = async (search: string = ""): Promise<Project[]> => {
-    const all = await db.getProjects();
-    if (!search) return all;
-    const term = search.toLowerCase();
-    return all.filter(p => p.ma_ct.toLowerCase().includes(term) || p.name.toLowerCase().includes(term));
-};
-
-export const fetchProjects = async (): Promise<Project[]> => {
-  return await db.getProjects();
-};
-
-export const updateProject = async (project: Project) => {
-  await db.saveProjectMetadata(project);
-  return project;
-};
-
+export const saveInspectionToSheet = async (inspection: Inspection) => { await db.saveInspection(inspection); return { success: true }; };
+export const deleteInspectionFromSheet = async (id: string) => { await db.deleteInspection(id); };
+export const fetchProjectByCode = async (maCt: string) => await db.getProjectByCode(maCt);
+export const fetchProjects = async () => await db.getProjects();
+export const updateProject = async (project: Project) => { await db.saveProjectMetadata(project); return project; };
 export const fetchUsers = async () => await db.getUsers();
 export const saveUser = async (user: User) => { await db.saveUser(user); return user; };
 export const deleteUser = async (id: string) => { await db.deleteUser(id); };
 export const importUsers = async (users: User[]) => { await db.importUsers(users); };
-
-export const importInspections = async (inspections: Inspection[]) => {
-  for (const inspection of inspections) {
-    await db.saveInspection(inspection);
-  }
-};
-
+export const importInspections = async (inspections: Inspection[]) => { for (const i of inspections) await db.saveInspection(i); };
 export const fetchWorkshops = async () => await db.getWorkshops();
-export const saveWorkshop = async (workshop: Workshop) => { await db.saveWorkshop(workshop); return workshop; };
+export const saveWorkshop = async (ws: Workshop) => { await db.saveWorkshop(ws); return ws; };
 export const deleteWorkshop = async (id: string) => { await db.deleteWorkshop(id); };
-
 export const fetchTemplates = async () => await db.getTemplates();
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => { await db.saveTemplate(moduleId, items); };
-
+export const saveTemplate = async (m: string, i: CheckItem[]) => { await db.saveTemplate(m, i); };
 export const importPlans = async (plans: PlanItem[]) => { await db.importPlansBatch(plans); };

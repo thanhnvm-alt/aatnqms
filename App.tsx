@@ -49,8 +49,7 @@ import {
   importPlans, 
   importInspections, 
   fetchProjects,
-  fetchProjectByCode,
-  fetchProjectsSummary
+  fetchProjectByCode
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
