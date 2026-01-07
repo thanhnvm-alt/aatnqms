@@ -1,3 +1,4 @@
+
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem } from '../types';
 import * as db from './tursoService';
 
@@ -103,46 +104,51 @@ export const importDefectLibrary = async (file: File): Promise<any> => {
 
 /**
  * EXPORT EXCEL - SERVER AUTHORITATIVE
- * Kiểm tra mã phản hồi và định dạng Content-Type nghiêm ngặt
+ * Cập nhật đường dẫn api/defects-export để tương thích với Vercel Serverless Functions
  */
 export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
     const query = new URLSearchParams(filters).toString();
-    const response = await fetch(`/api/defects/export?${query}`);
+    const apiUrl = `/api/defects-export?${query}`;
     
-    if (!response.ok) {
-        const errorText = await response.text();
-        let message = 'Không thể kết nối API xuất dữ liệu.';
-        try {
-            const errJson = JSON.parse(errorText);
-            message = errJson.message || message;
-        } catch(e) {}
-        throw new Error(message);
-    }
-    
-    // Kiểm tra định dạng phản hồi thực tế từ Server
-    const contentType = response.headers.get('Content-Type');
-    if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
-        console.warn(`[ISO-WARN] Server returned unexpected Content-Type: ${contentType}`);
-        throw new Error(`Dữ liệu không đúng định dạng (.xlsx). Server trả về: ${contentType || 'không xác định'}`);
-    }
+    try {
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let message = `Lỗi kết nối API (${response.status})`;
+            try {
+                const errJson = JSON.parse(errorText);
+                message = errJson.message || message;
+            } catch(e) {}
+            throw new Error(message);
+        }
+        
+        const contentType = response.headers.get('Content-Type');
+        if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
+            throw new Error(`Dữ liệu không đúng định dạng. Server trả về: ${contentType || 'không xác định'}`);
+        }
 
-    const blob = await response.blob();
-    if (blob.size === 0) {
-        throw new Error('Tệp Excel được tạo không có nội dung. Vui lòng kiểm tra dữ liệu nguồn.');
-    }
+        const blob = await response.blob();
+        if (blob.size === 0) {
+            throw new Error('Tệp Excel rỗng.');
+        }
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = `Hoso_Loi_ISO_${new Date().toISOString().split('T')[0]}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    
-    setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    }, 150);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `AATN_Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }, 150);
+    } catch (e: any) {
+        console.error("[ISO-EXPORT-API-ERROR]", e);
+        throw e;
+    }
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
