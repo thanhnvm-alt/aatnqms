@@ -1,3 +1,4 @@
+
 import { NextRequest } from 'next/server';
 import { getDefectLibrary } from '@/services/tursoService';
 import ExcelJS from 'exceljs';
@@ -6,14 +7,14 @@ export const dynamic = 'force-dynamic';
 
 /**
  * EXPORT EXCEL - ISO 9001:2026 AUDIT READY
- * Khắc phục triệt để lỗi định dạng file không hợp lệ bằng Standard Web Response
+ * Chuẩn hóa phản hồi binary để vượt qua các bộ lọc proxy và browser
  */
 export async function GET(request: NextRequest) {
   try {
-    // 1. Truy vấn dữ liệu từ Turso (Read-only)
+    // 1. Truy vấn dữ liệu từ Turso
     const data = await getDefectLibrary();
     
-    // 2. Khởi tạo Workbook với Metadata chuẩn ISO
+    // 2. Khởi tạo Workbook
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'QMS AATN System';
     workbook.lastModifiedBy = 'QMS AATN System';
@@ -22,21 +23,21 @@ export async function GET(request: NextRequest) {
 
     const worksheet = workbook.addWorksheet('Defect Library');
 
-    // 3. Mapping cột theo cấu trúc hồ sơ chất lượng
+    // 3. Cấu hình Cột (Mapping ISO 9001)
     worksheet.columns = [
-      { header: 'Mã Lỗi (Code)', key: 'defect_code', width: 20 },
-      { header: 'Tên Lỗi (Name)', key: 'defect_name', width: 35 },
-      { header: 'Nhóm Lỗi (Group)', key: 'defect_group', width: 20 },
-      { header: 'Loại Lỗi (Type)', key: 'defect_type', width: 20 },
-      { header: 'Mức Độ (Severity)', key: 'severity', width: 15 },
-      { header: 'Mô Tả (Description)', key: 'description', width: 50 },
-      { header: 'Quy Trình (Process)', key: 'applicable_process', width: 20 },
-      { header: 'Trạng Thái (Status)', key: 'status', width: 15 },
-      { header: 'Ngày Tạo', key: 'created_at', width: 25 },
-      { header: 'Cập Nhật', key: 'updated_at', width: 25 }
+      { header: 'Mã Lỗi', key: 'defect_code', width: 15 },
+      { header: 'Tên Lỗi', key: 'defect_name', width: 30 },
+      { header: 'Nhóm Lỗi', key: 'defect_group', width: 20 },
+      { header: 'Loại Lỗi', key: 'defect_type', width: 20 },
+      { header: 'Mức Độ', key: 'severity', width: 15 },
+      { header: 'Mô Tả Chi Tiết', key: 'description', width: 50 },
+      { header: 'Quy Trình Áp Dụng', key: 'applicable_process', width: 20 },
+      { header: 'Trạng Thái', key: 'status', width: 15 },
+      { header: 'Gợi Ý Khắc Phục', key: 'suggested_action', width: 40 },
+      { header: 'Ngày Tạo', key: 'created_at', width: 20 }
     ];
 
-    // 4. Đổ dữ liệu
+    // 4. Đổ dữ liệu vào hàng
     data.forEach(item => {
       worksheet.addRow({
         defect_code: item.defect_code,
@@ -47,45 +48,48 @@ export async function GET(request: NextRequest) {
         description: item.description,
         applicable_process: item.applicable_process,
         status: item.status,
-        created_at: item.created_at ? new Date(item.created_at * 1000).toLocaleString('vi-VN') : '---',
-        updated_at: item.updated_at ? new Date(item.updated_at * 1000).toLocaleString('vi-VN') : '---'
+        suggested_action: item.suggested_action,
+        created_at: item.created_at ? new Date(item.created_at * 1000).toLocaleString('vi-VN') : '---'
       });
     });
 
-    // Định dạng Header chuyên nghiệp
-    worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-      cell.alignment = { horizontal: 'center' };
-    });
+    // Định dạng Header Row (Chuyên nghiệp)
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E40AF' } // Blue-800
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-    // 5. Tạo Buffer và chuyển đổi sang ArrayBuffer chuẩn Web
+    // 5. Xuất Buffer
     const buffer = await workbook.xlsx.writeBuffer();
     
-    /* 
-       CRITICAL: Sử dụng Response constructor thay vì NextResponse.json 
-       để ép buộc Content-Type binary không bị framework can thiệp.
-    */
-    return new Response(buffer, {
+    // Đảm bảo buffer là Uint8Array sạch để truyền qua mạng
+    const binaryData = new Uint8Array(buffer);
+
+    // 6. Trả về Response chuẩn binary (Web Standard)
+    return new Response(binaryData, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="AATN_Defect_Library_${Date.now()}.xlsx"`,
-        'Content-Length': buffer.byteLength.toString(),
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'X-Content-Type-Options': 'nosniff'
+        'Content-Length': binaryData.length.toString(),
+        'Cache-Control': 'no-store, max-age=0',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY'
       }
     });
 
   } catch (error: any) {
-    console.error(`[ISO-CRITICAL] Export failed: ${error.message}`);
-    // Trả về lỗi JSON chuẩn nếu thất bại
-    return new Response(JSON.stringify({ 
+    console.error(`[ISO-EXPORT-ERROR]`, error);
+    // Trả về lỗi JSON để frontend bắt được thay vì trả về HTML 404/500 của server
+    const errorBody = JSON.stringify({ 
       success: false, 
       message: `Lỗi hệ thống khi tạo hồ sơ ISO: ${error.message}` 
-    }), {
+    });
+    return new Response(errorBody, {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
