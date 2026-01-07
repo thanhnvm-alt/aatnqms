@@ -26,7 +26,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   const allAvailableStages = useMemo(() => {
       const stages = new Set<string>();
       workshops.forEach(w => w.stages?.forEach(s => stages.add(s)));
-      // Nếu không có xưởng nào, dùng mặc định
       if (stages.size === 0) return ['CHUNG'];
       return Array.from(stages).sort();
   }, [workshops]);
@@ -61,13 +60,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       });
   };
 
-  // Grouping logic
   const groupedData = useMemo(() => {
       const groups: Record<string, Record<string, CheckItem[]>> = {};
-      
-      // Khởi tạo các công đoạn từ Workshop
       allAvailableStages.forEach(s => { groups[s] = {}; });
-      // Thêm công đoạn 'CHUNG' nếu chưa có
       if (!groups['CHUNG']) groups['CHUNG'] = {};
 
       items.forEach(item => {
@@ -106,7 +101,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
             <Info className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
                 <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Nguyên tắc cấu hình</p>
-                <p className="text-xs font-medium leading-relaxed">Cấu trúc phân tầng: <b>Công đoạn (G1)</b> từ quản lý xưởng → <b>Danh mục (G2)</b> → <b>Hạng mục & Tiêu chuẩn (G3)</b>. Hệ thống sẽ tự động lọc hạng mục khi QC chọn công đoạn trong phiếu.</p>
+                <p className="text-xs font-medium leading-relaxed">Cấu trúc phân tầng: <b>Công đoạn (G1)</b> từ quản lý xưởng → <b>Danh mục (G2)</b> → <b>Hạng mục & Tiêu chuẩn (G3)</b>.</p>
             </div>
         </div>
 
@@ -151,34 +146,31 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                 className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-transparent border-b border-blue-100 focus:border-blue-500 outline-none min-w-[150px]"
                                                 placeholder="TÊN DANH MỤC..."
                                             />
-                                            <div className="h-px flex-1 bg-slate-100"></div>
                                         </div>
 
                                         <div className="grid grid-cols-1 gap-3">
                                             {catItems.map((item) => (
-                                                <div key={item.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all group">
+                                                <div key={item.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group">
                                                     <div className="flex gap-4">
                                                         <div className="flex-1 space-y-3">
                                                             <div className="space-y-1">
-                                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra (Group 3)</label>
+                                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label>
                                                                 <input
                                                                     type="text"
                                                                     value={item.label}
                                                                     onChange={(e) => handleChange(item.id, 'label', e.target.value)}
                                                                     className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
-                                                                    placeholder="Nhập hạng mục..."
                                                                 />
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <label className="text-[8px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                                                                    <FileText className="w-2 h-2" /> Tiêu chuẩn kỹ thuật đính kèm
+                                                                    <FileText className="w-2 h-2" /> Tiêu chuẩn kỹ thuật
                                                                 </label>
                                                                 <textarea
                                                                     value={item.standard}
                                                                     onChange={(e) => handleChange(item.id, 'standard', e.target.value)}
                                                                     className="w-full px-4 py-2.5 bg-blue-50/30 border border-blue-100 rounded-xl text-xs font-medium text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                                                     rows={2}
-                                                                    placeholder="Mô tả tiêu chuẩn kỹ thuật cho hạng mục này..."
                                                                 />
                                                             </div>
                                                         </div>
@@ -197,12 +189,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                     </div>
                                 ))
                             )}
-                            <button 
-                                onClick={() => handleAddItem(stageName)}
-                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-widest"
-                            >
-                                <Plus className="w-4 h-4" /> Thêm hạng mục vào {stageName}
-                            </button>
                         </div>
                     )}
                 </div>

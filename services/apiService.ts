@@ -9,8 +9,6 @@ export interface PagedResult<T> {
   limit?: number;
 }
 
-const AUTH_STORAGE_KEY = 'aatn_auth_storage';
-
 /**
  * ISO Helper: Lưu file Excel trực tiếp từ trình duyệt
  */

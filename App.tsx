@@ -49,8 +49,7 @@ import {
   importPlans, 
   importInspections, 
   fetchProjects,
-  fetchProjectByCode,
-  fetchProjectsSummary
+  fetchProjectByCode
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
@@ -145,10 +144,7 @@ const App = () => {
   
   const loadProjects = async () => { 
     if (!isDbReady) return;
-    try { 
-        const data = await fetchProjects(); 
-        setProjects(data || []); 
-    } catch(e) {} 
+    try { const data = await fetchProjects(); setProjects(data || []); } catch(e) {} 
   };
   
   const loadPlans = async () => {
@@ -160,10 +156,7 @@ const App = () => {
   const loadInspections = async () => {
     if (!isDbReady) return;
     setIsLoadingInspections(true);
-    try { 
-        const data = await fetchInspections(); 
-        setInspections(data.items || []); 
-    } catch (e) {} finally { setIsLoadingInspections(false); }
+    try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); }
   };
 
   const handleSelectInspection = async (id: string) => {
@@ -176,43 +169,18 @@ const App = () => {
   };
 
   const handleSelectProject = async (maCt: string) => {
-      const safeProjs = Array.isArray(projects) ? projects : [];
-      const found = safeProjs.find(p => p && p.ma_ct === maCt);
-      if (found) {
-          setActiveProject(found);
-          setView('PROJECT_DETAIL');
-      } else {
-          setIsDetailLoading(true);
-          try {
-              const freshProject = await fetchProjectByCode(maCt);
-              if (freshProject) {
-                  setActiveProject(freshProject);
-                  setView('PROJECT_DETAIL');
-              } else {
-                  alert("Không tìm thấy dự án: " + maCt);
-              }
-          } catch (e) {
-              alert("Lỗi kết nối cơ sở dữ liệu.");
-          } finally {
-              setIsDetailLoading(false);
-          }
-      }
-  };
-
-  const handleEditInspection = async (id: string) => {
-    setIsDetailLoading(true);
-    try {
-        const fullInspection = await fetchInspectionById(id);
-        if (fullInspection) { setActiveInspection(fullInspection); setView('FORM'); }
-    } catch (e) {} finally { setIsDetailLoading(false); }
+      setIsDetailLoading(true);
+      try {
+          const freshProject = await fetchProjectByCode(maCt);
+          if (freshProject) { setActiveProject(freshProject); setView('PROJECT_DETAIL'); }
+          else alert("Không tìm thấy dự án: " + maCt);
+      } catch (e) { alert("Lỗi kết nối cơ sở dữ liệu."); } finally { setIsDetailLoading(false); }
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
 
-  const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
-
   /**
-   * Bước 1: Quét QR -> Lưu mã tạm -> Mở bảng chọn loại phiếu
+   * QR Flow Header
    */
   const handleQrScan = (scannedCode: string) => {
     setShowQrScanner(false);
@@ -220,16 +188,10 @@ const App = () => {
     setShowModuleSelector(true);
   };
 
-  /**
-   * Bước 2: Sau khi chọn loại phiếu, tải dữ liệu từ Plans DB và mở Form
-   */
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false);
       setIsDetailLoading(true);
-      
       let baseData: Partial<Inspection> = { ma_nha_may: pendingScannedCode || '' };
-      
-      // Tìm kiếm thông tin kế hoạch trong Database
       if (pendingScannedCode) {
           try {
               const searchResult = await fetchPlans(pendingScannedCode, 1, 5);
@@ -237,7 +199,6 @@ const App = () => {
                   String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || 
                   String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()
               );
-              
               if (foundPlan) {
                   baseData = {
                       ma_nha_may: foundPlan.ma_nha_may,
@@ -249,18 +210,10 @@ const App = () => {
                       so_luong_ipo: foundPlan.so_luong_ipo
                   };
               }
-          } catch (e) {
-              console.warn("Dữ liệu Plans chưa sẵn sàng hoặc lỗi DB, sử dụng mã thô.");
-          }
+          } catch (e) {}
       }
-
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
-      setInitialFormState({ 
-          ...baseData, 
-          type: moduleId, 
-          items: JSON.parse(JSON.stringify(template)) 
-      });
-      
+      setInitialFormState({ ...baseData, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
       setActiveInspection(null);
       setPendingScannedCode(null);
       setIsDetailLoading(false);
@@ -270,16 +223,9 @@ const App = () => {
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} />;
 
   const headerActions = {
-    onRefresh: view === 'LIST' || view === 'DASHBOARD' || view === 'NCR_LIST' || view === 'DEFECT_LIST' ? loadInspections : (view === 'PLAN' || view === 'PROJECTS' ? loadPlans : undefined),
-    onScanClick: () => {
-        setPendingScannedCode(null);
-        setShowQrScanner(true);
-    },
-    onCreate: () => { 
-        setPendingScannedCode(null);
-        setInitialFormState(undefined); 
-        setShowModuleSelector(true); 
-    },
+    onRefresh: () => { loadInspections(); loadProjects(); loadPlans(); },
+    onScanClick: () => { setPendingScannedCode(null); setShowQrScanner(true); },
+    onCreate: () => { setPendingScannedCode(null); setInitialFormState(undefined); setShowModuleSelector(true); },
   };
 
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo hệ thống...</p></div>;
@@ -290,63 +236,42 @@ const App = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && (
             <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center">
-                <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200">
+                <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
                     <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
                     <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải dữ liệu...</p>
                 </div>
             </div>
         )}
-
-        <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} {...headerActions} />
+        <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={(tab) => { setSettingsInitialTab(tab); setView('SETTINGS'); }} {...headerActions} />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
-            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onImportInspections={async (p) => { await importInspections(p); loadInspections(); }} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
+            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
             {view === 'FORM' && <InspectionForm initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
-            {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
+            {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={(id) => { setView('FORM'); }} onDelete={async (id) => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setPendingScannedCode(item.ma_nha_may); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
-            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
+            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={handleSelectProject} />}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onUpdate={loadProjects} onBack={() => { setView('PROJECTS'); setActiveProject(null); }} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
-        
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
-
-        {showQrScanner && (
-          <QRScannerModal 
-            onClose={() => setShowQrScanner(false)} 
-            onScan={handleQrScan} 
-          />
-        )}
-
+        {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={handleQrScan} />}
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl p-6 space-y-4 animate-in zoom-in duration-200">
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-black text-slate-800 uppercase tracking-tighter">Chọn Loại Kiểm Tra</h3>
-                        <button onClick={() => setShowModuleSelector(false)}><X className="w-6 h-6 text-slate-400"/></button>
-                    </div>
+                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 animate-in zoom-in duration-200">
+                    <div className="flex justify-between items-center"><h3 className="font-black text-slate-800 uppercase">Chọn Loại Phiếu</h3><button onClick={() => setShowModuleSelector(false)}><X className="w-6 h-6"/></button></div>
                     <div className="grid grid-cols-1 gap-2">
                         {ALL_MODULES.filter(m => m.group === 'QC' || m.group === 'QA').map(mod => (
-                            <button key={mod.id} onClick={() => startCreateInspection(mod.id)} className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-200 rounded-2xl flex items-center gap-4 transition-all group">
-                                <div className="p-2 bg-white rounded-xl shadow-sm text-blue-600 group-hover:scale-110 transition-transform">
-                                    <FileText className="w-5 h-5" />
-                                </div>
-                                <span className="font-bold text-slate-700 group-hover:text-blue-700 uppercase text-xs">{mod.label}</span>
+                            <button key={mod.id} onClick={() => startCreateInspection(mod.id)} className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 rounded-2xl flex items-center gap-4 transition-all">
+                                <FileText className="w-5 h-5 text-blue-600" /><span className="font-bold text-slate-700 uppercase text-xs">{mod.label}</span>
                             </button>
                         ))}
                     </div>
-                    {pendingScannedCode && (
-                        <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                             <p className="text-[10px] font-black text-blue-600 uppercase">Mã đang chờ: {pendingScannedCode}</p>
-                        </div>
-                    )}
                 </div>
             </div>
         )}
