@@ -7,12 +7,9 @@ const turso = createClient({
 });
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'GET') return res.status(405).send('ISO: Method Not Allowed');
+  if (req.method !== 'GET') return res.status(405).send('ISO Error: Method Not Allowed');
 
   try {
-    const authHeader = req.headers['authorization'] || 'anonymous';
-    console.info(`[ISO-AUDIT] [EXPORT] Defects Library by ${authHeader}`);
-
     const result = await turso.execute("SELECT * FROM defect_library ORDER BY defect_code ASC");
     const rows = result.rows;
 
@@ -51,12 +48,12 @@ export default async function handler(req: any, res: any) {
     const buffer = await workbook.xlsx.writeBuffer();
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=AATN_Defect_Library.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=Thư_viện_Lỗi_ISO_AATN_${Date.now()}.xlsx`);
     
     // Fixed: Replaced Buffer.from with Uint8Array to resolve "Cannot find name 'Buffer'" error
     return res.status(200).send(new Uint8Array(buffer as ArrayBuffer));
   } catch (error: any) {
     console.error("[ISO-CRITICAL] Export Defects Error:", error);
-    return res.status(500).send(`Lỗi hệ thống ISO: ${error.message}`);
+    return res.status(500).json({ message: "Lỗi kết xuất dữ liệu thư viện ISO." });
   }
 }

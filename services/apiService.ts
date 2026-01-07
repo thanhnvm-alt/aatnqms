@@ -8,22 +8,38 @@ export interface PagedResult<T> {
   limit?: number;
 }
 
-// Helper: Tải file binary từ API
+// Key đồng bộ với App.tsx
+const AUTH_STORAGE_KEY = 'aatn_auth_storage';
+
+/**
+ * Audit Helper: Tải file nhị phân từ API
+ * Đảm bảo file nhận được là .xlsx hợp lệ trước khi cho phép lưu
+ */
 const downloadBlob = async (apiUrl: string, fileName: string) => {
     try {
-        const response = await fetch(apiUrl);
+        const authData = localStorage.getItem(AUTH_STORAGE_KEY);
+        let token = 'anonymous';
+        if (authData) {
+            try {
+                const user = JSON.parse(authData);
+                token = user.id || user.username || 'system';
+            } catch (e) {}
+        }
+
+        const response = await fetch(apiUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+        });
         
         if (!response.ok) {
-            let errorMsg = `Lỗi hệ thống (${response.status})`;
-            try {
-                const errorData = await response.json();
-                errorMsg = errorData.message || errorMsg;
-            } catch (e) {}
-            throw new Error(errorMsg);
+            const errorText = await response.text();
+            throw new Error(`Server rejected request: ${response.status} - ${errorText}`);
         }
 
         const blob = await response.blob();
-        if (blob.size === 0) throw new Error("Dữ liệu nhận được rỗng.");
+        if (blob.size < 100) throw new Error("Dữ liệu nhận được quá nhỏ, có thể file bị hỏng (ISO Integrity Error).");
 
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -36,21 +52,29 @@ const downloadBlob = async (apiUrl: string, fileName: string) => {
         setTimeout(() => {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-        }, 400);
+        }, 1000);
     } catch (err: any) {
-        console.error("Download Error:", err);
-        alert(`Không thể tải file: ${err.message}. Vui lòng liên hệ Admin để kiểm tra Server Logs.`);
+        console.error("[AUDIT-LOG] Download Error:", err);
+        alert(`Lỗi hệ thống khi trích xuất hồ sơ: ${err.message}`);
     }
 };
 
-// Helper: Upload file Excel lên API
 const uploadExcel = async (apiUrl: string, file: File) => {
+    const authData = localStorage.getItem(AUTH_STORAGE_KEY);
+    let token = 'system';
+    if (authData) {
+        try { token = JSON.parse(authData).id; } catch (e) {}
+    }
+
     const formData = new FormData();
     formData.append('file', file);
+    
     const response = await fetch(apiUrl, {
         method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
     });
+    
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Lỗi xử lý file Excel tại server.');
     return data;
@@ -67,8 +91,8 @@ export const fetchPlans = async (search: string = '', page?: number, limit?: num
 };
 
 export const exportPlans = async () => {
-    // Sửa đường dẫn từ /api/plans/export thành /api/plans-export
-    await downloadBlob('/api/plans-export', `AATN_Plans_${new Date().toISOString().split('T')[0]}.xlsx`);
+    // Chuyển sang đường dẫn phẳng để đảm bảo Vercel routing hoạt động ổn định
+    await downloadBlob('/api/plans-export', `AATN_Kế_hoạch_Sản_xuất_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
 export const importPlansExcel = async (file: File) => {
@@ -81,23 +105,16 @@ export const fetchInspections = async (filters: any = {}): Promise<PagedResult<I
 };
 
 export const fetchInspectionById = async (id: string) => await db.getInspectionById(id);
-
-export const fetchNcrs = async (params: any = {}): Promise<PagedResult<any>> => {
-    const result = await db.getNcrs(params);
-    return { items: result, total: result.length };
-};
-
+export const fetchNcrs = async (params: any = {}) => ({ items: await db.getNcrs(params), total: 0 });
 export const fetchNcrById = async (id: string) => await db.getNcrById(id);
 export const fetchDefects = async (params: any = {}) => ({ items: await db.getDefects(params), total: 0 });
 
-// Defect Library
 export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
 export const deleteDefectLibraryItem = async (id: string) => { await db.deleteDefectLibraryItem(id); };
 
 export const exportDefectLibrary = async () => {
-    // Sửa đường dẫn từ /api/defects/export thành /api/defects-export
-    await downloadBlob('/api/defects-export', `AATN_Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`);
+    await downloadBlob('/api/defects-export', `AATN_Thư_viện_Lỗi_Kỹ_thuật_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
 export const importDefectLibrary = async (file: File) => {

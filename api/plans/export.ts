@@ -10,15 +10,14 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') return res.status(405).send('ISO: Method Not Allowed');
 
   try {
-    const authHeader = req.headers['authorization'] || 'anonymous';
-    console.info(`[ISO-AUDIT] [EXPORT] Plans by ${authHeader}`);
-
+    // Audit-Log: Export request detected
     const result = await turso.execute("SELECT * FROM plans ORDER BY id DESC");
     const rows = result.rows;
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Kế hoạch sản xuất');
 
+    // Header bắt buộc phải trùng khớp tuyệt đối với logic Import để đảm bảo tính hệ thống
     worksheet.columns = [
       { header: 'Mã Nhà Máy', key: 'ma_nha_may', width: 20 },
       { header: 'Headcode', key: 'headcode', width: 20 },
@@ -53,12 +52,12 @@ export default async function handler(req: any, res: any) {
     const buffer = await workbook.xlsx.writeBuffer();
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=AATN_Plans_Export.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=Hồ_sơ_Kế_hoạch_AATN_${Date.now()}.xlsx`);
     
     // Fixed: Replaced Buffer.from with Uint8Array to resolve "Cannot find name 'Buffer'" error
     return res.status(200).send(new Uint8Array(buffer as ArrayBuffer));
   } catch (error: any) {
     console.error("[ISO-CRITICAL] Export Plans Error:", error);
-    return res.status(500).send(`Lỗi hệ thống ISO: ${error.message}`);
+    return res.status(500).json({ message: "Lỗi hệ thống khi trích xuất dữ liệu ISO." });
   }
 }

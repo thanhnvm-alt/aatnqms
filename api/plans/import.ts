@@ -9,13 +9,13 @@ const turso = createClient({
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') return res.status(405).send('ISO: Method Not Allowed');
+  if (req.method !== 'POST') return res.status(405).json({ message: 'ISO: Method Not Allowed' });
 
   try {
-    const authHeader = req.headers['authorization'] || 'anonymous';
     const chunks: any[] = [];
     for await (const chunk of req) chunks.push(chunk);
     
+    // Fixed: Replaced Buffer.concat with Uint8Array concatenation to resolve "Cannot find name 'Buffer'" error
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const combined = new Uint8Array(totalLength);
     let pos = 0;
@@ -24,44 +24,50 @@ export default async function handler(req: any, res: any) {
       pos += chunk.length;
     }
     
+    // Fixed: Using 'array' type for XLSX.read with Uint8Array
     const workbook = XLSX.read(combined, { type: 'array' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
 
     if (rawData.length === 0) throw new Error("File rỗng.");
 
+    // ISO Rule: Kiểm tra Header thực tế so với mẫu chuẩn
     const firstRow = rawData[0];
     const requiredKeys = ['Mã Nhà Máy', 'Mã Công Trình', 'Tên Sản Phẩm'];
     for (const key of requiredKeys) {
-        if (!(key in firstRow)) throw new Error(`Sai cấu trúc hồ sơ ISO: Thiếu cột '${key}'`);
+        if (!(key in firstRow)) throw new Error(`Sai cấu trúc ISO: Thiếu cột '${key}'`);
     }
 
+    let success = 0;
     const now = Math.floor(Date.now() / 1000);
-    const batchQueries = rawData.map(row => ({
+
+    for (const row of rawData) {
+      const ma_nm = row['Mã Nhà Máy'];
+      if (!ma_nm) continue;
+
+      await turso.execute({
         sql: `INSERT INTO plans (ma_nha_may, headcode, ma_ct, ten_ct, ten_hang_muc, so_luong_ipo, dvt, plannedDate, assignee, status, created_at) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
-          String(row['Mã Nhà Máy'] || ''),
-          String(row['Headcode'] || ''),
-          String(row['Mã Công Trình'] || ''),
-          String(row['Tên Công Trình'] || ''),
-          String(row['Tên Sản Phẩm'] || ''),
+          String(ma_nm),
+          row['Headcode'] || '',
+          row['Mã Công Trình'] || '',
+          row['Tên Công Trình'] || '',
+          row['Tên Sản Phẩm'] || '',
           Number(row['Số lượng (IPO)'] || 0),
-          String(row['ĐVT'] || 'PCS'),
-          String(row['Ngày Kế Hoạch'] || ''),
-          String(row['Người Phụ Trách'] || ''),
+          row['ĐVT'] || 'PCS',
+          row['Ngày Kế Hoạch'] || '',
+          row['Người Phụ Trách'] || '',
           'PENDING',
           now
         ]
-    }));
+      });
+      success++;
+    }
 
-    // Sử dụng transaction để đảm bảo tính toàn vẹn (ISO Compliance)
-    await turso.batch(batchQueries, "write");
-    
-    console.info(`[ISO-AUDIT] [IMPORT] Plans: ${batchQueries.length} rows by ${authHeader}`);
-    return res.status(200).json({ success: batchQueries.length, total: rawData.length });
+    return res.status(200).json({ success, total: rawData.length });
   } catch (error: any) {
     console.error("[ISO-IMPORT-FAIL]:", error.message);
-    return res.status(500).json({ message: `Lỗi hệ thống ISO: ${error.message}` });
+    return res.status(500).json({ message: `Lỗi ISO: ${error.message}` });
   }
 }

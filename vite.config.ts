@@ -1,4 +1,3 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -22,6 +21,17 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    // Cấu hình server proxy để xử lý API requests
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3000', // Vercel CLI dev server port
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path,
+        },
+      },
+    },
     // Override resolve to remove the alias causing the build issue
     resolve: {
       alias: {}

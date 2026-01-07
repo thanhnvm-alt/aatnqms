@@ -9,13 +9,13 @@ const turso = createClient({
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') return res.status(405).send('ISO: Method Not Allowed');
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
 
   try {
-    const authHeader = req.headers['authorization'] || 'anonymous';
     const chunks: any[] = [];
     for await (const chunk of req) chunks.push(chunk);
     
+    // Fixed: Replaced Buffer.concat with Uint8Array concatenation to resolve "Cannot find name 'Buffer'" error
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const combined = new Uint8Array(totalLength);
     let pos = 0;
@@ -24,35 +24,39 @@ export default async function handler(req: any, res: any) {
       pos += chunk.length;
     }
     
+    // Fixed: Using 'array' type for XLSX.read with Uint8Array
     const workbook = XLSX.read(combined, { type: 'array' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
 
+    let success = 0;
     const now = Math.floor(Date.now() / 1000);
-    const batchQueries = rawData.filter(r => r['Mã Lỗi']).map(row => ({
+
+    for (const row of rawData) {
+      const code = row['Mã Lỗi'];
+      if (!code) continue;
+
+      await turso.execute({
         sql: `INSERT INTO defect_library (id, defect_code, defect_name, defect_group, defect_type, severity, description, applicable_process, status, suggested_action, updated_at) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(id) DO UPDATE SET defect_name=excluded.defect_name, description=excluded.description, updated_at=excluded.updated_at`,
         args: [
-          String(row['Mã Lỗi']), String(row['Mã Lỗi']),
-          String(row['Tên Lỗi'] || ''),
-          String(row['Nhóm Lỗi'] || 'Ngoại quan'),
-          'Chung',
+          code, code,
+          row['Tên Lỗi'] || '',
+          row['Nhóm Lỗi'] || 'Ngoại quan',
+          row['Loại Lỗi'] || 'Chung',
           String(row['Mức Độ'] || 'MINOR').toUpperCase(),
-          String(row['Mô Tả Lỗi'] || ''),
-          String(row['Quy Trình Áp Dụng'] || ''),
+          row['Mô Tả Lỗi'] || '',
+          row['Quy Trình Áp Dụng'] || '',
           'ACTIVE',
-          String(row['Biện Pháp Khắc Phục'] || ''),
+          row['Biện Pháp Khắc Phục'] || '',
           now
         ]
-    }));
-
-    if (batchQueries.length > 0) {
-        await turso.batch(batchQueries, "write");
+      });
+      success++;
     }
 
-    console.info(`[ISO-AUDIT] [IMPORT] Defects: ${batchQueries.length} items by ${authHeader}`);
-    return res.status(200).json({ success: batchQueries.length, total: rawData.length });
+    return res.status(200).json({ success, total: rawData.length });
   } catch (error: any) {
     return res.status(500).json({ message: `ISO Error: ${error.message}` });
   }
