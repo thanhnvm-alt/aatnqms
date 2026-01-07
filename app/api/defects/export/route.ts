@@ -5,15 +5,17 @@ import * as XLSX from 'xlsx';
 export const dynamic = 'force-dynamic';
 
 /**
- * EXPORT EXCEL - ISO 9001:2026 Standard
- * Đảm bảo dữ liệu binary thuần túy, không chèn log hoặc HTML.
+ * EXPORT EXCEL - ISO 9001:2026 COMPLIANT
+ * Quy tắc:
+ * 1. Dữ liệu binary thuần (Uint8Array)
+ * 2. Không BOM, không Log can thiệp vào stream
+ * 3. Mapping cột cố định theo schema database
  */
 export async function GET(request: NextRequest) {
   try {
     const data = await getDefectLibrary();
     
-    // Mapping 1-1 với yêu cầu cấu trúc database/excel
-    // Thứ tự cột phải được giữ cố định cho hệ thống audit
+    // Mapping 1-1 theo cấu trúc yêu cầu của Giám đốc Chất lượng
     const exportRows = data.map(item => ({
       defect_code: item.defect_code,
       defect_name: item.defect_name,
@@ -31,25 +33,32 @@ export async function GET(request: NextRequest) {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "DefectLibrary");
     
-    // Tạo binary buffer dưới dạng Uint8Array (chuẩn OpenXML)
-    const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    /* 
+       CRITICAL FIX: Chuyển đổi sang Uint8Array (chuẩn Web) 
+       để tránh lỗi "file format or extension is not valid" trên Excel.
+    */
+    const buf = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+    const binaryData = new Uint8Array(buf);
 
-    // Server-Authoritative: Log audit trail tại backend
-    console.info(`[AUDIT] Export Defect Library triggered. Records: ${data.length}, Time: ${new Date().toISOString()}`);
+    // Backend logging cho mục đích audit ISO
+    const timestamp = new Date().toISOString();
+    console.info(`[ISO-AUDIT] [EXPORT] Module: DefectLibrary | Records: ${data.length} | Time: ${timestamp}`);
 
-    return new NextResponse(buf, {
+    return new NextResponse(binaryData, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="Defect_Library_${Date.now()}.xlsx"`,
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache'
       }
     });
   } catch (error: any) {
-    console.error(`[CRITICAL] Export failed:`, error);
+    console.error(`[ISO-ERROR] [EXPORT] Failed: ${error.message}`);
+    // Trả về JSON lỗi nếu export thất bại, frontend sẽ xử lý hiển thị alert
     return NextResponse.json({ 
       success: false, 
-      message: 'Lỗi hệ thống khi tạo file Excel. Vui lòng liên hệ IT.' 
+      message: 'Không thể tạo file Excel kỹ thuật. Vui lòng liên hệ quản trị viên.' 
     }, { status: 500 });
   }
 }

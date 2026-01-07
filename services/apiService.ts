@@ -86,7 +86,7 @@ export const deleteDefectLibraryItem = async (id: string) => {
 
 /**
  * IMPORT EXCEL - SERVER AUTHORITATIVE
- * Toàn bộ logic validation và insert đều nằm ở backend route.
+ * Toàn bộ logic validation và ghi log audit đều nằm ở backend route.
  */
 export const importDefectLibrary = async (file: File): Promise<any> => {
     const formData = new FormData();
@@ -99,7 +99,7 @@ export const importDefectLibrary = async (file: File): Promise<any> => {
     
     const data = await response.json();
     if (!response.ok) {
-        throw new Error(data.message || 'Lỗi khi nhập dữ liệu Excel.');
+        throw new Error(data.message || 'Lỗi hệ thống khi nhập dữ liệu ISO.');
     }
     
     return data;
@@ -107,27 +107,42 @@ export const importDefectLibrary = async (file: File): Promise<any> => {
 
 /**
  * EXPORT EXCEL - ISO COMPLIANT
- * Chỉ thực hiện tải về nếu backend phản hồi 200 OK.
+ * Kiểm tra mã phản hồi để tránh tình trạng tải "nội dung lỗi" về thành file .xlsx
  */
 export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
     const query = new URLSearchParams(filters).toString();
     const response = await fetch(`/api/defects/export?${query}`);
     
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Lỗi server không xác định.' }));
-        throw new Error(errorData.message || 'Không thể xuất file Excel.');
+        const errorText = await response.text();
+        let message = 'Không thể kết nối API xuất dữ liệu.';
+        try {
+            const errJson = JSON.parse(errorText);
+            message = errJson.message || message;
+        } catch(e) {}
+        throw new Error(message);
     }
     
+    // Kiểm tra Content-Type để đảm bảo đây là binary chuẩn
+    const contentType = response.headers.get('Content-Type');
+    if (!contentType?.includes('spreadsheetml.sheet')) {
+        throw new Error('Dữ liệu server trả về không đúng định dạng Excel chuẩn.');
+    }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = `Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`;
+    a.download = `Defect_Library_ISO_${new Date().toISOString().split('T')[0]}.xlsx`;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    
+    // Cleanup để giải phóng bộ nhớ (đặc biệt quan trọng cho mobile)
+    setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }, 100);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
