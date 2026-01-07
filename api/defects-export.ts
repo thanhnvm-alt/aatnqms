@@ -1,6 +1,5 @@
-
 import { createClient } from '@libsql/client';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 const turso = createClient({
   url: process.env.TURSO_DATABASE_URL || 'libsql://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io',
@@ -14,30 +13,51 @@ export default async function handler(req: any, res: any) {
     const result = await turso.execute("SELECT * FROM defect_library ORDER BY defect_code ASC");
     const rows = result.rows;
 
-    const exportData = rows.map((item: any) => ({
-      'Mã Lỗi': item.defect_code,
-      'Tên Lỗi': item.defect_name,
-      'Nhóm Lỗi': item.defect_group,
-      'Loại Lỗi': item.defect_type,
-      'Mức Độ': item.severity,
-      'Mô Tả Chi Tiết': item.description,
-      'Quy Trình Áp Dụng': item.applicable_process,
-      'Trạng Thái': item.status,
-      'Gợi Ý Khắc Phục': item.suggested_action
-    }));
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Defect Library');
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Defect Library");
+    worksheet.columns = [
+      { header: 'Mã Lỗi', key: 'defect_code', width: 15 },
+      { header: 'Tên Lỗi', key: 'defect_name', width: 30 },
+      { header: 'Nhóm Lỗi', key: 'defect_group', width: 20 },
+      { header: 'Loại Lỗi', key: 'defect_type', width: 20 },
+      { header: 'Mức Độ', key: 'severity', width: 15 },
+      { header: 'Mô Tả Chi Tiết', key: 'description', width: 50 },
+      { header: 'Quy Trình Áp Dụng', key: 'applicable_process', width: 20 },
+      { header: 'Trạng Thái', key: 'status', width: 15 },
+      { header: 'Gợi Ý Khắc Phục', key: 'suggested_action', width: 40 }
+    ];
 
-    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    rows.forEach((item: any) => {
+      worksheet.addRow({
+        defect_code: item.defect_code,
+        defect_name: item.defect_name,
+        defect_group: item.defect_group,
+        defect_type: item.defect_type,
+        severity: item.severity,
+        description: item.description,
+        applicable_process: item.applicable_process,
+        status: item.status,
+        suggested_action: item.suggested_action
+      });
+    });
 
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=AATN_Defect_Library_${Date.now()}.xlsx`);
     
-    return res.send(excelBuffer);
+    // Fixed: Replaced Buffer.from with new Uint8Array to resolve "Cannot find name 'Buffer'" error
+    return res.status(200).send(new Uint8Array(buffer as ArrayBuffer));
   } catch (error: any) {
     console.error("Export Defects Error:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 }

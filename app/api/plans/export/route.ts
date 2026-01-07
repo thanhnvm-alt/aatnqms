@@ -1,3 +1,5 @@
+
+import { NextRequest } from 'next/server';
 import { createClient } from '@libsql/client';
 import ExcelJS from 'exceljs';
 
@@ -6,9 +8,9 @@ const turso = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjY5OTIyMTEsImlkIjoiY2IxYmZmOGYtYzVhNS00NTNhLTk1N2EtYjdhMWU5NzIwZTUzIiwicmlkIjoiZDcxNjFjNGYtNDQyOC00ZmIyLTgzZDEtN2JkOGUzZjcyYzFmIn0.u8k5EJwCPv1uopKKDbaJ3AiDkmZFoAI3SlvgT_Hk8HSwLiO16IegBSUc5Hg4Lca7VPU_3quNqyvxzTPNPYd3DA',
 });
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== 'GET') return res.status(405).json({ message: 'Method Not Allowed' });
+export const dynamic = 'force-dynamic';
 
+export async function GET(request: NextRequest) {
   try {
     const result = await turso.execute("SELECT * FROM plans ORDER BY id DESC");
     const rows = result.rows;
@@ -55,13 +57,18 @@ export default async function handler(req: any, res: any) {
 
     const buffer = await workbook.xlsx.writeBuffer();
     
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=AATN_Plans_${Date.now()}.xlsx`);
-    
-    // Fixed: Replaced Buffer.from with new Uint8Array to resolve "Cannot find name 'Buffer'" error
-    return res.status(200).send(new Uint8Array(buffer as ArrayBuffer));
+    return new Response(buffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename=AATN_Plans_${Date.now()}.xlsx`,
+      },
+    });
   } catch (error: any) {
     console.error("Export Plans Error:", error);
-    return res.status(500).json({ message: error.message });
+    return new Response(JSON.stringify({ message: error.message }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
