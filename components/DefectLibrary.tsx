@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
 import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, importDefectLibrary, exportDefectLibrary } from '../services/apiService';
@@ -177,8 +178,9 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const handleExport = async () => {
     try {
         await exportDefectLibrary();
-    } catch (e) {
-        alert('Lỗi khi xuất file Excel');
+    } catch (e: any) {
+        // Cải thiện thông báo lỗi ISO
+        alert(e.message || 'Lỗi hệ thống khi xuất file Excel. Vui lòng thử lại.');
     }
   };
 
