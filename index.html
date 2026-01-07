@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="vi">
   <head>
@@ -8,7 +7,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Quản lý QA/QC AATN</title>
     
-    <!-- CRITICAL FIX: Polyfill global variables. -->
+    <!-- CRITICAL FIX: Polyfill global variables. 
+         Nhiều thư viện (như Recharts, GenAI) cần process.env hoặc global. 
+         Khai báo trước khi load module chính. -->
     <script>
       window.global = window;
       window.process = window.process || { env: {} };
@@ -26,19 +27,22 @@
       
       body { 
         font-family: 'Inter', sans-serif; 
-        overscroll-behavior-y: none;
-        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior-y: none; /* Prevent pull-to-refresh behavior */
+        -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
       }
       
+      /* Input Optimization for Mobile */
       input, select, textarea {
-        font-size: 16px !important;
+        font-size: 16px !important; /* Prevent iOS zoom on focus */
       }
 
+      /* Custom scrollbar for webkit */
       ::-webkit-scrollbar { width: 4px; height: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+      /* Animation Utility */
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       
@@ -64,9 +68,7 @@
     "zod": "https://esm.sh/zod@^4.2.1",
     "@libsql/client/": "https://esm.sh/@libsql/client@^0.15.15/",
     "next/": "https://esm.sh/next@^16.1.1/",
-    "vitest": "https://esm.sh/vitest@^4.0.16",
-    "xlsx": "https://esm.sh/xlsx@^0.18.5",
-    "exceljs": "https://esm.sh/exceljs@4.4.0"
+    "vitest": "https://esm.sh/vitest@^4.0.16"
   }
 }
 </script>

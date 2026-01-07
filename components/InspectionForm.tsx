@@ -227,10 +227,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   const availableDefects = useMemo(() => {
       const stage = formData.inspectionStage || '';
-      // Fixed: Property 'stage' and 'code' do not exist on type 'DefectLibraryItem'. Replaced with applicable_process and defect_code.
       return defectLibrary.filter(d => 
-          (!stage || d.applicable_process.toLowerCase() === stage.toLowerCase()) &&
-          (!librarySearch || d.defect_code.toLowerCase().includes(librarySearch.toLowerCase()) || d.description.toLowerCase().includes(librarySearch.toLowerCase()))
+          (!stage || d.stage.toLowerCase() === stage.toLowerCase()) &&
+          (!librarySearch || d.code.toLowerCase().includes(librarySearch.toLowerCase()) || d.description.toLowerCase().includes(librarySearch.toLowerCase()))
       );
   }, [defectLibrary, formData.inspectionStage, librarySearch]);
 
@@ -411,8 +410,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   const selectedDefectInfo = useMemo(() => {
       if (!ncrFormData.defect_code) return null;
-      // Fixed: Property 'code' does not exist on type 'DefectLibraryItem'. Replaced with defect_code.
-      return defectLibrary.find(d => d.defect_code === ncrFormData.defect_code);
+      return defectLibrary.find(d => d.code === ncrFormData.defect_code);
   }, [defectLibrary, ncrFormData.defect_code]);
 
   const stats = useMemo(() => {
@@ -903,8 +901,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                               <div className="overflow-hidden">
                                   <p className="text-[9px] font-black uppercase tracking-widest opacity-70">Thư viện lỗi chuẩn</p>
                                   <p className="text-xs font-black truncate">
-                                      {/* Fixed: Property 'name' does not exist on type 'DefectLibraryItem'. Replaced with defect_name. */}
-                                      {ncrFormData.defect_code ? `${ncrFormData.defect_code} - ${selectedDefectInfo?.defect_name || ''}` : 'CHỌN LỖI TỪ THƯ VIỆN'}
+                                      {ncrFormData.defect_code ? `${ncrFormData.defect_code} - ${selectedDefectInfo?.name || ''}` : 'CHỌN LỖI TỪ THƯ VIỆN'}
                                   </p>
                               </div>
                           </div>
@@ -1013,13 +1010,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                   </div>
                   <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-2 bg-slate-50/50">
                       {availableDefects.map(def => (
-                          // Fixed: Property 'code', 'suggestedAction', 'category', 'name' do not exist on type 'DefectLibraryItem'.
-                          <div key={def.id} onClick={() => { setNcrFormData({...ncrFormData, defect_code: def.defect_code, issueDescription: def.description, severity: def.severity, solution: def.suggested_action}); setShowLibraryModal(false); }} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-[0.98] transition-all hover:border-blue-300 group">
+                          <div key={def.id} onClick={() => { setNcrFormData({...ncrFormData, defect_code: def.code, issueDescription: def.description, severity: def.severity, solution: def.suggestedAction}); setShowLibraryModal(false); }} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-[0.98] transition-all hover:border-blue-300 group">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 shadow-sm">{def.defect_code}</span>
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{def.applicable_process}</span>
+                                <span className="text-[10px] font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 shadow-sm">{def.code}</span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{def.category}</span>
                               </div>
-                              <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-700 transition-colors">{def.defect_name}</h4>
+                              <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-700 transition-colors">{def.name}</h4>
                               <p className="text-xs font-medium text-slate-500 mt-2 leading-relaxed line-clamp-2 italic">"{def.description}"</p>
                           </div>
                       ))}

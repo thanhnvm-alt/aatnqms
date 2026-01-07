@@ -1,13 +1,11 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
-import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, importDefectLibrary, exportDefectLibrary } from '../services/apiService';
+import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops } from '../services/apiService';
 import { 
     Search, Plus, Edit2, Trash2, ShieldAlert, Hammer, 
     Tag, Filter, Loader2, X, Save, AlertTriangle, 
     Layers, BookOpen, ChevronRight, Hash, ChevronDown,
-    Image as ImageIcon, CheckCircle, XCircle, Camera,
-    FileUp, FileDown, MoreHorizontal, AlertCircle
+    Image as ImageIcon, CheckCircle, XCircle, Camera
 } from 'lucide-react';
 
 interface DefectLibraryProps {
@@ -42,11 +40,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DefectLibraryItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Excel states
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<any | null>(null);
-  const importFileRef = useRef<HTMLInputElement>(null);
 
   const correctImgRef = useRef<HTMLInputElement>(null);
   const incorrectImgRef = useRef<HTMLInputElement>(null);
@@ -54,16 +47,15 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const isQA = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'QA';
 
   const [formData, setFormData] = useState<Partial<DefectLibraryItem>>({
-    defect_code: '',
-    defect_name: '',
-    applicable_process: '',
-    defect_group: 'Ngoại quan',
+    code: '',
+    name: '',
+    stage: '',
+    category: 'Ngoại quan',
     description: '',
     severity: 'MINOR',
-    status: 'ACTIVE',
-    suggested_action: '',
-    correct_image: '',
-    incorrect_image: ''
+    suggestedAction: '',
+    correctImage: '',
+    incorrectImage: ''
   });
 
   useEffect(() => {
@@ -96,10 +88,10 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
     const term = (searchTerm || '').toLowerCase().trim();
     return library.filter(item => {
         const matchesSearch = !term || 
-            item.defect_code.toLowerCase().includes(term) || 
-            (item.defect_name && item.defect_name.toLowerCase().includes(term)) ||
+            item.code.toLowerCase().includes(term) || 
+            (item.name && item.name.toLowerCase().includes(term)) ||
             item.description.toLowerCase().includes(term);
-        const matchesStage = stageFilter === 'ALL' || item.applicable_process === stageFilter;
+        const matchesStage = stageFilter === 'ALL' || item.stage === stageFilter;
         return matchesSearch && matchesStage;
     });
   }, [library, searchTerm, stageFilter]);
@@ -113,17 +105,15 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
           const generatedCode = `DEF_${Date.now()}`;
           setFormData({
               id: generatedCode,
-              defect_code: generatedCode,
-              defect_name: '',
-              applicable_process: availableStages[0] || '',
-              defect_group: 'Ngoại quan',
-              defect_type: 'Chung',
+              code: generatedCode,
+              name: '',
+              stage: availableStages[0] || '',
+              category: 'Ngoại quan',
               description: '',
               severity: 'MINOR',
-              status: 'ACTIVE',
-              suggested_action: '',
-              correct_image: '',
-              incorrect_image: ''
+              suggestedAction: '',
+              correctImage: '',
+              incorrectImage: ''
           });
       }
       setIsModalOpen(true);
@@ -137,14 +127,14 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
         const resized = await resizeImage(reader.result as string);
         setFormData(prev => ({
             ...prev,
-            [type === 'correct' ? 'correct_image' : 'incorrect_image']: resized
+            [type === 'correct' ? 'correctImage' : 'incorrectImage']: resized
         }));
     };
     reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
-      if (!formData.defect_code || !formData.defect_name || !formData.applicable_process || !formData.description) {
+      if (!formData.code || !formData.name || !formData.stage || !formData.description) {
           alert("Vui lòng điền đầy đủ các thông tin bắt buộc (*)");
           return;
       }
@@ -152,9 +142,9 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
       try {
           const itemToSave = {
               ...formData,
-              id: formData.id || formData.defect_code,
-              created_by: currentUser.name,
-              created_at: editingItem?.created_at || Math.floor(Date.now() / 1000)
+              id: formData.id || formData.code,
+              createdBy: currentUser.name,
+              createdAt: editingItem?.createdAt || Math.floor(Date.now() / 1000)
           } as DefectLibraryItem;
 
           await saveDefectLibraryItem(itemToSave);
@@ -175,37 +165,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
       }
   };
 
-  const handleExport = async () => {
-    try {
-        await exportDefectLibrary();
-    } catch (e: any) {
-        // Cải thiện thông báo lỗi ISO
-        alert(e.message || 'Lỗi hệ thống khi xuất file Excel. Vui lòng thử lại.');
-    }
-  };
-
-  const handleImportClick = () => {
-      importFileRef.current?.click();
-  };
-
-  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      
-      setIsImporting(true);
-      setImportResult(null);
-      try {
-          const result = await importDefectLibrary(file);
-          setImportResult(result);
-          loadData();
-      } catch (err: any) {
-          alert(err.message);
-      } finally {
-          setIsImporting(false);
-          if (importFileRef.current) importFileRef.current.value = '';
-      }
-  };
-
   const getSeverityStyle = (severity: string) => {
     switch (severity?.toUpperCase()) {
         case 'CRITICAL': return 'bg-red-600 text-white border-red-700';
@@ -217,60 +176,16 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
       <div className="bg-white p-4 md:px-6 md:py-4 border-b border-slate-200 shadow-sm shrink-0">
-          <div className="max-w-7xl mx-auto flex flex-col gap-4">
-              {/* Header Actions Row */}
-              <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100">
-                          <BookOpen className="w-5 h-5" />
-                      </div>
-                      <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter hidden sm:block">Defect Library</h1>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                      {isQA && (
-                          <>
-                              <button 
-                                onClick={handleExport}
-                                className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center gap-2"
-                                title="Xuất Excel"
-                              >
-                                  <FileDown className="w-5 h-5" />
-                                  <span className="text-[10px] font-black uppercase hidden md:inline">Xuất Excel</span>
-                              </button>
-                              <button 
-                                onClick={handleImportClick}
-                                disabled={isImporting}
-                                className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-100 active:scale-95 transition-all shadow-sm flex items-center gap-2"
-                                title="Nhập Excel"
-                              >
-                                  {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
-                                  <span className="text-[10px] font-black uppercase hidden md:inline">Nhập Excel</span>
-                              </button>
-                              <input type="file" ref={importFileRef} className="hidden" accept=".xlsx" onChange={handleFileImport} />
-                              
-                              <div className="w-px h-8 bg-slate-100 mx-1"></div>
-                              
-                              <button 
-                                onClick={() => handleOpenModal()} 
-                                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all"
-                              >
-                                  <Plus className="w-4 h-4" /> Thêm lỗi
-                              </button>
-                          </>
-                      )}
-                  </div>
-              </div>
-
-              {/* Filters Row */}
-              <div className="flex flex-wrap items-center gap-2">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-start gap-3 md:gap-4">
+              {/* Removed the entire left div containing icon and titles */}
+              <div className="flex flex-wrap items-center gap-2 flex-1">
                   <div className="relative group flex-1 md:max-w-md">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500" />
                       <input 
                         type="text" placeholder="Tìm mã lỗi, tên, mô tả..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white outline-none focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
+                        className="pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold w-full focus:bg-white outline-none focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
                       />
                   </div>
                   <select 
@@ -278,31 +193,19 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                     onChange={e => setStageFilter(e.target.value)}
                     className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none cursor-pointer shadow-sm hover:border-blue-300 transition-all"
                   >
-                      <option value="ALL">Tất cả quy trình</option>
+                      <option value="ALL">Tất cả công đoạn</option>
                       {availableStages.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  {isQA && (
+                      <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
+                          <Plus className="w-4 h-4" /> Thêm lỗi chuẩn
+                      </button>
+                  )}
               </div>
           </div>
       </div>
 
       <div className="flex-1 overflow-auto p-4 md:p-6 no-scrollbar">
-          {importResult && (
-              <div className="max-w-7xl mx-auto mb-6 animate-in slide-in-from-top duration-300">
-                  <div className={`p-4 rounded-2xl border flex items-center justify-between ${importResult.failed > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
-                      <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-xl ${importResult.failed > 0 ? 'bg-orange-600' : 'bg-green-600'} text-white`}>
-                              {importResult.failed > 0 ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-                          </div>
-                          <div>
-                              <p className="text-sm font-black uppercase tracking-tight text-slate-900">Kết quả đồng bộ Excel</p>
-                              <p className="text-xs font-bold text-slate-500 uppercase">Thành công: {importResult.success} | Thất bại: {importResult.failed}</p>
-                          </div>
-                      </div>
-                      <button onClick={() => setImportResult(null)} className="p-2 text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
-                  </div>
-              </div>
-          )}
-
           {isLoading ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400">
                   <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
@@ -334,23 +237,23 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                                   <Tag className="w-4 h-4" />
                                               </div>
                                               <div>
-                                                  <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">{item.defect_code}</span>
-                                                  <span className="text-[11px] font-bold text-slate-600 uppercase">{item.defect_name || '---'}</span>
+                                                  <span className="font-black text-slate-900 text-xs tracking-tight block">{item.code}</span>
+                                                  <span className="text-[11px] font-bold text-slate-600 uppercase">{item.name || '---'}</span>
                                               </div>
                                           </div>
                                       </td>
                                       <td className="px-6 py-4">
                                           <div className="space-y-1">
-                                              <span className="block px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[8px] font-black uppercase w-fit">{item.applicable_process}</span>
+                                              <span className="block px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[8px] font-black uppercase w-fit">{item.stage}</span>
                                               <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold text-slate-400">{item.defect_group}</span>
+                                                <span className="text-[10px] font-bold text-slate-400">{item.category}</span>
                                                 <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${getSeverityStyle(item.severity)}`}>{item.severity}</span>
                                               </div>
                                           </div>
                                       </td>
                                       <td className="px-6 py-4">
                                           <p className="text-sm font-bold text-slate-700 leading-snug">{item.description}</p>
-                                          {item.suggested_action && <p className="text-[10px] text-blue-600 font-medium mt-1 uppercase italic">Action: {item.suggested_action}</p>}
+                                          {item.suggestedAction && <p className="text-[10px] text-blue-600 font-medium mt-1 uppercase italic">Action: {item.suggestedAction}</p>}
                                       </td>
                                       <td className="px-6 py-4 text-center">
                                           {isQA ? (
@@ -380,46 +283,47 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       <button onClick={() => setIsModalOpen(false)}><X className="w-6 h-6"/></button>
                   </div>
                   <div className="p-6 space-y-5 overflow-y-auto max-h-[80vh] no-scrollbar">
+                      {/* Dòng 1: Mã và Tên */}
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mã Lỗi (defect_code) *</label>
+                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mã Lỗi *</label>
                               <input 
-                                value={formData.defect_code} 
-                                onChange={e => setFormData({...formData, defect_code: e.target.value.toUpperCase()})}
-                                className={`w-full px-4 py-2.5 border rounded-xl font-black uppercase ${editingItem ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-800'}`} 
-                                placeholder="VD: LS-001"
-                                readOnly={!!editingItem}
+                                value={formData.code} 
+                                readOnly 
+                                className="w-full px-4 py-2.5 border rounded-xl font-black uppercase bg-slate-50 text-slate-400 cursor-not-allowed" 
+                                placeholder="Tự động..."
                               />
                           </div>
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Tên lỗi (defect_name) *</label>
+                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Tên lỗi *</label>
                               <input 
-                                value={formData.defect_name} 
-                                onChange={e => setFormData({...formData, defect_name: e.target.value.toUpperCase()})}
+                                value={formData.name} 
+                                onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})}
                                 className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-100 outline-none uppercase" 
                                 placeholder="VD: TRẦY XƯỚC BỀ MẶT..."
                               />
                           </div>
                       </div>
 
+                      {/* Dòng 2: Gộp thông tin */}
                       <div className="grid grid-cols-3 gap-4">
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Quy trình *</label>
+                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Công đoạn *</label>
                               <div className="relative">
                                   <select 
-                                    value={formData.applicable_process} 
-                                    onChange={e => setFormData({...formData, applicable_process: e.target.value})} 
+                                    value={formData.stage} 
+                                    onChange={e => setFormData({...formData, stage: e.target.value})} 
                                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-bold appearance-none bg-white outline-none focus:ring-2 focus:ring-blue-100 transition-all text-xs"
                                   >
-                                      <option value="" disabled>Chọn quy trình</option>
+                                      <option value="" disabled>Chọn công đoạn</option>
                                       {availableStages.map(s => <option key={s} value={s}>{s}</option>)}
                                   </select>
                                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                               </div>
                           </div>
                           <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Nhóm (group)</label>
-                              <select value={formData.defect_group} onChange={e => setFormData({...formData, defect_group: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-bold text-xs">
+                              <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Phân loại</label>
+                              <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-bold text-xs">
                                   <option value="Ngoại quan">Ngoại quan</option>
                                   <option value="Kết cấu">Kết cấu</option>
                                   <option value="Kích thước">Kích thước</option>
@@ -436,11 +340,13 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
+                      {/* Dòng 3: Mô tả chi tiết */}
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Mô tả chi tiết *</label>
                           <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-medium text-sm focus:ring-2 focus:ring-blue-100 outline-none resize-none" rows={2} placeholder="Nhập mô tả lỗi..."/>
                       </div>
 
+                      {/* Dòng 4: Hình ảnh Đúng/Sai */}
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-green-600 uppercase flex items-center gap-1.5"><CheckCircle className="w-3 h-3" /> Hình ảnh chuẩn (ĐÚNG)</label>
@@ -448,8 +354,8 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                 onClick={() => correctImgRef.current?.click()}
                                 className="aspect-video bg-green-50 border-2 border-dashed border-green-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-100 transition-all overflow-hidden relative group"
                               >
-                                  {formData.correct_image ? (
-                                      <img src={formData.correct_image} className="w-full h-full object-cover" />
+                                  {formData.correctImage ? (
+                                      <img src={formData.correctImage} className="w-full h-full object-cover" />
                                   ) : (
                                       <div className="flex flex-col items-center text-green-300">
                                           <Camera className="w-8 h-8" />
@@ -465,8 +371,8 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                 onClick={() => incorrectImgRef.current?.click()}
                                 className="aspect-video bg-red-50 border-2 border-dashed border-red-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-red-100 transition-all overflow-hidden relative group"
                               >
-                                  {formData.incorrect_image ? (
-                                      <img src={formData.incorrect_image} className="w-full h-full object-cover" />
+                                  {formData.incorrectImage ? (
+                                      <img src={formData.incorrectImage} className="w-full h-full object-cover" />
                                   ) : (
                                       <div className="flex flex-col items-center text-red-300">
                                           <Camera className="w-8 h-8" />
@@ -478,9 +384,10 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
+                      {/* Dòng 5: Biện pháp khắc phục */}
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-500 uppercase ml-1">Biện pháp khắc phục gợi ý</label>
-                          <textarea value={formData.suggested_action} onChange={e => setFormData({...formData, suggested_action: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-medium bg-blue-50/30 text-sm focus:ring-2 focus:ring-blue-100 outline-none resize-none" rows={2} placeholder="Nhập biện pháp xử lý chuẩn..."/>
+                          <textarea value={formData.suggestedAction} onChange={e => setFormData({...formData, suggestedAction: e.target.value})} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl font-medium bg-blue-50/30 text-sm focus:ring-2 focus:ring-blue-100 outline-none resize-none" rows={2} placeholder="Nhập biện pháp xử lý chuẩn..."/>
                       </div>
                   </div>
 
