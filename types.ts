@@ -1,3 +1,4 @@
+
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -126,10 +127,10 @@ export interface Defect {
 
 export interface CheckItem {
   id: string;
-  stage?: string; // Group 1: Công đoạn (Dành cho PQC/SQC)
-  category: string; // Group 2: Danh mục (VD: Lắp ráp, Ngoại quan...)
+  stage?: string; // Group 1: Công đoạn (PQC/SQC)
+  category: string; // Group 2: Danh mục (Lắp ráp, Bề mặt...)
   label: string; // Group 3: Hạng mục kiểm tra
-  standard?: string; // Tiêu chuẩn kỹ thuật (đính kèm Group 3)
+  standard?: string; // Tiêu chuẩn kỹ thuật đính kèm G3
   status: CheckStatus;
   notes?: string;
   images?: string[];

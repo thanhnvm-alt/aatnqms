@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CheckItem, CheckStatus, Workshop } from '../types';
 import { Button } from './Button';
-import { Plus, Trash2, Save, X, Settings, Layers, ChevronDown, ChevronRight, Info, FileText } from 'lucide-react';
+import { Plus, Trash2, Save, X, Settings, Layers, ChevronDown, ChevronRight, Info, FileText, Factory } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
 import { fetchWorkshops } from '../services/apiService';
 
@@ -77,13 +77,13 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col animate-fade-in pb-20 md:pb-0">
-      <div className="p-3 md:p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-20">
+      <div className="p-3 md:p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-20 shadow-sm">
          <div className="flex items-center gap-2">
             <div className="p-2 bg-slate-200 rounded-lg hidden md:block">
                 <Settings className="w-5 h-5 text-slate-700" />
             </div>
             <div>
-                <h2 className="text-base md:text-lg font-bold text-slate-800 leading-none uppercase tracking-tight">Cấu hình mẫu PQC</h2>
+                <h2 className="text-base md:text-lg font-bold text-slate-800 leading-none uppercase tracking-tight">Cấu hình mẫu ISO 3 Lớp</h2>
                 <div className="flex items-center gap-1 mt-1">
                     <Layers className="w-3 h-3 text-blue-500" />
                     <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest truncate max-w-[150px]">{moduleLabel}</span>
@@ -92,7 +92,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
          </div>
          <div className="flex gap-2">
              <Button variant="ghost" size="sm" onClick={onCancel} className="hidden md:flex">Hủy</Button>
-             <Button onClick={() => onSave(items)} icon={<Save className="w-4 h-4"/>} size="sm">Lưu mẫu ISO</Button>
+             <Button onClick={() => onSave(items)} icon={<Save className="w-4 h-4"/>} size="sm">Lưu ma trận ISO</Button>
          </div>
       </div>
 
@@ -100,8 +100,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
         <div className="bg-blue-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-100 flex items-start gap-3">
             <Info className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Nguyên tắc cấu hình</p>
-                <p className="text-xs font-medium leading-relaxed">Cấu trúc phân tầng: <b>Công đoạn (G1)</b> từ quản lý xưởng → <b>Danh mục (G2)</b> → <b>Hạng mục & Tiêu chuẩn (G3)</b>.</p>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Nguyên tắc cấu hình 3 cấp (ISO)</p>
+                <p className="text-xs font-medium leading-relaxed">G1: Công đoạn (từ Xưởng). G2: Danh mục (Nhóm). G3: Hạng mục & Tiêu chuẩn chi tiết. Form kiểm tra sẽ lọc tự động theo công đoạn đã chọn.</p>
             </div>
         </div>
 
@@ -113,10 +113,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                         className={`px-5 py-4 flex items-center justify-between cursor-pointer transition-colors ${expandedStages.has(stageName) ? 'bg-slate-900 text-white' : 'hover:bg-slate-50 text-slate-800'}`}
                     >
                         <div className="flex items-center gap-3">
-                            {expandedStages.has(stageName) ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                            <Factory className="w-4 h-4 opacity-40" />
                             <span className="text-xs font-black uppercase tracking-widest">{stageName}</span>
                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold ${expandedStages.has(stageName) ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                {Object.values(categories).flat().length} hạng mục
+                                {Object.values(categories).flat().length} mục
                             </span>
                         </div>
                         <button 
@@ -128,10 +128,10 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                     </div>
 
                     {expandedStages.has(stageName) && (
-                        <div className="p-4 space-y-6">
+                        <div className="p-4 space-y-6 bg-slate-50/20">
                             {Object.entries(categories).length === 0 ? (
-                                <div className="py-10 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Chưa có hạng mục cho công đoạn này</p>
+                                <div className="py-10 text-center border-2 border-dashed border-slate-100 rounded-2xl bg-white">
+                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Công đoạn này chưa có tiêu chí kiểm tra</p>
                                 </div>
                             ) : (
                                 Object.entries(categories).map(([catName, catItems]) => (
@@ -143,41 +143,43 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                     const newVal = e.target.value.toUpperCase();
                                                     setItems(items.map(i => (i.stage === stageName && i.category === catName) ? { ...i, category: newVal } : i));
                                                 }}
-                                                className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-transparent border-b border-blue-100 focus:border-blue-500 outline-none min-w-[150px]"
-                                                placeholder="TÊN DANH MỤC..."
+                                                className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-transparent border-b border-blue-100 focus:border-blue-500 outline-none min-w-[200px]"
+                                                placeholder="DANH MỤC (GROUP 2)..."
                                             />
+                                            <div className="h-px flex-1 bg-slate-100"></div>
                                         </div>
 
                                         <div className="grid grid-cols-1 gap-3">
                                             {catItems.map((item) => (
-                                                <div key={item.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group">
+                                                <div key={item.id} className="p-5 bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:border-blue-200 transition-all group">
                                                     <div className="flex gap-4">
-                                                        <div className="flex-1 space-y-3">
-                                                            <div className="space-y-1">
-                                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label>
+                                                        <div className="flex-1 space-y-4">
+                                                            <div className="space-y-1.5">
+                                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra (Group 3)</label>
                                                                 <input
                                                                     type="text"
                                                                     value={item.label}
                                                                     onChange={(e) => handleChange(item.id, 'label', e.target.value)}
-                                                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                                                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none transition-all shadow-inner"
                                                                 />
                                                             </div>
-                                                            <div className="space-y-1">
-                                                                <label className="text-[8px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                                                                    <FileText className="w-2 h-2" /> Tiêu chuẩn kỹ thuật
+                                                            <div className="space-y-1.5">
+                                                                <label className="text-[8px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                                                    <FileText className="w-3 h-3 text-blue-300" /> Tiêu chuẩn kỹ thuật đối chiếu
                                                                 </label>
                                                                 <textarea
                                                                     value={item.standard}
                                                                     onChange={(e) => handleChange(item.id, 'standard', e.target.value)}
-                                                                    className="w-full px-4 py-2.5 bg-blue-50/30 border border-blue-100 rounded-xl text-xs font-medium text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                                                    className="w-full px-4 py-2.5 bg-blue-50/30 border border-blue-100 rounded-2xl text-xs font-semibold text-slate-600 focus:ring-4 focus:ring-blue-100 focus:bg-white outline-none resize-none transition-all shadow-sm"
                                                                     rows={2}
+                                                                    placeholder="VD: Độ dày sơn phủ tối thiểu 80 microns, màu sắc đồng bộ mẫu chuẩn..."
                                                                 />
                                                             </div>
                                                         </div>
                                                         <div className="flex flex-col justify-center gap-2 shrink-0">
                                                             <button
                                                                 onClick={() => handleRemoveItem(item.id)}
-                                                                className="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                                className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all active:scale-90"
                                                             >
                                                                 <Trash2 className="w-5 h-5" />
                                                             </button>
@@ -189,6 +191,12 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                     </div>
                                 ))
                             )}
+                            <button 
+                                onClick={() => handleAddItem(stageName)}
+                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-[0.2em]"
+                            >
+                                <Plus className="w-4 h-4" /> Thêm hạng mục vào {stageName}
+                            </button>
                         </div>
                     )}
                 </div>
