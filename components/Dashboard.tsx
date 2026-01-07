@@ -5,8 +5,8 @@ import {
 } from 'recharts';
 import { 
   ClipboardCheck, AlertTriangle, CheckCircle2, Flag, 
-  TrendingUp, Activity, Clock, AlertOctagon,
-  Calendar, ArrowRight, ShieldCheck, UserCircle
+  Activity, Clock, AlertOctagon,
+  ArrowRight, ShieldCheck, UserCircle
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -90,17 +90,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
   return (
     <div className="h-full overflow-y-auto no-scrollbar bg-slate-50/50 flex flex-col">
       <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto w-full pb-24">
-        {/* Page Header */}
-        <div className="flex flex-col gap-1 px-1">
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
-                <TrendingUp className="w-6 h-6 text-blue-600" />
-                SYSTEM DASHBOARD
-            </h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
-                <Calendar className="w-3 h-3" /> Cập nhật: {new Date().toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' })}
-            </p>
-        </div>
-
         {/* Top Stat Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
             <StatCard title="TỔNG PHIẾU" value={stats.total} icon={ClipboardCheck} colorHex="#3b82f6" subtitle={`${stats.drafts} bản nháp`} />

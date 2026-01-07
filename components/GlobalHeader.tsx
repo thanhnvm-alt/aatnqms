@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { User, ViewState } from '../types';
 import { 
@@ -45,6 +44,9 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       case 'PROJECTS': return 'Quản lý dự án';
       case 'SETTINGS': return 'Cài đặt hệ thống';
       case 'CONVERT_3D': return 'AI 2D to 3D';
+      case 'NCR_LIST': return 'NCR - Hồ sơ lỗi';
+      case 'DEFECT_LIST': return 'Theo dõi lỗi';
+      case 'DEFECT_LIBRARY': return 'Thư viện lỗi';
       default: return 'QAQC System';
     }
   };

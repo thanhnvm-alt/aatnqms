@@ -1,10 +1,9 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, Inspection, InspectionStatus, CheckStatus } from '../types';
 import { 
   Search, Calendar, CheckCircle2, Clock, PauseCircle, 
   ImageIcon, Target, BarChart3, ArrowUpRight, ChevronDown, Filter, LayoutGrid, X,
-  ClipboardList, AlertCircle
+  ClipboardList, AlertCircle, ChevronRight, Building2
 } from 'lucide-react';
 
 interface ProjectListProps {
@@ -58,7 +57,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
     const safeProjs = Array.isArray(projects) ? projects : [];
     const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
     return safeProjs.filter(p => {
-      if (!p) return false; // CRITICAL FIX: Skip null projects
+      if (!p) return false;
       
       const matchesSearch = !safeSearchTerm || 
                             (p.name && p.name.toLowerCase().includes(safeSearchTerm)) || 
@@ -119,19 +118,11 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                     {filter === 'All' ? 'TẤT CẢ' : filter}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${filter !== 'All' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                      {statusCounts[filter]}
-                  </span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''} opacity-40`} />
-              </div>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''} opacity-40`} />
             </button>
 
             {isFilterOpen && (
               <div className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 origin-top-right overflow-hidden">
-                <div className="px-4 py-2 border-b border-slate-50 mb-1">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">TRẠNG THÁI DỰ ÁN</p>
-                </div>
                 {filterOptions.map((opt) => (
                   <button
                     key={opt}
@@ -151,12 +142,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                            {opt === 'All' ? 'TẤT CẢ' : opt}
                        </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${filter === opt ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                            {statusCounts[opt]}
-                        </span>
-                        {filter === opt && <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center"><CheckCircle2 className="w-3 h-3 text-white" /></div>}
-                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${filter === opt ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                        {statusCounts[opt]}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -165,88 +153,77 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar pb-24">
+      <div className="flex-1 overflow-y-auto p-2 md:p-6 no-scrollbar pb-24">
         {filteredProjects.length === 0 ? (
-          <div className="py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200 mx-2 flex flex-col items-center">
-            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                <Target className="w-10 h-10 text-slate-200" />
-            </div>
-            <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Không tìm thấy dự án phù hợp</p>
+          <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200 mx-2 flex flex-col items-center">
+            <Target className="w-10 h-10 text-slate-200 mb-2" />
+            <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Không tìm thấy dự án</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map(project => {
-              const displayImage = (project.images && project.images.length > 0) ? project.images[0] : project.thumbnail;
-              const { total, passRate } = getProjectStats(project.ma_ct);
-              
-              return (
-                <div 
-                  key={project.id} 
-                  onClick={() => onSelectProject(project.id)}
-                  className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300"
-                >
-                  <div className="h-48 relative overflow-hidden bg-slate-900 shrink-0">
-                    {displayImage ? (
-                      <img src={displayImage} alt={project.name} className="w-full h-full object-cover opacity-80 transition-transform duration-700 group-hover:scale-110 group-hover:opacity-100" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-600"><ImageIcon className="w-12 h-12 opacity-20" /></div>
-                    )}
-                    <div className="absolute top-4 left-4">
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg backdrop-blur-md ${STATUS_COLORS[project.status] || STATUS_COLORS['Planning']}`}>
-                            {STATUS_ICONS[project.status] || STATUS_ICONS['Planning']} {project.status}
-                        </div>
-                    </div>
-                    <div className="absolute bottom-4 right-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-3 py-2 text-white flex items-center gap-2 shadow-xl">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[8px] font-black uppercase opacity-60">QC Pass</span>
-                            <span className="text-sm font-black leading-none">{passRate}%</span>
-                        </div>
-                        <div className={`w-2.5 h-2.5 rounded-full ${passRate >= 90 ? 'bg-green-500' : passRate >= 70 ? 'bg-blue-500' : 'bg-red-500'} shadow-[0_0_10px_currentColor]`}></div>
-                    </div>
-                  </div>
-                  
-                  <div className="p-6 flex-1 flex flex-col space-y-4">
-                    <div className="flex-1">
-                        <h3 className="text-base font-black text-slate-800 leading-tight uppercase tracking-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-2">{project.name}</h3>
-                        
-                        <div className="flex items-center gap-4 mb-4 border-b border-slate-50 pb-3">
-                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                <Target className="w-3.5 h-3.5 text-blue-500" /> {project.pm || 'No PM'}
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                <ClipboardList className="w-3.5 h-3.5 text-indigo-500" /> {total} QC
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Start Date</p>
-                                <p className="text-xs font-bold text-slate-700">{project.startDate || '---'}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">End Date</p>
-                                <p className="text-xs font-bold text-slate-700">{project.endDate || '---'}</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="pt-2">
-                        <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><BarChart3 className="w-3 h-3 text-indigo-500" /> Project Progress</span>
-                            <span className="text-[10px] font-black text-blue-600">{project.progress}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden shadow-inner">
-                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-1000 group-hover:from-indigo-600 group-hover:to-blue-600" style={{ width: `${project.progress}%` }}></div>
-                        </div>
-                    </div>
-                  </div>
-                  <div className="px-6 py-4 border-t border-slate-50 bg-slate-50/50 flex justify-between items-center group-hover:bg-blue-50/30 transition-colors">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] group-hover:text-blue-500 transition-colors">Project Details</span>
-                        <div className="p-1.5 rounded-lg bg-white border border-slate-200 text-blue-600 shadow-sm group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all"><ArrowUpRight className="w-4 h-4" /></div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="max-w-7xl mx-auto bg-white rounded-2xl md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[9px] md:text-[10px] sticky top-0 z-10">
+                      <tr>
+                          <th className="px-4 md:px-6 py-4">Dự án & Mã CT</th>
+                          <th className="px-4 md:px-6 py-4 hidden sm:table-cell">Tiến độ</th>
+                          <th className="px-4 md:px-6 py-4 hidden md:table-cell text-center">QC Pass</th>
+                          <th className="px-4 md:px-6 py-4 text-right">Trạng thái</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                      {filteredProjects.map(project => {
+                          const { total, passRate } = getProjectStats(project.ma_ct);
+                          const displayImage = project.thumbnail || (project.images && project.images[0]);
+                          
+                          return (
+                              <tr 
+                                  key={project.id} 
+                                  onClick={() => onSelectProject(project.id)}
+                                  className="hover:bg-blue-50/30 transition-all cursor-pointer group"
+                              >
+                                  <td className="px-4 md:px-6 py-4">
+                                      <div className="flex items-center gap-4">
+                                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl overflow-hidden border border-slate-100 bg-slate-50 shrink-0">
+                                              <img src={displayImage} className="w-full h-full object-cover" alt="" />
+                                          </div>
+                                          <div className="overflow-hidden">
+                                              <p className="font-black text-slate-900 text-xs md:text-sm tracking-tight uppercase truncate leading-tight group-hover:text-blue-600 transition-colors">{project.name}</p>
+                                              <div className="flex items-center gap-2 mt-1">
+                                                  <span className="text-[9px] font-mono font-bold text-slate-400 tracking-widest">{project.ma_ct}</span>
+                                                  <span className="sm:hidden text-[9px] font-black text-blue-600">{project.progress}%</span>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  </td>
+                                  <td className="px-4 md:px-6 py-4 hidden sm:table-cell">
+                                      <div className="w-32">
+                                          <div className="flex justify-between items-center mb-1">
+                                              <span className="text-[9px] font-black text-slate-400 uppercase">{project.progress}%</span>
+                                          </div>
+                                          <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                                              <div className="bg-blue-600 h-full" style={{ width: `${project.progress}%` }}></div>
+                                          </div>
+                                      </div>
+                                  </td>
+                                  <td className="px-4 md:px-6 py-4 hidden md:table-cell text-center">
+                                      <div className="flex flex-col items-center">
+                                          <span className={`text-xs font-black ${passRate >= 90 ? 'text-green-600' : passRate >= 70 ? 'text-blue-600' : 'text-red-600'}`}>{passRate}%</span>
+                                          <span className="text-[8px] font-black text-slate-300 uppercase tracking-tighter">{total} QC</span>
+                                      </div>
+                                  </td>
+                                  <td className="px-4 md:px-6 py-4 text-right">
+                                      <div className="flex items-center justify-end gap-3">
+                                          <span className={`px-2 py-1 rounded-lg text-[8px] md:text-[9px] font-black uppercase tracking-tighter border shadow-sm ${STATUS_COLORS[project.status] || STATUS_COLORS['Planning']}`}>
+                                              {project.status}
+                                          </span>
+                                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                      </div>
+                                  </td>
+                              </tr>
+                          );
+                      })}
+                  </tbody>
+              </table>
           </div>
         )}
       </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
 import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops } from '../services/apiService';
@@ -176,35 +175,29 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      <div className="bg-white p-4 md:p-6 border-b border-slate-200 shadow-sm shrink-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                  <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-3">
-                      <BookOpen className="w-8 h-8 text-blue-600" />
-                      THƯ VIỆN LỖI (DEFECT LIBRARY)
-                  </h1>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Danh mục sai lỗi kỹ thuật chuẩn hóa</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative group">
+      <div className="bg-white p-4 md:px-6 md:py-4 border-b border-slate-200 shadow-sm shrink-0">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-start gap-3 md:gap-4">
+              {/* Removed the entire left div containing icon and titles */}
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                  <div className="relative group flex-1 md:max-w-md">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500" />
                       <input 
                         type="text" placeholder="Tìm mã lỗi, tên, mô tả..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium w-full md:w-80 focus:bg-white outline-none transition-all shadow-inner"
+                        className="pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold w-full focus:bg-white outline-none focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
                       />
                   </div>
                   <select 
                     value={stageFilter}
                     onChange={e => setStageFilter(e.target.value)}
-                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase outline-none cursor-pointer shadow-sm"
+                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none cursor-pointer shadow-sm hover:border-blue-300 transition-all"
                   >
                       <option value="ALL">Tất cả công đoạn</option>
                       {availableStages.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   {isQA && (
-                      <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 transition-all">
+                      <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
                           <Plus className="w-4 h-4" /> Thêm lỗi chuẩn
                       </button>
                   )}
