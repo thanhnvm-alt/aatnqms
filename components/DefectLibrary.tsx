@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
-import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops } from '../services/apiService';
+import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, exportDefectLibrary, importDefectLibraryFile } from '../services/apiService';
 import { 
     Search, Plus, Edit2, Trash2, ShieldAlert, Hammer, 
     Tag, Filter, Loader2, X, Save, AlertTriangle, 
     Layers, BookOpen, ChevronRight, Hash, ChevronDown,
-    Image as ImageIcon, CheckCircle, XCircle, Camera
+    Image as ImageIcon, CheckCircle, XCircle, Camera,
+    FileUp, FileDown
 } from 'lucide-react';
 
 interface DefectLibraryProps {
@@ -40,9 +41,12 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DefectLibraryItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const correctImgRef = useRef<HTMLInputElement>(null);
   const incorrectImgRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isQA = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER' || currentUser.role === 'QA';
 
@@ -119,6 +123,38 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
       setIsModalOpen(true);
   };
 
+  const handleExport = async () => {
+      setIsExporting(true);
+      try {
+          await exportDefectLibrary();
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsExporting(false);
+      }
+  };
+
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsImporting(true);
+      try {
+          const result = await importDefectLibraryFile(file);
+          alert(`Thành công! Đã nhập ${result.count} lỗi chuẩn vào hệ thống.`);
+          await loadData();
+      } catch (err: any) {
+          alert(`Lỗi khi nhập file: ${err.message}`);
+      } finally {
+          setIsImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'correct' | 'incorrect') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -175,9 +211,9 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      <input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".xlsx" className="hidden" />
       <div className="bg-white p-4 md:px-6 md:py-4 border-b border-slate-200 shadow-sm shrink-0">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-start gap-3 md:gap-4">
-              {/* Removed the entire left div containing icon and titles */}
               <div className="flex flex-wrap items-center gap-2 flex-1">
                   <div className="relative group flex-1 md:max-w-md">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500" />
@@ -197,9 +233,27 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       {availableStages.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   {isQA && (
-                      <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
-                          <Plus className="w-4 h-4" /> Thêm lỗi chuẩn
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                            onClick={handleExport}
+                            disabled={isExporting}
+                            className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
+                            title="Xuất Excel"
+                        >
+                            {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
+                        </button>
+                        <button 
+                            onClick={handleImportClick}
+                            disabled={isImporting}
+                            className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
+                            title="Nhập từ Excel"
+                        >
+                            {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
+                        </button>
+                        <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
+                            <Plus className="w-4 h-4" /> Thêm lỗi chuẩn
+                        </button>
+                      </div>
                   )}
               </div>
           </div>

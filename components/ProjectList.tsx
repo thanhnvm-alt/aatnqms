@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, Inspection, InspectionStatus, CheckStatus } from '../types';
 import { 
@@ -10,7 +9,7 @@ import {
 interface ProjectListProps {
   projects: Project[];
   inspections: Inspection[];
-  onSelectProject: (id: string) => void;
+  onSelectProject: (maCt: string) => void;
 }
 
 const STATUS_COLORS = {
@@ -58,8 +57,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
     const safeProjs = Array.isArray(projects) ? projects : [];
     const safeSearchTerm = (searchTerm || '').toLowerCase().trim();
     return safeProjs.filter(p => {
-      if (!p) return false; // CRITICAL FIX: Skip null projects
-      
+      if (!p) return false;
       const matchesSearch = !safeSearchTerm || 
                             (p.name && p.name.toLowerCase().includes(safeSearchTerm)) || 
                             (p.code && p.code.toLowerCase().includes(safeSearchTerm)) ||
@@ -182,7 +180,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
               return (
                 <div 
                   key={project.id} 
-                  onClick={() => onSelectProject(project.id)}
+                  onClick={() => onSelectProject(project.ma_ct)}
                   className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300"
                 >
                   <div className="h-48 relative overflow-hidden bg-slate-900 shrink-0">
@@ -240,7 +238,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                         </div>
                     </div>
                   </div>
-                  <div className="px-6 py-4 border-t border-slate-50 bg-slate-50/50 flex justify-between items-center group-hover:bg-blue-50/30 transition-colors">
+                  <div className="px-6 py-4 border-t border-slate-50 bg-slate-50/50 flex justify-between items-center group-hover:bg-blue-50/30 transition-colors" onClick={() => onSelectProject(project.ma_ct)}>
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] group-hover:text-blue-500 transition-colors">Project Details</span>
                         <div className="p-1.5 rounded-lg bg-white border border-slate-200 text-blue-600 shadow-sm group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all"><ArrowUpRight className="w-4 h-4" /></div>
                   </div>

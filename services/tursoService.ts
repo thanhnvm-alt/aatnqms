@@ -2,7 +2,7 @@ import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem, NCRComment } from "../types";
 
 /**
- * Initialize all database tables and perform migrations.
+ * Khởi tạo cơ sở dữ liệu và thực hiện các bước di chuyển schema (ISO Integrity)
  */
 export const initDatabase = async () => {
   if (!isTursoConfigured) {
@@ -50,7 +50,7 @@ export const initDatabase = async () => {
         score INTEGER
       )`);
 
-    // 3. Projects Metadata Table - Stores detailed project info
+    // 3. Projects Metadata Table
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS projects (
         ma_ct TEXT PRIMARY KEY,
@@ -58,22 +58,45 @@ export const initDatabase = async () => {
         updated_at INTEGER
       )`);
 
-    // 4. Các bảng hệ thống khác
+    // 4. Defect Library & NCRs
     await turso.execute(`CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT UNIQUE, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, correct_image TEXT, incorrect_image TEXT, created_by TEXT, created_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT, status TEXT, description TEXT, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, comments_json TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, closed_at INTEGER, deleted_at INTEGER)`);
+    
+    // 5. Users Table
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, data TEXT, username TEXT UNIQUE, role TEXT, created_at INTEGER, updated_at INTEGER)`);
     
-    // Migrations
-    try {
-        const tableInfo = await turso.execute("PRAGMA table_info(users)");
-        const columns = tableInfo.rows.map(row => String(row.name).toLowerCase());
-        const missing = [{ name: 'username', type: 'TEXT' }, { name: 'role', type: 'TEXT' }, { name: 'created_at', type: 'INTEGER' }, { name: 'updated_at', type: 'INTEGER' }];
-        for (const col of missing) { if (!columns.includes(col.name)) await turso.execute(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`); }
-    } catch (e) {}
-
+    // 6. Workshops Table
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, data TEXT, code TEXT UNIQUE, name TEXT, created_at INTEGER, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
+
+    // 7. Roles Table
     await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER)`);
+
+    /**
+     * ISO MIGRATION: Templates Table (FIX FOR moduleId ERROR)
+     * Đảm bảo Primary Key luôn là moduleId
+     */
+    const checkTableRes = await turso.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='templates'");
+    if (checkTableRes.rows.length > 0) {
+        const tableInfo = await turso.execute("PRAGMA table_info(templates)");
+        const hasModuleId = tableInfo.rows.some(col => String(col.name).toLowerCase() === 'moduleid');
+        
+        if (!hasModuleId) {
+            console.log("🔄 ISO-MIGRATION: Updating templates table schema...");
+            // Thực hiện migration an toàn: Rename -> Create -> Copy -> Drop
+            await turso.execute("ALTER TABLE templates RENAME TO templates_old");
+            await turso.execute(`CREATE TABLE templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
+            
+            // Nếu có cột 'id', copy dữ liệu sang 'moduleId'
+            const hasId = tableInfo.rows.some(col => String(col.name).toLowerCase() === 'id');
+            if (hasId) {
+                await turso.execute("INSERT INTO templates (moduleId, data, updated_at) SELECT id, data, updated_at FROM templates_old");
+            }
+            await turso.execute("DROP TABLE templates_old");
+            console.log("✅ ISO-MIGRATION: Templates table migrated successfully.");
+        }
+    } else {
+        await turso.execute(`CREATE TABLE templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
+    }
 
     console.log("✅ QMS Database initialized and verified.");
   } catch (e) {
@@ -92,14 +115,12 @@ export const testConnection = async () => {
 };
 
 /**
- * Lấy danh sách dự án (Master Plan):
- * Kết hợp danh sách mã công trình từ Kế hoạch + Phiếu kiểm tra với Metadata chi tiết.
+ * Lấy danh sách dự án (Master Plan)
  */
 export const getProjects = async (): Promise<Project[]> => {
     if (!isTursoConfigured) return [];
     
     try {
-        // 1. Lấy danh sách các mã công trình duy nhất từ Plans và Inspections
         const derivedRes = await turso.execute(`
             SELECT ma_ct, MAX(ten_ct) as ten_ct 
             FROM (
@@ -110,7 +131,6 @@ export const getProjects = async (): Promise<Project[]> => {
             GROUP BY ma_ct
         `);
         
-        // 2. Lấy dữ liệu Metadata đã lưu
         const metaRes = await turso.execute("SELECT ma_ct, data FROM projects");
         const metaMap: Record<string, Project> = {};
         metaRes.rows.forEach(row => {
@@ -119,7 +139,6 @@ export const getProjects = async (): Promise<Project[]> => {
             } catch(e) {}
         });
         
-        // 3. Trộn dữ liệu: Ưu tiên metadata nếu có, nếu không tạo Project mặc định từ Mã/Tên công trình
         return derivedRes.rows.map(row => {
             const ma_ct = String(row.ma_ct);
             const ten_ct = String(row.ten_ct || ma_ct);
@@ -155,11 +174,9 @@ export const getProjects = async (): Promise<Project[]> => {
 
 export const getProjectByCode = async (maCt: string): Promise<Project | null> => {
     if (!isTursoConfigured) return null;
-    // Tìm trong metadata trước
     const res = await turso.execute({ sql: "SELECT data FROM projects WHERE ma_ct = ?", args: [maCt] });
     if (res.rows.length > 0) return JSON.parse(res.rows[0].data as string);
     
-    // Nếu không có metadata, lấy thông tin thô từ plans/inspections
     const rawRes = await turso.execute({ 
         sql: "SELECT ma_ct, MAX(ten_ct) as ten_ct FROM (SELECT ma_ct, ten_ct FROM plans WHERE ma_ct = ? UNION ALL SELECT ma_ct, ten_ct FROM inspections WHERE ma_ct = ?) GROUP BY ma_ct", 
         args: [maCt, maCt] 
@@ -194,13 +211,6 @@ export const saveProjectMetadata = async (project: Project) => {
     args: [project.ma_ct, JSON.stringify(project), now]
   });
 };
-
-export const deleteProjectMetadata = async (ma_ct: string) => {
-    if (!isTursoConfigured) return;
-    await turso.execute({ sql: "DELETE FROM projects WHERE ma_ct = ?", args: [ma_ct] });
-};
-
-// --- Inspection Services ---
 
 export const saveInspection = async (inspection: Inspection) => {
     if (!isTursoConfigured) return;
@@ -263,8 +273,6 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
     }
     return inspection;
 };
-
-// --- Shared Helper Services ---
 
 export const getRoles = async (): Promise<Role[]> => { if (!isTursoConfigured) return []; const res = await turso.execute("SELECT data FROM roles"); return res.rows.map(r => JSON.parse(r.data as string)); };
 export const saveRole = async (role: Role) => { if (!isTursoConfigured) return; const now = Math.floor(Date.now() / 1000); await turso.execute({ sql: `INSERT INTO roles (id, data, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`, args: [role.id, JSON.stringify(role), now, now] }); };
