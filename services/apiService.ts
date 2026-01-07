@@ -84,10 +84,6 @@ export const deleteDefectLibraryItem = async (id: string) => {
     await db.deleteDefectLibraryItem(id);
 };
 
-/**
- * IMPORT EXCEL - SERVER AUTHORITATIVE
- * Toàn bộ logic validation và ghi log audit đều nằm ở backend route.
- */
 export const importDefectLibrary = async (file: File): Promise<any> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -106,8 +102,8 @@ export const importDefectLibrary = async (file: File): Promise<any> => {
 };
 
 /**
- * EXPORT EXCEL - ISO COMPLIANT
- * Kiểm tra mã phản hồi để tránh tình trạng tải "nội dung lỗi" về thành file .xlsx
+ * EXPORT EXCEL - SERVER AUTHORITATIVE
+ * Kiểm tra mã phản hồi và định dạng Content-Type nghiêm ngặt
  */
 export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
     const query = new URLSearchParams(filters).toString();
@@ -123,26 +119,30 @@ export const exportDefectLibrary = async (filters: any = {}): Promise<void> => {
         throw new Error(message);
     }
     
-    // Kiểm tra Content-Type để đảm bảo đây là binary chuẩn
+    // Kiểm tra định dạng phản hồi thực tế từ Server
     const contentType = response.headers.get('Content-Type');
-    if (!contentType?.includes('spreadsheetml.sheet')) {
-        throw new Error('Dữ liệu server trả về không đúng định dạng Excel chuẩn.');
+    if (!contentType || !contentType.includes('spreadsheetml.sheet')) {
+        console.warn(`[ISO-WARN] Server returned unexpected Content-Type: ${contentType}`);
+        throw new Error(`Dữ liệu không đúng định dạng (.xlsx). Server trả về: ${contentType || 'không xác định'}`);
     }
 
     const blob = await response.blob();
+    if (blob.size === 0) {
+        throw new Error('Tệp Excel được tạo không có nội dung. Vui lòng kiểm tra dữ liệu nguồn.');
+    }
+
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = `Defect_Library_ISO_${new Date().toISOString().split('T')[0]}.xlsx`;
+    a.download = `Hoso_Loi_ISO_${new Date().toISOString().split('T')[0]}.xlsx`;
     document.body.appendChild(a);
     a.click();
     
-    // Cleanup để giải phóng bộ nhớ (đặc biệt quan trọng cho mobile)
     setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-    }, 100);
+    }, 150);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
