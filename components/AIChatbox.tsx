@@ -132,10 +132,8 @@ ${summaryLines.join('\n')}`;
     setIsLoading(true);
 
     try {
-      const apiKey = process.env.API_KEY;
-      if (!apiKey) throw new Error("Missing API Key");
-      
-      const ai = new GoogleGenAI({ apiKey });
+      // Fixed: Always use direct process.env.API_KEY for GoogleGenAI initialization as per guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       // LOGIC LỌC DỮ LIỆU AN TOÀN (Safe String Handling)
       const keywords = text.toUpperCase().split(/\s+/).filter(k => k.length > 1);
