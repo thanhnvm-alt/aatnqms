@@ -127,11 +127,11 @@ export interface Defect {
 
 export interface CheckItem {
   id: string;
-  stage?: string; // Phân tầng 1 cho PQC (Công đoạn)
-  category: string; // Cho các module khác hoặc định danh nội bộ
-  label: string; // Tên hạng mục kiểm tra
-  method?: string; // Phương pháp kiểm tra (ISO)
-  standard?: string; // Tiêu chuẩn kỹ thuật / Dung sai (ISO)
+  stage?: string; // Tầng 1: Công đoạn (Dành cho PQC)
+  category: string; // Tầng 1 (cho các module khác)
+  label: string; // Tầng 2: Hạng mục kiểm tra
+  method?: string; // Phương pháp kiểm tra
+  standard?: string; // Tiêu chuẩn kỹ thuật / dung sai
   status: CheckStatus;
   notes?: string;
   images?: string[];

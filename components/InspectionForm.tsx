@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR, DefectLibraryItem } from '../types';
+import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR } from '../types';
 import { fetchPlans, fetchTemplates } from '../services/apiService'; 
 import { QRScannerModal } from './QRScannerModal';
+// Fixed: Added Plus to the import list from lucide-react
 import { 
   Save, ArrowLeft, Image as ImageIcon, X, Trash2, 
   Layers, QrCode, ChevronDown, AlertTriangle, 
   ClipboardList, Loader2, PenTool, Edit2, Camera, Info,
-  Box, Hash, Factory, Calendar, FileText, Sparkles
+  Box, Hash, Factory, Calendar, FileText, Sparkles, Building2, UserCircle, Plus
 } from 'lucide-react';
 
 interface InspectionFormProps {
@@ -87,17 +88,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     });
   }, []);
 
-  // ISO Logic: Tải hạng mục theo Công đoạn (Stage) cho PQC
+  // ISO Logic: Tải hạng mục theo Công đoạn cho PQC
   useEffect(() => {
       if (isTemplatesLoading || formData.type !== 'PQC' || !formData.inspectionStage) return;
       const pqcTemplate = masterTemplates['PQC'] || [];
       const stageItems = pqcTemplate.filter(item => item.stage === formData.inspectionStage);
-      
-      // Cập nhật hạng mục mà không làm reload form
-      setFormData(prev => ({
-          ...prev,
-          items: JSON.parse(JSON.stringify(stageItems))
-      }));
+      setFormData(prev => ({ ...prev, items: JSON.parse(JSON.stringify(stageItems)) }));
   }, [formData.inspectionStage, isTemplatesLoading, formData.type]);
 
   const availableStages = useMemo(() => {
@@ -128,13 +124,13 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   };
 
   const handleSaveNCR = () => {
-      if (!ncrModalItem || !ncrFormData.issueDescription) { alert("Vui lòng mô tả lỗi cho NCR"); return; }
+      if (!ncrModalItem || !ncrFormData.issueDescription) { alert("Vui lòng mô tả lỗi NCR"); return; }
       const newNCR: NCR = {
           id: `NCR-${Date.now()}`,
           inspection_id: formData.id,
           itemId: ncrModalItem.itemId,
-          createdDate: ncrFormData.createdDate || new Date().toISOString().split('T')[0],
-          issueDescription: ncrFormData.issueDescription,
+          createdDate: ncrFormData.createdDate || '',
+          issueDescription: ncrFormData.issueDescription || '',
           rootCause: ncrFormData.rootCause || '',
           solution: ncrFormData.solution || '',
           responsiblePerson: ncrFormData.responsiblePerson || '',
@@ -143,7 +139,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           imagesBefore: ncrFormData.imagesBefore || [],
           imagesAfter: []
       };
-      // Gán NCR vào hạng mục (API sẽ bóc tách lưu bảng riêng ở backend)
       updateItem(ncrModalItem.itemId, { ncr: newNCR });
       setNcrModalItem(null);
   };
@@ -164,13 +159,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   };
 
   const handleSave = () => {
-    if (!formData.ma_nha_may || !formData.ten_hang_muc) { alert("Thiếu thông tin bắt buộc (*)"); return; }
+    if (!formData.ma_nha_may || !formData.ten_hang_muc) { alert("Nhập đủ thông tin (*)"); return; }
     setIsSaving(true);
-    onSave({
-        ...formData as Inspection,
-        id: formData.id || `INS-${Date.now()}`,
-        signature: qcCanvasRef.current?.toDataURL()
-    });
+    onSave({ ...formData as Inspection, id: formData.id || `INS-${Date.now()}`, signature: qcCanvasRef.current?.toDataURL() });
   };
 
   return (
@@ -178,13 +169,15 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       <input type="file" multiple ref={fileInputRef} onChange={handleImageInput} className="hidden" />
       <input type="file" capture="environment" ref={cameraInputRef} onChange={handleImageInput} className="hidden" />
 
-      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={(data) => { setFormData(prev => ({...prev, ma_nha_may: data})); setShowScanner(false); }} />}
-
+      {/* Header Toolbar */}
       <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 z-[100] h-16 shadow-sm">
         <button onClick={onCancel} className="p-2 text-slate-400 active:scale-90 transition-all"><ArrowLeft className="w-6 h-6"/></button>
         <div className="text-center">
-            <h2 className="text-[13px] font-black text-slate-900 uppercase tracking-tight">LẬP PHIẾU KIỂM TRA</h2>
-            <div className="mt-1"><span className="px-2 py-0.5 bg-blue-600 text-white rounded text-[8px] font-black uppercase">{formData.type}</span></div>
+            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] leading-none mb-1">Tạo phiếu mới</h2>
+            <div className="flex gap-2 justify-center">
+                <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-[8px] font-black uppercase">PQC - KIỂM TRA SẢN XUẤT</span>
+                <span className="px-2 py-0.5 bg-green-500 text-white rounded text-[8px] font-black uppercase">LINK KẾ HOẠCH</span>
+            </div>
         </div>
         <button onClick={handleSave} disabled={isSaving} className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg active:scale-95 transition-all">
           {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
@@ -194,97 +187,175 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
         <div className="max-w-3xl mx-auto p-4 space-y-6 pb-32">
           
-          {/* Thông tin đối tượng */}
-          <section className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
-              <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ NHÀ MÁY / HEADCODE *</label>
-                  <div className="relative group">
-                      <input value={formData.ma_nha_may} onChange={e => setFormData({...formData, ma_nha_may: e.target.value})} className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-800 outline-none focus:bg-white transition-all shadow-inner" placeholder="Quét QR hoặc nhập mã..."/>
-                      <button onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-white text-blue-600 rounded-xl shadow-md border border-slate-100 active:scale-90 transition-all"><QrCode className="w-5 h-5"/></button>
-                  </div>
+          {/* Section: Hình ảnh hiện trường */}
+          <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                  <ImageIcon className="w-4 h-4 text-slate-400" />
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">HÌNH ẢNH HIỆN TRƯỜNG ({formData.images?.length || 0})</h3>
               </div>
-              <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN SẢN PHẨM *</label>
-                  <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 outline-none shadow-inner" placeholder="Tên sản phẩm..."/>
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                  <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-24 h-24 shrink-0 bg-white border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-1 text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-all">
+                      <Plus className="w-6 h-6" />
+                      <span className="text-[8px] font-black uppercase">Thêm ảnh</span>
+                  </button>
+                  {formData.images?.map((img, idx) => (
+                      <div key={idx} className="relative w-24 h-24 shrink-0 rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
+                          <img src={img} className="w-full h-full object-cover" />
+                          <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                      </div>
+                  ))}
               </div>
           </section>
 
-          {/* Vị trí & Công đoạn (ISO Tier 1) */}
-          <section className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+          {/* Section: Thông tin nguồn */}
+          <section className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-2">
+                  <Box className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Thông tin nguồn</h3>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">XƯỞNG SẢN XUẤT</label>
-                      <select value={formData.workshop || ''} onChange={e => setFormData({...formData, workshop: e.target.value, inspectionStage: '', items: []})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black outline-none shadow-inner">
-                          <option value="">-- Chọn xưởng --</option>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ NHÀ MÁY *</label>
+                      <div className="relative">
+                          <input value={formData.ma_nha_may} onChange={e => setFormData({...formData, ma_nha_may: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none pr-10" placeholder="Nhập mã nhà máy..."/>
+                          <button onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-lg shadow-md"><QrCode className="w-4 h-4"/></button>
+                      </div>
+                  </div>
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ CÔNG TRÌNH *</label>
+                      <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-400 uppercase" placeholder="NHẬP MÃ CÔNG TRÌNH..."/>
+                  </div>
+              </div>
+              <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN CÔNG TRÌNH</label>
+                  <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-400" placeholder="Nhập tên công trình..."/>
+              </div>
+              <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN SẢN PHẨM *</label>
+                  <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700" placeholder="Nhập tên sản phẩm..."/>
+              </div>
+          </section>
+
+          {/* Section: Thông tin kiểm tra */}
+          <section className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-orange-600" />
+                  <h3 className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Thông tin kiểm tra</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">XƯỞNG / KHO / PHÒNG</label>
+                      <select value={formData.workshop || ''} onChange={e => setFormData({...formData, workshop: e.target.value, inspectionStage: '', items: []})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none">
+                          <option value="">-- Chọn Xưởng --</option>
                           {workshops?.map(ws => <option key={ws.id} value={ws.name}>{ws.name}</option>)}
                       </select>
                   </div>
                   <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1">CÔNG ĐOẠN (ISO G1)</label>
-                      <select value={formData.inspectionStage || ''} onChange={e => setFormData({...formData, inspectionStage: e.target.value})} className="w-full px-4 py-3 bg-blue-50 border border-blue-200 rounded-2xl text-xs font-black text-blue-800 outline-none appearance-none cursor-pointer">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CÔNG ĐOẠN SẢN XUẤT</label>
+                      <select value={formData.inspectionStage || ''} onChange={e => setFormData({...formData, inspectionStage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none">
                           <option value="">-- Chọn công đoạn --</option>
                           {availableStages.map(stage => <option key={stage} value={stage}>{stage}</option>)}
                       </select>
                   </div>
               </div>
-          </section>
-
-          {/* Hạng mục kiểm tra (ISO Tier 2) */}
-          <section className="space-y-4">
-              <div className="flex items-center gap-2 px-1">
-                  <ClipboardList className="w-4 h-4 text-slate-800" />
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">TIÊU CHÍ KIỂM TRA ISO {formData.inspectionStage ? `[${formData.inspectionStage}]` : ''}</h3>
-              </div>
-
-              <div className="space-y-4">
-                  {isTemplatesLoading ? (
-                      <div className="py-10 text-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
-                  ) : !formData.inspectionStage ? (
-                      <div className="py-16 text-center bg-white rounded-[2rem] border-2 border-dashed border-slate-100 flex flex-col items-center gap-2">
-                          <Info className="w-8 h-8 text-slate-200" />
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chọn công đoạn để tải hạng mục</p>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QC THỰC HIỆN *</label>
+                      <div className="flex items-center gap-3 px-4 py-3 bg-slate-100 rounded-xl">
+                          <UserCircle className="w-4 h-4 text-blue-500" />
+                          <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{formData.inspectorName}</span>
                       </div>
-                  ) : (
-                      formData.items?.map((item) => (
-                          <div key={item.id} className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden shadow-sm p-4 space-y-4 relative group">
-                              <div className="flex justify-between items-start gap-4">
-                                  <div className="flex-1 space-y-2">
-                                      <h4 className="text-sm font-black text-slate-800 leading-tight">{item.label}</h4>
-                                      <div className="flex flex-wrap gap-2">
-                                          {item.method && <span className="px-2 py-0.5 bg-slate-50 text-slate-500 rounded text-[9px] font-bold border border-slate-100 uppercase">Cách: {item.method}</span>}
-                                          {item.standard && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-bold border border-blue-100 uppercase">Chuẩn: {item.standard}</span>}
-                                      </div>
-                                  </div>
-                                  {item.ncr && <div className="p-1.5 bg-red-600 text-white rounded-lg shadow-sm animate-pulse"><AlertTriangle className="w-3.5 h-3.5" /></div>}
-                              </div>
-                              
-                              <div className="flex gap-2">
-                                  <button onClick={() => handleItemStatusChange(item, CheckStatus.PASS)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${item.status === CheckStatus.PASS ? 'bg-green-600 border-green-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>ĐẠT</button>
-                                  <button onClick={() => handleItemStatusChange(item, CheckStatus.FAIL)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${item.status === CheckStatus.FAIL ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>LỖI</button>
-                                  <button onClick={() => handleItemStatusChange(item, CheckStatus.CONDITIONAL)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${item.status === CheckStatus.CONDITIONAL ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>CÓ ĐK</button>
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-1">
-                                  <div className="flex-1 flex gap-2 overflow-x-auto no-scrollbar">
-                                      <button onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }} className="w-10 h-10 shrink-0 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center border border-blue-100 active:scale-90 transition-all"><Camera className="w-5 h-5" /></button>
-                                      <button onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }} className="w-10 h-10 shrink-0 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center border border-slate-100 active:scale-90 transition-all"><ImageIcon className="w-5 h-5" /></button>
-                                      {item.images?.map((img, i) => (
-                                          <div key={i} className="relative w-10 h-10 shrink-0 rounded-lg overflow-hidden border border-slate-200">
-                                              <img src={img} className="w-full h-full object-cover" />
-                                              <button onClick={() => updateItem(item.id, { images: item.images?.filter((_, idx) => idx !== i) })} className="absolute top-0 right-0 bg-black/50 text-white p-0.5"><X className="w-2 h-2" /></button>
-                                          </div>
-                                      ))}
-                                  </div>
-                                  <div className="relative group/note flex-1 max-w-[150px]">
-                                      <Edit2 className="absolute left-3 top-3 w-3 h-3 text-slate-300" />
-                                      <textarea value={item.notes} onChange={(e) => updateItem(item.id, { notes: e.target.value })} placeholder="Ghi chú..." className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-medium text-slate-600 focus:bg-white outline-none resize-none shadow-sm" rows={1}/>
-                                  </div>
-                              </div>
-                          </div>
-                      ))
-                  )}
+                  </div>
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NGÀY KIỂM TRA</label>
+                      <div className="relative">
+                        <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none"/>
+                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      </div>
+                  </div>
               </div>
           </section>
+
+          {/* Section: Số lượng kiểm tra */}
+          <section className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-2">
+                  <Hash className="w-4 h-4 text-blue-700" />
+                  <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Số lượng kiểm tra</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SL ĐƠN HÀNG (IPO)</label>
+                      <div className="relative">
+                          <input type="number" value={formData.so_luong_ipo} onChange={e => setFormData({...formData, so_luong_ipo: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-blue-700 outline-none pr-10"/>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">PCS</span>
+                      </div>
+                  </div>
+                  <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SL KIỂM TRA</label>
+                      <input type="number" value={formData.inspectedQuantity} onChange={e => setFormData({...formData, inspectedQuantity: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-blue-700 outline-none"/>
+                  </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                      <div className="flex justify-between items-center px-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SL ĐẠT</label><span className="text-[8px] font-bold text-green-500">0%</span></div>
+                      <input type="number" value={formData.passedQuantity} onChange={e => setFormData({...formData, passedQuantity: Number(e.target.value)})} className="w-full px-4 py-3 bg-green-50/30 border border-green-100 rounded-xl text-sm font-black text-green-600 outline-none"/>
+                  </div>
+                  <div className="space-y-1.5">
+                      <div className="flex justify-between items-center px-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SL LỖI</label><span className="text-[8px] font-bold text-red-500">0%</span></div>
+                      <input type="number" value={formData.failedQuantity} onChange={e => setFormData({...formData, failedQuantity: Number(e.target.value)})} className="w-full px-4 py-3 bg-red-50/30 border border-red-100 rounded-xl text-sm font-black text-red-600 outline-none"/>
+                  </div>
+              </div>
+          </section>
+
+          {/* Hạng mục kiểm tra dynamic */}
+          {formData.items && formData.items.length > 0 && (
+            <section className="space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                    <ClipboardList className="w-4 h-4 text-slate-800" />
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">HẠNG MỤC KIỂM TRA ISO {formData.inspectionStage ? `[${formData.inspectionStage}]` : ''}</h3>
+                </div>
+
+                <div className="space-y-4">
+                    {formData.items.map((item) => (
+                        <div key={item.id} className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden shadow-sm p-4 space-y-4 relative group">
+                            <div className="flex justify-between items-start gap-4">
+                                <div className="flex-1 space-y-2">
+                                    <h4 className="text-sm font-black text-slate-800 leading-tight">{item.label}</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {item.method && <span className="px-2 py-0.5 bg-slate-50 text-slate-500 rounded text-[9px] font-bold border border-slate-100 uppercase">Cách: {item.method}</span>}
+                                        {item.standard && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-bold border border-blue-100 uppercase">Chuẩn: {item.standard}</span>}
+                                    </div>
+                                </div>
+                                {item.ncr && <div className="p-1.5 bg-red-600 text-white rounded-lg shadow-sm animate-pulse"><AlertTriangle className="w-3.5 h-3.5" /></div>}
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <button onClick={() => handleItemStatusChange(item, CheckStatus.PASS)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${item.status === CheckStatus.PASS ? 'bg-green-600 border-green-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>ĐẠT</button>
+                                <button onClick={() => handleItemStatusChange(item, CheckStatus.FAIL)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${item.status === CheckStatus.FAIL ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>LỖI</button>
+                                <button onClick={() => handleItemStatusChange(item, CheckStatus.CONDITIONAL)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${item.status === CheckStatus.CONDITIONAL ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>CÓ ĐK</button>
+                            </div>
+
+                            <div className="flex items-center gap-3 pt-1">
+                                <div className="flex-1 flex gap-2 overflow-x-auto no-scrollbar">
+                                    <button onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }} className="w-10 h-10 shrink-0 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center border border-blue-100 active:scale-90 transition-all"><Camera className="w-5 h-5" /></button>
+                                    <button onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }} className="w-10 h-10 shrink-0 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center border border-slate-100 active:scale-90 transition-all"><ImageIcon className="w-5 h-5" /></button>
+                                    {item.images?.map((img, i) => (
+                                        <div key={i} className="relative w-10 h-10 shrink-0 rounded-lg overflow-hidden border border-slate-200">
+                                            <img src={img} className="w-full h-full object-cover" />
+                                            <button onClick={() => updateItem(item.id, { images: item.images?.filter((_, idx) => idx !== i) })} className="absolute top-0 right-0 bg-black/50 text-white p-0.5"><X className="w-2 h-2" /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="relative group/note flex-1 max-w-[150px]">
+                                    <Edit2 className="absolute left-3 top-3 w-3 h-3 text-slate-300" />
+                                    <textarea value={item.notes} onChange={(e) => updateItem(item.id, { notes: e.target.value })} placeholder="Ghi chú..." className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-medium text-slate-600 focus:bg-white outline-none resize-none shadow-sm" rows={1}/>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+          )}
 
           {/* Chữ ký */}
           <section className="space-y-4 pt-6 border-t border-slate-200 pb-12">
