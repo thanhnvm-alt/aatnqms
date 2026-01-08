@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, CheckItem, Workshop, User, NCR } from '../types';
 import { fetchPlans, fetchTemplates } from '../services/apiService'; 
 import { QRScannerModal } from './QRScannerModal';
-// Fixed: Added Plus to the import list from lucide-react
 import { 
   Save, ArrowLeft, Image as ImageIcon, X, Trash2, 
   Layers, QrCode, ChevronDown, AlertTriangle, 
@@ -62,6 +61,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       inspectionStage: '',
       dvt: 'PCS',
       so_luong_ipo: 0,
+      inspectedQuantity: 0,
+      passedQuantity: 0,
+      failedQuantity: 0,
       type: (initialData?.type || 'PQC') as any,
     };
     if (initialData) return { ...baseState, ...JSON.parse(JSON.stringify(initialData)) };
@@ -70,7 +72,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   const [masterTemplates, setMasterTemplates] = useState<Record<string, CheckItem[]>>({});
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(true);
-  const [isSearchingPlan, setIsSearchingPlan] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
@@ -111,7 +112,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
   const handleItemStatusChange = (item: CheckItem, status: CheckStatus) => {
     updateItem(item.id, { status });
-    // ISO RULE: Bắt buộc mở NCR khi chọn FAIL trong PQC
+    // ISO RULE: Bắt buộc mở NCR khi chọn LỖI trong PQC
     if (formData.type === 'PQC' && status === CheckStatus.FAIL) {
         setNcrModalItem({ itemId: item.id, itemLabel: item.label });
         setNcrFormData({
@@ -159,13 +160,13 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   };
 
   const handleSave = () => {
-    if (!formData.ma_nha_may || !formData.ten_hang_muc) { alert("Nhập đủ thông tin (*)"); return; }
+    if (!formData.ma_nha_may || !formData.ten_hang_muc) { alert("Vui lòng nhập đủ thông tin bắt buộc (*)"); return; }
     setIsSaving(true);
     onSave({ ...formData as Inspection, id: formData.id || `INS-${Date.now()}`, signature: qcCanvasRef.current?.toDataURL() });
   };
 
   return (
-    <div className="bg-slate-50 h-full flex flex-col relative overflow-hidden">
+    <div className="bg-[#f8faff] h-full flex flex-col relative overflow-hidden">
       <input type="file" multiple ref={fileInputRef} onChange={handleImageInput} className="hidden" />
       <input type="file" capture="environment" ref={cameraInputRef} onChange={handleImageInput} className="hidden" />
 
@@ -184,7 +185,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
+      <div className="flex-1 overflow-y-auto no-scrollbar bg-[#f8faff]">
         <div className="max-w-3xl mx-auto p-4 space-y-6 pb-32">
           
           {/* Section: Hình ảnh hiện trường */}
@@ -208,60 +209,60 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
           </section>
 
           {/* Section: Thông tin nguồn */}
-          <section className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-2">
+          <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-1">
                   <Box className="w-4 h-4 text-blue-600" />
                   <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Thông tin nguồn</h3>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ NHÀ MÁY *</label>
                       <div className="relative">
-                          <input value={formData.ma_nha_may} onChange={e => setFormData({...formData, ma_nha_may: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none pr-10" placeholder="Nhập mã nhà máy..."/>
-                          <button onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-lg shadow-md"><QrCode className="w-4 h-4"/></button>
+                          <input value={formData.ma_nha_may} onChange={e => setFormData({...formData, ma_nha_may: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:bg-white transition-all shadow-inner" placeholder="Nhập mã nhà máy..."/>
+                          <button onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl shadow-md"><QrCode className="w-4 h-4"/></button>
                       </div>
                   </div>
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MÃ CÔNG TRÌNH *</label>
-                      <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-400 uppercase" placeholder="NHẬP MÃ CÔNG TRÌNH..."/>
+                      <input value={formData.ma_ct} onChange={e => setFormData({...formData, ma_ct: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-800 uppercase shadow-inner outline-none focus:bg-white" placeholder="NHẬP MÃ CÔNG TRÌNH..."/>
                   </div>
               </div>
               <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN CÔNG TRÌNH</label>
-                  <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-400" placeholder="Nhập tên công trình..."/>
+                  <input value={formData.ten_ct} onChange={e => setFormData({...formData, ten_ct: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-500 shadow-inner outline-none focus:bg-white" placeholder="Nhập tên công trình..."/>
               </div>
               <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TÊN SẢN PHẨM *</label>
-                  <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700" placeholder="Nhập tên sản phẩm..."/>
+                  <input value={formData.ten_hang_muc} onChange={e => setFormData({...formData, ten_hang_muc: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 shadow-inner outline-none focus:bg-white" placeholder="Nhập tên sản phẩm..."/>
               </div>
           </section>
 
           {/* Section: Thông tin kiểm tra */}
-          <section className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-2">
+          <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-1">
                   <AlertTriangle className="w-4 h-4 text-orange-600" />
                   <h3 className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Thông tin kiểm tra</h3>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">XƯỞNG / KHO / PHÒNG</label>
-                      <select value={formData.workshop || ''} onChange={e => setFormData({...formData, workshop: e.target.value, inspectionStage: '', items: []})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none">
+                      <select value={formData.workshop || ''} onChange={e => setFormData({...formData, workshop: e.target.value, inspectionStage: '', items: []})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black text-slate-700 outline-none appearance-none shadow-inner">
                           <option value="">-- Chọn Xưởng --</option>
                           {workshops?.map(ws => <option key={ws.id} value={ws.name}>{ws.name}</option>)}
                       </select>
                   </div>
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CÔNG ĐOẠN SẢN XUẤT</label>
-                      <select value={formData.inspectionStage || ''} onChange={e => setFormData({...formData, inspectionStage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none">
+                      <select value={formData.inspectionStage || ''} onChange={e => setFormData({...formData, inspectionStage: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black text-slate-700 outline-none appearance-none shadow-inner">
                           <option value="">-- Chọn công đoạn --</option>
                           {availableStages.map(stage => <option key={stage} value={stage}>{stage}</option>)}
                       </select>
                   </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">QC THỰC HIỆN *</label>
-                      <div className="flex items-center gap-3 px-4 py-3 bg-slate-100 rounded-xl">
+                      <div className="flex items-center gap-3 px-5 py-3 bg-slate-100 rounded-2xl border border-slate-50">
                           <UserCircle className="w-4 h-4 text-blue-500" />
                           <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{formData.inspectorName}</span>
                       </div>
@@ -269,16 +270,16 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NGÀY KIỂM TRA</label>
                       <div className="relative">
-                        <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none"/>
-                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 outline-none shadow-inner"/>
+                        <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       </div>
                   </div>
               </div>
           </section>
 
           {/* Section: Số lượng kiểm tra */}
-          <section className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-2">
+          <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3 mb-1">
                   <Hash className="w-4 h-4 text-blue-700" />
                   <h3 className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Số lượng kiểm tra</h3>
               </div>
@@ -286,23 +287,33 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SL ĐƠN HÀNG (IPO)</label>
                       <div className="relative">
-                          <input type="number" value={formData.so_luong_ipo} onChange={e => setFormData({...formData, so_luong_ipo: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-blue-700 outline-none pr-10"/>
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">PCS</span>
+                          <input type="number" value={formData.so_luong_ipo} onChange={e => setFormData({...formData, so_luong_ipo: Number(e.target.value)})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-blue-700 outline-none pr-12 shadow-inner"/>
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">PCS</span>
                       </div>
                   </div>
                   <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SL KIỂM TRA</label>
-                      <input type="number" value={formData.inspectedQuantity} onChange={e => setFormData({...formData, inspectedQuantity: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-blue-700 outline-none"/>
+                      <input type="number" value={formData.inspectedQuantity} onChange={e => setFormData({...formData, inspectedQuantity: Number(e.target.value)})} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-blue-700 outline-none shadow-inner"/>
                   </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                      <div className="flex justify-between items-center px-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SL ĐẠT</label><span className="text-[8px] font-bold text-green-500">0%</span></div>
-                      <input type="number" value={formData.passedQuantity} onChange={e => setFormData({...formData, passedQuantity: Number(e.target.value)})} className="w-full px-4 py-3 bg-green-50/30 border border-green-100 rounded-xl text-sm font-black text-green-600 outline-none"/>
+                      <div className="flex justify-between items-center px-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SL ĐẠT</label>
+                          <span className="text-[10px] font-bold text-green-500">
+                             {formData.inspectedQuantity ? Math.round(((formData.passedQuantity || 0) / formData.inspectedQuantity) * 100) : 0}%
+                          </span>
+                      </div>
+                      <input type="number" value={formData.passedQuantity} onChange={e => setFormData({...formData, passedQuantity: Number(e.target.value)})} className="w-full px-5 py-3 bg-green-50/30 border border-green-100 rounded-2xl text-sm font-black text-green-600 outline-none shadow-inner"/>
                   </div>
                   <div className="space-y-1.5">
-                      <div className="flex justify-between items-center px-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SL LỖI</label><span className="text-[8px] font-bold text-red-500">0%</span></div>
-                      <input type="number" value={formData.failedQuantity} onChange={e => setFormData({...formData, failedQuantity: Number(e.target.value)})} className="w-full px-4 py-3 bg-red-50/30 border border-red-100 rounded-xl text-sm font-black text-red-600 outline-none"/>
+                      <div className="flex justify-between items-center px-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SL LỖI</label>
+                          <span className="text-[10px] font-bold text-red-500">
+                             {formData.inspectedQuantity ? Math.round(((formData.failedQuantity || 0) / formData.inspectedQuantity) * 100) : 0}%
+                          </span>
+                      </div>
+                      <input type="number" value={formData.failedQuantity} onChange={e => setFormData({...formData, failedQuantity: Number(e.target.value)})} className="w-full px-5 py-3 bg-red-50/30 border border-red-100 rounded-2xl text-sm font-black text-red-600 outline-none shadow-inner"/>
                   </div>
               </div>
           </section>
