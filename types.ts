@@ -76,7 +76,7 @@ export interface NCR {
   id: string;
   inspection_id?: string;
   itemId?: string;
-  defect_code?: string; 
+  defect_code?: string;
   createdDate: string;
   issueDescription: string;
   rootCause: string;
@@ -93,14 +93,14 @@ export interface NCR {
 export interface DefectLibraryItem {
   id: string;
   code: string;
-  name: string; 
+  name: string;
   stage: string;
   category: string;
   description: string;
   severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
   suggestedAction?: string;
-  correctImage?: string; 
-  incorrectImage?: string; 
+  correctImage?: string;
+  incorrectImage?: string;
   createdBy?: string;
   createdAt?: number;
 }
@@ -127,10 +127,11 @@ export interface Defect {
 
 export interface CheckItem {
   id: string;
-  stage?: string; // Group 1: Công đoạn (PQC/SQC)
-  category: string; // Group 2: Danh mục (Lắp ráp, Bề mặt...)
-  label: string; // Group 3: Hạng mục kiểm tra
-  standard?: string; // Tiêu chuẩn kỹ thuật đính kèm G3
+  stage?: string; // Tầng 1: Công đoạn (Dành cho PQC)
+  category: string; // Tầng 1 (cho các module khác)
+  label: string; // Tầng 2: Hạng mục kiểm tra
+  method?: string; // Phương pháp kiểm tra
+  standard?: string; // Tiêu chuẩn kỹ thuật / dung sai
   status: CheckStatus;
   notes?: string;
   images?: string[];

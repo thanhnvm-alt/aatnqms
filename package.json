@@ -19,8 +19,7 @@
     "recharts": "^2.13.0",
     "jsqr": "^1.4.0",
     "firebase": "^10.13.1",
-    "@libsql/client": "^0.14.0",
-    "exceljs": "^4.4.0"
+    "@libsql/client": "^0.14.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

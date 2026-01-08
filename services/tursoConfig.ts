@@ -2,43 +2,41 @@ import { createClient, Client } from "@libsql/client/web";
 
 /**
  * TURSO DATABASE CONFIGURATION - WEB OPTIMIZED
- * Cấu hình được tối ưu cho môi trường trình duyệt, sử dụng HTTPS thay vì protocol libsql://
  */
 
-const FALLBACK_URL = 'https://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io';
+const FALLBACK_URL = 'libsql://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io';
 const FALLBACK_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjY5OTIyMTEsImlkIjoiY2IxYmZmOGYtYzVhNS00NTNhLTk1N2EtYjdhMWU5NzIwZTUzIiwicmlkIjoiZDcxNjFjNGYtNDQyOC00ZmIyLTgzZDEtN2JkOGUzZjcyYzFmIn0.u8k5EJwCPv1uopKKDbaJ3AiDkmZFoAI3SlvgT_Hk8HSwLiO16IegBSUc5Hg4Lca7VPU_3quNqyvxzTPNPYd3DA';
 
-// Lấy giá trị từ environment variables (được Vite tiêm vào)
-const envUrl = process.env.TURSO_DATABASE_URL;
-const envToken = process.env.TURSO_AUTH_TOKEN;
+// Lấy giá trị từ môi trường, ưu tiên các biến hệ thống
+const envUrl = process.env.TURSO_DATABASE_URL || process.env.VITE_TURSO_DATABASE_URL;
+const envToken = process.env.TURSO_AUTH_TOKEN || process.env.VITE_TURSO_AUTH_TOKEN;
 
-const normalizeUrl = (url: string | undefined, fallback: string): string => {
-    if (!url || url === "undefined" || url === "null" || url.trim() === "") return fallback;
-    let normalized = url.trim();
-    // Web client yêu cầu https:// để fetch hoạt động bình thường
-    if (normalized.startsWith("libsql://")) {
-        normalized = normalized.replace("libsql://", "https://");
-    }
-    // Đảm bảo không có dấu gạch chéo cuối
-    return normalized.replace(/\/$/, "");
+const getSafeValue = (val: any, fallback: string) => {
+    if (!val || val === "undefined" || val === "null" || String(val).trim() === "") return fallback;
+    return String(val).trim();
 };
 
-const normalizeToken = (token: string | undefined, fallback: string): string => {
-    if (!token || token === "undefined" || token === "null" || token.trim() === "") return fallback;
-    return token.trim();
-};
+let rawUrl = getSafeValue(envUrl, FALLBACK_URL);
+let authToken = getSafeValue(envToken, FALLBACK_TOKEN);
 
-const finalUrl = normalizeUrl(envUrl, FALLBACK_URL);
-const finalToken = normalizeToken(envToken, FALLBACK_TOKEN);
+// CRITICAL: Web client trình duyệt yêu cầu https:// thay vì libsql:// 
+// để tránh lỗi "Failed to fetch" (do trình duyệt không hiểu protocol libsql)
+let finalUrl = rawUrl;
+if (finalUrl.startsWith("libsql://")) {
+    finalUrl = finalUrl.replace("libsql://", "https://");
+}
+
+// Xóa trailing slash nếu có
+finalUrl = finalUrl.replace(/\/$/, "");
 
 export const isTursoConfigured = finalUrl.length > 0 && !finalUrl.includes("placeholder");
 
 if (isTursoConfigured) {
-  console.log("📡 Turso DB connecting to:", finalUrl);
+  console.log("📡 Turso DB connecting to:", finalUrl.substring(0, 20) + "...");
 }
 
-// Khởi tạo client Turso sử dụng fetch API của trình duyệt
 export const turso: Client = createClient({
-  url: finalUrl,
-  authToken: finalToken,
+  url: finalUrl, 
+  authToken: authToken,
+  intMode: "number", 
 });
