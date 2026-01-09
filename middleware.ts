@@ -1,14 +1,19 @@
 
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 import { verifyToken } from './lib/jwt';
 
-export async function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
+export const config = {
+  matcher: '/api/:path*',
+};
+
+export default async function middleware(request: Request) {
+  const url = new URL(request.url);
+  const path = url.pathname;
 
   // 1. Bypass authentication for Login endpoint
   if (path === '/api/auth/login') {
-    return NextResponse.next();
+    return new Response(null, {
+        headers: { 'x-middleware-next': '1' }
+    });
   }
 
   // 2. Enforce strict authentication for all other /api routes
@@ -16,9 +21,9 @@ export async function middleware(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized: Missing or invalid token' },
-        { status: 401 }
+      return new Response(
+        JSON.stringify({ success: false, message: 'Unauthorized: Missing or invalid token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -26,20 +31,15 @@ export async function middleware(request: NextRequest) {
     const payload = await verifyToken(token);
 
     if (!payload) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized: Invalid or expired token' },
-        { status: 401 }
+      return new Response(
+        JSON.stringify({ success: false, message: 'Unauthorized: Invalid or expired token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
     
     // Valid token -> Proceed
-    return NextResponse.next();
+    return new Response(null, {
+        headers: { 'x-middleware-next': '1' }
+    });
   }
-
-  // Default behavior for non-api routes
-  return NextResponse.next();
 }
-
-export const config = {
-  matcher: '/api/:path*',
-};

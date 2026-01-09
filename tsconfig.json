@@ -1,3 +1,4 @@
+
 {
   "compilerOptions": {
     "target": "ES2020",
@@ -16,6 +17,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "components/**/*.tsx", "services/**/*.ts", "types.ts", "constants.ts"],
+  "exclude": ["node_modules", "api", "middleware.ts", "lib", "app"]
 }
