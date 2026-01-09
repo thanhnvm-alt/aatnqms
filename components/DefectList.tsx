@@ -25,7 +25,7 @@ export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDef
     setIsLoading(true);
     try {
         const result = await fetchDefects({ status: statusFilter });
-        setDefects(result.items);
+        setDefects(result);
     } catch (e) {
         console.error("Load Defects failed:", e);
     } finally {

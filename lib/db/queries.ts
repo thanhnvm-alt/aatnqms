@@ -2,6 +2,17 @@
 import { turso, isTursoConfigured } from "./turso";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem } from "../../types";
 
+// NEW: Authenticaton Helper
+export const authenticateUser = async (username: string): Promise<User | null> => {
+    if (!isTursoConfigured) return null;
+    const res = await turso.execute({
+        sql: "SELECT data FROM users WHERE username = ?",
+        args: [username]
+    });
+    if (res.rows.length === 0) return null;
+    return JSON.parse(res.rows[0].data as string) as User;
+};
+
 export const getPlans = async (params: { search?: string, page?: number, limit?: number }) => { 
     if (!isTursoConfigured) return { items: [], total: 0 }; 
     const { search = '', page = 1, limit = 100 } = params; 
@@ -40,6 +51,16 @@ export const getInspectionsPaginated = async (params: { page?: number, limit?: n
     return { items: dataRes.rows as unknown as Inspection[], total: Number(countRes.rows[0]?.total || 0) };
 };
 
+export const getInspectionById = async (id: string): Promise<Inspection | null> => {
+    if (!isTursoConfigured) return null;
+    const result = await turso.execute({
+      sql: 'SELECT id, data, created_by FROM inspections WHERE id = ?',
+      args: [id]
+    });
+    if (result.rows.length === 0) return null;
+    return JSON.parse(result.rows[0].data as string) as Inspection;
+};
+
 export const saveInspection = async (inspection: Inspection) => {
     if (!isTursoConfigured) return;
     const now = Math.floor(Date.now() / 1000);
@@ -65,6 +86,11 @@ export const saveInspection = async (inspection: Inspection) => {
               ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, status = excluded.status, score = excluded.score`,
         args: [inspectionData.id, JSON.stringify(inspectionData), now, now, inspection.inspectorName, inspection.ma_ct, inspection.ten_ct, inspection.ma_nha_may, inspection.ten_hang_muc, inspection.workshop, inspection.status, inspection.type, inspection.score]
     });
+};
+
+export const deleteInspection = async (id: string) => {
+    if (!isTursoConfigured) return;
+    await turso.execute({ sql: 'DELETE FROM inspections WHERE id = ?', args: [id] });
 };
 
 export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {

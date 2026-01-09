@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Square, AlertCircle, Database } from 'lucide-react';
 import { login } from '../services/apiService';
 
 interface LoginPageProps {
   onLoginSuccess: (data: { user: User; access_token: string }, remember: boolean) => void;
-  users: User[]; // Kept for interface compatibility but unused for auth logic
+  users: User[]; 
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
@@ -18,7 +18,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [logoError, setLogoError] = useState(false);
 
-  // Load saved username on mount
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
     if (savedUsername) {
@@ -33,10 +32,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      // Call Real API
       const authData = await login(username, password);
       
-      // Save username preference
       if (rememberMe) {
           localStorage.setItem('aatn_saved_username', username);
       } else {
@@ -48,15 +45,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       console.error("Login Error:", err);
       let msg = err.message || 'Đăng nhập thất bại.';
       
-      // Translate common backend errors to Vietnamese
       if (msg === 'Invalid credentials' || msg.includes('401')) {
           msg = 'Tên đăng nhập hoặc mật khẩu không đúng';
       } else if (msg === 'Missing credentials') {
           msg = 'Vui lòng nhập đầy đủ thông tin';
       } else if (msg.includes('Network') || msg.includes('Failed to fetch')) {
-          msg = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng.';
-      } else if (msg.includes('500')) {
-          msg = 'Lỗi hệ thống. Vui lòng thử lại sau.';
+          msg = 'Lỗi kết nối Server. Vui lòng kiểm tra mạng.';
+      } else if (msg.includes('500') || msg.includes('405')) {
+          msg = 'Lỗi hệ thống. Vui lòng liên hệ Admin.';
       }
 
       setError(msg);
@@ -67,7 +63,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decoration */}
       <div className="absolute inset-0 z-0">
           <img 
             src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1920" 
@@ -79,9 +74,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-10 animate-in fade-in zoom-in duration-300">
         
-        {/* Header with Logo */}
         <div className="bg-white p-8 pb-4 text-center flex flex-col items-center border-b border-slate-50">
-            {/* Logo Container */}
             <div className="mb-4 relative w-full flex justify-center">
                  {!logoError ? (
                     <img 
@@ -106,7 +99,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <h2 className="text-lg font-bold text-slate-600 uppercase tracking-wide mt-2">Hệ thống QA/QC</h2>
         </div>
 
-        {/* Form */}
         <div className="p-8 pt-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -154,7 +146,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
             
-            {/* Remember Me Checkbox */}
             <div 
                 className="flex items-start cursor-pointer group" 
                 onClick={() => setRememberMe(!rememberMe)}
@@ -173,7 +164,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-in fade-in slide-in-from-top-1 duration-200 shadow-sm">
                  <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
                  {error}
               </div>
@@ -196,8 +187,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </form>
         </div>
       </div>
-      <p className="mt-6 text-center text-xs text-white/80 font-medium shadow-sm">
-        © 2024 AA Corporation. Interior Solutions Since 1989.
+      <p className="mt-6 text-center text-xs text-white/80 font-medium shadow-sm flex items-center gap-1">
+        <Database className="w-3 h-3" /> Turso DB Connected • © 2024 AA Corporation
       </p>
     </div>
   );

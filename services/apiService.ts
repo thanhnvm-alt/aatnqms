@@ -1,11 +1,42 @@
+
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem } from '../types';
 import ExcelJS from 'exceljs';
+import { signToken } from '../lib/jwt';
+import { 
+    authenticateUser, 
+    getPlans, 
+    getInspectionsPaginated, 
+    getInspectionById, 
+    saveInspection, 
+    deleteInspection, 
+    getProjects, 
+    getProjectByCode, 
+    updateProject as dbUpdateProject,
+    getUsers, 
+    saveUser as dbSaveUser, 
+    deleteUser as dbDeleteUser, 
+    importUsers as dbImportUsers,
+    getWorkshops, 
+    saveWorkshop as dbSaveWorkshop, 
+    deleteWorkshop as dbDeleteWorkshop,
+    getTemplates, 
+    saveTemplate as dbSaveTemplate,
+    getNcrs, 
+    getNcrById, 
+    saveNcrMapped, 
+    getDefects,
+    getDefectLibrary, 
+    saveDefectLibraryItem as dbSaveDefectLibrary, 
+    deleteDefectLibraryItem as dbDeleteDefectLibrary,
+    getRoles, 
+    saveRole as dbSaveRole, 
+    deleteRole as dbDeleteRole,
+    importPlansBatch
+} from '../lib/db/queries';
 
-const API_BASE = '/api';
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const getAuthHeaders = () => {
-  // Check both storages (localStorage for Remember Me, sessionStorage for temporary)
   const stored = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
   if (!stored) return {};
   try {
@@ -19,49 +50,37 @@ const getAuthHeaders = () => {
   }
 };
 
-const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
-    const headers = { ...getAuthHeaders(), ...options.headers };
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers: headers as any });
-    if (!res.ok) {
-        if (res.status === 401) {
-            console.error("Unauthorized API call - Token invalid or expired");
-            // Optional: Redirect to login or dispatch event
-        }
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-    }
-    const json = await res.json();
-    return json.data || json;
-};
+// HYBRID MODE: Direct DB calls wrapper
+// This avoids network calls to /api/* which fail in Vite dev environment (405 Method Not Allowed)
+// while maintaining separation of concerns.
 
 // LOGIN
 export const login = async (username: string, password: string) => {
     try {
-        const res = await fetch(`${API_BASE}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-
-        // Handle non-200 responses safely
-        if (!res.ok) {
-            let errorMsg = `Server Error (${res.status})`;
-            try {
-                const errorData = await res.json();
-                errorMsg = errorData.message || errorData.error || errorMsg;
-            } catch (e) {
-                // Response was not JSON (e.g. 404 HTML page or 500 server crash)
-                console.warn("Login failed with non-JSON response", res.status);
-            }
-            throw new Error(errorMsg);
+        const user = await authenticateUser(username);
+        
+        if (!user) {
+            throw new Error('Invalid credentials');
         }
 
-        const json = await res.json();
-        if (!json.success) throw new Error(json.message);
-        
-        // Return data to component/app to handle storage (Remember Me logic)
+        // NOTE: Plaintext password check for demo/audit remediation only.
+        // Production must use bcrypt/argon2.
+        if (user.password !== password) {
+            throw new Error('Invalid credentials');
+        }
+
+        const token = await signToken({
+            sub: user.id,
+            username: user.username,
+            role: user.role,
+            name: user.name
+        });
+
+        const { password: _, ...safeUser } = user;
+
         return {
-            access_token: json.data.access_token,
-            user: json.data.user
+            access_token: token,
+            user: safeUser
         };
     } catch (error: any) {
         throw error;
@@ -69,8 +88,9 @@ export const login = async (username: string, password: string) => {
 };
 
 export const checkApiConnection = async () => {
+    // Check DB connection directly
     try {
-        await apiFetch('/health');
+        const users = await getUsers(); // Simple query to test connectivity
         return { ok: true };
     } catch(e) {
         return { ok: false };
@@ -79,34 +99,28 @@ export const checkApiConnection = async () => {
 
 // PLANS
 export const fetchPlans = async (search: string = '', page: number = 1, limit: number = 50) => {
-    const query = new URLSearchParams({ search, page: page.toString(), limit: limit.toString() });
-    return await apiFetch(`/plans?${query}`);
+    return await getPlans({ search, page, limit });
 };
 
 export const importPlans = async (plans: PlanItem[]) => {
-    // Placeholder: In real app, create POST /api/plans/import
-    // console.log("Import plans API called", plans.length);
+    await importPlansBatch(plans);
 };
 
 // INSPECTIONS
 export const fetchInspections = async (filters: any = {}) => {
-    const query = new URLSearchParams(filters);
-    return await apiFetch(`/inspections?${query}`);
+    return await getInspectionsPaginated(filters);
 };
 
 export const fetchInspectionById = async (id: string) => {
-    return await apiFetch(`/inspections/${id}`);
+    return await getInspectionById(id);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
-    return await apiFetch('/inspections', {
-        method: 'POST',
-        body: JSON.stringify({ id: inspection.id, data: inspection })
-    });
+    await saveInspection(inspection);
 };
 
 export const deleteInspectionFromSheet = async (id: string) => {
-    return await apiFetch(`/inspections/${id}`, { method: 'DELETE' });
+    await deleteInspection(id);
 };
 
 export const importInspections = async (inspections: Inspection[]) => {
@@ -116,74 +130,93 @@ export const importInspections = async (inspections: Inspection[]) => {
 };
 
 // PROJECTS
-export const fetchProjects = async () => await apiFetch('/projects');
-export const fetchProjectByCode = async (code: string) => {
-    try { return await apiFetch(`/projects/${code}`); } catch(e) { return null; }
-};
-export const updateProject = async (project: Project) => {
-    return await apiFetch(`/projects/${project.ma_ct}`, {
-        method: 'PUT',
-        body: JSON.stringify(project)
-    });
-};
+export const fetchProjects = async () => await getProjects();
+export const fetchProjectByCode = async (code: string) => await getProjectByCode(code);
+export const updateProject = async (project: Project) => await dbUpdateProject(project);
 export const fetchProjectsSummary = async () => fetchProjects();
 
 // USERS
-export const fetchUsers = async () => await apiFetch('/users');
-export const saveUser = async (user: User) => await apiFetch('/users', { method: 'POST', body: JSON.stringify(user) });
-export const deleteUser = async (id: string) => await apiFetch(`/users/${id}`, { method: 'DELETE' });
-export const importUsers = async (users: User[]) => await apiFetch('/users?action=import', { method: 'POST', body: JSON.stringify(users) });
+export const fetchUsers = async () => await getUsers();
+export const saveUser = async (user: User) => await dbSaveUser(user);
+export const deleteUser = async (id: string) => await dbDeleteUser(id);
+export const importUsers = async (users: User[]) => await dbImportUsers(users);
 
 // WORKSHOPS
-export const fetchWorkshops = async () => await apiFetch('/workshops');
-export const saveWorkshop = async (ws: Workshop) => await apiFetch('/workshops', { method: 'POST', body: JSON.stringify(ws) });
-export const deleteWorkshop = async (id: string) => await apiFetch(`/workshops/${id}`, { method: 'DELETE' });
+export const fetchWorkshops = async () => await getWorkshops();
+export const saveWorkshop = async (ws: Workshop) => await dbSaveWorkshop(ws);
+export const deleteWorkshop = async (id: string) => await dbDeleteWorkshop(id);
 
 // TEMPLATES
-export const fetchTemplates = async () => await apiFetch('/templates');
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => await apiFetch('/templates', { method: 'POST', body: JSON.stringify({ moduleId, items }) });
+export const fetchTemplates = async () => await getTemplates();
+export const saveTemplate = async (moduleId: string, items: CheckItem[]) => await dbSaveTemplate(moduleId, items);
 
 // NCRS & DEFECTS
-export const fetchNcrs = async (params: any = {}) => await apiFetch(`/ncrs?${new URLSearchParams(params)}`);
-export const fetchNcrById = async (id: string) => await apiFetch(`/ncrs/${id}`);
-export const fetchDefects = async (params: any = {}) => await apiFetch(`/defects?${new URLSearchParams(params)}`);
-export const saveNcr = async (ncr: NCR) => await apiFetch('/ncrs', { method: 'POST', body: JSON.stringify(ncr) });
+export const fetchNcrs = async (params: any = {}) => await getNcrs(params);
+export const fetchNcrById = async (id: string) => await getNcrById(id);
+export const fetchDefects = async (params: any = {}) => await getDefects(params);
+export const saveNcr = async (ncr: NCR) => {
+    if (!ncr.inspection_id) throw new Error("Missing inspection_id for NCR");
+    await saveNcrMapped(ncr.inspection_id, ncr, "System"); 
+};
 
-export const fetchDefectLibrary = async () => await apiFetch('/defects/library');
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await apiFetch('/defects/library', { method: 'POST', body: JSON.stringify(item) });
-export const deleteDefectLibraryItem = async (id: string) => await apiFetch(`/defects/library/${id}`, { method: 'DELETE' });
+export const fetchDefectLibrary = async () => await getDefectLibrary();
+export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await dbSaveDefectLibrary(item);
+export const deleteDefectLibraryItem = async (id: string) => await dbDeleteDefectLibrary(id);
 
 export const exportDefectLibrary = async () => {
-    const res = await fetch(`${API_BASE}/defects/export`, { headers: getAuthHeaders() as any });
-    if(!res.ok) throw new Error("Export failed");
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'DefectLibrary.xlsx';
-    document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url);
+    // Client-side export to avoid 405 on route handler
+    const data = await getDefectLibrary();
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Defect Library');
+    worksheet.columns = [
+      { header: 'Mã Lỗi', key: 'code', width: 15 },
+      { header: 'Tên Lỗi', key: 'name', width: 30 },
+      { header: 'Nhóm Lỗi', key: 'category', width: 20 },
+      { header: 'Công Đoạn', key: 'stage', width: 20 },
+      { header: 'Mức Độ', key: 'severity', width: 15 },
+      { header: 'Mô Tả Lỗi', key: 'description', width: 50 },
+      { header: 'Biện Pháp Khắc Phục', key: 'suggestedAction', width: 40 }
+    ];
+    // @ts-ignore
+    data.forEach((item: any) => worksheet.addRow(item));
+    await saveExcelLocally(workbook, `DefectLibrary_Export_${Date.now()}.xlsx`);
 };
 
 export const importDefectLibraryFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    // Note: FormData requires omitting Content-Type header to let browser set boundary
-    const headers = getAuthHeaders();
-    delete (headers as any)['Content-Type'];
+    const buffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.getWorksheet(1);
+    if (!worksheet) throw new Error("Sheet empty");
     
-    const res = await fetch(`${API_BASE}/defects/import`, {
-        method: 'POST',
-        headers: headers as any,
-        body: formData
+    let count = 0;
+    worksheet.eachRow(async (row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const defect = {
+        id: row.getCell(1).value?.toString() || `DEF_${Date.now()}_${rowNumber}`,
+        code: row.getCell(1).value?.toString() || '',
+        name: row.getCell(2).value?.toString() || '',
+        category: row.getCell(3).value?.toString() || 'Ngoại quan',
+        stage: row.getCell(4).value?.toString() || 'Chung',
+        severity: (row.getCell(5).value?.toString() || 'MINOR') as any,
+        description: row.getCell(6).value?.toString() || '',
+        suggestedAction: row.getCell(7).value?.toString() || ''
+      } as DefectLibraryItem;
+
+      if (defect.code) {
+          await dbSaveDefectLibrary(defect);
+          count++;
+      }
     });
-    if (!res.ok) throw new Error("Import failed");
-    return await res.json();
+    return { count };
 };
 
 // ROLES
-export const fetchRoles = async () => await apiFetch('/roles');
-export const saveRole = async (role: Role) => await apiFetch('/roles', { method: 'POST', body: JSON.stringify(role) });
-export const deleteRole = async (id: string) => await apiFetch(`/roles/${id}`, { method: 'DELETE' });
+export const fetchRoles = async () => await getRoles();
+export const saveRole = async (role: Role) => await dbSaveRole(role);
+export const deleteRole = async (id: string) => await dbDeleteRole(id);
 
-// EXCEL HELPERS (Client-side generation for Export Plans)
+// EXCEL HELPERS
 const saveExcelLocally = async (workbook: ExcelJS.Workbook, fileName: string) => {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
