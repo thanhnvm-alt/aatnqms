@@ -1,6 +1,7 @@
 
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, (process as any).cwd(), '');
@@ -9,7 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
-        '@': '/src',
+        '@': path.resolve((process as any).cwd(), './'),
       }
     },
     build: {
@@ -21,7 +22,8 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || env.VITE_API_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
-      // SECURE: DB Credentials removed. Client must use API.
+      'process.env.TURSO_DATABASE_URL': JSON.stringify(env.TURSO_DATABASE_URL || env.VITE_TURSO_DATABASE_URL || ''),
+      'process.env.TURSO_AUTH_TOKEN': JSON.stringify(env.TURSO_AUTH_TOKEN || env.VITE_TURSO_AUTH_TOKEN || ''),
     },
   };
 });

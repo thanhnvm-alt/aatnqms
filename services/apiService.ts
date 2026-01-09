@@ -1,9 +1,7 @@
 
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem } from '../types';
 import ExcelJS from 'exceljs';
-import { signToken } from '../lib/jwt';
 import { 
-    authenticateUser, 
     getPlans, 
     getInspectionsPaginated, 
     getInspectionById, 
@@ -38,7 +36,7 @@ const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const getAuthHeaders = () => {
   const stored = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
-  if (!stored) return {};
+  if (!stored) return { 'Content-Type': 'application/json' };
   try {
       const { access_token } = JSON.parse(stored);
       return { 
@@ -50,48 +48,45 @@ const getAuthHeaders = () => {
   }
 };
 
-// HYBRID MODE: Direct DB calls wrapper
-// This avoids network calls to /api/* which fail in Vite dev environment (405 Method Not Allowed)
-// while maintaining separation of concerns.
-
-// LOGIN
+// LOGIN: Server-Authoritative Only
+// STRICT MODE: No mocks, no fallbacks, no client-side validation.
 export const login = async (username: string, password: string) => {
-    try {
-        const user = await authenticateUser(username);
-        
-        if (!user) {
-            throw new Error('Invalid credentials');
-        }
+    const cleanUsername = (username || '').trim();
+    const cleanPassword = (password || '').trim();
 
-        // NOTE: Plaintext password check for demo/audit remediation only.
-        // Production must use bcrypt/argon2.
-        if (user.password !== password) {
-            throw new Error('Invalid credentials');
-        }
+    const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: cleanUsername, password: cleanPassword }),
+    });
 
-        const token = await signToken({
-            sub: user.id,
-            username: user.username,
-            role: user.role,
-            name: user.name
-        });
-
-        const { password: _, ...safeUser } = user;
-
-        return {
-            access_token: token,
-            user: safeUser
-        };
-    } catch (error: any) {
-        throw error;
+    if (!response.ok) {
+        let errorMessage = 'Đăng nhập thất bại';
+        try {
+            const errData = await response.json();
+            errorMessage = errData.message || errorMessage;
+        } catch (e) {}
+        throw new Error(errorMessage);
     }
+
+    const result = await response.json();
+
+    if (!result.success || !result.data || !result.data.token) {
+        throw new Error('Phản hồi từ máy chủ không hợp lệ');
+    }
+
+    return {
+        access_token: result.data.token,
+        user: result.data.user
+    };
 };
 
 export const checkApiConnection = async () => {
-    // Check DB connection directly
     try {
-        const users = await getUsers(); // Simple query to test connectivity
-        return { ok: true };
+        const res = await fetch('/api/health');
+        return { ok: res.ok };
     } catch(e) {
         return { ok: false };
     }
@@ -164,7 +159,6 @@ export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db
 export const deleteDefectLibraryItem = async (id: string) => await dbDeleteDefectLibrary(id);
 
 export const exportDefectLibrary = async () => {
-    // Client-side export to avoid 405 on route handler
     const data = await getDefectLibrary();
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Defect Library');
