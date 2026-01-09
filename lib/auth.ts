@@ -1,28 +1,34 @@
 
 import { NextRequest } from 'next/server';
+import { verifyToken } from './jwt';
 
 export interface AuthUser {
   userId: string;
   role: 'QC' | 'QA' | 'MANAGER' | 'ADMIN';
   name?: string;
+  username?: string;
 }
 
-export function getAuthUser(req: NextRequest): AuthUser | null {
+export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
   const authHeader = req.headers.get('Authorization');
   
-  // Mobile Support: Check Bearer token
-  if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      // In production: verifyJWT(token)
-      // Current implementation: Extract info from fallback headers if token is just userId
-      return {
-          userId: token,
-          role: (req.headers.get('x-user-role') as any) || 'QC',
-          name: req.headers.get('x-user-name') || 'Mobile User'
-      };
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
   }
 
-  return null;
+  const token = authHeader.split(' ')[1];
+  const payload = await verifyToken(token);
+  
+  if (!payload) {
+    return null;
+  }
+
+  return {
+    userId: payload.sub as string,
+    role: payload.role as any,
+    name: payload.name as string,
+    username: payload.username as string
+  };
 }
 
 export function canModifyInspection(user: AuthUser, recordOwnerId: string): boolean {
