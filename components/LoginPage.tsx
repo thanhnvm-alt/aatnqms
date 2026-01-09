@@ -1,15 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Square, AlertCircle, Database } from 'lucide-react';
-import { login } from '../services/apiService';
+import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
 
 interface LoginPageProps {
-  onLoginSuccess: (data: { user: User; access_token: string }, remember: boolean) => void;
-  users: User[]; 
+  onLoginSuccess: (user: User, remember: boolean) => void;
+  users: User[]; // Pass the dynamic list of users to verify against
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,11 +17,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
   const [logoError, setLogoError] = useState(false);
 
+  // Load saved username on mount
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
     if (savedUsername) {
       setUsername(savedUsername);
-      setRememberMe(true); 
+      setRememberMe(true); // Default to checked if we have a saved username
     }
   }, []);
 
@@ -31,38 +31,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setError('');
     setIsLoading(true);
 
-    try {
-      const authData = await login(username, password);
-      
-      if (rememberMe) {
-          localStorage.setItem('aatn_saved_username', username);
-      } else {
-          localStorage.removeItem('aatn_saved_username');
-      }
+    // Simulate network delay
+    setTimeout(() => {
+        const foundUser = users.find(u => u.username === username && u.password === password);
+        
+        if (foundUser) {
+            // Logic lưu username để điền sẵn cho lần sau (kể cả khi đã logout)
+            if (rememberMe) {
+                localStorage.setItem('aatn_saved_username', username);
+            } else {
+                localStorage.removeItem('aatn_saved_username');
+            }
 
-      onLoginSuccess(authData, rememberMe);
-    } catch (err: any) {
-      console.error("Login Error:", err);
-      let msg = err.message || 'Đăng nhập thất bại.';
-      
-      if (msg === 'Invalid credentials' || msg.includes('401')) {
-          msg = 'Tên đăng nhập hoặc mật khẩu không đúng';
-      } else if (msg === 'Missing credentials') {
-          msg = 'Vui lòng nhập đầy đủ thông tin';
-      } else if (msg.includes('Network') || msg.includes('Failed to fetch')) {
-          msg = 'Lỗi kết nối Server. Vui lòng kiểm tra mạng.';
-      } else if (msg.includes('500') || msg.includes('405')) {
-          msg = 'Lỗi hệ thống. Vui lòng liên hệ Admin.';
-      }
-
-      setError(msg);
-    } finally {
-      setIsLoading(false);
-    }
+            // NEVER pass the password back up, strict security
+            const { password: _, ...safeUser } = foundUser; 
+            // Re-construct user object for the app state without password
+            onLoginSuccess(foundUser as User, rememberMe);
+        } else {
+            setError('Tên đăng nhập hoặc mật khẩu không đúng');
+        }
+        setIsLoading(false);
+    }, 800);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background decoration */}
       <div className="absolute inset-0 z-0">
           <img 
             src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1920" 
@@ -74,7 +68,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-10 animate-in fade-in zoom-in duration-300">
         
+        {/* Header with Logo */}
         <div className="bg-white p-8 pb-4 text-center flex flex-col items-center border-b border-slate-50">
+            {/* Logo Container */}
             <div className="mb-4 relative w-full flex justify-center">
                  {!logoError ? (
                     <img 
@@ -99,6 +95,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <h2 className="text-lg font-bold text-slate-600 uppercase tracking-wide mt-2">Hệ thống QA/QC</h2>
         </div>
 
+        {/* Form */}
         <div className="p-8 pt-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -146,6 +143,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
             
+            {/* Remember Me Checkbox */}
             <div 
                 className="flex items-start cursor-pointer group" 
                 onClick={() => setRememberMe(!rememberMe)}
@@ -164,8 +162,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-in fade-in slide-in-from-top-1 duration-200 shadow-sm">
-                 <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-pulse">
+                 <Info className="w-4 h-4 mr-2 flex-shrink-0" />
                  {error}
               </div>
             )}
@@ -187,8 +185,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </form>
         </div>
       </div>
-      <p className="mt-6 text-center text-xs text-white/80 font-medium shadow-sm flex items-center gap-1">
-        <Database className="w-3 h-3" /> Turso DB Connected • © 2024 AA Corporation
+      <p className="mt-6 text-center text-xs text-white/80 font-medium shadow-sm">
+        © 2024 AA Corporation. Interior Solutions Since 1989.
       </p>
     </div>
   );

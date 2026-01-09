@@ -9,7 +9,8 @@ import {
     BrainCircuit, ClipboardList, Send, Paperclip, X, Loader2,
     FileWarning, MessageSquare, Plus
 } from 'lucide-react';
-import { saveInspectionToSheet, fetchInspectionById, fetchNcrById, saveNcr } from '../services/apiService';
+import { saveInspectionToSheet, fetchInspectionById, fetchNcrById } from '../services/apiService';
+import { saveNcrMapped } from '../services/tursoService';
 import { ImageEditorModal } from './ImageEditorModal';
 
 interface NCRDetailProps {
@@ -58,8 +59,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       
       const updatedNcrObj = { ...ncr, ...updates };
       try {
-          // Sử dụng hàm saveNcr từ apiService
-          await saveNcr(updatedNcrObj);
+          // Sử dụng hàm saveNcrMapped từ tursoService (qua API layer nếu cần, ở đây gọi trực tiếp cho nhanh)
+          await saveNcrMapped(ncr.inspection_id, updatedNcrObj, user.name);
           setNcr(updatedNcrObj);
           if (onUpdate) onUpdate();
       } catch (e) {

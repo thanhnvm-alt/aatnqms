@@ -1,3 +1,4 @@
+
 import { NextRequest } from 'next/server';
 import { plansService } from '@/services/plansService';
 import { PlanSchema, PaginationSchema } from '@/lib/validations';
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
   const requestId = generateRequestId();
   try {
     // Xác thực cơ bản
-    const user = await getAuthUser(request);
+    const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
     const { searchParams } = new URL(request.url);
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
   try {
-    const user = await getAuthUser(request);
+    const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
     
     // Chỉ Admin và Manager được phép tạo kế hoạch

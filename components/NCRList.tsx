@@ -30,7 +30,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
     setIsLoading(true);
     try {
         const result = await fetchNcrs({ status: statusFilter });
-        setNcrs(result);
+        setNcrs(result.items);
     } catch (e) {
         console.error("Load NCRs failed:", e);
     } finally {

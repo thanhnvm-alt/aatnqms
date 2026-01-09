@@ -1,4 +1,5 @@
 
+
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
@@ -73,18 +74,17 @@ export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   { id: 'SITE', label: 'Site - Công trình', group: 'QA' },
   { id: 'PROJECTS', label: 'Danh Sách Dự Án', group: 'PM' },
   { id: 'OEM', label: 'Khách OEM', group: 'OEM' },
-  { id: 'DEFECTS', label: 'Theo dõi lỗi', group: 'QC' },
 ];
 
 export const MOCK_USERS: User[] = [
   {
     id: '1',
     username: 'admin',
-    password: '123456',
+    password: '123',
     name: 'Administrator',
     role: 'ADMIN',
     avatar: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff',
-    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D', 'DEFECTS'],
+    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'],
     msnv: 'MS-001',
     position: 'Giám đốc hệ thống',
     workLocation: 'Trụ sở chính',
@@ -95,11 +95,11 @@ export const MOCK_USERS: User[] = [
   {
     id: '2',
     username: 'manager',
-    password: '123456',
+    password: '123',
     name: 'Trần Văn Quản Lý',
     role: 'MANAGER',
     avatar: 'https://ui-avatars.com/api/?name=Manager&background=6366f1&color=fff',
-    allowedModules: ['IQC', 'PQC', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D', 'DEFECTS'],
+    allowedModules: ['IQC', 'PQC', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
     msnv: 'MS-002',
     position: 'Quản lý QC',
     workLocation: 'Nhà máy 1',
@@ -110,11 +110,11 @@ export const MOCK_USERS: User[] = [
   {
     id: '3',
     username: 'qc',
-    password: '123456',
+    password: '123',
     name: 'Nguyễn Văn QC',
     role: 'QC',
     avatar: 'https://ui-avatars.com/api/?name=QC&background=10b981&color=fff',
-    allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'FSR', 'DEFECTS'],
+    allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'FSR'],
     msnv: 'MS-003',
     position: 'Nhân viên QC',
     workLocation: 'Nhà máy 1',

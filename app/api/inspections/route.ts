@@ -1,5 +1,6 @@
+
 import { NextRequest } from 'next/server';
-import { saveInspection } from '@/lib/db/queries';
+import { saveInspection } from '@/services/tursoService';
 import { buildSuccessResponse, buildErrorResponse } from '@/lib/api-response';
 import { getAuthUser } from '@/lib/auth';
 
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
+    const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
     const body = await request.json();

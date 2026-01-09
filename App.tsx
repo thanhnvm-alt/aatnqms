@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect } from './types';
 import { 
@@ -96,13 +95,9 @@ const App = () => {
             const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
             if (localData) {
                 try {
-                    const parsedData = JSON.parse(localData);
-                    // Check if new structure { user, access_token } or old structure { ...user }
-                    const userObj = parsedData.user || parsedData;
-                    if (userObj && userObj.username) {
-                        setUser(userObj);
-                        setView(userObj.role === 'QC' ? 'LIST' : 'DASHBOARD');
-                    }
+                    const parsedUser = JSON.parse(localData);
+                    setUser(parsedUser);
+                    setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
                 } catch (e) {}
             }
             await Promise.allSettled([checkConn(), loadUsers(), loadWorkshops(), loadTemplates()]);
@@ -132,19 +127,11 @@ const App = () => {
     } catch (e) {}
   };
 
-  const handleLogin = (authData: { user: User, access_token: string }, remember: boolean) => {
-      const { user: loggedInUser, access_token } = authData;
+  const handleLogin = (loggedInUser: User, remember: boolean) => {
       const { password, ...safeUser } = loggedInUser;
-      
       setUser(safeUser as User); 
-      
       const storage = remember ? localStorage : sessionStorage;
-      // Save full auth object needed for API calls
-      storage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-          user: safeUser,
-          access_token: access_token
-      }));
-      
+      storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
       setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
   };
 

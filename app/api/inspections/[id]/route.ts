@@ -1,3 +1,4 @@
+
 import { NextRequest } from 'next/server';
 import { turso } from '@/services/tursoConfig';
 import { buildSuccessResponse, buildErrorResponse } from '@/lib/api-response';
@@ -9,7 +10,7 @@ interface RouteParams {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const user = await getAuthUser(request);
+    const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
     const result = await turso.execute({
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const user = await getAuthUser(request);
+    const user = getAuthUser(request);
     if (!user) return buildErrorResponse('Unauthorized', 'UNAUTHORIZED', null, 401);
 
     const { data } = await request.json();
@@ -76,7 +77,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-    const user = await getAuthUser(request);
+    const user = getAuthUser(request);
     if (!user || (user.role !== 'ADMIN' && user.role !== 'MANAGER')) {
         return buildErrorResponse('Chỉ Quản lý mới có quyền xóa dữ liệu kiểm tra', 'FORBIDDEN', null, 403);
     }
