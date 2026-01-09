@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { NCR, User } from '../types';
 import { fetchNcrs, fetchNcrById } from '../services/apiService';

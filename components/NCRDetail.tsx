@@ -1,17 +1,16 @@
 
-import React, { useState, useRef } from 'react';
-import { NCR, User, NCRComment } from '../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { NCR, User, DefectLibraryItem } from '../types';
 import { 
-    ArrowLeft, Calendar, User as UserIcon, Tag, 
-    AlertTriangle, ShieldCheck, Hammer, Box, 
-    FileText, CheckCircle2, Clock, Camera, 
-    Maximize2, ExternalLink, MapPin, Hash,
-    BrainCircuit, ClipboardList, Send, Paperclip, X, Loader2,
-    FileWarning, MessageSquare, Plus
+    ArrowLeft, Calendar, User as UserIcon, AlertTriangle, 
+    CheckCircle2, Clock, MessageSquare, Camera, Paperclip, 
+    Send, Loader2, BrainCircuit, Maximize2, Plus, 
+    X, FileText, Image as ImageIcon, Save, Sparkles, BookOpen,
+    ChevronDown, Filter, RefreshCw
 } from 'lucide-react';
-import { saveInspectionToSheet, fetchInspectionById, fetchNcrById } from '../services/apiService';
-import { saveNcrMapped } from '../services/tursoService';
 import { ImageEditorModal } from './ImageEditorModal';
+import { fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
+import { generateNCRSuggestions } from '../services/geminiService';
 
 interface NCRDetailProps {
   ncr: NCR;
@@ -21,7 +20,7 @@ interface NCRDetailProps {
   onUpdate?: () => void;
 }
 
-const resizeImage = (base64Str: string, maxWidth = 1200): Promise<string> => {
+const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -42,66 +41,171 @@ const resizeImage = (base64Str: string, maxWidth = 1200): Promise<string> => {
 
 export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onBack, onViewInspection, onUpdate }) => {
   const [ncr, setNcr] = useState<NCR>(initialNcr);
-  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const [formData, setFormData] = useState<NCR>(initialNcr);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  
+  // Comment State
   const [newComment, setNewComment] = useState('');
-  const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
+  
+  // Library State
+  const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
+  const [selectedStage, setSelectedStage] = useState<string>('');
+  const [showLibrary, setShowLibrary] = useState(false);
+
+  // UI State
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+
   const commentFileRef = useRef<HTMLInputElement>(null);
+  const commentCameraRef = useRef<HTMLInputElement>(null);
+  const beforeFileRef = useRef<HTMLInputElement>(null);
+  const beforeCameraRef = useRef<HTMLInputElement>(null);
   const afterFileRef = useRef<HTMLInputElement>(null);
+  const afterCameraRef = useRef<HTMLInputElement>(null);
 
   const isLocked = ncr.status === 'CLOSED';
 
-  /**
-   * Lưu thay đổi của NCR trực tiếp vào bảng ncrs.
-   */
-  const updateNCRDirectly = async (updates: Partial<NCR>) => {
-      if (!ncr.id || !ncr.inspection_id) return;
-      
-      const updatedNcrObj = { ...ncr, ...updates };
+  // Load Defect Library
+  useEffect(() => {
+      const loadLib = async () => {
+          try {
+              const data = await fetchDefectLibrary();
+              setLibrary(data);
+          } catch (e) {
+              console.error("Failed to load defect library", e);
+          }
+      };
+      loadLib();
+  }, []);
+
+  const stages = useMemo(() => {
+      const unique = new Set(library.map(item => item.stage || 'Chung'));
+      return Array.from(unique).sort();
+  }, [library]);
+
+  const filteredDefects = useMemo(() => {
+      if (!selectedStage) return library;
+      return library.filter(item => item.stage === selectedStage);
+  }, [library, selectedStage]);
+
+  // Sync formData when initialNcr changes
+  useEffect(() => {
+      setNcr(initialNcr);
+      setFormData(initialNcr);
+  }, [initialNcr]);
+
+  const handleApplyDefect = (defect: DefectLibraryItem) => {
+      if (window.confirm("Áp dụng thông tin lỗi này? Mô tả và mức độ sẽ được cập nhật.")) {
+          setFormData(prev => ({
+              ...prev,
+              issueDescription: defect.description,
+              defect_code: defect.code,
+              severity: defect.severity as any,
+              solution: defect.suggestedAction || prev.solution
+          }));
+          setIsEditing(true); // Auto enable edit mode to show changes
+          setShowLibrary(false);
+      }
+  };
+
+  const handleRunAI = async () => {
+      if (!formData.issueDescription) return;
+      setIsAiLoading(true);
       try {
-          // Sử dụng hàm saveNcrMapped từ tursoService (qua API layer nếu cần, ở đây gọi trực tiếp cho nhanh)
-          await saveNcrMapped(ncr.inspection_id, updatedNcrObj, user.name);
-          setNcr(updatedNcrObj);
+          const result = await generateNCRSuggestions(formData.issueDescription, 'General');
+          setFormData(prev => ({
+              ...prev,
+              rootCause: result.rootCause,
+              solution: result.solution
+          }));
+          setIsEditing(true); // Switch to edit mode to review AI results
+      } catch (error) {
+          alert("Lỗi khi gọi AI. Vui lòng thử lại.");
+      } finally {
+          setIsAiLoading(false);
+      }
+  };
+
+  const handleSaveChanges = async () => {
+      setIsSaving(true);
+      try {
+          await saveNcrMapped(formData.inspection_id || '', formData, user.name);
+          setNcr(formData);
+          setIsEditing(false);
           if (onUpdate) onUpdate();
-      } catch (e) {
-          console.error("Update NCR direct failed:", e);
-          alert("Lỗi khi cập nhật NCR trực tiếp.");
+          alert("Đã lưu cập nhật NCR thành công!");
+      } catch (error) {
+          console.error(error);
+          alert("Lỗi khi lưu NCR.");
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
+  const handleAddImage = async (e: React.ChangeEvent<HTMLInputElement>, type: 'BEFORE' | 'AFTER') => {
+      const files = e.target.files;
+      if (!files) return;
+      
+      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+          const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(f);
+          });
+          return resizeImage(base64);
+      }));
+
+      setFormData(prev => {
+          const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+          return { ...prev, [field]: [...(prev[field] || []), ...processed] };
+      });
+      setIsEditing(true); // Mark as dirty
+      e.target.value = '';
+  };
+
+  const removeImage = (index: number, type: 'BEFORE' | 'AFTER') => {
+      if (!isEditing && isLocked) return;
+      if (window.confirm("Xóa ảnh này?")) {
+          setFormData(prev => {
+              const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+              const currentList = prev[field] || [];
+              return { ...prev, [field]: currentList.filter((_, i) => i !== index) };
+          });
+          setIsEditing(true);
       }
   };
 
   const handlePostComment = async () => {
-    if (!newComment.trim() && commentAttachments.length === 0) return;
-    setIsSubmitting(true);
-    const commentObj: NCRComment = {
-        id: `cmt_${Date.now()}`,
-        userId: user.id,
-        userName: user.name,
-        userAvatar: user.avatar,
-        content: newComment.trim(),
-        createdAt: new Date().toISOString(),
-        attachments: commentAttachments
-    };
-    try {
-        await updateNCRDirectly({ comments: [...(ncr.comments || []), commentObj] });
-        setNewComment('');
-        setCommentAttachments([]);
-    } catch (err) { alert("Lỗi khi gửi bình luận."); } finally { setIsSubmitting(false); }
-  };
+      if (!newComment.trim() && commentAttachments.length === 0) return;
+      setIsSubmitting(true);
+      
+      // Simulate comment structure since we don't have a separate comment table in this scope
+      const newCommentObj = {
+          id: Date.now().toString(),
+          userId: user.id,
+          userName: user.name,
+          userAvatar: user.avatar,
+          content: newComment,
+          createdAt: new Date().toISOString(),
+          attachments: commentAttachments
+      };
 
-  const handleAddAfterImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-      const processed = await Promise.all((Array.from(files) as File[]).map((file: File) => new Promise<string>((res) => {
-          const r = new FileReader(); 
-          r.onload = async () => res(await resizeImage(r.result as string)); 
-          r.readAsDataURL(file);
-      })));
-      await updateNCRDirectly({ imagesAfter: [...(ncr.imagesAfter || []), ...processed] });
-  };
+      const updatedComments = [...(formData.comments || []), newCommentObj];
+      const updatedNcr = { ...formData, comments: updatedComments };
 
-  const handleUpdateStatus = async (newStatus: string) => {
-      if (window.confirm(`Xác nhận chuyển trạng thái sang ${newStatus}?`)) {
-          await updateNCRDirectly({ status: newStatus });
+      try {
+          await saveNcrMapped(ncr.inspection_id || '', updatedNcr, user.name);
+          setFormData(updatedNcr);
+          setNcr(updatedNcr); // Update view state immediately
+          setNewComment('');
+          setCommentAttachments([]);
+      } catch (e) {
+          alert("Lỗi khi gửi bình luận.");
+      } finally {
+          setIsSubmitting(false);
       }
   };
 
@@ -110,132 +214,289 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      <input type="file" ref={afterFileRef} className="hidden" multiple accept="image/*" onChange={handleAddAfterImage} />
-      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={async (e) => {
-           const files = e.target.files; if(!files) return;
-           const processed = await Promise.all(Array.from(files).map(async (f: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(f);}))));
-           setCommentAttachments(prev => [...prev, ...processed]);
-      }} />
-
-      {/* Header Toolbar */}
-      <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 z-40 shadow-sm shrink-0">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-slate-600 font-bold text-sm px-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors active:scale-95">
-            <ArrowLeft className="w-5 h-5"/> Quay lại danh sách
-        </button>
-        <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 mr-2">
-                {ncr.status !== 'CLOSED' ? (
-                    <button onClick={() => handleUpdateStatus('CLOSED')} className="bg-green-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-green-100 active:scale-95">ĐÓNG NCR</button>
-                ) : (
-                    <div className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase">ĐÃ HOÀN TẤT</div>
-                )}
-            </div>
-            <div className="h-6 w-px bg-slate-200 mx-1"></div>
-            {ncr.inspection_id && (
-                <button onClick={() => onViewInspection(ncr.inspection_id!)} className="bg-blue-600 text-white px-4 py-1.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95">
-                    <FileText className="w-4 h-4" /> Phiếu QC Gốc
-                </button>
-            )}
-        </div>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
+      <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-600 font-bold text-sm px-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors active:scale-95">
+                  <ArrowLeft className="w-5 h-5"/>
+              </button>
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest hidden md:inline">Chi tiết NCR</span>
+          </div>
+          <div className="flex gap-2">
+              {isEditing ? (
+                  <>
+                    <button onClick={() => { setFormData(ncr); setIsEditing(false); }} className="px-4 py-2 text-slate-500 font-bold text-xs hover:bg-slate-100 rounded-xl">Hủy</button>
+                    <button onClick={handleSaveChanges} disabled={isSaving} className="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-lg active:scale-95">
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Lưu
+                    </button>
+                  </>
+              ) : (
+                  !isLocked && (
+                      <button onClick={() => setIsEditing(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-lg active:scale-95">
+                          <AlertTriangle className="w-4 h-4"/> Review / Sửa
+                      </button>
+                  )
+              )}
+              <button onClick={() => onViewInspection(ncr.inspection_id || '')} className="text-blue-600 bg-blue-50 px-3 py-2 rounded-xl hover:bg-blue-100 active:scale-95">
+                  <FileText className="w-5 h-5"/>
+              </button>
+          </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar pb-24">
+        <div className="max-w-5xl mx-auto space-y-6">
             
-            {/* Title Block */}
-            <div className="bg-white rounded-[2.5rem] p-6 md:p-10 border border-slate-200 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
-                    <AlertTriangle className="w-48 h-48" />
-                </div>
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-                    <div className="w-20 h-20 bg-red-600 text-white rounded-3xl flex items-center justify-center shadow-xl shadow-red-200 shrink-0">
-                        <ShieldCheck className="w-10 h-10" />
+            {/* Header Status Card */}
+            <div className={`rounded-[2rem] p-6 border shadow-sm relative overflow-hidden transition-colors ${
+                formData.status === 'CLOSED' ? 'bg-green-50 border-green-100' : 'bg-white border-slate-200'
+            }`}>
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                    <div className="flex-1 space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest">NCR: {formData.id}</span>
+                            
+                            {isEditing ? (
+                                <select 
+                                    value={formData.severity}
+                                    onChange={e => setFormData({...formData, severity: e.target.value as any})}
+                                    className="px-2 py-0.5 rounded text-[10px] font-black uppercase border tracking-widest bg-white outline-none focus:ring-2 ring-blue-200"
+                                >
+                                    <option value="MINOR">MINOR</option>
+                                    <option value="MAJOR">MAJOR</option>
+                                    <option value="CRITICAL">CRITICAL</option>
+                                </select>
+                            ) : (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border tracking-widest ${
+                                    formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-600' :
+                                    formData.severity === 'MAJOR' ? 'bg-orange-500 text-white border-orange-500' :
+                                    'bg-blue-50 text-blue-600 border-blue-100'
+                                }`}>{formData.severity}</span>
+                            )}
+
+                            {isEditing ? (
+                                <select 
+                                    value={formData.status}
+                                    onChange={e => setFormData({...formData, status: e.target.value})}
+                                    className="px-2 py-0.5 rounded text-[10px] font-black uppercase border tracking-widest bg-white outline-none focus:ring-2 ring-blue-200"
+                                >
+                                    <option value="OPEN">OPEN</option>
+                                    <option value="IN_PROGRESS">IN PROGRESS</option>
+                                    <option value="CLOSED">CLOSED</option>
+                                </select>
+                            ) : (
+                                <span className="bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest">{formData.status}</span>
+                            )}
+                        </div>
+
+                        <div>
+                            {isEditing ? (
+                                <textarea 
+                                    value={formData.issueDescription}
+                                    onChange={e => setFormData({...formData, issueDescription: e.target.value})}
+                                    className="w-full text-xl md:text-2xl font-black text-slate-800 bg-slate-50 border-b-2 border-blue-500 focus:outline-none resize-none p-2 rounded-t-lg"
+                                    rows={2}
+                                />
+                            ) : (
+                                <h1 className="text-xl md:text-2xl font-black text-slate-800 uppercase leading-tight tracking-tight">
+                                    {formData.issueDescription}
+                                </h1>
+                            )}
+                        </div>
+
+                        {/* Defect Library Selector (Only visible in Edit Mode) */}
+                        {isEditing && (
+                            <div className="bg-blue-50/50 rounded-xl p-3 border border-blue-100 space-y-2">
+                                <div 
+                                    className="flex justify-between items-center cursor-pointer" 
+                                    onClick={() => setShowLibrary(!showLibrary)}
+                                >
+                                    <span className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-2">
+                                        <BookOpen className="w-3 h-3" /> Chuẩn hóa từ thư viện lỗi
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 text-blue-400 transition-transform ${showLibrary ? 'rotate-180' : ''}`} />
+                                </div>
+                                
+                                {showLibrary && (
+                                    <div className="animate-in slide-in-from-top-2 pt-2 space-y-2">
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Filter className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                                                <select 
+                                                    value={selectedStage} 
+                                                    onChange={e => setSelectedStage(e.target.value)}
+                                                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-400 bg-white"
+                                                >
+                                                    <option value="">-- Lọc theo công đoạn --</option>
+                                                    {stages.map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-white no-scrollbar">
+                                            {filteredDefects.map(def => (
+                                                <div 
+                                                    key={def.id} 
+                                                    onClick={() => handleApplyDefect(def)}
+                                                    className="p-2 border-b border-slate-50 hover:bg-blue-50 cursor-pointer flex justify-between items-center group"
+                                                >
+                                                    <div className="flex-1">
+                                                        <p className="text-xs font-bold text-slate-700">{def.name || def.description}</p>
+                                                        <span className="text-[9px] text-slate-400 font-mono">{def.code}</span>
+                                                    </div>
+                                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase ${
+                                                        def.severity === 'CRITICAL' ? 'text-red-600 border-red-100 bg-red-50' : 
+                                                        'text-slate-500 border-slate-100'
+                                                    }`}>{def.severity}</span>
+                                                </div>
+                                            ))}
+                                            {filteredDefects.length === 0 && <div className="p-3 text-center text-xs text-slate-400 italic">Không tìm thấy lỗi phù hợp</div>}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-4 text-xs font-bold text-slate-500 pt-2">
+                            <div className="flex items-center gap-1.5">
+                                <UserIcon className="w-4 h-4"/> 
+                                {isEditing ? (
+                                    <input 
+                                        value={formData.responsiblePerson}
+                                        onChange={e => setFormData({...formData, responsiblePerson: e.target.value})}
+                                        className="bg-slate-50 border-b border-slate-300 px-1 focus:outline-none focus:border-blue-500 w-32"
+                                        placeholder="Người phụ trách"
+                                    />
+                                ) : (
+                                    formData.responsiblePerson || 'Chưa phân công'
+                                )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <Calendar className="w-4 h-4"/> 
+                                {isEditing ? (
+                                    <input 
+                                        type="date"
+                                        value={formData.deadline}
+                                        onChange={e => setFormData({...formData, deadline: e.target.value})}
+                                        className="bg-slate-50 border-b border-slate-300 px-1 focus:outline-none focus:border-blue-500"
+                                    />
+                                ) : (
+                                    `Deadline: ${formData.deadline || 'ASAP'}`
+                                )}
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-hidden space-y-3">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black bg-slate-900 text-white px-2 py-0.5 rounded-lg uppercase tracking-widest">NCR: {ncr.id}</span>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest ${ncr.severity === 'CRITICAL' ? 'bg-red-600 text-white' : 'bg-orange-500 text-white'}`}>{ncr.severity || 'MINOR'}</span>
-                        </div>
-                        <h1 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight uppercase tracking-tighter">{ncr.issueDescription}</h1>
-                        <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            <div className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-blue-500" /> {ncr.createdDate}</div>
-                            <div className="flex items-center gap-1.5"><UserIcon className="w-4 h-4 text-indigo-500" /> {ncr.responsiblePerson || '---'}</div>
-                        </div>
+                    
+                    <div className="shrink-0 flex flex-col items-center gap-2">
+                        {formData.status === 'CLOSED' ? (
+                            <div className="w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-200">
+                                <CheckCircle2 className="w-8 h-8" />
+                            </div>
+                        ) : (
+                            <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center border-4 border-white shadow-lg animate-pulse">
+                                <AlertTriangle className="w-8 h-8" />
+                            </div>
+                        )}
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{formData.status}</span>
                     </div>
                 </div>
             </div>
 
-            {/* Evidence & Analysis Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Images */}
-                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
-                        <Camera className="w-5 h-5 text-red-600" />
-                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Bằng chứng lỗi & Khắc phục</h3>
-                    </div>
-                    <div className="p-6 space-y-6">
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-red-500 uppercase flex items-center gap-2"><FileWarning className="w-4 h-4"/> TRƯỚC XỬ LÝ (EVIDENCE)</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                {ncr.imagesBefore?.map((img, idx) => (
-                                    <div key={idx} onClick={() => openGallery(ncr.imagesBefore, idx)} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 cursor-zoom-in group relative">
-                                        <img src={img} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
-                                    </div>
-                                ))}
-                                {(!ncr.imagesBefore || ncr.imagesBefore.length === 0) && <div className="col-span-2 py-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black uppercase">Trống</div>}
-                            </div>
-                        </div>
-
-                        <div className="h-px bg-slate-100"></div>
-
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-black text-green-600 uppercase flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> SAU XỬ LÝ (RESOLUTION)</label>
-                                {!isLocked && <button onClick={() => afterFileRef.current?.click()} className="text-blue-600 p-1 hover:bg-blue-50 rounded-full transition-colors"><Plus className="w-5 h-5"/></button>}
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                {ncr.imagesAfter?.map((img, idx) => (
-                                    <div key={idx} onClick={() => openGallery(ncr.imagesAfter, idx)} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 cursor-zoom-in group relative">
-                                        <img src={img} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                                        <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
-                                    </div>
-                                ))}
-                                {(!ncr.imagesAfter || ncr.imagesAfter.length === 0) && <div className="col-span-2 py-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black uppercase">Chưa có ảnh khắc phục</div>}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Analysis */}
-                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+            {/* Analysis Section with AI */}
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col relative">
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-3">
                         <BrainCircuit className="w-5 h-5 text-purple-600" />
                         <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Phân tích Kỹ thuật</h3>
                     </div>
-                    <div className="p-6 space-y-8">
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (Root Cause)</label>
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm font-bold text-slate-700 italic leading-relaxed">
-                                "{ncr.rootCause || 'Đang chờ phân tích...'}"
+                    {isEditing && (
+                        <button 
+                            onClick={handleRunAI} 
+                            disabled={isAiLoading || !formData.issueDescription}
+                            className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 shadow-lg shadow-purple-200 hover:bg-purple-700 active:scale-95 disabled:opacity-50 transition-all"
+                        >
+                            {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3" />}
+                            AI Phân tích
+                        </button>
+                    )}
+                </div>
+                <div className="p-6 space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (Root Cause)</label>
+                        {isEditing ? (
+                            <textarea 
+                                value={formData.rootCause}
+                                onChange={e => setFormData({...formData, rootCause: e.target.value})}
+                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none"
+                                rows={3}
+                                placeholder="Nhập nguyên nhân..."
+                            />
+                        ) : (
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm font-bold text-slate-700 italic leading-relaxed whitespace-pre-wrap">
+                                {formData.rootCause || 'Đang chờ phân tích...'}
                             </div>
-                        </div>
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Biện pháp xử lý (Action Plan)</label>
-                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 text-sm font-bold text-blue-900 leading-relaxed">
-                                {ncr.solution || 'Chưa cập nhật biện pháp khắc phục.'}
+                        )}
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Biện pháp xử lý (Action Plan)</label>
+                        {isEditing ? (
+                            <textarea 
+                                value={formData.solution}
+                                onChange={e => setFormData({...formData, solution: e.target.value})}
+                                className="w-full p-4 bg-blue-50 rounded-2xl border border-blue-100 text-sm font-medium focus:ring-2 focus:ring-blue-200 outline-none resize-none text-blue-900"
+                                rows={3}
+                                placeholder="Nhập biện pháp khắc phục..."
+                            />
+                        ) : (
+                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 text-sm font-bold text-blue-900 leading-relaxed whitespace-pre-wrap">
+                                {formData.solution || 'Chưa cập nhật biện pháp khắc phục.'}
                             </div>
-                        </div>
-                        <div className="pt-4 grid grid-cols-1 gap-4">
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                                <Clock className="w-5 h-5 text-orange-500" />
-                                <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Thời hạn hoàn tất</p>
-                                    <p className="text-sm font-black text-slate-800">{ncr.deadline || 'ASAP'}</p>
-                                </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Images Grid (Before & After) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Before Images */}
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-red-50/30">
+                        <label className="text-[10px] font-black text-red-500 uppercase flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> TRƯỚC XỬ LÝ (ISSUE)</label>
+                        {isEditing && (
+                            <div className="flex gap-1">
+                                <button onClick={() => beforeCameraRef.current?.click()} className="p-1.5 bg-white text-slate-500 hover:text-red-500 rounded-lg border border-slate-200 shadow-sm active:scale-90"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => beforeFileRef.current?.click()} className="p-1.5 bg-white text-slate-500 hover:text-red-500 rounded-lg border border-slate-200 shadow-sm active:scale-90"><Plus className="w-4 h-4"/></button>
                             </div>
-                        </div>
+                        )}
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                        {formData.imagesBefore?.map((img, idx) => (
+                            <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-slate-100 relative group">
+                                <img src={img} className="w-full h-full object-cover" onClick={() => openGallery(formData.imagesBefore!, idx)} />
+                                {isEditing && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>}
+                            </div>
+                        ))}
+                        {(!formData.imagesBefore || formData.imagesBefore.length === 0) && <div className="col-span-2 py-8 text-center text-xs text-slate-300 font-bold border-2 border-dashed border-slate-100 rounded-xl">Chưa có ảnh lỗi</div>}
+                    </div>
+                </div>
+
+                {/* After Images */}
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-green-50/30">
+                        <label className="text-[10px] font-black text-green-600 uppercase flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> SAU XỬ LÝ (FIX)</label>
+                        {(!isLocked || isEditing) && (
+                            <div className="flex gap-1">
+                                <button onClick={() => afterCameraRef.current?.click()} className="p-1.5 bg-white text-slate-500 hover:text-green-600 rounded-lg border border-slate-200 shadow-sm active:scale-90"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => afterFileRef.current?.click()} className="p-1.5 bg-white text-slate-500 hover:text-green-600 rounded-lg border border-slate-200 shadow-sm active:scale-90"><Plus className="w-4 h-4"/></button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                        {formData.imagesAfter?.map((img, idx) => (
+                            <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-slate-100 relative group">
+                                <img src={img} className="w-full h-full object-cover" onClick={() => openGallery(formData.imagesAfter!, idx)} />
+                                {(!isLocked || isEditing) && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>}
+                            </div>
+                        ))}
+                        {(!formData.imagesAfter || formData.imagesAfter.length === 0) && <div className="col-span-2 py-8 text-center text-xs text-slate-300 font-bold border-2 border-dashed border-slate-100 rounded-xl">Chưa có ảnh khắc phục</div>}
                     </div>
                 </div>
             </div>
@@ -247,7 +508,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận & Theo dõi xử lý</h3>
                 </div>
                 <div className="p-6 space-y-6">
-                    {ncr.comments?.map((comment) => (
+                    {formData.comments?.map((comment) => (
                         <div key={comment.id} className="flex gap-4">
                             <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-2xl border border-slate-200 shrink-0" alt="" />
                             <div className="flex-1 space-y-1">
@@ -266,7 +527,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             </div>
                         </div>
                     ))}
-                    {(!ncr.comments || ncr.comments.length === 0) && <p className="text-center text-xs text-slate-400 py-6 italic font-medium">Chưa có bình luận trao đổi cho phiếu này.</p>}
+                    {(!formData.comments || formData.comments.length === 0) && <p className="text-center text-xs text-slate-400 py-6 italic font-medium">Chưa có bình luận trao đổi cho phiếu này.</p>}
                 </div>
 
                 <div className="p-4 border-t border-slate-100 bg-slate-50">
@@ -276,15 +537,16 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                 value={newComment}
                                 onChange={(e) => setNewComment(e.target.value)}
                                 placeholder="Nhập bình luận hoặc cập nhật tiến độ..."
-                                className="w-full pl-4 pr-12 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-sm"
+                                className="w-full pl-4 pr-24 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-sm"
                                 rows={2}
                             />
-                            <div className="absolute right-3 bottom-3 flex items-center gap-1">
-                                <button onClick={() => commentFileRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 rounded-lg"><Paperclip className="w-4 h-4" /></button>
+                            <div className="absolute right-3 bottom-2.5 flex items-center gap-1">
+                                <button onClick={() => commentCameraRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg active:scale-90 transition-all"><Camera className="w-4 h-4" /></button>
+                                <button onClick={() => commentFileRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg active:scale-90 transition-all"><Paperclip className="w-4 h-4" /></button>
                                 <button 
                                     onClick={handlePostComment}
                                     disabled={isSubmitting || (!newComment.trim() && commentAttachments.length === 0)}
-                                    className="p-2 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 disabled:opacity-50"
+                                    className="p-2 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 disabled:opacity-50 transition-all"
                                 >
                                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}
                                 </button>
@@ -298,6 +560,23 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       </div>
 
       {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
+      
+      <input type="file" ref={beforeFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
+      <input type="file" ref={beforeCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
+      
+      <input type="file" ref={afterFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
+      <input type="file" ref={afterCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
+
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={async (e) => {
+           const files = e.target.files; if(!files) return;
+           const processed = await Promise.all(Array.from(files).map(async (f: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(f);}))));
+           setCommentAttachments(prev => [...prev, ...processed]);
+      }} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={async (e) => {
+           const files = e.target.files; if(!files) return;
+           const processed = await Promise.all(Array.from(files).map(async (f: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(f);}))));
+           setCommentAttachments(prev => [...prev, ...processed]);
+      }} />
     </div>
   );
 };

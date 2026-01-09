@@ -117,6 +117,7 @@ export const importInspections = async (inspections: Inspection[]) => {
 export const fetchInspectionById = async (id: string) => await db.getInspectionById(id);
 export const fetchNcrs = async (params: any = {}) => ({ items: await db.getNcrs(params), total: 0 });
 export const fetchNcrById = async (id: string) => await db.getNcrById(id);
+export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => await db.saveNcrMapped(inspection_id, ncr, createdBy);
 export const fetchDefects = async (params: any = {}) => ({ items: await db.getDefects(params), total: 0 });
 
 export const fetchDefectLibrary = async () => await db.getDefectLibrary();

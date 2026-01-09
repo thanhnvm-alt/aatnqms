@@ -1,7 +1,5 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-// Fixed: Added Loader2 to the import list
-import { X, ChevronLeft, ChevronRight, PenTool, Eraser, Save, Maximize2, Move, Undo2, Check, ZoomIn, ZoomOut, Download, Loader2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, PenTool, Undo2, Check, ZoomIn, ZoomOut, Download, Loader2, Move, AlertCircle } from 'lucide-react';
 
 interface ImageEditorModalProps {
   images: string[];
@@ -20,7 +18,14 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // View Mode State
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const startPan = useRef({ x: 0, y: 0 });
+
+  // Edit Mode State
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#ef4444'); 
@@ -28,115 +33,207 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [history, setHistory] = useState<string[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Loading & Error State
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Khởi tạo Canvas khi vào chế độ chỉnh sửa
+  // --- VIEW MODE LOGIC ---
+
+  const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if (isEditing) {
+        if (isLoadingImage || loadError) return;
+        startDrawing(e);
+    } else if (zoom > 1) {
+        setIsPanning(true);
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        startPan.current = { x: clientX - pan.x, y: clientY - pan.y };
+    }
+  };
+
+  const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (isEditing) {
+        if (isLoadingImage || loadError) return;
+        draw(e);
+    } else if (isPanning && zoom > 1) {
+        const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        setPan({
+            x: clientX - startPan.current.x,
+            y: clientY - startPan.current.y
+        });
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (isEditing) {
+        stopDrawing();
+    } else {
+        setIsPanning(false);
+    }
+  };
+
+  // --- EDIT MODE LOGIC ---
+
+  // Initialize Canvas to fit screen
   const initCanvas = useCallback(() => {
     if (isEditing && canvasRef.current) {
+      setLoadError(null);
+      setIsLoadingImage(true);
+
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      
+      if (!ctx) {
+          setLoadError("Không thể khởi tạo bộ xử lý hình ảnh (Canvas Context).");
+          setIsLoadingImage(false);
+          return;
+      }
+
       const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = images[currentIndex];
+      // Crucial for editing external images without tainting canvas
+      img.crossOrigin = "anonymous"; 
       
       img.onload = () => {
-        // Tối ưu kích thước hiển thị theo màn hình
-        const padding = window.innerWidth < 768 ? 20 : 60;
-        const maxWidth = window.innerWidth - padding;
-        const maxHeight = window.innerHeight * 0.75;
-        
-        let width = img.width;
-        let height = img.height;
+        try {
+            // Calculate max available space (Screen - Header - Footer/Controls)
+            // Header ~60px, Footer ~100px, Padding ~20px
+            const maxWidth = window.innerWidth - 20;
+            const maxHeight = window.innerHeight - 180; 
+            
+            let width = img.width;
+            let height = img.height;
 
-        const ratio = Math.min(maxWidth / width, maxHeight / height);
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-        
-        if (ctx) {
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            if (width === 0 || height === 0) {
+                throw new Error("Kích thước ảnh không hợp lệ (0x0).");
+            }
+
+            // Calculate aspect ratio to fit "contain"
+            const scale = Math.min(maxWidth / width, maxHeight / height);
+            
+            // Set canvas size to the calculated visual size for sharp rendering at this screen size
+            // We do NOT use the full original resolution to keep performance high on mobile
+            // and keep file size small (<100KB target)
+            canvas.width = Math.max(width * scale, 100); // Ensure min size
+            canvas.height = Math.max(height * scale, 100);
+            
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            // Draw image to fill the calculated canvas size
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Save initial state
+            setHistory([canvas.toDataURL('image/jpeg', 0.8)]);
+            setIsDirty(false);
+        } catch (err: any) {
+            console.error("Canvas init error:", err);
+            setLoadError("Lỗi xử lý hình ảnh: " + (err.message || "Unknown error"));
+        } finally {
+            setIsLoadingImage(false);
         }
-        
-        setHistory([canvas.toDataURL('image/jpeg', 0.9)]);
-        setIsDirty(false);
       };
+
+      img.onerror = () => {
+          console.error("Image load error for source:", images[currentIndex]);
+          setLoadError("Không thể tải hình ảnh gốc. File có thể bị lỗi hoặc không tồn tại.");
+          setIsLoadingImage(false);
+      };
+
+      img.src = images[currentIndex];
     }
   }, [isEditing, currentIndex, images]);
 
   useEffect(() => {
     initCanvas();
-  }, [initCanvas]);
+    // Reset zoom/pan when entering edit mode
+    if (isEditing) {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+    }
+  }, [initCanvas, isEditing]);
+
+  // Handle Resize to keep canvas responsive
+  useEffect(() => {
+      const handleResize = () => {
+          if (isEditing) initCanvas();
+      };
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+  }, [isEditing, initCanvas]);
 
   const saveToHistory = () => {
-    if (canvasRef.current) {
-      const state = canvasRef.current.toDataURL('image/jpeg', 0.9);
-      setHistory(prev => [...prev, state].slice(-20));
+    if (canvasRef.current && !isLoadingImage && !loadError) {
+      const state = canvasRef.current.toDataURL('image/jpeg', 0.8);
+      setHistory(prev => [...prev, state].slice(-10)); // Limit history to 10 steps
       setIsDirty(true);
     }
   };
 
   const handleUndo = () => {
-    if (history.length > 1 && canvasRef.current) {
+    if (history.length > 1 && canvasRef.current && !isLoadingImage) {
       const newHistory = [...history];
-      newHistory.pop(); 
+      newHistory.pop(); // Remove current state
       const prevState = newHistory[newHistory.length - 1];
       
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       const img = new Image();
-      img.src = prevState;
+      
       img.onload = () => {
         ctx?.clearRect(0, 0, canvas.width, canvas.height);
         ctx?.drawImage(img, 0, 0);
         setHistory(newHistory);
         if (newHistory.length === 1) setIsDirty(false);
       };
+      
+      img.onerror = () => {
+          alert("Không thể hoàn tác (Lỗi tải trạng thái cũ).");
+      };
+
+      img.src = prevState;
     }
   };
 
   const handleCommitEdit = async () => {
-    if (canvasRef.current && onSave && isDirty) {
-      setIsProcessing(true);
-      // Xuất ảnh chất lượng cao
-      const updatedImage = canvasRef.current.toDataURL('image/jpeg', 0.85);
-      await onSave(currentIndex, updatedImage);
-      setIsProcessing(false);
+    if (canvasRef.current && onSave && isDirty && !loadError) {
+      try {
+          setIsProcessing(true);
+          // Export at 0.7 quality for file size optimization
+          const updatedImage = canvasRef.current.toDataURL('image/jpeg', 0.7);
+          
+          if (!updatedImage || updatedImage === 'data:,') {
+              throw new Error("Dữ liệu ảnh trống.");
+          }
+
+          await onSave(currentIndex, updatedImage);
+          setIsEditing(false);
+          setIsDirty(false);
+          setHistory([]);
+      } catch (error: any) {
+          console.error("Save image error:", error);
+          alert("Lỗi khi lưu ảnh: " + (error.message || "Vui lòng thử lại."));
+      } finally {
+          setIsProcessing(false);
+      }
+    } else {
+        // If simply closing without save or no changes
+        setIsEditing(false);
     }
-    setIsEditing(false);
-    setIsDirty(false);
-    setHistory([]);
-  };
-
-  const handleDownload = () => {
-    const link = document.createElement('a');
-    link.download = `AATN_QC_IMG_${currentIndex + 1}.jpg`;
-    link.href = isEditing && canvasRef.current ? canvasRef.current.toDataURL('image/jpeg', 0.9) : images[currentIndex];
-    link.click();
-  };
-
-  const handlePrev = () => {
-    if (isDirty && !window.confirm("Bạn có thay đổi chưa lưu. Tiếp tục chuyển ảnh?")) return;
-    setIsEditing(false);
-    setCurrentIndex(prev => (prev === 0 ? images.length - 1 : prev - 1));
-    setZoom(1);
-  };
-
-  const handleNext = () => {
-    if (isDirty && !window.confirm("Bạn có thay đổi chưa lưu. Tiếp tục chuyển ảnh?")) return;
-    setIsEditing(false);
-    setCurrentIndex(prev => (prev === images.length - 1 ? 0 : prev + 1));
-    setZoom(1);
   };
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isEditing || !canvasRef.current) return;
+    if (!isEditing || !canvasRef.current || isLoadingImage || loadError) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left;
-    const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top;
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -147,17 +244,17 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing || !canvasRef.current) return;
-    if ('touches' in e) {
-      if (e.touches.length > 1) return; // Cho phép pinch-zoom nếu cần, không vẽ
-    }
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left;
-    const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top;
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -170,40 +267,68 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     }
   };
 
+  // --- GENERAL ACTIONS ---
+
+  const handleDownload = () => {
+    try {
+        const link = document.createElement('a');
+        link.download = `AATN_IMG_${Date.now()}.jpg`;
+        link.href = isEditing && canvasRef.current 
+            ? canvasRef.current.toDataURL('image/jpeg', 0.8) 
+            : images[currentIndex];
+        link.click();
+    } catch (e) {
+        alert("Không thể tải ảnh xuống.");
+    }
+  };
+
+  const handlePrev = () => {
+    if (isDirty && !window.confirm("Chưa lưu thay đổi. Chuyển ảnh?")) return;
+    setIsEditing(false);
+    setZoom(1);
+    setPan({x:0, y:0});
+    setLoadError(null);
+    setCurrentIndex(prev => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = () => {
+    if (isDirty && !window.confirm("Chưa lưu thay đổi. Chuyển ảnh?")) return;
+    setIsEditing(false);
+    setZoom(1);
+    setPan({x:0, y:0});
+    setLoadError(null);
+    setCurrentIndex(prev => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
   return (
-    <div className="fixed inset-0 z-[500] bg-black flex flex-col animate-in fade-in duration-200 overflow-hidden">
-      {/* Header Top Bar */}
+    <div className="fixed inset-0 z-[500] bg-black flex flex-col animate-in fade-in duration-200 overflow-hidden touch-none">
+      
+      {/* Header */}
       <div className="p-4 flex items-center justify-between text-white bg-slate-950 border-b border-white/10 shrink-0 z-50">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => {
-              if (isDirty) {
-                if (window.confirm("Bạn có thay đổi chưa lưu. Lưu lại trước khi đóng?")) {
+              if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) {
                   handleCommitEdit();
-                  return;
-                }
+              } else {
+                  onClose();
               }
-              onClose();
             }} 
             className="p-2 hover:bg-white/10 rounded-full transition-colors active:scale-90"
           >
             <X className="w-6 h-6" />
           </button>
           <div className="hidden sm:block">
-            <h3 className="font-black text-sm uppercase tracking-tighter">
-              {isEditing ? 'Đang ghi chú ảnh' : 'Xem chi tiết hình ảnh'}
+            <h3 className="font-bold text-sm uppercase tracking-tighter">
+              {isEditing ? 'Chế độ chỉnh sửa' : 'Xem chi tiết'}
             </h3>
-            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Image {currentIndex + 1} of {images.length}</p>
+            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{currentIndex + 1} / {images.length}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {!isEditing && (
-            <button 
-              onClick={handleDownload}
-              className="p-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all"
-              title="Tải ảnh về máy"
-            >
+            <button onClick={handleDownload} className="p-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl">
               <Download className="w-5 h-5" />
             </button>
           )}
@@ -211,9 +336,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           {!readOnly && !isEditing && (
             <button 
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+              disabled={!!loadError}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <PenTool className="w-4 h-4" /> Vẽ ghi chú
+              <PenTool className="w-4 h-4" /> <span className="hidden sm:inline">Sửa ảnh</span>
             </button>
           )}
 
@@ -221,121 +347,135 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             <div className="flex items-center gap-2">
               <button 
                 onClick={handleUndo}
-                disabled={history.length <= 1}
-                className="p-2.5 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-xl transition-all"
-                title="Hoàn tác"
+                disabled={history.length <= 1 || isLoadingImage}
+                className="p-2.5 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-xl transition-colors"
               >
                 <Undo2 className="w-5 h-5" />
               </button>
               <button 
                 onClick={handleCommitEdit}
-                disabled={isProcessing}
-                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-[11px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50"
+                disabled={isProcessing || isLoadingImage || !!loadError}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-50 transition-all"
               >
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4" />} 
-                Lưu ghi chú
+                <span className="hidden sm:inline">Lưu</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main View Area */}
-      <div className="flex-1 relative flex items-center justify-center p-2 bg-slate-900 overflow-hidden">
+      {/* Main Content */}
+      <div 
+        className="flex-1 relative flex items-center justify-center bg-slate-900 overflow-hidden select-none"
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchMove={handlePointerMove}
+        onTouchEnd={handlePointerUp}
+      >
         {!isEditing ? (
-          <div className="relative w-full h-full flex items-center justify-center">
-            <div className="relative group max-w-full max-h-full">
+          <>
+            <div 
+                className="relative transition-transform duration-75 ease-linear"
+                style={{ 
+                    transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                    cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default',
+                    touchAction: 'none'
+                }}
+            >
               <img 
                 src={images[currentIndex]} 
                 alt="Preview" 
-                className="max-w-full max-h-full object-contain shadow-2xl transition-transform duration-300 pointer-events-none"
-                style={{ transform: `scale(${zoom})` }}
+                className="max-w-full max-h-[80vh] object-contain shadow-2xl transition-opacity duration-300"
+                style={{ maxWidth: '100vw', maxHeight: '80vh' }}
+                onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                    setLoadError("Ảnh không tải được.");
+                }}
               />
-              {/* Zoom Controls Overlay */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-xl px-6 py-2 rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-1 text-white/60 hover:text-white"><ZoomOut className="w-5 h-5"/></button>
-                  <span className="text-[10px] font-black text-white/80 min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
-                  <button onClick={() => setZoom(z => Math.min(4, z + 0.5))} className="p-1 text-white/60 hover:text-white"><ZoomIn className="w-5 h-5"/></button>
-              </div>
+              {loadError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400">
+                      <AlertCircle className="w-12 h-12 mb-2" />
+                      <p className="font-bold bg-black/50 px-4 py-2 rounded-xl">{loadError}</p>
+                  </div>
+              )}
             </div>
-            
+
+            {/* View Mode Controls */}
+            {!loadError && (
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-black/60 backdrop-blur-xl px-6 py-2.5 rounded-full border border-white/10 shadow-2xl z-20">
+                    <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-1 text-white/70 hover:text-white active:scale-90"><ZoomOut className="w-6 h-6"/></button>
+                    <span className="text-xs font-black text-white min-w-[30px] text-center">{Math.round(zoom * 100)}%</span>
+                    <button onClick={() => setZoom(z => Math.min(4, z + 0.5))} className="p-1 text-white/70 hover:text-white active:scale-90"><ZoomIn className="w-6 h-6"/></button>
+                </div>
+            )}
+
+            {/* Navigation */}
             {images.length > 1 && (
               <>
-                <button 
-                  onClick={handlePrev} 
-                  className="absolute left-4 p-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl backdrop-blur-md transition-all active:scale-90 border border-white/5 z-20"
-                >
-                  <ChevronLeft className="w-8 h-8" />
-                </button>
-                <button 
-                  onClick={handleNext} 
-                  className="absolute right-4 p-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl backdrop-blur-md transition-all active:scale-90 border border-white/5 z-20"
-                >
-                  <ChevronRight className="w-8 h-8" />
-                </button>
+                <button onClick={handlePrev} className="absolute left-4 p-3 bg-white/5 hover:bg-white/10 text-white rounded-full backdrop-blur-md z-20"><ChevronLeft className="w-8 h-8" /></button>
+                <button onClick={handleNext} className="absolute right-4 p-3 bg-white/5 hover:bg-white/10 text-white rounded-full backdrop-blur-md z-20"><ChevronRight className="w-8 h-8" /></button>
               </>
             )}
-          </div>
+          </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center p-4 cursor-crosshair touch-none overflow-auto">
-            <canvas
-              ref={canvasRef}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-              className="shadow-2xl bg-white max-w-none origin-center"
-              style={{ touchAction: 'none' }}
-            />
+          // Canvas for Editing (Auto-sized via initCanvas)
+          <div className="relative w-full h-full flex items-center justify-center">
+              {isLoadingImage && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+                      <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-2" />
+                      <p className="text-white text-xs font-bold uppercase tracking-widest">Đang chuẩn bị ảnh...</p>
+                  </div>
+              )}
+              
+              {loadError ? (
+                  <div className="flex flex-col items-center justify-center text-red-400 p-4 text-center">
+                      <AlertCircle className="w-12 h-12 mb-3" />
+                      <p className="font-bold text-sm max-w-xs">{loadError}</p>
+                      <button onClick={() => setIsEditing(false)} className="mt-4 px-4 py-2 bg-white/10 rounded-lg text-white text-xs hover:bg-white/20">Quay lại xem</button>
+                  </div>
+              ) : (
+                  <canvas
+                    ref={canvasRef}
+                    className="shadow-2xl bg-white cursor-crosshair touch-none"
+                  />
+              )}
           </div>
         )}
       </div>
 
-      {/* Editor Controls Bottom Bar */}
-      {isEditing ? (
-        <div className="p-6 bg-slate-950 border-t border-white/10 flex flex-col items-center gap-6 shrink-0 z-50">
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-12 animate-in slide-in-from-bottom-4 duration-300">
-            <div className="flex items-center gap-4">
-              <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.25em]">Màu bút</span>
-              <div className="flex gap-3">
-                {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff'].map(c => (
+      {/* Editor Controls (Colors/Size) */}
+      {isEditing && !loadError && (
+        <div className="p-4 bg-slate-950 border-t border-white/10 flex flex-col items-center gap-4 shrink-0 z-50 pb-8 md:pb-4">
+          <div className="flex items-center justify-between w-full max-w-md gap-4">
+            {/* Colors */}
+            <div className="flex gap-3">
+                {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff', '#000000'].map(c => (
                   <button 
                     key={c}
                     onClick={() => setColor(c)}
-                    className={`w-9 h-9 rounded-full border-4 transition-all ${color === c ? 'scale-110 border-white ring-4 ring-white/10' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${color === c ? 'scale-110 border-white ring-2 ring-white/20' : 'border-transparent opacity-60'}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
-              </div>
             </div>
-            <div className="hidden sm:block h-8 w-px bg-white/10"></div>
-            <div className="flex items-center gap-4">
-              <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.25em]">Cỡ nét</span>
+            
+            <div className="w-px h-8 bg-white/10"></div>
+
+            {/* Brush Size */}
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-[10px] font-black text-white/40 uppercase">Size</span>
               <input 
-                type="range" min="2" max="30" 
+                type="range" min="2" max="20" 
                 value={brushSize} 
                 onChange={e => setBrushSize(parseInt(e.target.value))}
-                className="w-32 h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500 cursor-pointer"
+                className="flex-1 h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500"
               />
-              <span className="text-[11px] font-black text-white/60 w-5">{brushSize}</span>
             </div>
           </div>
-          <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest">Click hoặc Chạm để vẽ trực tiếp lên ảnh</p>
-        </div>
-      ) : (
-        <div className="p-4 bg-slate-950 border-t border-white/5 flex items-center justify-center shrink-0 z-50">
-            <div className="flex gap-2">
-                {images.map((_, i) => (
-                    <div 
-                        key={i} 
-                        onClick={() => setCurrentIndex(i)}
-                        className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${i === currentIndex ? 'w-10 bg-blue-500' : 'w-2.5 bg-white/10 hover:bg-white/30'}`} 
-                    />
-                ))}
-            </div>
         </div>
       )}
     </div>

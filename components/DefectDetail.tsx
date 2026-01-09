@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Defect, User } from '../types';
 import { 
     ArrowLeft, Calendar, User as UserIcon, Tag, 
@@ -8,6 +8,7 @@ import {
     Maximize2, ExternalLink, MapPin, Hash,
     BrainCircuit, ClipboardList
 } from 'lucide-react';
+import { ImageEditorModal } from './ImageEditorModal';
 
 interface DefectDetailProps {
   defect: Defect;
@@ -17,8 +18,10 @@ interface DefectDetailProps {
 }
 
 export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack, onViewInspection }) => {
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
       {/* Header Toolbar */}
       <div className="bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 z-40 shadow-sm shrink-0">
         <button onClick={onBack} className="flex items-center gap-1.5 text-slate-600 font-bold text-sm px-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors active:scale-95">
@@ -72,7 +75,11 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
                     <div className="p-6 grid grid-cols-2 gap-4">
                         {defect.images && defect.images.length > 0 ? (
                             defect.images.map((img, idx) => (
-                                <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in">
+                                <div 
+                                    key={idx} 
+                                    onClick={() => setLightboxState({ images: defect.images, index: idx })}
+                                    className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in"
+                                >
                                     <img src={img} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <Maximize2 className="text-white w-6 h-6" />
@@ -165,6 +172,15 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
 
         </div>
       </div>
+
+      {lightboxState && (
+          <ImageEditorModal 
+              images={lightboxState.images} 
+              initialIndex={lightboxState.index} 
+              onClose={() => setLightboxState(null)} 
+              readOnly={true} 
+          />
+      )}
     </div>
   );
 };

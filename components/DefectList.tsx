@@ -1,17 +1,19 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Defect, User } from '../types';
 import { fetchDefects } from '../services/apiService';
 import { 
     Search, Clock, CheckCircle2, Loader2, Calendar, 
-    ChevronRight, Tag, Hash, Hammer, Camera, AlertCircle
+    ChevronRight, Tag, Hash, Hammer, Camera, AlertCircle, FileText
 } from 'lucide-react';
 
 interface DefectListProps {
   currentUser: User;
   onSelectDefect: (defect: Defect) => void;
+  onViewInspection?: (id: string) => void;
 }
 
-export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDefect }) => {
+export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDefect, onViewInspection }) => {
   const [defects, setDefects] = useState<Defect[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -167,8 +169,18 @@ export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDef
                               <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(defect.status)}`}>
                                   {defect.status}
                               </span>
-                              <div className="flex items-center gap-1 text-orange-600 text-[9px] font-black uppercase tracking-tighter">
-                                  Xem thêm <ChevronRight className="w-3 h-3" />
+                              <div className="flex items-center gap-2">
+                                  {onViewInspection && defect.inspectionId && (
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); onViewInspection(defect.inspectionId); }}
+                                          className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 rounded-lg text-blue-600 text-[9px] font-black uppercase hover:bg-blue-50 hover:border-blue-200 transition-colors shadow-sm"
+                                      >
+                                          <FileText className="w-3 h-3" /> <span className="hidden sm:inline">Phiếu QC</span>
+                                      </button>
+                                  )}
+                                  <div className="flex items-center gap-1 text-orange-600 text-[9px] font-black uppercase tracking-tighter">
+                                      Chi tiết <ChevronRight className="w-3 h-3" />
+                                  </div>
                               </div>
                           </div>
                       </div>

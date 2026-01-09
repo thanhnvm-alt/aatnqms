@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect } from './types';
 import { 
@@ -305,7 +306,7 @@ const App = () => {
             {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
-            {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} />}
+            {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
