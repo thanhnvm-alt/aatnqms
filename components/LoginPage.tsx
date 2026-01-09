@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
+import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { login } from '../services/apiService';
 
 interface LoginPageProps {
-  onLoginSuccess: (user: User, remember: boolean) => void;
-  users: User[]; // Pass the dynamic list of users to verify against
+  onLoginSuccess: (data: { user: User; access_token: string }, remember: boolean) => void;
+  users: User[]; // Kept for interface compatibility but unused for auth logic
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,7 +23,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users }) =
     const savedUsername = localStorage.getItem('aatn_saved_username');
     if (savedUsername) {
       setUsername(savedUsername);
-      setRememberMe(true); // Default to checked if we have a saved username
+      setRememberMe(true); 
     }
   }, []);
 
@@ -31,27 +32,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users }) =
     setError('');
     setIsLoading(true);
 
-    // Simulate network delay
-    setTimeout(() => {
-        const foundUser = users.find(u => u.username === username && u.password === password);
-        
-        if (foundUser) {
-            // Logic lưu username để điền sẵn cho lần sau (kể cả khi đã logout)
-            if (rememberMe) {
-                localStorage.setItem('aatn_saved_username', username);
-            } else {
-                localStorage.removeItem('aatn_saved_username');
-            }
+    try {
+      // Call Real API
+      const authData = await login(username, password);
+      
+      // Save username preference
+      if (rememberMe) {
+          localStorage.setItem('aatn_saved_username', username);
+      } else {
+          localStorage.removeItem('aatn_saved_username');
+      }
 
-            // NEVER pass the password back up, strict security
-            const { password: _, ...safeUser } = foundUser; 
-            // Re-construct user object for the app state without password
-            onLoginSuccess(foundUser as User, rememberMe);
-        } else {
-            setError('Tên đăng nhập hoặc mật khẩu không đúng');
-        }
-        setIsLoading(false);
-    }, 800);
+      onLoginSuccess(authData, rememberMe);
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      let msg = err.message || 'Đăng nhập thất bại.';
+      
+      // Translate common backend errors to Vietnamese
+      if (msg === 'Invalid credentials' || msg.includes('401')) {
+          msg = 'Tên đăng nhập hoặc mật khẩu không đúng';
+      } else if (msg === 'Missing credentials') {
+          msg = 'Vui lòng nhập đầy đủ thông tin';
+      } else if (msg.includes('Network') || msg.includes('Failed to fetch')) {
+          msg = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng.';
+      } else if (msg.includes('500')) {
+          msg = 'Lỗi hệ thống. Vui lòng thử lại sau.';
+      }
+
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -162,8 +173,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users }) =
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-pulse">
-                 <Info className="w-4 h-4 mr-2 flex-shrink-0" />
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-in fade-in slide-in-from-top-1 duration-200">
+                 <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
                  {error}
               </div>
             )}

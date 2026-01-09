@@ -5,7 +5,8 @@ const API_BASE = '/api';
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const getAuthHeaders = () => {
-  const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+  // Check both storages (localStorage for Remember Me, sessionStorage for temporary)
+  const stored = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
   if (!stored) return {};
   try {
       const { access_token } = JSON.parse(stored);
@@ -24,7 +25,7 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     if (!res.ok) {
         if (res.status === 401) {
             console.error("Unauthorized API call - Token invalid or expired");
-            // Optional: Redirect to login
+            // Optional: Redirect to login or dispatch event
         }
         throw new Error(`API Error: ${res.status} ${res.statusText}`);
     }
@@ -34,20 +35,37 @@ const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
 
 // LOGIN
 export const login = async (username: string, password: string) => {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
-    const json = await res.json();
-    if (!json.success) throw new Error(json.message);
-    
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-        access_token: json.data.access_token,
-        user: json.data.user
-    }));
-    
-    return json.data.user;
+    try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        // Handle non-200 responses safely
+        if (!res.ok) {
+            let errorMsg = `Server Error (${res.status})`;
+            try {
+                const errorData = await res.json();
+                errorMsg = errorData.message || errorData.error || errorMsg;
+            } catch (e) {
+                // Response was not JSON (e.g. 404 HTML page or 500 server crash)
+                console.warn("Login failed with non-JSON response", res.status);
+            }
+            throw new Error(errorMsg);
+        }
+
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+        
+        // Return data to component/app to handle storage (Remember Me logic)
+        return {
+            access_token: json.data.access_token,
+            user: json.data.user
+        };
+    } catch (error: any) {
+        throw error;
+    }
 };
 
 export const checkApiConnection = async () => {
