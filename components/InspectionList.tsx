@@ -97,25 +97,24 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const filteredInspections = useMemo(() => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
+    const term = (searchTerm || '').toLowerCase();
     
     return inspections.filter(item => {
       if (!item) return false;
       
-      // 1. Text Search
-      const term = searchTerm.toLowerCase();
-      if (searchTerm && !(
-        item.ma_ct.toLowerCase().includes(term) ||
-        item.ten_ct.toLowerCase().includes(term) ||
-        item.ma_nha_may?.toLowerCase().includes(term) ||
-        item.ten_hang_muc?.toLowerCase().includes(term) ||
-        item.inspectorName.toLowerCase().includes(term)
+      // 1. Text Search - Added Safe Guards for Null/Undefined properties
+      if (term && !(
+        (item.ma_ct || '').toLowerCase().includes(term) ||
+        (item.ten_ct || '').toLowerCase().includes(term) ||
+        (item.ma_nha_may || '').toLowerCase().includes(term) ||
+        (item.ten_hang_muc || '').toLowerCase().includes(term) ||
+        (item.inspectorName || '').toLowerCase().includes(term)
       )) return false;
 
       // 2. Status Filter
       if (appliedFilters.status !== 'ALL' && item.status !== appliedFilters.status) return false;
 
       // 3. Type Filter
-      // Map 'SQC' to both MAT and BTP if necessary, or exact match
       if (appliedFilters.type !== 'ALL') {
         const targetType = appliedFilters.type.toUpperCase();
         const itemType = (item.type || '').toUpperCase();
@@ -139,9 +138,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
       // 6. Time Preset Filter
       if (appliedFilters.datePreset !== 'ALL') {
-        const itemDate = new Date(item.date);
+        const itemDateStr = item.date || '';
+        const itemDate = new Date(itemDateStr);
         if (appliedFilters.datePreset === 'Today') {
-          if (item.date !== todayStr) return false;
+          if (itemDateStr !== todayStr) return false;
         } else if (appliedFilters.datePreset === 'Last 7 days') {
           const limit = new Date();
           limit.setDate(now.getDate() - 7);
@@ -157,7 +157,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       }
 
       return true;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   }, [inspections, searchTerm, appliedFilters]);
 
   const groupedItems = useMemo(() => {
@@ -405,7 +405,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                    <div className="w-4 h-4 rounded-full overflow-hidden border border-blue-100 bg-blue-50 flex items-center justify-center shrink-0">
                                       <UserCheck className="w-2.5 h-2.5" />
                                    </div>
-                                   {item.inspectorName}
+                                   {item.inspectorName || 'N/A'}
                                </div>
                                {item.workshop && (
                                    <div className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1.5">
