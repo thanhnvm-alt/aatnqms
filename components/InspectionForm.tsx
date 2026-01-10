@@ -26,7 +26,6 @@ interface InspectionFormProps {
 
 /**
  * ISO-Compliant Image Compressor
- * Đảm bảo file < 100KB để tối ưu truyền tải mobile và lưu trữ Turso.
  */
 const resizeImage = (base64Str: string, maxWidth = 1280): Promise<string> => {
   return new Promise((resolve) => {
@@ -56,34 +55,19 @@ const resizeImage = (base64Str: string, maxWidth = 1280): Promise<string> => {
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Vòng lặp nén thông minh: Giảm chất lượng cho đến khi < 100KB
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      
-      // 100KB ~ 133,333 characters in Base64
       while (dataUrl.length > 133333 && quality > 0.1) {
         quality -= 0.1;
         dataUrl = canvas.toDataURL('image/jpeg', quality);
       }
-      
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
   });
 };
 
-// Sub-component: Signature Pad
-const SignaturePad = ({ 
-    label, 
-    value, 
-    onChange, 
-    readOnly = false 
-}: { 
-    label: string; 
-    value?: string; 
-    onChange: (base64: string) => void;
-    readOnly?: boolean;
-}) => {
+const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [isEmpty, setIsEmpty] = useState(!value);
@@ -93,9 +77,7 @@ const SignaturePad = ({
         if (canvas && value) {
             const ctx = canvas.getContext('2d');
             const img = new Image();
-            img.onload = () => {
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-            };
+            img.onload = () => { ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); };
             img.src = value;
             setIsEmpty(false);
         }
@@ -169,27 +151,8 @@ const SignaturePad = ({
     );
 };
 
-// Sub-component: NCR Modal
-const NCRModal = ({ 
-    isOpen, 
-    onClose, 
-    onSave, 
-    initialData, 
-    itemName,
-    inspectionStage
-}: { 
-    isOpen: boolean; 
-    onClose: () => void; 
-    onSave: (ncr: NCR) => void; 
-    initialData?: NCR;
-    itemName: string;
-    inspectionStage?: string;
-}) => {
-    const [ncrData, setNcrData] = useState<Partial<NCR>>({
-        severity: 'MINOR', issueDescription: '', rootCause: '', solution: '',
-        responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN'
-    });
-    
+const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionStage }: { isOpen: boolean; onClose: () => void; onSave: (ncr: NCR) => void; initialData?: NCR; itemName: string; inspectionStage?: string; }) => {
+    const [ncrData, setNcrData] = useState<Partial<NCR>>({ severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
     const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
     const [showLibrary, setShowLibrary] = useState(false);
     const [libSearch, setLibSearch] = useState('');
@@ -202,10 +165,7 @@ const NCRModal = ({
 
     useEffect(() => {
         if (isOpen) {
-            setNcrData(initialData || {
-                severity: 'MINOR', issueDescription: '', rootCause: '', solution: '',
-                responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN'
-            });
+            setNcrData(initialData || { severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
             fetchDefectLibrary().then(setLibrary);
             if (initialData?.defect_code) {
                 fetchDefectLibrary().then(libs => {
@@ -222,11 +182,7 @@ const NCRModal = ({
             const name = (item.name || '').toLowerCase();
             const desc = (item.description || '').toLowerCase();
             const code = (item.code || '').toLowerCase();
-            
-            const matchSearch = !search || 
-                               name.includes(search) || 
-                               desc.includes(search) ||
-                               code.includes(search);
+            const matchSearch = !search || name.includes(search) || desc.includes(search) || code.includes(search);
             const matchStage = !inspectionStage || item.stage === inspectionStage;
             return matchSearch && matchStage;
         });
@@ -272,7 +228,6 @@ const NCRModal = ({
                     </h3>
                     <button onClick={onClose} className="p-2 hover:bg-red-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400"/></button>
                 </div>
-                
                 <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1 no-scrollbar bg-slate-50/30">
                     <div className="border border-blue-200 rounded-xl overflow-hidden bg-white shadow-sm">
                         <button onClick={() => setShowLibrary(!showLibrary)} className="w-full p-3 flex justify-between items-center text-blue-700 font-bold bg-blue-50/50" type="button">
@@ -292,31 +247,25 @@ const NCRModal = ({
                                             <ChevronDown className="w-3 h-3 text-slate-300 -rotate-90 group-hover:text-blue-500" />
                                         </div>
                                     ))}
-                                    {filteredLib.length === 0 && <div className="p-4 text-center text-slate-400 text-xs italic">Không tìm thấy lỗi phù hợp</div>}
                                 </div>
                             </div>
                         )}
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-slate-500 italic text-sm" /></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên lỗi chuẩn</label><input readOnly value={defectName || 'Chưa chọn'} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-blue-700 font-bold text-sm" /></div>
                     </div>
-
                     <div className="space-y-1">
                         <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mô tả lỗi chi tiết *</label><button onClick={handleAiAnalysis} disabled={isAiLoading || !ncrData.issueDescription} className="text-[9px] font-black text-purple-600 uppercase flex items-center gap-1 hover:underline disabled:opacity-30">{isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>} AI Phân tích</button></div>
                         <textarea className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 ring-red-100 bg-white text-sm" rows={2} value={ncrData.issueDescription} onChange={e => setNcrData({...ncrData, issueDescription: e.target.value})} placeholder="Mô tả cụ thể hiện trạng lỗi tại hiện trường..." />
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full p-2 border border-slate-200 rounded-lg bg-white text-sm font-bold" value={ncrData.severity} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Người phụ trách</label><input className="w-full p-2 border border-slate-200 rounded-lg bg-white text-sm" value={ncrData.responsiblePerson || ''} onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})} placeholder="Tên / Bộ phận..." /></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạn xử lý</label><input type="date" className="w-full p-2 border border-slate-200 rounded-lg bg-white text-sm font-mono" value={ncrData.deadline || ''} onChange={e => setNcrData({...ncrData, deadline: e.target.value})} /></div>
                     </div>
-
                     <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (Root Cause)</label><textarea className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-medium italic text-slate-600" rows={1} value={ncrData.rootCause || ''} onChange={e => setNcrData({...ncrData, rootCause: e.target.value})} placeholder="Phân tích tại sao lỗi xảy ra..." /></div>
                     <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Biện pháp khắc phục</label><textarea className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-medium text-blue-900" rows={1} value={ncrData.solution} onChange={e => setNcrData({...ncrData, solution: e.target.value})} placeholder="Hướng xử lý và ngăn chặn lặp lại..." /></div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                         <div className="space-y-2 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                             <div className="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
@@ -348,10 +297,8 @@ const NCRModal = ({
                         </div>
                     </div>
                 </div>
-
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
                 <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
-
                 <div className="p-4 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
                     <button onClick={onClose} className="px-6 py-3 text-slate-600 font-bold hover:text-slate-900 uppercase text-xs tracking-widest">Hủy bỏ</button>
                     <button onClick={() => onSave(ncrData as NCR)} disabled={!ncrData.issueDescription} className="px-10 py-3 bg-red-600 text-white rounded-xl shadow-xl shadow-red-200 hover:bg-red-700 active:scale-95 transition-all font-black uppercase text-xs tracking-widest disabled:opacity-50">Lưu hồ sơ NCR</button>
@@ -361,16 +308,8 @@ const NCRModal = ({
     );
 };
 
-export const InspectionForm: React.FC<InspectionFormProps> = ({ 
-  initialData, onSave, onCancel, plans, workshops, user
-}) => {
-  const [formData, setFormData] = useState<Partial<Inspection>>({
-    id: `INS-${Date.now()}`, date: new Date().toISOString().split('T')[0],
-    status: InspectionStatus.DRAFT, items: [], images: [], score: 0,
-    signature: '', productionSignature: '', inspectedQuantity: 0,
-    passedQuantity: 0, failedQuantity: 0, ...initialData
-  });
-
+export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, plans, workshops, user }) => {
+  const [formData, setFormData] = useState<Partial<Inspection>>({ id: `INS-${Date.now()}`, date: new Date().toISOString().split('T')[0], status: InspectionStatus.DRAFT, items: [], images: [], score: 0, signature: '', productionSignature: '', inspectedQuantity: 0, passedQuantity: 0, failedQuantity: 0, ...initialData });
   const [searchCode, setSearchCode] = useState(initialData?.headcode || initialData?.ma_nha_may || '');
   const [activeNcrItemIndex, setActiveNcrItemIndex] = useState<number | null>(null);
   const [isNcrModalOpen, setIsNcrModalOpen] = useState(false);
@@ -382,34 +321,17 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  // Auto-sync searchCode when ma_nha_may changes (from direct lookup)
-  useEffect(() => {
-    if (formData.ma_nha_may && !searchCode) {
-        setSearchCode(formData.ma_nha_may);
-    }
-  }, [formData.ma_nha_may]);
+  useEffect(() => { if (formData.ma_nha_may && !searchCode) setSearchCode(formData.ma_nha_may); }, [formData.ma_nha_may]);
 
-  const availableStages = useMemo(() => {
-      if (!formData.ma_nha_may) return [];
-      const selectedWorkshop = workshops.find(ws => ws.code === formData.ma_nha_may);
-      return selectedWorkshop?.stages || [];
-  }, [formData.ma_nha_may, workshops]);
-
-  const visibleItems = useMemo(() => {
-      if (!formData.inspectionStage) return [];
-      if (!formData.items) return [];
-      return formData.items.filter(item => !item.stage || item.stage === formData.inspectionStage);
-  }, [formData.items, formData.inspectionStage]);
+  const availableStages = useMemo(() => { if (!formData.ma_nha_may) return []; const selectedWorkshop = workshops.find(ws => ws.code === formData.ma_nha_may); return selectedWorkshop?.stages || []; }, [formData.ma_nha_may, workshops]);
+  const visibleItems = useMemo(() => { if (!formData.inspectionStage) return []; if (!formData.items) return []; return formData.items.filter(item => !item.stage || item.stage === formData.inspectionStage); }, [formData.items, formData.inspectionStage]);
 
   const rates = useMemo(() => {
     const ins = parseFloat(String(formData.inspectedQuantity || 0));
     const pas = parseFloat(String(formData.passedQuantity || 0));
     const fai = parseFloat(String(formData.failedQuantity || 0));
     if (ins <= 0) return { passRate: 0, defectRate: 0 };
-    return {
-        passRate: ((pas / ins) * 100).toFixed(1),
-        defectRate: ((fai / ins) * 100).toFixed(1)
-    };
+    return { passRate: ((pas / ins) * 100).toFixed(1), defectRate: ((fai / ins) * 100).toFixed(1) };
   }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
 
   const lookupPlanInfo = async (value: string) => {
@@ -484,8 +406,43 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   const handleSubmit = async () => {
     if (!formData.ma_ct || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin và chọn công đoạn."); return; }
     setIsSaving(true);
-    try { await onSave({ ...formData, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection); } 
-    catch (e) { alert("Lỗi khi lưu phiếu."); } finally { setIsSaving(false); }
+    try {
+        // ISO Optimization: Only save items for the selected stage
+        const filteredItems = (formData.items || []).filter(it => it.stage === formData.inspectionStage || !it.stage);
+        await onSave({ ...formData, items: filteredItems, status: InspectionStatus.PENDING, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
+    } catch (e) { alert("Lỗi khi lưu phiếu."); } finally { setIsSaving(false); }
+  };
+
+  const handleExitAsDraft = async () => {
+      if (window.confirm("Thoát và lưu dưới dạng bản nháp (Draft)?")) {
+          setIsSaving(true);
+          try {
+              await onSave({ ...formData, status: InspectionStatus.DRAFT, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
+          } catch (e) { alert("Lỗi lưu nháp."); } finally { setIsSaving(false); onCancel(); }
+      } else {
+          onCancel();
+      }
+  };
+
+  const handleEditImage = (type: 'MAIN' | 'ITEM', images: string[], index: number, itemId?: string) => {
+      setEditorState({ images, index, context: { type, itemId } });
+  };
+
+  const onImageSave = (idx: number, updatedImg: string) => {
+      if (!editorState) return;
+      const { type, itemId } = editorState.context;
+      if (type === 'MAIN') {
+          setFormData(prev => {
+              const newImgs = [...(prev.images || [])];
+              newImgs[idx] = updatedImg;
+              return { ...prev, images: newImgs };
+          });
+      } else if (type === 'ITEM' && itemId) {
+          setFormData(prev => ({
+              ...prev,
+              items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? updatedImg : img) } : i)
+          }));
+      }
   };
 
   const formStyle = { fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt' };
@@ -497,7 +454,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
               <FileText className="w-5 h-5 text-blue-600" />
               <h2 className="font-black text-[13pt] uppercase tracking-tighter">QAQC SYSTEM</h2>
           </div>
-          <button onClick={onCancel} className="p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-full transition-all" type="button"><X className="w-6 h-6" /></button>
+          <button onClick={handleExitAsDraft} className="p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-full transition-all" type="button"><X className="w-6 h-6" /></button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar bg-slate-50">
@@ -528,7 +485,11 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                 <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-24 h-24 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col items-center justify-center text-blue-600 hover:bg-blue-100 transition-colors shrink-0 shadow-sm" type="button"><Camera className="w-7 h-7 mb-1"/><span className="text-[8pt] font-black uppercase">Chụp ảnh</span></button>
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-24 h-24 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors shrink-0 shadow-sm" type="button"><ImageIcon className="w-7 h-7 mb-1"/><span className="text-[8pt] font-black uppercase">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
-                    <div key={idx} className="relative w-24 h-24 rounded-2xl overflow-hidden border border-slate-200 shrink-0 group"><img src={img} className="w-full h-full object-cover" /><button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"><X className="w-3 h-3"/></button></div>
+                    <div key={idx} className="relative w-24 h-24 rounded-2xl overflow-hidden border border-slate-200 shrink-0 group">
+                        <img src={img} className="w-full h-full object-cover cursor-zoom-in" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} />
+                        <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg" type="button"><X className="w-3 h-3"/></button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[8px] font-black py-0.5 text-center uppercase">Chạm để sửa</div>
+                    </div>
                 ))}
             </div>
         </section>
@@ -585,7 +546,10 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                 {item.images && item.images.length > 0 && (
                                     <div className="flex gap-2.5 mt-3 overflow-x-auto no-scrollbar py-1">
                                         {item.images.map((im, i) => (
-                                            <div key={i} className="relative w-16 h-16 shrink-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm group"><img src={im} className="w-full h-full object-cover" /><button onClick={() => { const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(originalIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button></div>
+                                            <div key={i} className="relative w-16 h-16 shrink-0 border border-slate-200 rounded-xl overflow-hidden shadow-sm group">
+                                                <img src={im} className="w-full h-full object-cover cursor-zoom-in" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)} />
+                                                <button onClick={() => { const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(originalIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button>
+                                            </div>
                                         ))}
                                     </div>
                                 )}
@@ -607,10 +571,10 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       </div>
 
       <div className="p-4 md:p-6 border-t border-slate-200 bg-white flex flex-col sm:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
-        <button onClick={onCancel} className="px-8 py-3.5 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-50 rounded-xl transition-all active:scale-95" type="button">Hủy bỏ</button>
+        <button onClick={handleExitAsDraft} className="px-8 py-3.5 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-50 rounded-xl transition-all active:scale-95" type="button">Thoát & Lưu nháp</button>
         <button onClick={handleSubmit} disabled={isSaving} className="px-16 py-4 bg-blue-700 text-white font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-2xl shadow-blue-200 hover:bg-blue-800 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50" type="button">
             {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
-            <span>Lưu & Hoàn tất Phiếu</span>
+            <span>Lưu & Gửi phê duyệt</span>
         </button>
       </div>
 
@@ -618,19 +582,14 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
       
       {activeNcrItemIndex !== null && formData.items && formData.items[activeNcrItemIndex] && (
-          <NCRModal 
-              isOpen={isNcrModalOpen} onClose={() => setIsNcrModalOpen(false)} onSave={handleSaveNCR}
-              initialData={formData.items[activeNcrItemIndex].ncr}
-              itemName={formData.items[activeNcrItemIndex].label}
-              inspectionStage={formData.inspectionStage}
-          />
+          <NCRModal isOpen={isNcrModalOpen} onClose={() => setIsNcrModalOpen(false)} onSave={handleSaveNCR} initialData={formData.items[activeNcrItemIndex].ncr} itemName={formData.items[activeNcrItemIndex].label} inspectionStage={formData.inspectionStage} />
       )}
 
       {showScanner && (
           <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); lookupPlanInfo(data); setShowScanner(false); }} />
       )}
       {editorState && (
-          <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} readOnly={false} />
+          <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onSave={onImageSave} onClose={() => setEditorState(null)} readOnly={false} />
       )}
     </div>
   );

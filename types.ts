@@ -8,6 +8,7 @@ export enum CheckStatus {
 
 export enum InspectionStatus {
   DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
   FLAGGED = 'FLAGGED',
   APPROVED = 'APPROVED'

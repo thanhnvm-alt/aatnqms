@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect } from './types';
+import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
@@ -210,27 +209,42 @@ const App = () => {
 
   const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
 
+  const handleApproveInspection = async (id: string, signature: string) => {
+      if (!activeInspection) return;
+      const updated = { 
+          ...activeInspection, 
+          status: InspectionStatus.COMPLETED, 
+          managerSignature: signature, 
+          managerName: user?.name,
+          confirmedDate: new Date().toISOString() 
+      };
+      await saveInspectionToSheet(updated);
+      loadInspections();
+  };
+
+  const handlePostComment = async (id: string, comment: NCRComment) => {
+      if (!activeInspection) return;
+      const updatedComments = [...(activeInspection.comments || []), comment];
+      const updated = { ...activeInspection, comments: updatedComments };
+      await saveInspectionToSheet(updated);
+      setActiveInspection(updated);
+      loadInspections();
+  };
+
   const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
 
-  /**
-   * Bước 1: Quét QR -> Lưu mã tạm -> Mở bảng chọn loại phiếu
-   */
   const handleQrScan = (scannedCode: string) => {
     setShowQrScanner(false);
     setPendingScannedCode(scannedCode);
     setShowModuleSelector(true);
   };
 
-  /**
-   * Bước 2: Sau khi chọn loại phiếu, tải dữ liệu từ Plans DB và mở Form
-   */
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false);
       setIsDetailLoading(true);
       
       let baseData: Partial<Inspection> = { ma_nha_may: pendingScannedCode || '' };
       
-      // Tìm kiếm thông tin kế hoạch trong Database
       if (pendingScannedCode) {
           try {
               const searchResult = await fetchPlans(pendingScannedCode, 1, 5);
@@ -303,7 +317,7 @@ const App = () => {
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onImportInspections={async (p) => { await importInspections(p); loadInspections(); }} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
             {view === 'FORM' && <InspectionForm initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} />}
-            {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} />}
+            {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa vĩnh viễn phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} onApprove={handleApproveInspection} onPostComment={handlePostComment} workshops={workshops} />}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
@@ -319,10 +333,7 @@ const App = () => {
         <AIChatbox inspections={inspections} plans={plans} />
 
         {showQrScanner && (
-          <QRScannerModal 
-            onClose={() => setShowQrScanner(false)} 
-            onScan={handleQrScan} 
-          />
+          <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={handleQrScan} />
         )}
 
         {showModuleSelector && (
