@@ -11,7 +11,6 @@ import {
   SQC_MAT_CHECKLIST_TEMPLATE, 
   SQC_BTP_CHECKLIST_TEMPLATE, 
   FSR_CHECKLIST_TEMPLATE,
-  // Fixed: Added missing templates to the constants import list
   STEP_CHECKLIST_TEMPLATE,
   FQC_CHECKLIST_TEMPLATE,
   SPR_CHECKLIST_TEMPLATE,
@@ -20,7 +19,6 @@ import {
 } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { InspectionList } from './components/InspectionList';
-// Fixed: Corrected named import for InspectionFormPQC from its source file
 import { InspectionFormPQC } from './components/inspectionformPQC';
 import { InspectionFormIQC } from './components/inspectionformIQC';
 import { InspectionFormSQC_VT } from './components/inspectionformSQC_VT';
@@ -30,7 +28,15 @@ import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
 import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
-import { InspectionDetail } from './components/InspectionDetail';
+import { InspectionDetailPQC } from './components/inspectiondetailPQC';
+import { InspectionDetailIQC } from './components/inspectiondetailIQC';
+import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
+import { InspectionDetailSQC_BTP } from './components/inspectiondetailSQC_BTP';
+import { InspectionDetailFRS } from './components/inspectiondetailFRS';
+import { InspectionDetailStepVecni } from './components/inspectiondetailStepVecni';
+import { InspectionDetailFQC } from './components/inspectiondetailFQC';
+import { InspectionDetailSPR } from './components/inspectiondetailSPR';
+import { InspectionDetailSITE } from './components/inspectiondetailSITE';
 import { PlanList } from './components/PlanList';
 import { Settings } from './components/Settings';
 import { AIChatbox } from './components/AIChatbox';
@@ -164,6 +170,23 @@ const App = () => {
     }
   };
 
+  const renderDetail = () => {
+    if (!activeInspection) return null;
+    const commonProps = { inspection: activeInspection, user: user!, onBack: () => { setView('LIST'); setActiveInspection(null); }, onEdit: handleEditInspection, onDelete: async (id: string) => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, onApprove: handleApproveInspection, onPostComment: handlePostComment, workshops };
+    switch (activeInspection.type) {
+        case 'IQC': return <InspectionDetailIQC {...commonProps} />;
+        case 'SQC_MAT': return <InspectionDetailSQC_VT {...commonProps} />;
+        case 'SQC_BTP': return <InspectionDetailSQC_BTP {...commonProps} />;
+        case 'FSR': return <InspectionDetailFRS {...commonProps} />;
+        case 'STEP': return <InspectionDetailStepVecni {...commonProps} />;
+        case 'FQC': return <InspectionDetailFQC {...commonProps} />;
+        case 'SPR': return <InspectionDetailSPR {...commonProps} />;
+        case 'SITE': return <InspectionDetailSITE {...commonProps} />;
+        case 'PQC':
+        default: return <InspectionDetailPQC {...commonProps} />;
+    }
+  };
+
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} />;
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo...</p></div>;
 
@@ -177,7 +200,7 @@ const App = () => {
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
             {view === 'FORM' && renderForm()}
-            {view === 'DETAIL' && activeInspection && <InspectionDetail inspection={activeInspection} user={user} onBack={() => { setView('LIST'); setActiveInspection(null); }} onEdit={handleEditInspection} onDelete={async (id) => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }} onApprove={handleApproveInspection} onPostComment={handlePostComment} workshops={workshops} />}
+            {view === 'DETAIL' && renderDetail()}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
