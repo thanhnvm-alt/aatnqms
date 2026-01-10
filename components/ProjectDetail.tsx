@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Project, Inspection, InspectionStatus, CheckStatus } from '../types';
 import { 
@@ -162,7 +161,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                  <div className="flex items-center gap-2 mb-6 border-b border-slate-50 pb-3 w-full"><PieChartIcon className="w-5 h-5 text-emerald-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">BÁO CÁO CHẤT LƯỢNG</h3></div>
                  <div className="flex flex-col items-center w-full">
                      <div className="w-44 h-44 relative">
-                        <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieData} innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value" stroke="none">{pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><Tooltip /></PieChart></ResponsiveContainer>
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                          <PieChart>
+                            <Pie data={pieData} innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value" stroke="none">
+                              {pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-3xl font-black text-slate-800 leading-none">{stats.passRate}%</span><span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mt-1">QC PASS</span></div>
                      </div>
                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-8 w-full px-4">
