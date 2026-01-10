@@ -209,15 +209,24 @@ const App = () => {
 
   const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
 
-  const handleApproveInspection = async (id: string, signature: string) => {
+  const handleApproveInspection = async (id: string, signature: string, productionInfo?: { signature: string, name: string }) => {
       if (!activeInspection) return;
-      const updated = { 
+      
+      const updated: Inspection = { 
           ...activeInspection, 
-          status: InspectionStatus.COMPLETED, 
+          status: InspectionStatus.APPROVED, 
           managerSignature: signature, 
           managerName: user?.name,
           confirmedDate: new Date().toISOString() 
       };
+
+      // Cập nhật thông tin sản xuất nếu được ký bổ sung tại màn hình review
+      if (productionInfo) {
+          updated.productionSignature = productionInfo.signature;
+          updated.productionName = productionInfo.name;
+          updated.productionConfirmedDate = new Date().toISOString();
+      }
+
       await saveInspectionToSheet(updated);
       loadInspections();
   };

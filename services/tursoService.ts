@@ -1,11 +1,8 @@
+
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, Defect, DefectLibraryItem, NCRComment } from "../types";
 import { withRetry } from "../lib/retry";
 
-/**
- * CRITICAL FIX: Sanitizes SQL arguments to prevent "Unsupported type of value" error.
- * Turso/libSQL driver throws this when encountering 'undefined'.
- */
 const cleanArgs = (args: any[]): any[] => {
   return args.map(arg => {
     if (arg === undefined) return null;
@@ -13,9 +10,6 @@ const cleanArgs = (args: any[]): any[] => {
   });
 };
 
-/**
- * Khởi tạo cơ sở dữ liệu và thực hiện các bước di chuyển schema (ISO Integrity)
- */
 export const initDatabase = async () => {
   if (!isTursoConfigured) {
     console.warn("⚠️ Turso is not configured. Database will not be initialized.");
@@ -25,7 +19,6 @@ export const initDatabase = async () => {
   try {
     await withRetry(() => turso.execute("SELECT 1"), { maxRetries: 5, initialDelay: 500 });
     
-    // Create tables
     await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, stt INTEGER, ma_nha_may TEXT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo INTEGER, plannedDate TEXT, assignee TEXT, status TEXT, pthsp TEXT, created_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS inspections (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER, created_by TEXT, ma_ct TEXT, ten_ct TEXT, ma_nha_may TEXT, ten_hang_muc TEXT, workshop TEXT, status TEXT, type TEXT, score INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS projects (ma_ct TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
@@ -51,8 +44,6 @@ export const testConnection = async () => {
     return false;
   }
 };
-
-// --- PROJECTS ---
 
 export const getProjects = async (): Promise<Project[]> => {
     if (!isTursoConfigured) return [];
@@ -92,8 +83,6 @@ export const saveProjectMetadata = async (project: Project) => {
   }));
 };
 
-// --- PLANS ---
-
 export const getPlans = async (options: { search?: string, page?: number, limit?: number }) => {
     const { search = '', page = 1, limit = 50 } = options;
     const offset = (page - 1) * limit;
@@ -117,8 +106,6 @@ export const importPlansBatch = async (plans: PlanItem[]) => {
         });
     }
 };
-
-// --- INSPECTIONS ---
 
 export const getInspectionsPaginated = async (filters: any) => {
     const { page = 1, limit = 20, status, type, ma_ct } = filters;
@@ -144,17 +131,48 @@ export const getInspectionsPaginated = async (filters: any) => {
 
 export const getInspectionById = async (id: string): Promise<Inspection | null> => {
     const res = await turso.execute({ sql: `SELECT data FROM inspections WHERE id = ?`, args: cleanArgs([id]) });
-    return res.rows.length > 0 ? JSON.parse(res.rows[0].data as string) : null;
+    if (res.rows.length === 0) return null;
+    
+    const inspection: Inspection = JSON.parse(res.rows[0].data as string);
+    
+    // ISO RE-HYDRATION: Lấy dữ liệu NCR từ table riêng để map vào checklist items
+    const ncrs = await getNcrs({ inspection_id: id });
+    if (ncrs.length > 0) {
+        inspection.items = inspection.items.map(item => {
+            const relatedNcr = ncrs.find(n => n.itemId === item.id || n.id === item.ncr?.id);
+            if (relatedNcr) {
+                return { ...item, ncr: relatedNcr, ncrId: relatedNcr.id };
+            }
+            return item;
+        });
+    }
+    
+    return inspection;
 };
 
 export const saveInspection = async (inspection: Inspection) => {
     const now = Math.floor(Date.now() / 1000);
-    // Extract CheckItems with NCRs to update separate NCR table
+    
+    // 1. Tách và lưu NCR vào table ncrs
     for (const item of inspection.items) {
         if (item.ncr) {
             await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
         }
     }
+
+    // 2. Tạo bản sao rút gọn để lưu vào column data (không chứa chi tiết NCR)
+    // Đáp ứng yêu cầu: "inspection và NCR được link với nhau qua inspection.id và NCR.id"
+    const slimInspection = JSON.parse(JSON.stringify(inspection));
+    slimInspection.items = slimInspection.items.map((item: any) => {
+        if (item.ncr) {
+            return { 
+                ...item, 
+                ncrId: item.ncr.id, 
+                ncr: { id: item.ncr.id, status: item.ncr.status } // Chỉ giữ lại ID link
+            };
+        }
+        return item;
+    });
 
     await turso.execute({
         sql: `INSERT INTO inspections (id, data, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, status, type, score) 
@@ -166,7 +184,7 @@ export const saveInspection = async (inspection: Inspection) => {
                 score = excluded.score`,
         args: cleanArgs([
             inspection.id, 
-            JSON.stringify(inspection), 
+            JSON.stringify(slimInspection), 
             now, 
             now, 
             inspection.inspectorName, 
@@ -186,8 +204,6 @@ export const deleteInspection = async (id: string) => {
     await turso.execute({ sql: `DELETE FROM inspections WHERE id = ?`, args: cleanArgs([id]) });
     await turso.execute({ sql: `DELETE FROM ncrs WHERE inspection_id = ?`, args: cleanArgs([id]) });
 };
-
-// --- NCRs ---
 
 export const getNcrs = async (options: { inspection_id?: string, status?: string, page?: number, limit?: number }) => {
     const { inspection_id, status, page = 1, limit = 50 } = options;
@@ -283,11 +299,8 @@ export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: 
     return ncr.id;
 };
 
-// --- DEFECTS (Derived from NCRs/Inspections) ---
-
 export const getDefects = async (params: { status?: string }) => {
     const ncrs = await getNcrs({ status: params.status });
-    // Map NCRs to Defect list view
     return ncrs.map(n => ({
         id: n.id,
         inspectionId: n.inspection_id || '',
@@ -299,13 +312,11 @@ export const getDefects = async (params: { status?: string }) => {
         severity: n.severity || 'MINOR',
         inspectorName: n.responsiblePerson || 'QA/QC',
         date: n.createdDate.split('T')[0],
-        ma_ct: 'Dự án', // Ideally join with inspections for this
+        ma_ct: 'Dự án', 
         ten_ct: 'Dự án',
         images: n.imagesBefore || []
     } as unknown as Defect));
 };
-
-// --- DEFECT LIBRARY ---
 
 export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
     const res = await turso.execute("SELECT * FROM defect_library ORDER BY defect_code ASC");
@@ -342,8 +353,6 @@ export const deleteDefectLibraryItem = async (id: string) => {
     await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: cleanArgs([id]) });
 };
 
-// --- USERS ---
-
 export const getUsers = async (): Promise<User[]> => {
     const res = await turso.execute("SELECT data FROM users");
     return res.rows.map(r => JSON.parse(r.data as string));
@@ -357,9 +366,6 @@ export const saveUser = async (user: User) => {
     });
 };
 
-/**
- * Added importUsers to resolve compilation error in app/api/users/route.ts
- */
 export const importUsers = async (users: User[]) => {
     for (const user of users) {
         await saveUser(user);
@@ -369,8 +375,6 @@ export const importUsers = async (users: User[]) => {
 export const deleteUser = async (id: string) => {
     await turso.execute({ sql: `DELETE FROM users WHERE id = ?`, args: cleanArgs([id]) });
 };
-
-// --- WORKSHOPS ---
 
 export const getWorkshops = async (): Promise<Workshop[]> => {
     const res = await turso.execute("SELECT data FROM workshops");
@@ -389,8 +393,6 @@ export const deleteWorkshop = async (id: string) => {
     await turso.execute({ sql: `DELETE FROM workshops WHERE id = ?`, args: cleanArgs([id]) });
 };
 
-// --- TEMPLATES ---
-
 export const getTemplates = async (): Promise<Record<string, CheckItem[]>> => {
     const res = await turso.execute("SELECT moduleId, data FROM templates");
     const result: Record<string, CheckItem[]> = {};
@@ -405,8 +407,6 @@ export const saveTemplate = async (moduleId: string, data: CheckItem[]) => {
         args: cleanArgs([moduleId, JSON.stringify(data), now])
     });
 };
-
-// --- ROLES ---
 
 export const getRoles = async (): Promise<Role[]> => {
     const res = await turso.execute("SELECT data FROM roles");

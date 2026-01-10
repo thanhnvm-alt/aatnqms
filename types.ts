@@ -128,15 +128,16 @@ export interface Defect {
 
 export interface CheckItem {
   id: string;
-  stage?: string; // Tầng 1: Công đoạn (Dành cho PQC)
-  category: string; // Tầng 1 (cho các module khác)
-  label: string; // Tầng 2: Hạng mục kiểm tra
-  method?: string; // Phương pháp kiểm tra
-  standard?: string; // Tiêu chuẩn kỹ thuật / dung sai
+  stage?: string;
+  category: string;
+  label: string;
+  method?: string;
+  standard?: string;
   status: CheckStatus;
   notes?: string;
   images?: string[];
-  ncr?: NCR;
+  ncr?: NCR; // Trong runtime có thể chứa object NCR, nhưng lưu trữ sẽ bị tách
+  ncrId?: string; // Link ID dùng cho persistence
 }
 
 export interface Inspection {
@@ -171,6 +172,7 @@ export interface Inspection {
   productionConfirmedDate?: string;
   confirmedDate?: string;
   comments?: NCRComment[];
+  updatedAt?: string;
 }
 
 export interface Project {

@@ -6,9 +6,7 @@ import {
   MessageSquare, Camera, Paperclip, Send, Loader2,
   Trash2, Edit3, X, Maximize2, ShieldCheck,
   CheckCircle, Image as ImageIcon, LayoutList, AlertOctagon,
-  Eraser, ChevronRight,
-  // Added Building2 to fix the 'Cannot find name Building2' error on line 171
-  Building2
+  Eraser, ChevronRight, Building2, UserCheck
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -19,7 +17,7 @@ interface InspectionDetailProps {
   onBack: () => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  onApprove?: (id: string, signature: string) => Promise<void>;
+  onApprove?: (id: string, signature: string, productionInfo?: { signature: string, name: string }) => Promise<void>;
   onPostComment?: (id: string, comment: NCRComment) => Promise<void>;
   workshops?: Workshop[];
 }
@@ -27,6 +25,7 @@ interface InspectionDetailProps {
 const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
+    
     useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas && value) {
@@ -36,6 +35,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             img.src = value;
         }
     }, [value]);
+
     const startDrawing = (e: any) => {
         if (readOnly) return;
         const canvas = canvasRef.current;
@@ -52,6 +52,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
         ctx.strokeStyle = '#000000';
         setIsDrawing(true);
     };
+
     const draw = (e: any) => {
         if (!isDrawing || readOnly) return;
         const canvas = canvasRef.current;
@@ -64,11 +65,13 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
         ctx.lineTo(clientX - rect.left, clientY - rect.top);
         ctx.stroke();
     };
+
     const stopDrawing = () => {
         if (readOnly) return;
         setIsDrawing(false);
         if (canvasRef.current) onChange(canvasRef.current.toDataURL());
     };
+
     const clear = () => {
         const canvas = canvasRef.current;
         if (canvas) {
@@ -77,6 +80,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             onChange('');
         }
     };
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center px-1">
@@ -85,7 +89,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             </div>
             <div className="border border-slate-300 rounded-[2rem] bg-white overflow-hidden relative h-40 shadow-inner">
                 <canvas ref={canvasRef} width={400} height={160} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-black uppercase tracking-widest">Ký phê duyệt tại đây</div>}
+                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-black uppercase tracking-widest">Ký tại đây</div>}
             </div>
         </div>
     );
@@ -95,23 +99,36 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  
+  // States for Approval Workflow
   const [managerSignature, setManagerSignature] = useState('');
+  const [productionSignature, setProductionSignature] = useState(inspection.productionSignature || '');
+  const [productionName, setProductionName] = useState(inspection.productionName || '');
+  
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
   const [viewingNcr, setViewingNcr] = useState<NCR | null>(null);
 
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isApproved = inspection.status === InspectionStatus.COMPLETED || inspection.status === InspectionStatus.APPROVED;
+  const isProductionSigned = !!inspection.productionSignature;
 
-  // Resolve Workshop Name
   const workshopName = workshops.find(w => w.code === inspection.ma_nha_may)?.name || inspection.ma_nha_may || 'SITE WORK';
 
   const handleApprove = async () => {
-      if (!managerSignature) { alert("Bắt buộc phải ký tên để phê duyệt báo cáo."); return; }
+      if (!managerSignature) { alert("Bắt buộc phải ký tên Manager để phê duyệt."); return; }
+      
+      // Nếu chưa có chữ ký sản xuất, yêu cầu phải có cả chữ ký và tên
+      if (!isProductionSigned && (!productionSignature || !productionName.trim())) {
+          alert("Báo cáo hiện trường yêu cầu đầy đủ chữ ký và họ tên của Đại diện Sản xuất.");
+          return;
+      }
+
       if (!onApprove) return;
       setIsApproving(true);
       try {
-          await onApprove(inspection.id, managerSignature);
-          alert("Báo cáo đã được Quản lý phê duyệt thành công.");
+          const productionInfo = !isProductionSigned ? { signature: productionSignature, name: productionName } : undefined;
+          await onApprove(inspection.id, managerSignature, productionInfo);
+          alert("Báo cáo đã được Quản lý phê duyệt và đóng hồ sơ thành công.");
           onBack();
       } catch (e) { alert("Lỗi hệ thống khi phê duyệt."); } finally { setIsApproving(false); }
   };
@@ -159,11 +176,11 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                     <h1 className="text-2xl md:text-3xl font-black text-slate-800 uppercase tracking-tighter leading-tight">{inspection.ten_hang_muc}</h1>
                     <p className="text-sm font-bold text-slate-500 mt-2 uppercase">{inspection.ten_ct}</p>
                 </div>
-                <div className="bg-slate-50 rounded-[2rem] p-5 flex flex-col items-center justify-center border border-slate-100 shadow-inner">
+                <div className="bg-slate-50 rounded-[2rem] p-5 flex flex-col items-center justify-center border border-slate-100 shadow-inner text-center">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">SCORE</p>
                     <p className={`text-4xl font-black ${inspection.score >= 90 ? 'text-green-600' : 'text-red-600'}`}>{inspection.score}</p>
                 </div>
-                <div className="bg-slate-50 rounded-[2rem] p-5 flex flex-col items-center justify-center border border-slate-100 shadow-inner">
+                <div className="bg-slate-50 rounded-[2rem] p-5 flex flex-col items-center justify-center border border-slate-100 shadow-inner text-center">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">NCR RECORDED</p>
                     <p className="text-4xl font-black text-red-600">{inspection.items.filter(i => i.status === CheckStatus.FAIL).length}</p>
                 </div>
@@ -245,28 +262,64 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
         {/* Section V: Approval Section with Forced Signature */}
         <section className="bg-white p-8 md:p-10 rounded-[3rem] border border-slate-200 shadow-sm space-y-10">
             <h3 className="text-blue-700 border-b border-blue-50 pb-5 font-black text-xs uppercase tracking-[0.2em] flex items-center gap-3"><ShieldCheck className="w-6 h-6 text-green-500"/> XÁC NHẬN PHÊ DUYỆT (ISO COMPLIANCE)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                {/* QC Sign */}
                 <div className="space-y-6">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-4 border-blue-500 pl-3">Nhân viên QC hiện trường</p>
                     {inspection.signature ? (
-                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-inner">
-                            <img src={inspection.signature} className="h-28 mx-auto object-contain" />
+                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-inner h-40 flex items-center justify-center overflow-hidden">
+                            <img src={inspection.signature} className="h-full w-full object-contain" />
                         </div>
-                    ) : <div className="h-32 flex items-center justify-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 text-[10px] text-slate-300 font-bold">Chưa ký</div>}
-                    <p className="text-sm font-black text-slate-800 uppercase tracking-tight text-center">{inspection.inspectorName}</p>
+                    ) : <div className="h-40 flex items-center justify-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 text-[10px] text-slate-300 font-bold uppercase">Chưa ký</div>}
+                    <div className="text-center px-2">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Họ và Tên</p>
+                        <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{inspection.inspectorName}</p>
+                    </div>
                 </div>
+
+                {/* Production Sign */}
+                <div className="space-y-6">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-4 border-orange-500 pl-3">Đại diện Sản xuất / Xưởng</p>
+                    {!isProductionSigned && !isApproved ? (
+                        <SignaturePad label="Ký xác nhận bổ sung" value={productionSignature} onChange={setProductionSignature} readOnly={isApproved} />
+                    ) : (
+                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-inner h-40 flex items-center justify-center overflow-hidden">
+                            {(inspection.productionSignature || productionSignature) ? (
+                                <img src={inspection.productionSignature || productionSignature} className="h-full w-full object-contain" />
+                            ) : <div className="h-full flex items-center justify-center text-[10px] text-orange-400 font-black uppercase tracking-widest">Đang chờ ký...</div>}
+                        </div>
+                    )}
+                    <div className="text-center px-2 space-y-2">
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Họ và Tên Sản xuất</p>
+                        {(!isProductionSigned && !isApproved) ? (
+                            <input 
+                                value={productionName}
+                                onChange={e => setProductionName(e.target.value.toUpperCase())}
+                                className="w-full text-center p-2 bg-white border border-slate-200 rounded-xl text-sm font-black focus:ring-4 ring-blue-50 outline-none uppercase placeholder:text-slate-300 transition-all"
+                                placeholder="Nhập họ tên đại diện..."
+                            />
+                        ) : (
+                            <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || productionName || '---'}</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Manager Sign */}
                 <div className="space-y-6">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-4 border-green-500 pl-3">Quản lý phê duyệt (Required)</p>
                     {isManager && !isApproved ? (
                         <SignaturePad label="Chữ ký điện tử Manager" value={managerSignature} onChange={setManagerSignature} readOnly={isApproved} />
                     ) : (
-                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-inner">
+                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-inner h-40 flex items-center justify-center overflow-hidden">
                             {inspection.managerSignature ? (
-                                <img src={inspection.managerSignature} className="h-28 mx-auto object-contain" />
-                            ) : <div className="h-28 flex items-center justify-center text-[10px] text-orange-400 font-black uppercase tracking-widest">Đang chờ phê duyệt...</div>}
+                                <img src={inspection.managerSignature} className="h-full w-full object-contain" />
+                            ) : <div className="h-full flex items-center justify-center text-[10px] text-orange-400 font-black uppercase tracking-widest">Đang chờ phê duyệt...</div>}
                         </div>
                     )}
-                    <p className="text-sm font-black text-slate-800 uppercase tracking-tight text-center">{inspection.managerName || 'Manager Approval'}</p>
+                    <div className="text-center px-2">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Cấp phê duyệt</p>
+                        <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{inspection.managerName || 'Manager Approval'}</p>
+                    </div>
                 </div>
             </div>
         </section>
@@ -314,7 +367,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
           <div className="fixed bottom-0 left-0 right-0 p-6 md:p-8 border-t border-slate-200 bg-white/90 backdrop-blur-xl flex justify-end gap-5 z-40 shadow-[0_-15px_40px_rgba(0,0,0,0.1)]">
               <button onClick={onBack} className="px-8 py-4 text-slate-500 font-black uppercase text-[10px] tracking-[0.2em] hover:bg-slate-50 rounded-2xl transition-all">Quay lại</button>
               <button 
-                  onClick={handleApprove} disabled={isApproving || !managerSignature} 
+                  onClick={handleApprove} disabled={isApproving || !managerSignature || (!isProductionSigned && !productionSignature)} 
                   className="px-16 py-4 bg-green-600 text-white font-black uppercase text-xs tracking-[0.3em] rounded-2xl shadow-2xl shadow-green-500/30 hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
               >
                   {isApproving ? <Loader2 className="w-5 h-5 animate-spin"/> : <CheckCircle className="w-5 h-5"/>}
@@ -338,7 +391,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                         ncr={viewingNcr} 
                         user={user} 
                         onBack={() => setViewingNcr(null)} 
-                        onViewInspection={() => {}} // No-op as we are already in inspection detail
+                        onViewInspection={() => {}} // No-op
                       />
                   </div>
               </div>
