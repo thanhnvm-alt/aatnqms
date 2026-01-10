@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { Button } from './Button';
@@ -25,8 +24,11 @@ interface InspectionFormProps {
   user: User;
 }
 
-// Helper: Resize and compress image
-const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
+/**
+ * ISO-Compliant Image Compressor
+ * Đảm bảo file < 100KB để tối ưu truyền tải mobile và lưu trữ Turso.
+ */
+const resizeImage = (base64Str: string, maxWidth = 1280): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -48,14 +50,23 @@ const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (ctx) {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, width, height);
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.6));
-      } else {
-          resolve(base64Str);
+      if (!ctx) { resolve(base64Str); return; }
+      
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Vòng lặp nén thông minh: Giảm chất lượng cho đến khi < 100KB
+      let quality = 0.7;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      
+      // 100KB ~ 133,333 characters in Base64
+      while (dataUrl.length > 133333 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
       }
+      
+      resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
   });
@@ -300,14 +311,12 @@ const NCRModal = ({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full p-2 border border-slate-200 rounded-lg bg-white text-sm font-bold" value={ncrData.severity} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Người phụ trách</label><input className="w-full p-2 border border-slate-200 rounded-lg bg-white text-sm" value={ncrData.responsiblePerson || ''} onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})} placeholder="Tên / Bộ phận..." /></div>
-                        {/* Fix: Changed 'ncrDate' to 'ncrData' to resolve the 'Cannot find name' error */}
                         <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạn xử lý</label><input type="date" className="w-full p-2 border border-slate-200 rounded-lg bg-white text-sm font-mono" value={ncrData.deadline || ''} onChange={e => setNcrData({...ncrData, deadline: e.target.value})} /></div>
                     </div>
 
                     <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (Root Cause)</label><textarea className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-medium italic text-slate-600" rows={1} value={ncrData.rootCause || ''} onChange={e => setNcrData({...ncrData, rootCause: e.target.value})} placeholder="Phân tích tại sao lỗi xảy ra..." /></div>
                     <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Biện pháp khắc phục</label><textarea className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-medium text-blue-900" rows={1} value={ncrData.solution} onChange={e => setNcrData({...ncrData, solution: e.target.value})} placeholder="Hướng xử lý và ngăn chặn lặp lại..." /></div>
 
-                    {/* Image Sections with Dual Buttons */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                         <div className="space-y-2 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
                             <div className="flex justify-between items-center border-b border-slate-50 pb-2 mb-2">
@@ -532,7 +541,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
                  <div className="space-y-1"><label className="font-black text-slate-500 text-[9pt] uppercase tracking-widest ml-1">SL Kiểm tra</label><input type="number" step="0.01" value={formData.inspectedQuantity || ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-black bg-white focus:ring-4 ring-blue-100 outline-none transition-all shadow-inner" placeholder="0.00" /></div>
-                 <div className="space-y-1"><div className="flex justify-between items-center"><label className="font-black text-green-600 text-[9pt] uppercase tracking-widest ml-1">SL Đạt</label><span className="text-[9pt] font-black text-green-700 bg-green-100 px-2 py-0.5 rounded-full shadow-sm">{rates.passRate}%</span></div><input type="number" step="0.01" value={formData.passedQuantity || ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-black bg-white focus:ring-4 ring-blue-100 outline-none transition-all shadow-inner" placeholder="0.00" /></div>
+                 <div className="space-y-1"><div className="flex justify-between items-center"><label className="font-black text-green-600 text-[9pt] uppercase tracking-widest ml-1">SL Đạt</label><span className="text-[9pt] font-black text-green-700 bg-green-100 px-2 py-0.5 rounded-full shadow-sm">{rates.passRate}%</span></div><input type="number" step="0.01" value={formData.passedQuantity || ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-black bg-white focus:ring-4 ring-green-100 outline-none transition-all shadow-inner" placeholder="0.00" /></div>
                  <div className="space-y-1"><div className="flex justify-between items-center"><label className="font-black text-red-600 text-[9pt] uppercase tracking-widest ml-1">SL Lỗi</label><span className="text-[9pt] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded-full shadow-sm">{rates.defectRate}%</span></div><input type="number" step="0.01" value={formData.failedQuantity || ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-black bg-white focus:ring-4 ring-red-100 outline-none transition-all shadow-inner" placeholder="0.00" /></div>
             </div>
         </div>
