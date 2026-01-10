@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment } from './types';
 import { 
@@ -139,7 +138,30 @@ const App = () => {
   const handleSelectProject = async (maCt: string) => { const found = (projects || []).find(p => p && p.ma_ct === maCt); if (found) { setActiveProject(found); setView('PROJECT_DETAIL'); } else { setIsDetailLoading(true); try { const freshProject = await fetchProjectByCode(maCt); if (freshProject) { setActiveProject(freshProject); setView('PROJECT_DETAIL'); } else alert("Không tìm thấy dự án."); } catch (e) { alert("Lỗi kết nối."); } finally { setIsDetailLoading(false); } } };
   const handleEditInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('FORM'); } } catch (e) {} finally { setIsDetailLoading(false); } };
   const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
-  const handleApproveInspection = async (id: string, signature: string, productionInfo?: { signature: string, name: string }) => { if (!activeInspection) return; const updated: Inspection = { ...activeInspection, status: InspectionStatus.APPROVED, managerSignature: signature, managerName: user?.name, confirmedDate: new Date().toISOString() }; if (productionInfo) { updated.productionSignature = productionInfo.signature; updated.productionName = productionInfo.name; updated.productionConfirmedDate = new Date().toISOString(); } await saveInspectionToSheet(updated); loadInspections(); };
+  const handleApproveInspection = async (id: string, signature: string, extraInfo?: any) => { 
+    if (!activeInspection) return; 
+    const isFullApproval = !!signature;
+    const updated: Inspection = { 
+        ...activeInspection, 
+        status: isFullApproval ? InspectionStatus.APPROVED : activeInspection.status, 
+        managerSignature: signature || activeInspection.managerSignature, 
+        managerName: isFullApproval ? user?.name : (activeInspection.managerName || extraInfo?.managerName), 
+        confirmedDate: isFullApproval ? new Date().toISOString() : activeInspection.confirmedDate 
+    }; 
+    if (extraInfo) { 
+        if (extraInfo.signature) {
+            updated.productionSignature = extraInfo.signature;
+            updated.productionName = extraInfo.name;
+            updated.productionConfirmedDate = new Date().toISOString();
+        }
+        if (extraInfo.pmSignature !== undefined) updated.pmSignature = extraInfo.pmSignature;
+        if (extraInfo.pmComment !== undefined) updated.pmComment = extraInfo.pmComment;
+        if (extraInfo.pmName !== undefined) updated.pmName = extraInfo.pmName;
+    } 
+    await saveInspectionToSheet(updated); 
+    loadInspections(); 
+    setActiveInspection(updated);
+  };
   const handlePostComment = async (id: string, comment: NCRComment) => { if (!activeInspection) return; const updatedComments = [...(activeInspection.comments || []), comment]; const updated = { ...activeInspection, comments: updatedComments }; await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections(); };
   const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
   const handleQrScan = (scannedCode: string) => { setShowQrScanner(false); setPendingScannedCode(scannedCode); setShowModuleSelector(true); };
