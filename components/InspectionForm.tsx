@@ -6,7 +6,8 @@ import {
   MapPin, Briefcase, Box, AlertTriangle, 
   CheckCircle2, Trash2, Plus, Info, LayoutList,
   AlertOctagon, FileText, Tag, Hash, Pencil, Calendar, Loader2, QrCode,
-  Ruler, Microscope, CheckSquare, PenTool, Eraser, BookOpen, Search
+  Ruler, Microscope, CheckSquare, PenTool, Eraser, BookOpen, Search,
+  Target, CheckCircle, XCircle, Calculator, TrendingUp, User as UserIcon
 } from 'lucide-react';
 import { generateItemSuggestion } from '../services/geminiService';
 import { fetchPlans, fetchDefectLibrary } from '../services/apiService';
@@ -184,7 +185,7 @@ const SignaturePad = ({
     );
 };
 
-// Sub-component: NCR Modal (Enhanced with Defect Library)
+// Sub-component: NCR Modal (Enhanced with requested fields)
 const NCRModal = ({ 
     isOpen, 
     onClose, 
@@ -203,23 +204,45 @@ const NCRModal = ({
     const [ncrData, setNcrData] = useState<Partial<NCR>>({
         severity: 'MINOR',
         issueDescription: '',
+        rootCause: '',
         solution: '',
-        imagesBefore: []
+        responsiblePerson: '',
+        imagesBefore: [],
+        imagesAfter: [],
+        status: 'OPEN'
     });
     
     const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
     const [showLibrary, setShowLibrary] = useState(false);
     const [libSearch, setLibSearch] = useState('');
+    const [defectName, setDefectName] = useState(''); // To display error name from library
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadType, setUploadType] = useState<'BEFORE' | 'AFTER'>('BEFORE');
 
     useEffect(() => {
         if (isOpen) {
             setNcrData(initialData || {
                 severity: 'MINOR',
                 issueDescription: '',
+                rootCause: '',
                 solution: '',
-                imagesBefore: []
+                responsiblePerson: '',
+                imagesBefore: [],
+                imagesAfter: [],
+                status: 'OPEN'
             });
             fetchDefectLibrary().then(setLibrary);
+            
+            if (initialData?.defect_code) {
+                // If editing, find the name in library if possible
+                fetchDefectLibrary().then(libs => {
+                    const match = libs.find(l => l.code === initialData.defect_code);
+                    if (match) setDefectName(match.name);
+                });
+            } else {
+                setDefectName('');
+            }
         }
     }, [isOpen, initialData]);
 
@@ -233,25 +256,42 @@ const NCRModal = ({
         });
     }, [library, libSearch, inspectionStage]);
 
+    // Fixed: Properly handled unknown FileReader result by casting to string when required
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const result = reader.result;
+                if (typeof result === 'string') {
+                    const resized = await resizeImage(result);
+                    setNcrData(prev => {
+                        const field = uploadType === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+                        return { ...prev, [field]: [...(prev[field] || []), resized] };
+                    });
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+        e.target.value = '';
+    };
+
     if (!isOpen) return null;
 
     const modalStyle = { fontFamily: '"Times New Roman", Times, serif', fontSize: '11pt', fontWeight: 'normal' };
 
     return (
         <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" style={modalStyle}>
-            <div className="bg-white w-full max-w-lg rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="bg-white w-full max-w-2xl rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
                 <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center shrink-0">
                     <h3 className="text-red-600 flex items-center gap-2" style={{ fontWeight: 'bold' }}>
                         <AlertOctagon className="w-5 h-5" /> Báo cáo sự không phù hợp (NCR)
                     </h3>
                     <button onClick={onClose}><X className="w-5 h-5 text-slate-400"/></button>
                 </div>
+                
                 <div className="p-5 space-y-4 overflow-y-auto flex-1 no-scrollbar">
-                    <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                        <span className="text-slate-500 block text-[10pt]">Hạng mục lỗi:</span>
-                        <span className="text-slate-800" style={{ fontWeight: 'bold' }}>{itemName}</span>
-                    </div>
-
                     {/* Defect Library Shortcut */}
                     <div className="border border-blue-200 rounded-lg overflow-hidden bg-blue-50/30">
                         <button 
@@ -285,6 +325,7 @@ const NCRModal = ({
                                                     defect_code: item.code,
                                                     solution: item.suggestedAction || ncrData.solution
                                                 });
+                                                setDefectName(item.name);
                                                 setShowLibrary(false);
                                             }}
                                             className="p-2 border rounded hover:bg-blue-50 cursor-pointer flex justify-between items-center group"
@@ -302,18 +343,33 @@ const NCRModal = ({
                         )}
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-slate-700 font-bold">Hạng mục kiểm tra</label>
+                            <input readOnly value={itemName} className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-slate-500 italic" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-slate-700 font-bold">Tên lỗi (Từ thư viện)</label>
+                            <input 
+                                readOnly 
+                                value={defectName || 'Chưa chọn lỗi từ thư viện'} 
+                                className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-blue-700 font-bold" 
+                            />
+                        </div>
+                    </div>
+
                     <div className="space-y-1">
-                        <label className="text-slate-700 font-bold">Mô tả lỗi *</label>
+                        <label className="text-slate-700 font-bold">Mô tả lỗi chi tiết *</label>
                         <textarea 
                             className="w-full p-2 border border-slate-300 rounded outline-none focus:border-blue-500 text-[11pt]"
                             rows={3}
-                            placeholder="Mô tả chi tiết vấn đề..."
+                            placeholder="Mô tả cụ thể hiện trạng lỗi..."
                             value={ncrData.issueDescription}
                             onChange={e => setNcrData({...ncrData, issueDescription: e.target.value})}
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1">
                             <label className="text-slate-700 font-bold">Mức độ</label>
                             <select 
@@ -327,6 +383,15 @@ const NCRModal = ({
                             </select>
                         </div>
                         <div className="space-y-1">
+                            <label className="text-slate-700 font-bold">Người chịu trách nhiệm</label>
+                            <input 
+                                className="w-full p-2 border border-slate-300 rounded outline-none text-[11pt]"
+                                placeholder="Tên/BP chịu trách nhiệm..."
+                                value={ncrData.responsiblePerson || ''}
+                                onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})}
+                            />
+                        </div>
+                        <div className="space-y-1">
                             <label className="text-slate-700 font-bold">Hạn xử lý</label>
                             <input 
                                 type="date" 
@@ -338,16 +403,75 @@ const NCRModal = ({
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-slate-700 font-bold">Biện pháp khắc phục (Dự kiến)</label>
+                        <label className="text-slate-700 font-bold">Nguyên nhân gốc rễ (Root Cause)</label>
+                        <textarea 
+                            className="w-full p-2 border border-slate-300 rounded outline-none text-[11pt]"
+                            rows={2}
+                            placeholder="Phân tích nguyên nhân sâu xa gây ra lỗi..."
+                            value={ncrData.rootCause || ''}
+                            onChange={e => setNcrData({...ncrData, rootCause: e.target.value})}
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-slate-700 font-bold">Biện pháp khắc phục & phòng ngừa</label>
                         <textarea 
                             className="w-full p-2 border border-slate-300 rounded outline-none resize-none text-[11pt]"
                             rows={2}
-                            placeholder="Hướng xử lý..."
+                            placeholder="Hướng xử lý và ngăn chặn lặp lại..."
                             value={ncrData.solution}
                             onChange={e => setNcrData({...ncrData, solution: e.target.value})}
                         />
                     </div>
+
+                    {/* Image Sections */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <label className="text-red-600 font-bold flex items-center gap-1"><AlertTriangle className="w-4 h-4"/> Hình ảnh Trước xử lý</label>
+                                <button 
+                                    onClick={() => { setUploadType('BEFORE'); fileInputRef.current?.click(); }}
+                                    className="p-1 bg-red-50 text-red-600 rounded border border-red-200"
+                                    type="button"
+                                >
+                                    <Camera className="w-4 h-4"/>
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                                {ncrData.imagesBefore?.map((img, i) => (
+                                    <div key={i} className="relative aspect-square border rounded overflow-hidden">
+                                        <img src={img} className="w-full h-full object-cover" />
+                                        <button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5"><X className="w-3 h-3"/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <label className="text-green-600 font-bold flex items-center gap-1"><CheckCircle className="w-4 h-4"/> Hình ảnh Sau xử lý</label>
+                                <button 
+                                    onClick={() => { setUploadType('AFTER'); fileInputRef.current?.click(); }}
+                                    className="p-1 bg-green-50 text-green-600 rounded border border-green-200"
+                                    type="button"
+                                >
+                                    <Camera className="w-4 h-4"/>
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                                {ncrData.imagesAfter?.map((img, i) => (
+                                    <div key={i} className="relative aspect-square border rounded overflow-hidden">
+                                        <img src={img} className="w-full h-full object-cover" />
+                                        <button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5"><X className="w-3 h-3"/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
+
                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
                     <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:text-slate-800 border rounded bg-white font-bold">Hủy</button>
                     <button 
@@ -355,7 +479,7 @@ const NCRModal = ({
                         disabled={!ncrData.issueDescription}
                         className="px-6 py-2 bg-red-600 text-white rounded shadow-sm hover:bg-red-700 disabled:opacity-50 font-bold"
                     >
-                        Lưu NCR
+                        Lưu hồ sơ NCR
                     </button>
                 </div>
             </div>
@@ -380,6 +504,9 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     score: 0,
     signature: '',
     productionSignature: '',
+    inspectedQuantity: 0,
+    passedQuantity: 0,
+    failedQuantity: 0,
     ...initialData
   });
 
@@ -429,9 +556,11 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
       return selectedWorkshop?.stages || [];
   }, [formData.ma_nha_may, workshops]);
 
+  // ISO RULE: Visible items depend on selected stage
   const visibleItems = useMemo(() => {
+      if (!formData.inspectionStage) return []; // Don't load items until stage is selected
       if (!formData.items) return [];
-      if (!formData.inspectionStage) return formData.items;
+      // Filter based on stage
       return formData.items.filter(item => !item.stage || item.stage === formData.inspectionStage);
   }, [formData.items, formData.inspectionStage]);
 
@@ -489,8 +618,41 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   };
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+        const next = { ...prev, [field]: value };
+
+        // ISO Calculation Logic
+        const ins = parseFloat(String(next.inspectedQuantity || 0));
+        const pas = parseFloat(String(next.passedQuantity || 0));
+        const fai = parseFloat(String(next.failedQuantity || 0));
+
+        if (field === 'inspectedQuantity') {
+            // Recalculate passed based on existing failed
+            next.passedQuantity = Math.max(0, value - fai);
+        } else if (field === 'passedQuantity') {
+            // Recalculate failed based on new passed
+            next.failedQuantity = Math.max(0, ins - value);
+        } else if (field === 'failedQuantity') {
+            // Recalculate passed based on new failed
+            next.passedQuantity = Math.max(0, ins - value);
+        }
+
+        return next;
+    });
   };
+
+  // Derived Rates
+  const rates = useMemo(() => {
+    const ins = parseFloat(String(formData.inspectedQuantity || 0));
+    const pas = parseFloat(String(formData.passedQuantity || 0));
+    const fai = parseFloat(String(formData.failedQuantity || 0));
+
+    if (ins <= 0) return { passRate: 0, defectRate: 0 };
+    return {
+        passRate: ((pas / ins) * 100).toFixed(1),
+        defectRate: ((fai / ins) * 100).toFixed(1)
+    };
+  }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
 
   const handleSearchCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
@@ -526,8 +688,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
               itemId: currentItem.id,
               createdDate: new Date().toISOString(),
               responsiblePerson: ncrData.responsiblePerson || 'QA/QC Lead',
-              status: 'OPEN',
-              imagesBefore: currentItem.images || []
+              status: ncrData.status || 'OPEN',
+              imagesBefore: ncrData.imagesBefore || currentItem.images || []
           };
           newItems[activeNcrItemIndex] = {
               ...currentItem,
@@ -561,6 +723,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     }
   };
 
+  // Fixed: Handled potential unknown FileReader result in handleFileUpload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -568,19 +731,21 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        const processedImage = await resizeImage(base64);
-        if (activeUploadId === 'MAIN') {
-          setFormData(prev => ({ ...prev, images: [...(prev.images || []), processedImage] }));
-        } else if (activeUploadId) {
-          setFormData(prev => ({
-            ...prev,
-            items: prev.items?.map(item => 
-              item.id === activeUploadId 
-                ? { ...item, images: [...(item.images || []), processedImage] }
-                : item
-            )
-          }));
+        const result = reader.result;
+        if (typeof result === 'string') {
+          const processedImage = await resizeImage(result);
+          if (activeUploadId === 'MAIN') {
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), processedImage] }));
+          } else if (activeUploadId) {
+            setFormData(prev => ({
+              ...prev,
+              items: prev.items?.map(item => 
+                item.id === activeUploadId 
+                  ? { ...item, images: [...(item.images || []), processedImage] }
+                  : item
+              )
+            }));
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -639,6 +804,10 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
     if (!formData.ma_ct || !formData.ten_hang_muc) {
       alert("Vui lòng nhập/quét mã để tải thông tin dự án và hạng mục");
       return;
+    }
+    if (!formData.inspectionStage) {
+        alert("Vui lòng chọn công đoạn kiểm tra.");
+        return;
     }
     setIsSaving(true);
     try {
@@ -719,7 +888,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                    <label className="block text-slate-600 mb-1">Số lượng</label>
+                    <label className="block text-slate-600 mb-1">Số lượng IPO</label>
                     <input type="number" value={formData.so_luong_ipo || 0} readOnly style={readOnlyStyle} />
                 </div>
                 <div>
@@ -737,7 +906,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
         </div>
 
-        {/* Section II: Hình ảnh hiện trường (MOVED UP per request) */}
+        {/* Section II: Hình ảnh hiện trường */}
         <section className="bg-white p-4 rounded border border-slate-300 shadow-sm space-y-3">
             <div className="flex items-center gap-2 border-b border-blue-100 pb-2 mb-2">
                 <ImageIcon className="w-4 h-4 text-blue-700" />
@@ -776,11 +945,12 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
         </section>
 
-        {/* Section III: Địa điểm & Công đoạn */}
+        {/* Section III: Địa điểm & Công đoạn & Số lượng (ISO DATA) */}
         <div className="bg-white p-4 rounded border border-slate-300 shadow-sm space-y-4">
              <h3 className="text-blue-700 border-b border-blue-100 pb-2 mb-2 flex items-center gap-2" style={{ fontWeight: 'bold' }}>
-                <MapPin className="w-4 h-4"/> III. ĐỊA ĐIỂM & CÔNG ĐOẠN
-            </h3>
+                <MapPin className="w-4 h-4"/> III. ĐỊA ĐIỂM & CÔNG ĐOẠN & SỐ LƯỢNG
+             </h3>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div>
                     <label className="block text-slate-600 mb-1">Nhà máy / Xưởng sản xuất</label>
@@ -799,7 +969,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                     </div>
                  </div>
                  <div>
-                    <label className="block text-slate-600 mb-1">Giai đoạn kiểm tra</label>
+                    <label className="block text-slate-600 mb-1">Giai đoạn kiểm tra *</label>
                     {availableStages.length > 0 ? (
                         <div className="relative">
                             <select 
@@ -807,7 +977,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                 onChange={(e) => handleInputChange('inspectionStage', e.target.value)}
                                 style={inputStyle}
                             >
-                                <option value="">-- Tất cả công đoạn --</option>
+                                <option value="">-- Chọn công đoạn để load hạng mục --</option>
                                 {availableStages.map(stage => (
                                     <option key={stage} value={stage}>{stage}</option>
                                 ))}
@@ -819,205 +989,266 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                     )}
                  </div>
             </div>
+
+            {/* Quantities Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 bg-slate-50/30 p-4 rounded-xl">
+                 <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-slate-600 font-bold" style={{ fontSize: '10pt' }}>
+                        <Target className="w-3.5 h-3.5 text-blue-500" /> SL Kiểm tra
+                    </label>
+                    <input 
+                        type="number" step="0.01"
+                        value={formData.inspectedQuantity || ''}
+                        onChange={(e) => handleInputChange('inspectedQuantity', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-bold focus:border-blue-500 outline-none transition-shadow focus:shadow-md"
+                        placeholder="0.00"
+                    />
+                 </div>
+                 <div className="space-y-1">
+                    <div className="flex justify-between items-center px-0.5">
+                        <label className="flex items-center gap-1.5 text-green-600 font-bold" style={{ fontSize: '10pt' }}>
+                            <CheckCircle className="w-3.5 h-3.5" /> SL Đạt
+                        </label>
+                        <span className="text-[9pt] font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3"/> {rates.passRate}%
+                        </span>
+                    </div>
+                    <input 
+                        type="number" step="0.01"
+                        value={formData.passedQuantity || ''}
+                        onChange={(e) => handleInputChange('passedQuantity', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-bold focus:border-green-500 outline-none transition-shadow focus:shadow-md"
+                        placeholder="0.00"
+                    />
+                 </div>
+                 <div className="space-y-1">
+                    <div className="flex justify-between items-center px-0.5">
+                        <label className="flex items-center gap-1.5 text-red-600 font-bold" style={{ fontSize: '10pt' }}>
+                            <XCircle className="w-3.5 h-3.5" /> SL Lỗi
+                        </label>
+                        <span className="text-[9pt] font-black text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+                             {rates.defectRate}%
+                        </span>
+                    </div>
+                    <input 
+                        type="number" step="0.01"
+                        value={formData.failedQuantity || ''}
+                        onChange={(e) => handleInputChange('failedQuantity', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-bold focus:border-red-500 outline-none transition-shadow focus:shadow-md"
+                        placeholder="0.00"
+                    />
+                 </div>
+            </div>
         </div>
 
-        {/* Section IV: Danh sách kiểm tra */}
+        {/* Section IV: Danh sách kiểm tra (STAGE DEPENDENT) */}
         <div className="space-y-3">
             <div className="flex justify-between items-end border-b border-slate-300 pb-2 px-1">
                 <h3 className="text-slate-700 flex items-center gap-2" style={{ fontWeight: 'bold' }}>
                     <LayoutList className="w-4 h-4 text-blue-600" /> IV. NỘI DUNG KIỂM TRA ({visibleItems.length})
                 </h3>
-                <button 
-                    onClick={handleAddItem} 
-                    className="text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded border border-blue-200"
-                    style={{ fontSize: '11pt' }}
-                >
-                    <Plus className="w-3 h-3" /> Thêm tiêu chí
-                </button>
+                {formData.inspectionStage && (
+                    <button 
+                        onClick={handleAddItem} 
+                        className="text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded border border-blue-200"
+                        style={{ fontSize: '11pt' }}
+                    >
+                        <Plus className="w-3 h-3" /> Thêm tiêu chí
+                    </button>
+                )}
             </div>
 
-            <div className="space-y-3">
-                {formData.items?.map((item, originalIndex) => {
-                    if (formData.inspectionStage && item.stage && item.stage !== formData.inspectionStage) return null;
+            {!formData.inspectionStage ? (
+                <div className="bg-orange-50 border border-orange-200 p-8 rounded-[2rem] text-center space-y-3 animate-pulse">
+                    <Info className="w-10 h-10 text-orange-400 mx-auto" />
+                    <p className="text-sm font-bold text-orange-800 uppercase tracking-tight">Vui lòng chọn công đoạn tại Mục III để bắt đầu kiểm tra</p>
+                    <p className="text-xs text-orange-600 italic">Hệ thống sẽ tự động load hạng mục tiêu chuẩn tương ứng với từng công đoạn sản xuất.</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {formData.items?.map((item, originalIndex) => {
+                        // Skip if item doesn't belong to current selected stage (if items have stages)
+                        if (item.stage && item.stage !== formData.inspectionStage) return null;
 
-                    return (
-                        <div key={item.id} className={`bg-white rounded p-4 border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-300'}`}>
-                            {/* Row 1: Content Label */}
-                            <div className="flex items-start justify-between gap-3 mb-3 border-b border-slate-100 pb-2">
-                                <div className="flex-1 space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200" style={{ fontSize: '10pt' }}>{item.category}</span>
-                                        {item.stage && <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200" style={{ fontSize: '10pt' }}>{item.stage}</span>}
-                                        {item.ncr && <span className="bg-red-600 text-white px-2 py-0.5 rounded flex items-center gap-1" style={{ fontSize: '10pt' }}><AlertTriangle className="w-3 h-3"/> NCR Active</span>}
+                        return (
+                            <div key={item.id} className={`bg-white rounded p-4 border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-300'}`}>
+                                {/* Row 1: Content Label */}
+                                <div className="flex items-start justify-between gap-3 mb-3 border-b border-slate-100 pb-2">
+                                    <div className="flex-1 space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200" style={{ fontSize: '10pt' }}>{item.category}</span>
+                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200" style={{ fontSize: '10pt' }}>{formData.inspectionStage}</span>
+                                            {item.ncr && <span className="bg-red-600 text-white px-2 py-0.5 rounded flex items-center gap-1" style={{ fontSize: '10pt' }}><AlertTriangle className="w-3 h-3"/> NCR Active</span>}
+                                        </div>
+                                        <input 
+                                            value={item.label}
+                                            onChange={(e) => handleItemChange(originalIndex, 'label', e.target.value)}
+                                            className="w-full bg-transparent p-1 text-slate-800 focus:border-blue-500 focus:outline-none placeholder:text-slate-400"
+                                            style={{ fontWeight: 'bold', fontSize: '12pt' }}
+                                            placeholder="Nội dung kiểm tra..."
+                                        />
                                     </div>
-                                    <input 
-                                        value={item.label}
-                                        onChange={(e) => handleItemChange(originalIndex, 'label', e.target.value)}
-                                        className="w-full bg-transparent p-1 text-slate-800 focus:border-blue-500 focus:outline-none placeholder:text-slate-400"
-                                        style={{ fontWeight: 'bold', fontSize: '12pt' }}
-                                        placeholder="Nội dung kiểm tra..."
-                                    />
-                                </div>
-                                <button onClick={() => handleRemoveItem(originalIndex)} className="text-slate-400 hover:text-red-500 p-2">
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            {/* Row 2: Method & Standard */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                                <div className="space-y-1">
-                                    <label className="text-slate-500 flex items-center gap-1" style={{ fontSize: '10pt', fontWeight: 'bold' }}>
-                                        <Microscope className="w-3 h-3" /> Phương pháp kiểm tra
-                                    </label>
-                                    <input 
-                                        value={item.method || ''}
-                                        onChange={(e) => handleItemChange(originalIndex, 'method', e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-700 outline-none focus:border-blue-400"
-                                        style={{ fontSize: '11pt' }}
-                                        placeholder="VD: Kiểm tra bằng mắt, thước..."
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-slate-500 flex items-center gap-1" style={{ fontSize: '10pt', fontWeight: 'bold' }}>
-                                        <Ruler className="w-3 h-3" /> Tiêu chuẩn / Dung sai
-                                    </label>
-                                    <input 
-                                        value={item.standard || ''}
-                                        onChange={(e) => handleItemChange(originalIndex, 'standard', e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-700 outline-none focus:border-blue-400"
-                                        style={{ fontSize: '11pt' }}
-                                        placeholder="VD: Không trầy xước, +/- 1mm..."
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Row 3: Evaluation Status Buttons */}
-                            <div className="flex flex-wrap gap-3 items-center mb-3">
-                                <span className="text-slate-600 mr-2" style={{ fontWeight: 'bold' }}>Đánh giá:</span>
-                                <div className="flex bg-slate-100 rounded p-1 gap-1 border border-slate-200">
-                                    <button
-                                        onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.PASS)}
-                                        className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-                                            item.status === CheckStatus.PASS 
-                                            ? 'bg-green-600 text-white shadow-sm' 
-                                            : 'text-slate-600 hover:bg-white'
-                                        }`}
-                                        style={{ fontSize: '10pt', fontWeight: item.status === CheckStatus.PASS ? 'bold' : 'normal' }}
-                                    >
-                                        {item.status === CheckStatus.PASS && <CheckCircle2 className="w-3 h-3"/>} Đạt
-                                    </button>
-                                    
-                                    <button
-                                        onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.FAIL)}
-                                        className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-                                            item.status === CheckStatus.FAIL 
-                                            ? 'bg-red-600 text-white shadow-sm' 
-                                            : 'text-slate-600 hover:bg-white'
-                                        }`}
-                                        style={{ fontSize: '10pt', fontWeight: item.status === CheckStatus.FAIL ? 'bold' : 'normal' }}
-                                    >
-                                        {item.status === CheckStatus.FAIL && <AlertTriangle className="w-3 h-3"/>} Lỗi
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.CONDITIONAL)}
-                                        className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-                                            item.status === CheckStatus.CONDITIONAL 
-                                            ? 'bg-orange-500 text-white shadow-sm' 
-                                            : 'text-slate-600 hover:bg-white'
-                                        }`}
-                                        style={{ fontSize: '10pt', fontWeight: item.status === CheckStatus.CONDITIONAL ? 'bold' : 'normal' }}
-                                    >
-                                        {item.status === CheckStatus.CONDITIONAL && <Info className="w-3 h-3"/>} Có điều kiện
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.PENDING)}
-                                        className={`px-2 py-1.5 rounded transition-all text-slate-400 hover:text-slate-600 hover:bg-white`}
-                                        title="Đặt lại"
-                                    >
-                                        ---
+                                    <button onClick={() => handleRemoveItem(originalIndex)} className="text-slate-400 hover:text-red-500 p-2">
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
 
-                                <div className="flex items-center gap-2 ml-auto">
-                                    <button 
-                                        onClick={() => triggerUpload(item.id, 'camera')}
-                                        className="p-2 bg-white text-slate-600 hover:text-blue-600 rounded border border-slate-300 shadow-sm"
-                                        title="Chụp ảnh minh chứng"
-                                    >
-                                        <Camera className="w-4 h-4" />
-                                    </button>
-                                    <button 
-                                        onClick={() => handleGetSuggestion(item, originalIndex)}
-                                        className="p-2 bg-purple-50 text-purple-600 rounded border border-purple-200 hover:bg-purple-100 shadow-sm"
-                                        title="Gợi ý AI"
-                                    >
-                                        <Info className="w-4 h-4" />
-                                    </button>
-                                    {item.status === CheckStatus.FAIL && (
-                                        <button 
-                                            onClick={() => { setActiveNcrItemIndex(originalIndex); setIsNcrModalOpen(true); }}
-                                            className={`px-3 py-1.5 rounded border flex items-center gap-1.5 transition-all ${
-                                                item.ncr 
-                                                ? 'bg-red-50 text-red-600 border-red-200' 
-                                                : 'bg-slate-800 text-white border-slate-800 hover:bg-black'
+                                {/* Row 2: Method & Standard */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                                    <div className="space-y-1">
+                                        <label className="text-slate-500 flex items-center gap-1" style={{ fontSize: '10pt', fontWeight: 'bold' }}>
+                                            <Microscope className="w-3 h-3" /> Phương pháp kiểm tra
+                                        </label>
+                                        <input 
+                                            value={item.method || ''}
+                                            onChange={(e) => handleItemChange(originalIndex, 'method', e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-700 outline-none focus:border-blue-400"
+                                            style={{ fontSize: '11pt' }}
+                                            placeholder="VD: Kiểm tra bằng mắt, thước..."
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-slate-500 flex items-center gap-1" style={{ fontSize: '10pt', fontWeight: 'bold' }}>
+                                            <Ruler className="w-3 h-3" /> Tiêu chuẩn / Dung sai
+                                        </label>
+                                        <input 
+                                            value={item.standard || ''}
+                                            onChange={(e) => handleItemChange(originalIndex, 'standard', e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-700 outline-none focus:border-blue-400"
+                                            style={{ fontSize: '11pt' }}
+                                            placeholder="VD: Không trầy xước, +/- 1mm..."
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Row 3: Evaluation Status Buttons */}
+                                <div className="flex flex-wrap gap-3 items-center mb-3">
+                                    <span className="text-slate-600 mr-2" style={{ fontWeight: 'bold' }}>Đánh giá:</span>
+                                    <div className="flex bg-slate-100 rounded p-1 gap-1 border border-slate-200">
+                                        <button
+                                            onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.PASS)}
+                                            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
+                                                item.status === CheckStatus.PASS 
+                                                ? 'bg-green-600 text-white shadow-sm' 
+                                                : 'text-slate-600 hover:bg-white'
                                             }`}
-                                            style={{ fontSize: '10pt' }}
+                                            style={{ fontSize: '10pt', fontWeight: item.status === CheckStatus.PASS ? 'bold' : 'normal' }}
                                         >
-                                            <AlertOctagon className="w-3 h-3" />
-                                            {item.ncr ? 'Sửa NCR' : 'Tạo NCR'}
+                                            {item.status === CheckStatus.PASS && <CheckCircle2 className="w-3 h-3"/>} Đạt
                                         </button>
+                                        
+                                        <button
+                                            onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.FAIL)}
+                                            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
+                                                item.status === CheckStatus.FAIL 
+                                                ? 'bg-red-600 text-white shadow-sm' 
+                                                : 'text-slate-600 hover:bg-white'
+                                            }`}
+                                            style={{ fontSize: '10pt', fontWeight: item.status === CheckStatus.FAIL ? 'bold' : 'normal' }}
+                                        >
+                                            {item.status === CheckStatus.FAIL && <AlertTriangle className="w-3 h-3"/>} Lỗi
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.CONDITIONAL)}
+                                            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
+                                                item.status === CheckStatus.CONDITIONAL 
+                                                ? 'bg-orange-500 text-white shadow-sm' 
+                                                : 'text-slate-600 hover:bg-white'
+                                            }`}
+                                            style={{ fontSize: '10pt', fontWeight: item.status === CheckStatus.CONDITIONAL ? 'bold' : 'normal' }}
+                                        >
+                                            {item.status === CheckStatus.CONDITIONAL && <Info className="w-3 h-3"/>} Có điều kiện
+                                        </button>
+
+                                        <button
+                                            onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.PENDING)}
+                                            className={`px-2 py-1.5 rounded transition-all text-slate-400 hover:text-slate-600 hover:bg-white`}
+                                            title="Đặt lại"
+                                        >
+                                            ---
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 ml-auto">
+                                        <button 
+                                            onClick={() => triggerUpload(item.id, 'camera')}
+                                            className="p-2 bg-white text-slate-600 hover:text-blue-600 rounded border border-slate-300 shadow-sm"
+                                            title="Chụp ảnh minh chứng"
+                                        >
+                                            <Camera className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleGetSuggestion(item, originalIndex)}
+                                            className="p-2 bg-purple-50 text-purple-600 rounded border border-purple-200 hover:bg-purple-100 shadow-sm"
+                                            title="Gợi ý AI"
+                                        >
+                                            <Info className="w-4 h-4" />
+                                        </button>
+                                        {item.status === CheckStatus.FAIL && (
+                                            <button 
+                                                onClick={() => { setActiveNcrItemIndex(originalIndex); setIsNcrModalOpen(true); }}
+                                                className={`px-3 py-1.5 rounded border flex items-center gap-1.5 transition-all ${
+                                                    item.ncr 
+                                                    ? 'bg-red-50 text-red-600 border-red-200' 
+                                                    : 'bg-slate-800 text-white border-slate-800 hover:bg-black'
+                                                }`}
+                                                style={{ fontSize: '10pt' }}
+                                            >
+                                                <AlertOctagon className="w-3 h-3" />
+                                                {item.ncr ? 'Sửa NCR' : 'Tạo NCR'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Row 4: Notes & Images */}
+                                <div className="mt-2 space-y-2">
+                                    <div className="relative">
+                                        <textarea 
+                                            value={item.notes || ''}
+                                            onChange={(e) => handleItemChange(originalIndex, 'notes', e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 resize-none h-16 focus:bg-white focus:border-blue-300 outline-none"
+                                            style={{ fontSize: '11pt' }}
+                                            placeholder="Ghi chú chi tiết..."
+                                        />
+                                        <div className="absolute top-2 right-2 pointer-events-none opacity-20">
+                                            <Pencil className="w-4 h-4" />
+                                        </div>
+                                    </div>
+                                    
+                                    {item.images && item.images.length > 0 && (
+                                        <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar border-t border-slate-100 pt-2">
+                                            {item.images.map((img, i) => (
+                                                <div 
+                                                    key={i} 
+                                                    onClick={() => handleImageClick(item.images || [], i, { type: 'ITEM', itemId: item.id })}
+                                                    className="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-slate-300 group/img cursor-pointer hover:border-blue-500"
+                                                >
+                                                    <img src={img} className="w-full h-full object-cover" />
+                                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                                                        <Pencil className="w-4 h-4 text-white" />
+                                                    </div>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const newImages = item.images?.filter((_, imgIdx) => imgIdx !== i);
+                                                            handleItemChange(originalIndex, 'images', newImages);
+                                                        }}
+                                                        className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl shadow-sm"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             </div>
-
-                            {/* Row 4: Notes & Images */}
-                            <div className="mt-2 space-y-2">
-                                <div className="relative">
-                                    <textarea 
-                                        value={item.notes || ''}
-                                        onChange={(e) => handleItemChange(originalIndex, 'notes', e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 resize-none h-16 focus:bg-white focus:border-blue-300 outline-none"
-                                        style={{ fontSize: '11pt' }}
-                                        placeholder="Ghi chú chi tiết..."
-                                    />
-                                    <div className="absolute top-2 right-2 pointer-events-none opacity-20">
-                                        <Pencil className="w-4 h-4" />
-                                    </div>
-                                </div>
-                                
-                                {item.images && item.images.length > 0 && (
-                                    <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar border-t border-slate-100 pt-2">
-                                        {item.images.map((img, i) => (
-                                            <div 
-                                                key={i} 
-                                                onClick={() => handleImageClick(item.images || [], i, { type: 'ITEM', itemId: item.id })}
-                                                className="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-slate-300 group/img cursor-pointer hover:border-blue-500"
-                                            >
-                                                <img src={img} className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
-                                                    <Pencil className="w-4 h-4 text-white" />
-                                                </div>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const newImages = item.images?.filter((_, imgIdx) => imgIdx !== i);
-                                                        handleItemChange(originalIndex, 'images', newImages);
-                                                    }}
-                                                    className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl shadow-sm"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
 
         {/* Section V: Xác nhận & Chữ ký */}
@@ -1030,64 +1261,3 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                     label="Đại diện Xưởng / Nhà máy"
                     value={formData.productionSignature}
                     onChange={(sig) => setFormData(prev => ({ ...prev, productionSignature: sig }))}
-                />
-                <SignaturePad 
-                    label={`Đại diện QA/QC (${user.name})`}
-                    value={formData.signature}
-                    onChange={(sig) => setFormData(prev => ({ ...prev, signature: sig }))}
-                />
-            </div>
-        </section>
-
-      </div>
-
-      {/* 5. Footer Actions */}
-      <div className="p-4 border-t border-slate-300 bg-white flex justify-end gap-3 shrink-0 shadow-lg z-20">
-        <Button variant="secondary" onClick={onCancel} className="w-32 border-slate-300">Hủy bỏ</Button>
-        <Button 
-            onClick={handleSubmit} 
-            disabled={isSaving}
-            className="w-48 bg-blue-700 hover:bg-blue-800 text-white shadow-md font-bold"
-        >
-            {isSaving ? 'Đang lưu...' : 'Lưu Phiếu'}
-        </Button>
-      </div>
-
-      {/* Hidden Inputs & Modals */}
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileUpload} />
-      <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
-      
-      {activeNcrItemIndex !== null && formData.items && formData.items[activeNcrItemIndex] && (
-          <NCRModal 
-              isOpen={isNcrModalOpen} 
-              onClose={() => setIsNcrModalOpen(false)} 
-              onSave={handleSaveNCR}
-              initialData={formData.items[activeNcrItemIndex].ncr}
-              itemName={formData.items[activeNcrItemIndex].label}
-              inspectionStage={formData.inspectionStage}
-          />
-      )}
-
-      {editorState && (
-          <ImageEditorModal
-              images={editorState.images}
-              initialIndex={editorState.index}
-              onClose={() => setEditorState(null)}
-              onSave={handleEditorSave}
-              readOnly={false} 
-          />
-      )}
-
-      {showScanner && (
-          <QRScannerModal 
-              onClose={() => setShowScanner(false)} 
-              onScan={(data) => {
-                  setSearchCode(data);
-                  lookupPlanInfo(data);
-                  setShowScanner(false);
-              }} 
-          />
-      )}
-    </div>
-  );
-};

@@ -4,7 +4,6 @@ import { ALL_MODULES } from '../constants';
 import { QRScannerModal } from './QRScannerModal';
 import { 
   Search, RefreshCw, QrCode, FolderOpen, Clock, Tag, 
-  // Added ChevronLeft to imports
   UserCheck, Briefcase, Loader2, Calendar, FileText, Camera,
   Factory, SlidersHorizontal, ChevronDown, ChevronLeft, ChevronRight, X,
   CheckCircle2, AlertCircle, FileEdit, Filter
@@ -438,7 +437,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 onClick={() => {setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' });}} 
                 className="w-12 h-12 flex items-center justify-center bg-white border border-slate-200 rounded-2xl shadow-sm disabled:opacity-30 active:scale-90 transition-all hover:border-blue-300"
               >
-                {/* Fixed: Added missing ChevronLeft component used in line 440 */}
                 <ChevronLeft className="w-6 h-6" />
               </button>
               <div className="flex items-center px-8 bg-white border border-slate-200 rounded-2xl text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] shadow-sm">
