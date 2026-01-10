@@ -143,9 +143,9 @@ export interface CheckItem {
 export interface MaterialIQC {
   id: string;
   name: string;
-  scope: 'COMMON' | 'PROJECT'; // Mới: Dùng chung hay Công trình
-  projectCode?: string;         // Mới: Mã công trình nếu scope = PROJECT
-  projectName?: string;         // Mới: Tên công trình (Auto-load)
+  scope: 'COMMON' | 'PROJECT'; 
+  projectCode?: string;         
+  projectName?: string;         
   orderQty: number;
   deliveryQty: number;
   unit: string;
@@ -162,7 +162,8 @@ export interface MaterialIQC {
 export interface Inspection {
   id: string;
   type?: ModuleId;
-  ma_ct: string;
+  ma_ct: string;         // Mã công trình (Lấy từ thông tin vật tư)
+  po_number?: string;    // Mới: Mã PO (Riêng biệt, không dùng làm khóa chính dự án)
   ten_ct: string;
   ma_nha_may?: string;
   ten_hang_muc?: string;

@@ -6,7 +6,6 @@ import {
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   CheckCircle, LayoutList, PenTool, ChevronDown, ChevronUp, Calculator,
   TrendingUp, Layers, MessageSquare, Loader2, Eraser, Info,
-  // Added ClipboardList to fix "Cannot find name 'ClipboardList'" error
   ClipboardList
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
@@ -32,25 +31,14 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             img.src = value;
         }
     }, [value]);
-    const startDrawing = (e: any) => {
-        if (readOnly) return;
-        const canvas = canvasRef.current; if (!canvas) return;
-        const ctx = canvas.getContext('2d'); if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top);
-        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000';
-    };
-    const draw = (e: any) => { /* logic skipped for brevity, similar to PQC */ };
     return (
         <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center px-1">
                 <label className="block text-slate-700 font-black uppercase text-[10px] tracking-widest">{label}</label>
             </div>
             <div className="border border-slate-300 rounded-[2rem] bg-white overflow-hidden relative h-40 shadow-inner">
-                <canvas ref={canvasRef} width={400} height={160} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={() => {}} onTouchStart={startDrawing} onTouchMove={draw} />
-                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-black uppercase tracking-widest">Ký tại đây</div>}
+                <canvas ref={canvasRef} width={400} height={160} className="w-full h-full cursor-default" />
+                {!value && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-black uppercase tracking-widest">Chưa ký</div>}
             </div>
         </div>
     );
@@ -62,7 +50,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [pmSignature, setPmSignature] = useState('');
   const [isApproving, setIsApproving] = useState(false);
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
-  const [newComment, setNewComment] = useState('');
 
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isApproved = inspection.status === InspectionStatus.APPROVED || inspection.status === InspectionStatus.COMPLETED;
@@ -76,10 +63,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
           onBack();
       } catch (e) { alert("Lỗi phê duyệt."); } finally { setIsApproving(false); }
   };
-
-  const InfoRow = ({ icon: Icon, label, value, iconColor = "text-slate-400" }: any) => (
-      <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><Icon className={`w-3.5 h-3.5 ${iconColor}`}/> {label}</p><p className="text-xs font-black text-slate-800 uppercase">{value || '---'}</p></div>
-  );
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt' }}>
@@ -98,7 +81,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
         {/* PO Header */}
         <div className="bg-white rounded-[3rem] p-8 border border-slate-200 shadow-sm space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Purchase Order Management</p><h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">MÃ PO: {inspection.ma_ct}</h1><div className="flex items-center gap-3 mt-4 px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100 w-fit"><Building2 className="w-4 h-4 text-blue-500" /><span className="text-xs font-black text-slate-700 uppercase">Supplier: {inspection.supplier}</span></div></div>
+                <div><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Purchase Order Management</p><h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">MÃ PO: {inspection.po_number || 'N/A'}</h1><div className="flex items-center gap-3 mt-4 px-4 py-2 bg-slate-50 rounded-2xl border border-slate-100 w-fit"><Building2 className="w-4 h-4 text-blue-500" /><span className="text-xs font-black text-slate-700 uppercase">Supplier: {inspection.supplier}</span></div></div>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center"><p className="text-[8px] font-black text-slate-400 uppercase mb-1">Ngày kiểm lô</p><p className="text-sm font-bold text-slate-800">{inspection.date}</p></div>
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center"><p className="text-[8px] font-black text-slate-400 uppercase mb-1">QC Thực hiện</p><p className="text-sm font-bold text-slate-800 uppercase">{inspection.inspectorName}</p></div>
@@ -135,7 +118,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                     </div>
                                     <div className="space-y-4">
                                         <div className="flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500"/><h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phạm vi & Ảnh chụp</h5></div>
-                                        <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 rounded-2xl border border-indigo-100"><Layers className="w-3.5 h-3.5 text-indigo-400"/><span className="text-[10px] font-black text-indigo-700 uppercase">{mat.scope === 'PROJECT' ? `Project: ${mat.projectCode}` : 'DÙNG CHUNG'}</span></div>
+                                        <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 rounded-2xl border border-indigo-100"><Layers className="w-3.5 h-3.5 text-indigo-400"/><span className="text-[10px] font-black text-indigo-700 uppercase">{mat.scope === 'PROJECT' ? `Mã Công Trình: ${mat.projectCode}` : 'VẬT TƯ DÙNG CHUNG'}</span></div>
                                         <div className="flex gap-2 overflow-x-auto no-scrollbar">{mat.images?.map((img, iIdx) => (<img key={iIdx} src={img} onClick={() => setLightboxState({ images: mat.images, index: iIdx })} className="w-16 h-16 rounded-xl border border-slate-200 cursor-zoom-in object-cover" />))}</div>
                                     </div>
                                 </div>

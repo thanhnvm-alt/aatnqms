@@ -101,7 +101,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             </div>
             <div className="border border-slate-300 rounded-[1.5rem] bg-white overflow-hidden relative h-32">
                 <canvas ref={canvasRef} width={400} height={128} className="w-full h-full touch-none cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {isEmpty && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] uppercase font-bold tracking-widest">Ký tại đây</div>}
+                {isEmpty && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-black uppercase tracking-widest">Ký tại đây</div>}
             </div>
         </div>
     );
@@ -112,7 +112,6 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
     const [showLibrary, setShowLibrary] = useState(false);
     const [libSearch, setLibSearch] = useState('');
-    const [isAiLoading, setIsAiLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const [uploadTarget, setUploadTarget] = useState<'BEFORE' | 'AFTER'>('BEFORE');
@@ -182,7 +181,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
 
 export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, plans, workshops, user }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ id: `INS-${Date.now()}`, date: new Date().toISOString().split('T')[0], status: InspectionStatus.DRAFT, items: [], images: [], score: 0, signature: '', productionSignature: '', inspectedQuantity: 0, passedQuantity: 0, failedQuantity: 0, ...initialData });
-  const [searchCode, setSearchCode] = useState(initialData?.headcode || initialData?.ma_nha_may || '');
+  const [searchCode, setSearchCode] = useState(initialData?.ma_nha_may || ''); 
   const [activeNcrItemIndex, setActiveNcrItemIndex] = useState<number | null>(null);
   const [isNcrModalOpen, setIsNcrModalOpen] = useState(false);
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
@@ -193,19 +192,41 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  useEffect(() => { if (formData.ma_nha_may && !searchCode) setSearchCode(formData.ma_nha_may); }, [formData.ma_nha_may]);
-  const availableStages = useMemo(() => { if (!formData.ma_nha_may) return []; const selectedWorkshop = workshops.find(ws => ws.code === formData.ma_nha_may); return selectedWorkshop?.stages || []; }, [formData.ma_nha_may, workshops]);
-  const visibleItems = useMemo(() => { if (!formData.inspectionStage) return []; if (!formData.items) return []; return formData.items.filter(item => !item.stage || item.stage === formData.inspectionStage); }, [formData.items, formData.inspectionStage]);
+  // Available stages based on selected workshop
+  const availableStages = useMemo(() => { 
+      if (!formData.workshop) return []; 
+      const selectedWorkshop = workshops.find(ws => ws.code === formData.workshop); 
+      return selectedWorkshop?.stages || []; 
+  }, [formData.workshop, workshops]);
+
+  const visibleItems = useMemo(() => { 
+      if (!formData.inspectionStage) return []; 
+      if (!formData.items) return []; 
+      return formData.items.filter(item => !item.stage || item.stage === formData.inspectionStage); 
+  }, [formData.items, formData.inspectionStage]);
   
   const lookupPlanInfo = async (value: string) => {
       if (!value) return; setIsLookupLoading(true);
       try {
           const searchTerm = value.toLowerCase().trim();
           const apiRes = await fetchPlans(value, 1, 5);
+          // Match logic from plans
           const match = (apiRes.items || []).find(p => (p.headcode || '').toLowerCase().trim() === searchTerm || (p.ma_nha_may || '').toLowerCase().trim() === searchTerm);
+          
           if (match) {
-              setFormData(prev => ({ ...prev, ma_ct: match.ma_ct, ten_ct: match.ten_ct, ten_hang_muc: match.ten_hang_muc, dvt: match.dvt, so_luong_ipo: match.so_luong_ipo, headcode: match.headcode, ma_nha_may: match.ma_nha_may }));
-              setSearchCode(match.ma_nha_may || match.headcode || value);
+              setFormData(prev => ({ 
+                  ...prev, 
+                  ma_ct: match.ma_ct, 
+                  ten_ct: match.ten_ct, 
+                  ten_hang_muc: match.ten_hang_muc, 
+                  dvt: match.dvt, 
+                  so_luong_ipo: match.so_luong_ipo, 
+                  // ISO UPDATE: Tự động gán ma_nha_may từ kế hoạch vào ma_nha_may của biểu mẫu
+                  ma_nha_may: match.ma_nha_may,
+                  workshop: match.ma_nha_may
+              }));
+              // Đồng bộ ô nhập liệu hiển thị mã chính thức
+              setSearchCode(match.ma_nha_may || value);
           }
       } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
   };
@@ -213,7 +234,9 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const handleInputChange = (field: keyof Inspection, value: any) => {
     setFormData(prev => {
         const next = { ...prev, [field]: value };
-        const ins = parseFloat(String(next.inspectedQuantity || 0)); const pas = parseFloat(String(next.passedQuantity || 0)); const fai = parseFloat(String(next.failedQuantity || 0));
+        const ins = parseFloat(String(next.inspectedQuantity || 0)); 
+        const pas = parseFloat(String(next.passedQuantity || 0)); 
+        const fai = parseFloat(String(next.failedQuantity || 0));
         if (field === 'inspectedQuantity') next.passedQuantity = Math.max(0, value - fai);
         else if (field === 'passedQuantity') next.failedQuantity = Math.max(0, ins - value);
         else if (field === 'failedQuantity') next.passedQuantity = Math.max(0, ins - value);
@@ -241,14 +264,14 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     } catch (e) { alert("Lỗi khi lưu phiếu."); } finally { setIsSaving(false); }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files; if (!files) return;
+  const handleFileUpload = (req: React.ChangeEvent<HTMLInputElement>) => {
+    const files = req.target.files; if (!files) return;
     Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = async () => { if (typeof reader.result === 'string') { const processed = await resizeImage(reader.result); if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), processed] })); else setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === activeUploadId ? { ...i, images: [...(i.images || []), processed] } : i) })); } };
       reader.readAsDataURL(file);
     });
-    e.target.value = '';
+    req.target.value = '';
   };
 
   return (
@@ -264,7 +287,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <div className="relative">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Mã định danh (Headcode)</label>
                     <div className="relative flex items-center">
-                        <input value={searchCode} onChange={e => { setSearchCode(e.target.value); if(e.target.value.length >= 3) lookupPlanInfo(e.target.value); }} className="w-full p-2.5 pr-10 border border-slate-200 rounded-xl focus:ring-2 ring-blue-100 outline-none font-bold text-sm" placeholder="Quét/Nhập mã..."/>
+                        <input value={searchCode} onChange={e => { setSearchCode(e.target.value); handleInputChange('ma_nha_may', e.target.value); if(e.target.value.length >= 3) lookupPlanInfo(e.target.value); }} className="w-full p-2.5 pr-10 border border-slate-200 rounded-xl focus:ring-2 ring-blue-100 outline-none font-bold text-sm" placeholder="Quét/Nhập mã..."/>
                         <button onClick={() => setShowScanner(true)} className="absolute right-2 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" type="button"><QrCode className="w-5 h-5"/></button>
                     </div>
                 </div>
@@ -279,9 +302,9 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-2 font-black text-xs uppercase tracking-widest flex items-center gap-2"><MapPin className="w-4 h-4"/> II. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
+            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-2 font-black text-xs uppercase tracking-widest flex items-center gap-2"><MapPin className="w-4 h-4"/> II. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Xưởng sản xuất</label><select value={formData.ma_nha_may || ''} onChange={e => handleInputChange('ma_nha_may', e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold shadow-sm"><option value="">-- Chọn --</option>{(workshops || []).map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Xưởng sản xuất</label><select value={formData.workshop || ''} onChange={e => handleInputChange('workshop', e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold shadow-sm"><option value="">-- Chọn xưởng --</option>{(workshops || []).map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
                  <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Công đoạn kiểm tra *</label><select value={formData.inspectionStage || ''} onChange={e => handleInputChange('inspectionStage', e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold shadow-sm"><option value="">-- Chọn giai đoạn --</option>{(availableStages || []).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 bg-slate-50/50 p-4 rounded-2xl">
@@ -325,7 +348,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             )}
         </div>
         <section className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm mt-6">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-3 mb-6 font-black text-xs uppercase tracking-widest flex items-center gap-2"><PenTool className="w-4 h-4"/> IV. CHỮ KÝ ĐIỆN TỬ (ISO LOG)</h3>
+            <h3 className="text-blue-700 border-b border-blue-50 pb-3 mb-6 font-black text-xs uppercase tracking-widest flex items-center gap-2"><PenTool className="w-4 h-4"/> IV. CHỮ KÝ ĐIỆY TỬ (ISO LOG)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <SignaturePad label="Đại diện Xưởng / Hiện trường" value={formData.productionSignature} onChange={sig => setFormData({...formData, productionSignature: sig})} />
                 <SignaturePad label={`QC/QA thực hiện (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
@@ -342,7 +365,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
       {activeNcrItemIndex !== null && formData.items && formData.items[activeNcrItemIndex] && <NCRModal isOpen={isNcrModalOpen} onClose={() => setIsNcrModalOpen(false)} onSave={ncr => { setFormData(prev => { const newItems = [...(prev.items || [])]; newItems[activeNcrItemIndex] = { ...newItems[activeNcrItemIndex], status: CheckStatus.FAIL, ncr: { ...ncr, id: newItems[activeNcrItemIndex].ncr?.id || `NCR-${Date.now()}`, inspection_id: formData.id, itemId: newItems[activeNcrItemIndex].id, createdDate: new Date().toISOString() } }; return { ...prev, items: newItems }; }); setIsNcrModalOpen(false); }} initialData={formData.items[activeNcrItemIndex].ncr} itemName={formData.items[activeNcrItemIndex].label} inspectionStage={formData.inspectionStage} />}
-      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); lookupPlanInfo(data); setShowScanner(false); }} />}
+      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); handleInputChange('ma_nha_may', data); lookupPlanInfo(data); setShowScanner(false); }} />}
     </div>
   );
 };

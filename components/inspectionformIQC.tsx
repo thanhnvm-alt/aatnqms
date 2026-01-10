@@ -12,7 +12,8 @@ interface InspectionFormProps {
   user: User;
 }
 
-const DOC_TYPES = ["Specification (Spec)", "Mẫu so sánh", "Bản vẽ duyệt", "PO"];
+// Added missing DOC_TYPES constant to resolve reference error
+const DOC_TYPES = ['CO', 'CQ', 'TDS', 'COA', 'Packing List'];
 
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
@@ -100,7 +101,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     materials: initialData?.materials || [],
     referenceDocs: initialData?.referenceDocs || [],
     inspectorName: user.name,
-    ma_ct: initialData?.ma_ct || '', // Đây là Mã PO
+    po_number: initialData?.po_number || '', 
+    ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
     reportImage: initialData?.reportImage || '',
     deliveryNoteImage: initialData?.deliveryNoteImage || '',
@@ -113,6 +115,17 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [showScanner, setShowScanner] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
+
+  useEffect(() => {
+    if (formData.materials && formData.materials.length > 0) {
+        const firstProject = formData.materials.find(m => m.scope === 'PROJECT');
+        if (firstProject && firstProject.projectCode) {
+            setFormData(prev => ({ ...prev, ma_ct: firstProject.projectCode }));
+        } else if (formData.materials.every(m => m.scope === 'COMMON')) {
+            setFormData(prev => ({ ...prev, ma_ct: 'DÙNG CHUNG' }));
+        }
+    }
+  }, [formData.materials]);
 
   const handleInputChange = (field: keyof Inspection, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
   
@@ -149,36 +162,36 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const updateMaterial = (idx: number, field: keyof MaterialIQC, value: any) => {
-    const nextMaterials = [...(formData.materials || [])];
-    if (!nextMaterials[idx]) return;
-    
-    let mat = { ...nextMaterials[idx], [field]: value };
-    
-    // Logic tự động cân bằng số lượng
-    if (field === 'inspectQty') {
-        mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
-    } else if (field === 'passQty') {
-        mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
-    } else if (field === 'failQty') {
-        mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
-    }
-
-    // Logic xử lý Phạm vi (Scope)
-    if (field === 'scope') {
-        if (value === 'COMMON') {
-            mat.projectCode = 'DÙNG CHUNG';
-            mat.projectName = 'VẬT TƯ KHO TỔNG / DÙNG CHUNG';
-        } else {
-            mat.projectCode = '';
-            mat.projectName = '';
+    setFormData(prev => {
+        const nextMaterials = [...(prev.materials || [])];
+        if (!nextMaterials[idx]) return prev;
+        
+        let mat = { ...nextMaterials[idx], [field]: value };
+        
+        if (field === 'inspectQty') {
+            mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
+        } else if (field === 'passQty') {
+            mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
+        } else if (field === 'failQty') {
+            mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
         }
-    }
 
-    nextMaterials[idx] = mat;
-    setFormData(prev => ({ ...prev, materials: nextMaterials }));
+        if (field === 'scope') {
+            if (value === 'COMMON') {
+                mat.projectCode = 'DÙNG CHUNG';
+                mat.projectName = 'VẬT TƯ KHO TỔNG / DÙNG CHUNG';
+            } else {
+                mat.projectCode = '';
+                mat.projectName = '';
+            }
+        }
+
+        nextMaterials[idx] = mat;
+        return { ...prev, materials: nextMaterials };
+    });
     
-    // Nếu thay đổi projectCode khi ở chế độ PROJECT, thực hiện lookup
-    if (field === 'projectCode' && mat.scope === 'PROJECT' && value && value.length >= 3) {
+    // Trigger lookup if field is projectCode
+    if (field === 'projectCode' && value && value.length >= 3) {
         lookupProjectForMaterial(idx, value);
     }
   };
@@ -187,11 +200,19 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsLookupLoading(true);
     try {
         const result = await fetchPlans(code, 1, 5);
-        const match = result.items?.find(p => p.ma_ct.toLowerCase() === code.toLowerCase());
+        const match = result.items?.find(p => (p.ma_ct || '').toLowerCase() === code.toLowerCase());
         if (match) {
-            const nextMaterials = [...(formData.materials || [])];
-            nextMaterials[matIdx].projectName = match.ten_ct;
-            setFormData(prev => ({ ...prev, materials: nextMaterials }));
+            setFormData(prev => {
+                const nextMaterials = [...(prev.materials || [])];
+                if (nextMaterials[matIdx]) {
+                    // CẬP NHẬT TÊN NHƯNG GIỮ NGUYÊN MÃ NGƯỜI DÙNG ĐANG NHẬP (TRÁNH OVERWRITE)
+                    nextMaterials[matIdx] = { 
+                        ...nextMaterials[matIdx], 
+                        projectName: match.ten_ct 
+                    };
+                }
+                return { ...prev, materials: nextMaterials };
+            });
         }
     } catch (e) {
         console.error(e);
@@ -203,10 +224,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const updateMaterialItem = (matIdx: number, itemIdx: number, field: keyof CheckItem, value: any) => {
       const nextMaterials = [...(formData.materials || [])];
       if (!nextMaterials[matIdx]) return;
-      
       const matItems = [...(nextMaterials[matIdx].items || [])];
       if (!matItems[itemIdx]) return;
-
       matItems[itemIdx] = { ...matItems[itemIdx], [field]: value };
       nextMaterials[matIdx].items = matItems;
       setFormData(prev => ({ ...prev, materials: nextMaterials }));
@@ -218,7 +237,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     reader.onload = async () => {
         const compressed = await resizeImage(reader.result as string);
         const nextMats = [...(formData.materials || [])];
-        
         if (itemIdx !== undefined) {
             const items = [...nextMats[matIdx].items];
             items[itemIdx].images = [...(items[itemIdx].images || []), compressed];
@@ -226,7 +244,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         } else {
             nextMats[matIdx].images = [...(nextMats[matIdx].images || []), compressed];
         }
-        
         setFormData(prev => ({ ...prev, materials: nextMats }));
     };
     reader.readAsDataURL(file);
@@ -234,7 +251,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleSubmit = async () => {
-    if (!formData.ma_ct || !formData.supplier) { alert("Vui lòng nhập Mã PO và Nhà cung cấp."); return; }
+    if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã PO và Nhà cung cấp."); return; }
     if (!formData.signature) { alert("Bắt buộc QC phải ký tên."); return; }
     setIsSaving(true);
     try {
@@ -259,7 +276,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Mã PO (Purchase Order) *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.ma_ct} onChange={e => handleInputChange('ma_ct', e.target.value.toUpperCase())} className="w-full p-2.5 pr-10 border border-slate-200 rounded-xl focus:ring-2 ring-blue-100 outline-none font-bold text-sm shadow-inner" placeholder="Nhập mã PO giao hàng..."/>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full p-2.5 pr-10 border border-slate-200 rounded-xl focus:ring-2 ring-blue-100 outline-none font-bold text-sm shadow-inner" placeholder="Nhập mã PO giao hàng..."/>
                         <button onClick={() => setShowScanner(true)} className="absolute right-2 p-1.5 text-slate-400 hover:text-blue-600" type="button"><QrCode className="w-5 h-5"/></button>
                     </div>
                 </div>
@@ -306,7 +323,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 {(formData.materials || []).map((mat, matIdx) => {
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                     const failRate = mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
-
                     return (
                     <div key={mat.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-md overflow-hidden animate-in zoom-in duration-200">
                         {/* Material Header */}
@@ -365,10 +381,18 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                         value={mat.projectCode} 
                                                         onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())}
                                                         readOnly={mat.scope === 'COMMON'}
-                                                        className={`w-full pl-7 pr-2 py-2 border rounded-lg text-xs font-black outline-none transition-all uppercase ${mat.scope === 'COMMON' ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-blue-200 text-blue-700 focus:ring-2 ring-blue-100'}`}
+                                                        className={`w-full pl-7 pr-8 py-2 border rounded-lg text-xs font-black outline-none transition-all uppercase ${mat.scope === 'COMMON' ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-blue-200 text-blue-700 focus:ring-2 ring-blue-100'}`}
                                                         placeholder={mat.scope === 'COMMON' ? '---' : 'Nhập mã...'}
                                                     />
                                                     <Search className={`absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${mat.scope === 'COMMON' ? 'text-slate-300' : 'text-blue-300'}`} />
+                                                    {mat.projectCode && mat.scope !== 'COMMON' && (
+                                                        <button 
+                                                            onClick={() => updateMaterial(matIdx, 'projectCode', '')}
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                             {(mat.projectName || mat.projectCode === 'DÙNG CHUNG') && (
@@ -388,7 +412,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     </div>
                                 </div>
 
-                                {/* Stats Block with Date & Images */}
                                 <div className="space-y-4 bg-slate-50/50 p-4 rounded-[1.5rem] border border-slate-100 shadow-inner">
                                     <div className="flex items-center justify-between mb-1">
                                         <div className="flex items-center gap-2">
@@ -506,38 +529,22 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                         )}
                     </div>
                 );})}
-
-                {(!formData.materials || formData.materials.length === 0) && (
-                    <div onClick={handleAddMaterial} className="p-12 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-slate-300 cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-all group shadow-inner bg-slate-50/20">
-                        <ClipboardList className="w-12 h-12 mb-3 group-hover:scale-110 transition-transform opacity-30" />
-                        <p className="font-black uppercase tracking-widest text-[10px]">Chưa có dữ liệu vật tư. Chạm để bắt đầu thêm.</p>
-                    </div>
-                )}
             </div>
         </section>
 
         {/* III. Approvals */}
         <section className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm mt-6 space-y-8">
             <h3 className="text-blue-700 border-b border-blue-50 pb-4 font-black text-xs uppercase tracking-widest flex items-center gap-2"><PenTool className="w-4 h-4"/> III. PHÊ DUYỆT CHẤT LƯỢNG LÔ HÀNG</h3>
-            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <SignaturePad label={`QC Kiểm Tra (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
                 <SignaturePad label="QA Manager phê duyệt" value={formData.managerSignature} onChange={sig => setFormData({...formData, managerSignature: sig})} />
                 <SignaturePad label="PM Dự Án xác nhận" value={formData.pmSignature} onChange={sig => setFormData({...formData, pmSignature: sig})} />
             </div>
-
             <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nhận xét của PM Dự án (Ghi chú hướng xử lý)</label>
                 <textarea value={formData.pmComment || ''} onChange={e => handleInputChange('pmComment', e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:bg-white outline-none transition-all shadow-inner h-24" placeholder="PM xác nhận điều kiện nhận hàng hoặc yêu cầu sửa lỗi tại hiện trường..."/>
             </div>
         </section>
-
-        <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start gap-3 shadow-sm">
-            <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-            <p className="text-[9pt] text-blue-700 leading-relaxed font-medium italic">
-                ISO Note: Tỷ lệ đạt và tỷ lệ lỗi được tính toán tự động dựa trên SL Kiểm thực tế. Ảnh chụp từng hạng mục giúp minh chứng sai lệch rõ ràng phục vụ mục đích Audit.
-            </p>
-        </div>
       </div>
 
       <div className="p-4 md:p-6 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0 shadow-sm z-20">
@@ -547,7 +554,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             <span>HOÀN TẤT & LƯU IQC</span>
         </button>
       </div>
-      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('ma_ct', data); setShowScanner(false); }} />}
+      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('po_number', data); setShowScanner(false); }} />}
     </div>
   );
 };
