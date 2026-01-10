@@ -1,5 +1,4 @@
 
-
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
@@ -60,6 +59,26 @@ export const FSR_CHECKLIST_TEMPLATE = [
     { id: 'fsr_11', category: 'Đóng gói', label: 'Quy cách thùng carton & Nhãn dán (Label)', status: CheckStatus.PENDING, notes: '' },
     { id: 'fsr_12', category: 'Đóng gói', label: 'Bảo vệ góc, xốp chèn (Protection)', status: CheckStatus.PENDING, notes: '' },
 ];
+
+// Added missing checklist templates to fix import errors in App.tsx
+export const STEP_CHECKLIST_TEMPLATE = [
+  { id: 'step_1', category: 'Bước màu', label: 'Kiểm tra màu lót', status: CheckStatus.PENDING, notes: '' },
+  { id: 'step_2', category: 'Bước màu', label: 'Kiểm tra màu tỉa', status: CheckStatus.PENDING, notes: '' },
+  { id: 'step_3', category: 'Bước màu', label: 'Kiểm tra màu phủ', status: CheckStatus.PENDING, notes: '' },
+];
+
+export const FQC_CHECKLIST_TEMPLATE = [
+  { id: 'fqc_1', category: 'Hoàn thiện', label: 'Vệ sinh sạch sẽ', status: CheckStatus.PENDING, notes: '' },
+  { id: 'fqc_2', category: 'Hoàn thiện', label: 'Màu sắc đồng nhất', status: CheckStatus.PENDING, notes: '' },
+  { id: 'fqc_3', category: 'Hoàn thiện', label: 'Đóng gói đúng quy cách', status: CheckStatus.PENDING, notes: '' },
+];
+
+export const SPR_CHECKLIST_TEMPLATE = [
+  { id: 'spr_1', category: 'Mẫu', label: 'Mẫu mã đúng yêu cầu', status: CheckStatus.PENDING, notes: '' },
+  { id: 'spr_2', category: 'Mẫu', label: 'Vật liệu đúng mẫu duyệt', status: CheckStatus.PENDING, notes: '' },
+];
+
+export const SITE_CHECKLIST_TEMPLATE = INITIAL_CHECKLIST_TEMPLATE;
 
 export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   { id: 'CONVERT_3D', label: 'AI - 2D sang 3D', group: 'TOOLS' },

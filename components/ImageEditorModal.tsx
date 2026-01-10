@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, PenTool, Undo2, Check, ZoomIn, ZoomOut, Download, Loader2, Move, AlertCircle } from 'lucide-react';
 
@@ -278,7 +279,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         {!isEditing ? (
           <>
             <div className="relative transition-transform duration-75 ease-linear" style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}>
-              <img src={images[currentIndex]} alt="HD Preview" className="max-w-full max-h-[80vh] object-contain shadow-2xl" style={{ imageRendering: 'high-quality' }} onError={() => setLoadError("Lỗi tải HD.")}/>
+              {/* Fixed: changed imageRendering from 'high-quality' (unsupported in standard React CSSProperties) to 'auto' */}
+              <img src={images[currentIndex]} alt="HD Preview" className="max-w-full max-h-[80vh] object-contain shadow-2xl" style={{ imageRendering: 'auto' }} onError={() => setLoadError("Lỗi tải HD.")}/>
               {loadError && <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400"><AlertCircle className="w-12 h-12 mb-2" /><p className="font-bold bg-black/50 px-4 py-2 rounded-xl">{loadError}</p></div>}
             </div>
             {!loadError && (

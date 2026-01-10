@@ -136,8 +136,27 @@ export interface CheckItem {
   status: CheckStatus;
   notes?: string;
   images?: string[];
-  ncr?: NCR; // Trong runtime có thể chứa object NCR, nhưng lưu trữ sẽ bị tách
-  ncrId?: string; // Link ID dùng cho persistence
+  ncr?: NCR; 
+  ncrId?: string; 
+}
+
+export interface MaterialIQC {
+  id: string;
+  name: string;
+  scope: 'COMMON' | 'PROJECT'; // Mới: Dùng chung hay Công trình
+  projectCode?: string;         // Mới: Mã công trình nếu scope = PROJECT
+  projectName?: string;         // Mới: Tên công trình (Auto-load)
+  orderQty: number;
+  deliveryQty: number;
+  unit: string;
+  criteria: string[]; 
+  items: CheckItem[]; 
+  inspectQty: number;
+  passQty: number;
+  failQty: number;
+  images: string[];
+  type: 'AQL' | '100%';
+  date: string;
 }
 
 export interface Inspection {
@@ -154,6 +173,7 @@ export interface Inspection {
   priority?: Priority;
   score: number;
   items: CheckItem[];
+  materials?: MaterialIQC[];
   images?: string[];
   summary?: string;
   aiSuggestions?: string;
@@ -167,12 +187,19 @@ export interface Inspection {
   signature?: string;
   productionSignature?: string;
   managerSignature?: string;
+  pmSignature?: string;
   managerName?: string;
+  pmName?: string;
+  pmComment?: string;
   productionName?: string;
   productionConfirmedDate?: string;
   confirmedDate?: string;
   comments?: NCRComment[];
   updatedAt?: string;
+  supplier?: string;
+  referenceDocs?: string[];
+  reportImage?: string;
+  deliveryNoteImage?: string;
 }
 
 export interface Project {

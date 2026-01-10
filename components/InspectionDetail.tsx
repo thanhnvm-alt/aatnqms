@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, CheckItem, NCRComment, Workshop, NCR } from '../types';
 import { 
@@ -100,7 +101,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   
-  // States for Approval Workflow
   const [managerSignature, setManagerSignature] = useState('');
   const [productionSignature, setProductionSignature] = useState(inspection.productionSignature || '');
   const [productionName, setProductionName] = useState(inspection.productionName || '');
@@ -116,13 +116,10 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
 
   const handleApprove = async () => {
       if (!managerSignature) { alert("Bắt buộc phải ký tên Manager để phê duyệt."); return; }
-      
-      // Nếu chưa có chữ ký sản xuất, yêu cầu phải có cả chữ ký và tên
       if (!isProductionSigned && (!productionSignature || !productionName.trim())) {
           alert("Báo cáo hiện trường yêu cầu đầy đủ chữ ký và họ tên của Đại diện Sản xuất.");
           return;
       }
-
       if (!onApprove) return;
       setIsApproving(true);
       try {
@@ -147,6 +144,15 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
       try { await onPostComment(inspection.id, comment); setNewComment(''); } 
       catch (e) { alert("Lỗi khi gửi phản hồi."); } finally { setIsSubmittingComment(false); }
   };
+
+  const InfoRow = ({ icon: Icon, label, value, iconColor = "text-slate-400" }: any) => (
+      <div>
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+              <Icon className={`w-3.5 h-3.5 ${iconColor}`}/> {label}
+          </p>
+          <p className="text-xs font-black text-slate-800 uppercase">{value || '---'}</p>
+      </div>
+  );
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
@@ -175,6 +181,12 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-3">Project Overview</p>
                     <h1 className="text-2xl md:text-3xl font-black text-slate-800 uppercase tracking-tighter leading-tight">{inspection.ten_hang_muc}</h1>
                     <p className="text-sm font-bold text-slate-500 mt-2 uppercase">{inspection.ten_ct}</p>
+                    {inspection.supplier && (
+                        <div className="mt-3 flex items-center gap-2 text-indigo-600">
+                            <Building2 className="w-4 h-4" />
+                            <span className="text-xs font-black uppercase tracking-widest">Supplier: {inspection.supplier}</span>
+                        </div>
+                    )}
                 </div>
                 <div className="bg-slate-50 rounded-[2rem] p-5 flex flex-col items-center justify-center border border-slate-100 shadow-inner text-center">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">SCORE</p>
@@ -186,10 +198,10 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                 </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-10 pt-10 border-t border-slate-100">
-                <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><Box className="w-3.5 h-3.5"/> Mã dự án</p><p className="text-xs font-black text-slate-800 uppercase">{inspection.ma_ct}</p></div>
-                <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><Building2 className="w-3.5 h-3.5 text-blue-500"/> Nhà máy / Xưởng</p><p className="text-xs font-black text-slate-800 uppercase">{workshopName}</p></div>
-                <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><UserIcon className="w-3.5 h-3.5"/> Inspector</p><p className="text-xs font-black text-slate-800 uppercase">{inspection.inspectorName}</p></div>
-                <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2"><Calendar className="w-3.5 h-3.5"/> Kiểm ngày</p><p className="text-xs font-black text-slate-800 uppercase">{inspection.date}</p></div>
+                <InfoRow icon={Box} label="Mã dự án / PO" value={inspection.ma_ct} />
+                <InfoRow icon={Building2} label="Xưởng / Địa điểm" value={workshopName} iconColor="text-blue-500" />
+                <InfoRow icon={UserIcon} label="Inspector" value={inspection.inspectorName} />
+                <InfoRow icon={Calendar} label="Kiểm ngày" value={inspection.date} />
             </div>
         </div>
 
@@ -206,7 +218,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
         </section>
 
         <div className="space-y-6">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] px-4 flex items-center gap-3"><LayoutList className="w-5 h-5 text-indigo-500" /> Nội dung thẩm định (Công đoạn: {inspection.inspectionStage})</h3>
+            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] px-4 flex items-center gap-3"><LayoutList className="w-5 h-5 text-indigo-500" /> Nội dung thẩm định (Công đoạn: {inspection.inspectionStage || 'N/A'})</h3>
             {inspection.items.map((item, idx) => (
                 <div key={idx} className={`bg-white p-6 md:p-8 rounded-[3rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 ring-4 ring-red-50' : 'border-slate-200'}`}>
                     <div className="flex items-start justify-between gap-4 mb-6 pb-6 border-b border-slate-50">
@@ -236,11 +248,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                             </div>
                             <div className="space-y-4">
                                 <p className="text-sm font-bold text-slate-700 leading-relaxed italic bg-white p-4 rounded-2xl border border-red-50">"{item.ncr.issueDescription}"</p>
-                                <div className="flex gap-3 overflow-x-auto no-scrollbar">
-                                    {item.ncr.imagesBefore?.map((img, i) => (
-                                        <img key={i} src={img} className="w-24 h-24 object-cover rounded-2xl border-2 border-white shadow-sm" />
-                                    ))}
-                                </div>
                             </div>
                         </div>
                     )}
@@ -259,11 +266,9 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
             ))}
         </div>
 
-        {/* Section V: Approval Section with Forced Signature */}
         <section className="bg-white p-8 md:p-10 rounded-[3rem] border border-slate-200 shadow-sm space-y-10">
             <h3 className="text-blue-700 border-b border-blue-50 pb-5 font-black text-xs uppercase tracking-[0.2em] flex items-center gap-3"><ShieldCheck className="w-6 h-6 text-green-500"/> XÁC NHẬN PHÊ DUYỆT (ISO COMPLIANCE)</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                {/* QC Sign */}
                 <div className="space-y-6">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-4 border-blue-500 pl-3">Nhân viên QC hiện trường</p>
                     {inspection.signature ? (
@@ -277,7 +282,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                     </div>
                 </div>
 
-                {/* Production Sign */}
                 <div className="space-y-6">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-4 border-orange-500 pl-3">Đại diện Sản xuất / Xưởng</p>
                     {!isProductionSigned && !isApproved ? (
@@ -304,7 +308,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                     </div>
                 </div>
 
-                {/* Manager Sign */}
                 <div className="space-y-6">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-4 border-green-500 pl-3">Quản lý phê duyệt (Required)</p>
                     {isManager && !isApproved ? (
@@ -324,7 +327,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
             </div>
         </section>
 
-        {/* Comment & Discussion System - Moved below signature as requested */}
         <section className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
             <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
                 <MessageSquare className="w-6 h-6 text-blue-600" />
@@ -343,7 +345,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                         </div>
                     </div>
                 ))}
-                {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-xs text-slate-300 py-10 font-bold uppercase tracking-widest">Chưa có bình luận thảo luận.</p>}
             </div>
             <div className="p-6 border-t border-slate-100 bg-slate-50/30">
                 <div className="flex gap-3">
@@ -376,7 +377,6 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
           </div>
       )}
 
-      {/* NCR Detail Modal Overlay */}
       {viewingNcr && (
           <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 md:p-6 overflow-hidden">
               <div className="bg-white w-full max-w-4xl h-full md:h-auto md:max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col relative animate-in zoom-in duration-300">
@@ -391,7 +391,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
                         ncr={viewingNcr} 
                         user={user} 
                         onBack={() => setViewingNcr(null)} 
-                        onViewInspection={() => {}} // No-op
+                        onViewInspection={() => {}} 
                       />
                   </div>
               </div>
