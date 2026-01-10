@@ -1,16 +1,15 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { Button } from './Button';
 import { 
   Save, X, Camera, Image as ImageIcon, ChevronDown, 
   MapPin, Briefcase, Box, AlertTriangle, 
   CheckCircle2, Trash2, Plus, Info, LayoutList,
   AlertOctagon, FileText, Tag, Hash, Pencil, Calendar, Loader2, QrCode,
-  Ruler, Microscope, CheckSquare, PenTool, Eraser
+  Ruler, Microscope, CheckSquare, PenTool, Eraser, BookOpen, Search
 } from 'lucide-react';
 import { generateItemSuggestion } from '../services/geminiService';
-import { fetchPlans } from '../services/apiService';
+import { fetchPlans, fetchDefectLibrary } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 
@@ -86,14 +85,13 @@ const SignaturePad = ({
             img.src = value;
             setIsEmpty(false);
         }
-    }, []);
+    }, [value]);
 
     const startDrawing = (e: any) => {
         if (readOnly) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         
-        // Prevent scrolling on touch devices
         if (e.type === 'touchstart') document.body.style.overflow = 'hidden';
 
         const ctx = canvas.getContext('2d');
@@ -131,7 +129,7 @@ const SignaturePad = ({
     const stopDrawing = () => {
         if (readOnly) return;
         setIsDrawing(false);
-        document.body.style.overflow = 'auto'; // Restore scrolling
+        document.body.style.overflow = 'auto';
         if (canvasRef.current) {
             onChange(canvasRef.current.toDataURL());
         }
@@ -186,19 +184,21 @@ const SignaturePad = ({
     );
 };
 
-// Sub-component: NCR Modal (Keep existing)
+// Sub-component: NCR Modal (Enhanced with Defect Library)
 const NCRModal = ({ 
     isOpen, 
     onClose, 
     onSave, 
     initialData, 
-    itemName 
+    itemName,
+    inspectionStage
 }: { 
     isOpen: boolean; 
     onClose: () => void; 
     onSave: (ncr: NCR) => void; 
     initialData?: NCR;
     itemName: string;
+    inspectionStage?: string;
 }) => {
     const [ncrData, setNcrData] = useState<Partial<NCR>>({
         severity: 'MINOR',
@@ -206,6 +206,10 @@ const NCRModal = ({
         solution: '',
         imagesBefore: []
     });
+    
+    const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
+    const [showLibrary, setShowLibrary] = useState(false);
+    const [libSearch, setLibSearch] = useState('');
 
     useEffect(() => {
         if (isOpen) {
@@ -215,48 +219,107 @@ const NCRModal = ({
                 solution: '',
                 imagesBefore: []
             });
+            fetchDefectLibrary().then(setLibrary);
         }
     }, [isOpen, initialData]);
 
+    const filteredLib = useMemo(() => {
+        return library.filter(item => {
+            const matchSearch = item.name?.toLowerCase().includes(libSearch.toLowerCase()) || 
+                               item.description?.toLowerCase().includes(libSearch.toLowerCase()) ||
+                               item.code?.toLowerCase().includes(libSearch.toLowerCase());
+            const matchStage = !inspectionStage || item.stage === inspectionStage;
+            return matchSearch && matchStage;
+        });
+    }, [library, libSearch, inspectionStage]);
+
     if (!isOpen) return null;
 
-    const modalStyle = { fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt', fontWeight: 'normal' };
+    const modalStyle = { fontFamily: '"Times New Roman", Times, serif', fontSize: '11pt', fontWeight: 'normal' };
 
     return (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" style={modalStyle}>
-            <div className="bg-white w-full max-w-md rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
+        <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" style={modalStyle}>
+            <div className="bg-white w-full max-w-lg rounded-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+                <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center shrink-0">
                     <h3 className="text-red-600 flex items-center gap-2" style={{ fontWeight: 'bold' }}>
                         <AlertOctagon className="w-5 h-5" /> Báo cáo sự không phù hợp (NCR)
                     </h3>
                     <button onClick={onClose}><X className="w-5 h-5 text-slate-400"/></button>
                 </div>
-                <div className="p-5 space-y-4">
+                <div className="p-5 space-y-4 overflow-y-auto flex-1 no-scrollbar">
                     <div className="p-3 bg-slate-50 rounded border border-slate-200">
-                        <span className="text-slate-500 block">Hạng mục lỗi:</span>
+                        <span className="text-slate-500 block text-[10pt]">Hạng mục lỗi:</span>
                         <span className="text-slate-800" style={{ fontWeight: 'bold' }}>{itemName}</span>
                     </div>
 
+                    {/* Defect Library Shortcut */}
+                    <div className="border border-blue-200 rounded-lg overflow-hidden bg-blue-50/30">
+                        <button 
+                            onClick={() => setShowLibrary(!showLibrary)}
+                            className="w-full p-2 flex justify-between items-center text-blue-700 font-bold"
+                            type="button"
+                        >
+                            <span className="flex items-center gap-2"><BookOpen className="w-4 h-4"/> Chọn từ thư viện lỗi chuẩn</span>
+                            <ChevronDown className={`w-4 h-4 transition-transform ${showLibrary ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showLibrary && (
+                            <div className="p-3 space-y-3 bg-white border-t border-blue-100">
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input 
+                                        value={libSearch}
+                                        onChange={e => setLibSearch(e.target.value)}
+                                        className="w-full pl-7 pr-2 py-1.5 border rounded outline-none text-xs"
+                                        placeholder="Tìm lỗi chuẩn..."
+                                    />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar">
+                                    {filteredLib.map(item => (
+                                        <div 
+                                            key={item.id} 
+                                            onClick={() => {
+                                                setNcrData({
+                                                    ...ncrData,
+                                                    issueDescription: item.description,
+                                                    severity: item.severity as any,
+                                                    defect_code: item.code,
+                                                    solution: item.suggestedAction || ncrData.solution
+                                                });
+                                                setShowLibrary(false);
+                                            }}
+                                            className="p-2 border rounded hover:bg-blue-50 cursor-pointer flex justify-between items-center group"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold truncate">{item.name}</p>
+                                                <p className="text-[9pt] text-slate-500 line-clamp-1">{item.description}</p>
+                                            </div>
+                                            <ChevronDown className="w-3 h-3 text-slate-300 -rotate-90 group-hover:text-blue-500" />
+                                        </div>
+                                    ))}
+                                    {filteredLib.length === 0 && <p className="text-center text-slate-400 text-xs py-2 italic">Không tìm thấy lỗi phù hợp</p>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="space-y-1">
-                        <label className="text-slate-700">Mô tả lỗi *</label>
+                        <label className="text-slate-700 font-bold">Mô tả lỗi *</label>
                         <textarea 
-                            className="w-full p-2 border border-slate-300 rounded outline-none focus:border-blue-500"
+                            className="w-full p-2 border border-slate-300 rounded outline-none focus:border-blue-500 text-[11pt]"
                             rows={3}
                             placeholder="Mô tả chi tiết vấn đề..."
                             value={ncrData.issueDescription}
                             onChange={e => setNcrData({...ncrData, issueDescription: e.target.value})}
-                            style={modalStyle}
                         />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <label className="text-slate-700">Mức độ</label>
+                            <label className="text-slate-700 font-bold">Mức độ</label>
                             <select 
-                                className="w-full p-2 border border-slate-300 rounded outline-none"
+                                className="w-full p-2 border border-slate-300 rounded outline-none text-[11pt]"
                                 value={ncrData.severity}
                                 onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}
-                                style={modalStyle}
                             >
                                 <option value="MINOR">MINOR (Nhẹ)</option>
                                 <option value="MAJOR">MAJOR (Nặng)</option>
@@ -264,35 +327,33 @@ const NCRModal = ({
                             </select>
                         </div>
                         <div className="space-y-1">
-                            <label className="text-slate-700">Hạn xử lý</label>
+                            <label className="text-slate-700 font-bold">Hạn xử lý</label>
                             <input 
                                 type="date" 
-                                className="w-full p-2 border border-slate-300 rounded outline-none"
+                                className="w-full p-2 border border-slate-300 rounded outline-none text-[11pt]"
                                 value={ncrData.deadline || ''}
                                 onChange={e => setNcrData({...ncrData, deadline: e.target.value})}
-                                style={modalStyle}
                             />
                         </div>
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-slate-700">Biện pháp khắc phục (Dự kiến)</label>
+                        <label className="text-slate-700 font-bold">Biện pháp khắc phục (Dự kiến)</label>
                         <textarea 
-                            className="w-full p-2 border border-slate-300 rounded outline-none resize-none"
+                            className="w-full p-2 border border-slate-300 rounded outline-none resize-none text-[11pt]"
                             rows={2}
                             placeholder="Hướng xử lý..."
                             value={ncrData.solution}
                             onChange={e => setNcrData({...ncrData, solution: e.target.value})}
-                            style={modalStyle}
                         />
                     </div>
                 </div>
-                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:text-slate-800 border rounded bg-white">Hủy</button>
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:text-slate-800 border rounded bg-white font-bold">Hủy</button>
                     <button 
                         onClick={() => onSave(ncrData as NCR)}
                         disabled={!ncrData.issueDescription}
-                        className="px-6 py-2 bg-red-600 text-white rounded shadow-sm hover:bg-red-700 disabled:opacity-50"
+                        className="px-6 py-2 bg-red-600 text-white rounded shadow-sm hover:bg-red-700 disabled:opacity-50 font-bold"
                     >
                         Lưu NCR
                     </button>
@@ -387,7 +448,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         setFormData(prev => ({ ...prev, score }));
       }
     }
-  }, [formData.items]);
+  }, [formData.items, formData.score]);
 
   const lookupPlanInfo = async (value: string) => {
       if (!value) return;
@@ -598,7 +659,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg md:shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={formStyle}>
       
-      {/* 1. Header Toolbar (Top position as requested) */}
+      {/* 1. Header Toolbar */}
       <div className="bg-white border-b border-slate-300 z-10 shrink-0 flex justify-between items-center px-4 py-3">
           <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
@@ -676,10 +737,49 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
         </div>
 
-        {/* Section II: Thông tin xưởng & Công đoạn */}
+        {/* Section II: Hình ảnh hiện trường (MOVED UP per request) */}
+        <section className="bg-white p-4 rounded border border-slate-300 shadow-sm space-y-3">
+            <div className="flex items-center gap-2 border-b border-blue-100 pb-2 mb-2">
+                <ImageIcon className="w-4 h-4 text-blue-700" />
+                <h3 className="text-blue-700" style={{ fontWeight: 'bold' }}>II. HÌNH ẢNH HIỆN TRƯỜNG TỔNG QUAN</h3>
+            </div>
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                <button onClick={() => triggerUpload('MAIN', 'camera')} className="w-24 h-24 shrink-0 bg-blue-50 border border-blue-200 rounded flex flex-col items-center justify-center gap-1 text-blue-600 hover:bg-blue-100 transition-all">
+                    <Camera className="w-6 h-6" />
+                    <span style={{ fontSize: '10pt' }}>Chụp ảnh</span>
+                </button>
+                <button onClick={() => triggerUpload('MAIN', 'file')} className="w-24 h-24 shrink-0 bg-white border border-slate-300 rounded flex flex-col items-center justify-center gap-1 text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition-all">
+                    <ImageIcon className="w-6 h-6" />
+                    <span style={{ fontSize: '10pt' }}>Thư viện</span>
+                </button>
+                {formData.images?.map((img, idx) => (
+                    <div 
+                        key={idx} 
+                        onClick={() => handleImageClick(formData.images || [], idx, { type: 'MAIN' })}
+                        className="relative w-24 h-24 shrink-0 rounded overflow-hidden border border-slate-300 shadow-sm group cursor-pointer hover:border-blue-500 transition-colors"
+                    >
+                        <img src={img} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Pencil className="w-6 h-6 text-white drop-shadow-sm" />
+                        </div>
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)});
+                            }} 
+                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full shadow-lg hover:bg-red-600"
+                        >
+                            <X className="w-3 h-3"/>
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* Section III: Địa điểm & Công đoạn */}
         <div className="bg-white p-4 rounded border border-slate-300 shadow-sm space-y-4">
              <h3 className="text-blue-700 border-b border-blue-100 pb-2 mb-2 flex items-center gap-2" style={{ fontWeight: 'bold' }}>
-                <MapPin className="w-4 h-4"/> II. ĐỊA ĐIỂM & CÔNG ĐOẠN
+                <MapPin className="w-4 h-4"/> III. ĐỊA ĐIỂM & CÔNG ĐOẠN
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div>
@@ -720,45 +820,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                  </div>
             </div>
         </div>
-
-        {/* Section III: Hình ảnh hiện trường (Moved Up) */}
-        <section className="bg-white p-4 rounded border border-slate-300 shadow-sm space-y-3">
-            <div className="flex items-center gap-2 border-b border-blue-100 pb-2 mb-2">
-                <ImageIcon className="w-4 h-4 text-blue-700" />
-                <h3 className="text-blue-700" style={{ fontWeight: 'bold' }}>III. HÌNH ẢNH HIỆN TRƯỜNG TỔNG QUAN</h3>
-            </div>
-            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                <button onClick={() => triggerUpload('MAIN', 'camera')} className="w-24 h-24 shrink-0 bg-blue-50 border border-blue-200 rounded flex flex-col items-center justify-center gap-1 text-blue-600 hover:bg-blue-100 transition-all">
-                    <Camera className="w-6 h-6" />
-                    <span style={{ fontSize: '10pt' }}>Chụp ảnh</span>
-                </button>
-                <button onClick={() => triggerUpload('MAIN', 'file')} className="w-24 h-24 shrink-0 bg-white border border-slate-300 rounded flex flex-col items-center justify-center gap-1 text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition-all">
-                    <ImageIcon className="w-6 h-6" />
-                    <span style={{ fontSize: '10pt' }}>Thư viện</span>
-                </button>
-                {formData.images?.map((img, idx) => (
-                    <div 
-                        key={idx} 
-                        onClick={() => handleImageClick(formData.images || [], idx, { type: 'MAIN' })}
-                        className="relative w-24 h-24 shrink-0 rounded overflow-hidden border border-slate-300 shadow-sm group cursor-pointer hover:border-blue-500 transition-colors"
-                    >
-                        <img src={img} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Pencil className="w-6 h-6 text-white drop-shadow-sm" />
-                        </div>
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)});
-                            }} 
-                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full shadow-lg hover:bg-red-600"
-                        >
-                            <X className="w-3 h-3"/>
-                        </button>
-                    </div>
-                ))}
-            </div>
-        </section>
 
         {/* Section IV: Danh sách kiểm tra */}
         <div className="space-y-3">
@@ -834,7 +895,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                             <div className="flex flex-wrap gap-3 items-center mb-3">
                                 <span className="text-slate-600 mr-2" style={{ fontWeight: 'bold' }}>Đánh giá:</span>
                                 <div className="flex bg-slate-100 rounded p-1 gap-1 border border-slate-200">
-                                    {/* Pass */}
                                     <button
                                         onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.PASS)}
                                         className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
@@ -847,7 +907,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                         {item.status === CheckStatus.PASS && <CheckCircle2 className="w-3 h-3"/>} Đạt
                                     </button>
                                     
-                                    {/* Fail */}
                                     <button
                                         onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.FAIL)}
                                         className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
@@ -860,7 +919,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                         {item.status === CheckStatus.FAIL && <AlertTriangle className="w-3 h-3"/>} Lỗi
                                     </button>
 
-                                    {/* Conditional */}
                                     <button
                                         onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.CONDITIONAL)}
                                         className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
@@ -873,7 +931,6 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
                                         {item.status === CheckStatus.CONDITIONAL && <Info className="w-3 h-3"/>} Có điều kiện
                                     </button>
 
-                                    {/* Pending */}
                                     <button
                                         onClick={() => handleItemChange(originalIndex, 'status', CheckStatus.PENDING)}
                                         className={`px-2 py-1.5 rounded transition-all text-slate-400 hover:text-slate-600 hover:bg-white`}
@@ -963,7 +1020,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
             </div>
         </div>
 
-        {/* Section V: Chữ ký (New) */}
+        {/* Section V: Xác nhận & Chữ ký */}
         <section className="bg-white p-4 rounded border border-slate-300 shadow-sm mt-4">
             <h3 className="text-blue-700 border-b border-blue-100 pb-2 mb-4 flex items-center gap-2" style={{ fontWeight: 'bold' }}>
                 <PenTool className="w-4 h-4"/> V. XÁC NHẬN & CHỮ KÝ
@@ -990,7 +1047,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
         <Button 
             onClick={handleSubmit} 
             disabled={isSaving}
-            className="w-48 bg-blue-700 hover:bg-blue-800 text-white shadow-md"
+            className="w-48 bg-blue-700 hover:bg-blue-800 text-white shadow-md font-bold"
         >
             {isSaving ? 'Đang lưu...' : 'Lưu Phiếu'}
         </Button>
@@ -1007,6 +1064,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({
               onSave={handleSaveNCR}
               initialData={formData.items[activeNcrItemIndex].ncr}
               itemName={formData.items[activeNcrItemIndex].label}
+              inspectionStage={formData.inspectionStage}
           />
       )}
 
