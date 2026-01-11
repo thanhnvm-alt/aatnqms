@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR } from '../types';
 import { Save, X, Camera, Image as ImageIcon, ChevronDown, MapPin, Box, AlertTriangle, Trash2, LayoutList, FileText, QrCode, PenTool, Eraser, Loader2 } from 'lucide-react';
@@ -29,12 +30,8 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt' }}>
-      <div className="bg-white border-b border-slate-300 shrink-0 flex justify-between items-center px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-amber-700" /><div><h2 className="font-black text-[13pt] uppercase tracking-tighter leading-none">SITE FORM</h2><p className="text-[8pt] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Kiểm tra công trình (Site Inspection)</p></div></div>
-          <button onClick={onCancel} className="p-2 text-slate-500 hover:bg-red-50 rounded-full transition-all" type="button"><X className="w-6 h-6" /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar bg-slate-50">
+    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12px' }}>
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar bg-slate-50 pb-28">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <h3 className="text-amber-700 border-b border-amber-50 pb-2 mb-2 font-black text-xs uppercase tracking-widest flex items-center gap-2"><MapPin className="w-4 h-4"/> I. THÔNG TIN CÔNG TRÌNH</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -65,9 +62,9 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
             </div>
         </div>
       </div>
-      <div className="p-4 md:p-6 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0 shadow-sm z-20">
+      <div className="p-4 md:p-6 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0 sticky bottom-0 z-20 shadow-[0_-10px_25px_rgba(0,0,0,0.05)] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
         <button onClick={onCancel} className="px-8 py-3.5 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-50 rounded-xl transition-all" type="button">Hủy</button>
-        <button onClick={handleSubmit} disabled={isSaving} className="px-16 py-4 bg-amber-700 text-white font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-2xl hover:bg-amber-800 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50" type="button">
+        <button onClick={handleSubmit} disabled={isSaving} className="flex-1 md:px-16 py-4 bg-amber-700 text-white font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-2xl hover:bg-amber-800 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50" type="button">
             {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
             <span>HOÀN TẤT SITE QC</span>
         </button>

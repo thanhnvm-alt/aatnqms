@@ -177,7 +177,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   );
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12pt' }}>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '12px' }}>
       {/* HEADER */}
       <div className="bg-white border-b border-slate-200 p-5 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -197,7 +197,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-8 no-scrollbar bg-slate-50/50 pb-32">
-        <div className="bg-white rounded-[3rem] p-8 border border-slate-200 shadow-sm relative overflow-hidden">
+        <div className="bg-white rounded-[3rem] p-8 border border-slate-200 shadow-sm space-y-6 relative overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                 <div className="lg:col-span-2">
                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-3">PQC Overview</p>

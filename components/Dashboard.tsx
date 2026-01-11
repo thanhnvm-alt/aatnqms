@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState } from '../types';
 import { 
@@ -41,8 +42,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
   }, [safeInspections]);
 
   const statusData = [
-    { name: 'Đã xong', value: stats.completed, color: COLORS.pass },
-    { name: 'Lỗi/NG', value: stats.flagged, color: COLORS.fail },
+    { name: 'Đạt', value: stats.completed, color: COLORS.pass },
+    { name: 'Lỗi', value: stats.flagged, color: COLORS.fail },
     { name: 'Nháp', value: stats.drafts, color: COLORS.draft },
   ].filter(item => item.value > 0);
 
@@ -62,57 +63,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
         score: Math.round(projectScores[key].total / projectScores[key].count)
       }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 6);
+      .slice(0, 5);
   }, [safeInspections]);
 
   const recentCritical = useMemo(() => {
     return safeInspections
       .filter(i => i && i.status === InspectionStatus.FLAGGED)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 4);
+      .slice(0, 5);
   }, [safeInspections]);
 
   const StatCard = ({ title, value, icon: Icon, colorHex, subtitle }: any) => (
-    <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
+    <div className="bg-white p-4 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
       <div className="flex justify-between items-start">
-        <div className="space-y-1">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
-          <h3 className="text-2xl font-black text-slate-900 leading-tight">{value}</h3>
-          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">{subtitle}</p>
+        <div className="space-y-0.5">
+          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+          <h3 className="text-xl font-black text-slate-900 leading-tight">{value}</h3>
+          <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">{subtitle}</p>
         </div>
-        <div className={`p-2.5 rounded-xl shrink-0`} style={{ backgroundColor: `${colorHex}15`, color: colorHex }}>
-          <Icon className="w-5 h-5" />
+        <div className={`p-2 rounded-xl shrink-0`} style={{ backgroundColor: `${colorHex}15`, color: colorHex }}>
+          <Icon className="w-4 h-4" />
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="h-full overflow-y-auto no-scrollbar bg-slate-50/50 flex flex-col">
-      <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto w-full pb-24">
-        {/* Top Stat Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+    <div className="h-full overflow-y-auto no-scrollbar bg-slate-50 flex flex-col no-scroll-x">
+      <div className="p-4 space-y-5 max-w-7xl mx-auto w-full pb-28">
+        {/* Top Stat Grid - Optimized for 2 cols on mobile */}
+        <div className="grid grid-cols-2 gap-3">
             <StatCard title="TỔNG PHIẾU" value={stats.total} icon={ClipboardCheck} colorHex="#3b82f6" subtitle={`${stats.drafts} bản nháp`} />
             <StatCard title="TỶ LỆ ĐẠT" value={`${stats.passRate}%`} icon={CheckCircle2} colorHex="#10b981" subtitle="KPI: >90%" />
             <StatCard title="LỖI/KPH" value={stats.flagged} icon={AlertTriangle} colorHex="#ef4444" subtitle="Đã phát hiện" />
-            <StatCard title="CẤP BÁCH" value={stats.highPriority} icon={Flag} colorHex="#f59e0b" subtitle="Ưu tiên xử lý" />
+            <StatCard title="CẤP BÁCH" value={stats.highPriority} icon={Flag} colorHex="#f59e0b" subtitle="Ưu tiên cao" />
         </div>
 
-        {/* Main Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        {/* Charts Row - Stacked on mobile */}
+        <div className="grid grid-cols-1 gap-4">
             {/* Status Pie */}
-            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center">
-               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 w-full text-center border-b border-slate-50 pb-3">TRẠNG THÁI KIỂM TRA</h3>
-               <div className="w-full h-48 relative">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col items-center">
+               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TRẠNG THÁI</h3>
+               <div className="w-full h-40 relative">
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={statusData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={55}
-                        outerRadius={75}
-                        paddingAngle={6}
+                        innerRadius={45}
+                        outerRadius={65}
+                        paddingAngle={4}
                         dataKey="value"
                         stroke="none"
                       >
@@ -120,30 +121,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '10px', fontWeight: 'bold' }} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                     <p className="text-2xl font-black text-slate-800 leading-none">{stats.completed + stats.flagged}</p>
-                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-0.5">XONG</p>
+                     <p className="text-xl font-black text-slate-800 leading-none">{stats.completed + stats.flagged}</p>
+                     <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5">HOÀN TẤT</p>
                   </div>
                </div>
-               <div className="flex gap-4 mt-2 overflow-x-auto no-scrollbar w-full justify-center">
+               <div className="flex flex-wrap gap-3 mt-2 justify-center">
                   {statusData.map((entry, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5 shrink-0">
+                      <div key={idx} className="flex items-center gap-1">
                           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase whitespace-nowrap">{entry.name}</p>
+                          <p className="text-[8px] font-black text-slate-400 uppercase whitespace-nowrap">{entry.name}: {entry.value}</p>
                       </div>
                   ))}
                </div>
             </div>
 
             {/* Top Project Bar */}
-            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm lg:col-span-2 flex flex-col">
-               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-50 pb-3">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
-               <div className="flex-1 min-h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <BarChart data={projectData} layout="vertical" margin={{ left: 0, right: 30 }}>
+            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
+               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
+               <div className="h-48 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 10 }}>
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis 
                         dataKey="name" 
@@ -151,15 +151,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                         width={80} 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{fontSize: 9, fontWeight: '900', fill: '#94a3b8'}} 
+                        tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}} 
                       />
-                      <Tooltip 
-                        cursor={{fill: '#f8fafc'}}
-                        contentStyle={{ borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}
-                      />
-                      <Bar dataKey="score" radius={[0, 8, 8, 0]} barSize={12}>
+                      <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={8}>
                         {projectData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.score >= 90 ? COLORS.pass : entry.score >= 70 ? COLORS.blue : COLORS.fail} />
+                          <Cell key={`cell-${index}`} fill={entry.score >= 90 ? COLORS.pass : COLORS.blue} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -169,12 +165,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
         </div>
 
         {/* Critical Issues Section */}
-        <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-red-50/20">
-                <h3 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
-                    <AlertOctagon className="w-5 h-5" /> PHIẾU CÓ LỖI (FLAGGED)
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-red-50/20">
+                <h3 className="text-[9px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+                    <AlertOctagon className="w-4 h-4" /> PHIẾU CẦN XỬ LÝ LỖI
                 </h3>
-                <span className="text-[8px] font-black text-red-500 bg-red-100 px-2 py-1 rounded-lg border border-red-200 uppercase tracking-widest">{recentCritical.length} Mới nhất</span>
              </div>
              <div className="divide-y divide-slate-100">
                 {recentCritical.length > 0 ? (
@@ -184,36 +179,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                           onClick={() => onNavigate?.('LIST')}
                           className="p-4 active:bg-slate-50 transition-all flex items-center justify-between group cursor-pointer"
                         >
-                            <div className="flex items-center gap-4 flex-1 min-w-0 pr-3">
-                                <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex flex-col items-center justify-center font-black shrink-0 shadow-lg shadow-red-200">
-                                    <span className="text-base leading-none">{item.score}</span>
-                                    <span className="text-[7px] uppercase mt-0.5 opacity-60">PTS</span>
+                            <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
+                                <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex flex-col items-center justify-center font-black shrink-0 shadow-md">
+                                    <span className="text-sm leading-none">{item.score}</span>
+                                    <span className="text-[6px] uppercase opacity-60">PTS</span>
                                 </div>
                                 <div className="min-w-0 overflow-hidden">
-                                    <h4 className="font-black text-slate-800 text-xs truncate uppercase tracking-tight mb-1">{item.ten_hang_muc}</h4>
-                                    <div className="flex flex-wrap items-center gap-3 text-[8px] text-slate-400 font-black uppercase tracking-tighter">
-                                        <span className="flex items-center gap-1"><Flag className="w-3 h-3 text-red-400"/> {item.ma_ct}</span>
-                                        <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {item.date}</span>
-                                        <span className="flex items-center gap-1 text-blue-500/70"><UserCircle className="w-3 h-3"/> {item.inspectorName}</span>
+                                    <h4 className="font-black text-slate-800 text-[11px] truncate uppercase tracking-tight mb-0.5">{item.ten_hang_muc}</h4>
+                                    <div className="flex items-center gap-2 text-[7px] text-slate-400 font-black uppercase tracking-tighter">
+                                        <span className="truncate max-w-[60px]">{item.ma_ct}</span>
+                                        <span className="text-slate-300">|</span>
+                                        <span>{item.date}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-300 group-hover:text-blue-600 group-hover:border-blue-100 transition-all active:scale-90">
-                                <ArrowRight className="w-4 h-4" />
+                            <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-300 active:scale-90 shrink-0">
+                                <ArrowRight className="w-3.5 h-3.5" />
                             </div>
                         </div>
                     ))
                 ) : (
-                    <div className="py-16 text-center flex flex-col items-center justify-center space-y-3">
-                        <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center shadow-inner">
-                            <CheckCircle2 className="w-6 h-6" />
-                        </div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Hệ thống chưa ghi nhận lỗi mới</p>
+                    <div className="py-12 text-center flex flex-col items-center justify-center space-y-2">
+                        <CheckCircle2 className="w-8 h-8 text-green-200" />
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Hệ thống không ghi nhận lỗi mới</p>
                     </div>
                 )}
              </div>
-             <div className="p-4 bg-slate-50 border-t border-slate-100">
-                <button onClick={() => onNavigate?.('LIST')} className="w-full py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 shadow-sm active:scale-95 transition-all">Xem tất cả báo cáo</button>
+             <div className="p-3 bg-slate-50 border-t border-slate-100">
+                <button onClick={() => onNavigate?.('LIST')} className="w-full py-2.5 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 shadow-sm active:scale-95 transition-all">Xem tất cả báo cáo</button>
              </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment } from './types';
 import { 
@@ -136,7 +137,11 @@ const App = () => {
   const loadInspections = async () => { if (!isDbReady) return; setIsLoadingInspections(true); try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
   const handleSelectInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); } else alert("Không tìm thấy phiếu."); } catch (error) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); } };
   const handleSelectProject = async (maCt: string) => { const found = (projects || []).find(p => p && p.ma_ct === maCt); if (found) { setActiveProject(found); setView('PROJECT_DETAIL'); } else { setIsDetailLoading(true); try { const freshProject = await fetchProjectByCode(maCt); if (freshProject) { setActiveProject(freshProject); setView('PROJECT_DETAIL'); } else alert("Không tìm thấy dự án."); } catch (e) { alert("Lỗi kết nối."); } finally { setIsDetailLoading(false); } } };
-  const handleEditInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('FORM'); } } catch (e) {} finally { setIsDetailLoading(false); } };
+  const handleEditInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { 
+    setActiveInspection(fullInspection); 
+    const formView = `form${fullInspection.type}` as ViewState;
+    setView(formView); 
+  } } catch (e) {} finally { setIsDetailLoading(false); } };
   const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
   const handleApproveInspection = async (id: string, signature: string, extraInfo?: any) => { 
     if (!activeInspection) return; 
@@ -171,13 +176,15 @@ const App = () => {
       if (pendingScannedCode) { try { const searchResult = await fetchPlans(pendingScannedCode, 1, 5); const foundPlan = searchResult.items.find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); if (foundPlan) { baseData = { ma_nha_may: foundPlan.ma_nha_may, headcode: foundPlan.headcode, ma_ct: foundPlan.ma_ct, ten_ct: foundPlan.ten_ct, ten_hang_muc: foundPlan.ten_hang_muc, dvt: foundPlan.dvt, so_luong_ipo: foundPlan.so_luong_ipo }; } } catch (e) {} }
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
       setInitialFormState({ ...baseData, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
-      setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); setView('FORM');
+      setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); 
+      const formView = `form${moduleId}` as ViewState;
+      setView(formView);
   };
 
   const renderForm = () => {
     const data = activeInspection || initialFormState;
     if (!data) return null;
-    const commonProps = { initialData: data, onSave: handleSaveInspection, onCancel: () => setView('LIST'), plans, workshops, user: user! };
+    const commonProps = { initialData: data, onSave: handleSaveInspection, onCancel: () => setView('LIST'), plans, workshops, inspections, user: user! };
     switch (data.type) {
         case 'IQC': return <InspectionFormIQC {...commonProps} />;
         case 'SQC_MAT': return <InspectionFormSQC_VT {...commonProps} />;
@@ -221,7 +228,7 @@ const App = () => {
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
-            {view === 'FORM' && renderForm()}
+            {view.startsWith('form') && renderForm()}
             {view === 'DETAIL' && renderDetail()}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
