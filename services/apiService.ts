@@ -1,4 +1,5 @@
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem } from '../types';
+
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, Role, NCR, Defect, DefectLibraryItem, Notification, ViewState } from '../types';
 import * as db from './tursoService';
 import ExcelJS from 'exceljs';
 
@@ -11,9 +12,6 @@ export interface PagedResult<T> {
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
-/**
- * ISO Helper: Lưu file Excel trực tiếp từ trình duyệt
- */
 const saveExcelLocally = async (workbook: ExcelJS.Workbook, fileName: string) => {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -32,6 +30,34 @@ export const fetchRoles = async () => await db.getRoles();
 export const saveRole = async (role: Role) => { await db.saveRole(role); return role; };
 export const deleteRole = async (id: string) => { await db.deleteRole(id); };
 
+// Notifications API
+export const fetchNotifications = async (userId: string) => await db.getNotifications(userId);
+export const markNotificationAsRead = async (id: string) => await db.markNotificationAsRead(id);
+export const markAllNotificationsAsRead = async (userId: string) => await db.markAllNotificationsAsRead(userId);
+
+export const createNotification = async (params: { 
+    userId: string, 
+    type: Notification['type'], 
+    title: string, 
+    message: string, 
+    link?: { view: ViewState, id: string } 
+}) => {
+    const notif: Notification = {
+        id: `ntf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        userId: params.userId,
+        type: params.type,
+        title: params.title,
+        message: params.message,
+        link: params.link,
+        isRead: false,
+        createdAt: Math.floor(Date.now() / 1000)
+    };
+    await db.saveNotification(notif);
+    return notif;
+};
+
+// ... existing code below ...
+
 export const fetchPlans = async (search: string = '', page?: number, limit?: number): Promise<PagedResult<PlanItem>> => {
   const result = await db.getPlans({ search, page, limit });
   return { items: result.items, total: result.total, page, limit };
@@ -41,47 +67,33 @@ export const importPlans = async (plans: PlanItem[]) => {
     await db.importPlansBatch(plans);
 };
 
-/**
- * Xuất kế hoạch sản xuất ra Excel (Client-side)
- */
 export const exportPlans = async () => {
     try {
         const result = await db.getPlans({ limit: 1000 });
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Kế hoạch sản xuất');
-
         worksheet.columns = [
             { header: 'Mã Nhà Máy', key: 'ma_nha_may', width: 20 },
             { header: 'Headcode', key: 'headcode', width: 15 },
-            { header: 'Mã Công Trình', key: 'ma_ct', width: 15 },
-            { header: 'Tên Công Trình', key: 'ten_ct', width: 30 },
+            { header: 'Mã Công Trinh', key: 'ma_ct', width: 15 },
+            { header: 'Tên Công Trinh', key: 'ten_ct', width: 30 },
             { header: 'Tên Sản Phẩm', key: 'ten_hang_muc', width: 30 },
             { header: 'Số Lượng IPO', key: 'so_luong_ipo', width: 15 },
             { header: 'ĐVT', key: 'dvt', width: 10 },
             { header: 'Ngày Kế Hoạch', key: 'plannedDate', width: 15 }
         ];
-
-        result.items.forEach(item => {
-            worksheet.addRow(item);
-        });
-
+        result.items.forEach(item => { worksheet.addRow(item); });
         worksheet.getRow(1).font = { bold: true };
         await saveExcelLocally(workbook, `AATN_Plans_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } catch (e: any) {
-        alert("Lỗi khi xuất kế hoạch: " + e.message);
-    }
+    } catch (e: any) { alert("Lỗi khi xuất kế hoạch: " + e.message); }
 };
 
-/**
- * Nhập kế hoạch từ file Excel (Client-side)
- */
 export const importPlansFile = async (file: File) => {
     const buffer = await file.arrayBuffer();
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
     const worksheet = workbook.getWorksheet(1);
     if (!worksheet) throw new Error("File Excel không có dữ liệu");
-
     const plans: PlanItem[] = [];
     worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
@@ -98,7 +110,6 @@ export const importPlansFile = async (file: File) => {
         };
         if (plan.ma_nha_may) plans.push(plan);
     });
-
     await db.importPlansBatch(plans);
     return { success: true, count: plans.length };
 };
@@ -109,9 +120,7 @@ export const fetchInspections = async (filters: any = {}): Promise<PagedResult<I
 };
 
 export const importInspections = async (inspections: Inspection[]) => {
-    for (const insp of inspections) {
-        await db.saveInspection(insp);
-    }
+    for (const insp of inspections) { await db.saveInspection(insp); }
 };
 
 export const fetchInspectionById = async (id: string) => await db.getInspectionById(id);
@@ -124,15 +133,11 @@ export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
 export const deleteDefectLibraryItem = async (id: string) => { await db.deleteDefectLibraryItem(id); };
 
-/**
- * Xuất thư viện lỗi ra file Excel (Client-side)
- */
 export const exportDefectLibrary = async () => {
     try {
         const library = await db.getDefectLibrary();
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Defect Library');
-
         worksheet.columns = [
             { header: 'Mã Lỗi', key: 'code', width: 15 },
             { header: 'Tên Lỗi', key: 'name', width: 30 },
@@ -142,23 +147,13 @@ export const exportDefectLibrary = async () => {
             { header: 'Mô Tả Lỗi', key: 'description', width: 50 },
             { header: 'Hành Động Gợi Ý', key: 'suggestedAction', width: 40 }
         ];
-
-        library.forEach(item => {
-            worksheet.addRow(item);
-        });
-
+        library.forEach(item => { worksheet.addRow(item); });
         worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
         worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
-
         await saveExcelLocally(workbook, `AATN_Defect_Library_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } catch (e: any) {
-        alert("Lỗi khi xuất thư viện lỗi: " + e.message);
-    }
+    } catch (e: any) { alert("Lỗi khi xuất thư viện lỗi: " + e.message); }
 };
 
-/**
- * Nhập thư viện lỗi từ file Excel (Client-side)
- */
 export const importDefectLibraryFile = async (file: File) => {
     try {
         const buffer = await file.arrayBuffer();
@@ -166,44 +161,26 @@ export const importDefectLibraryFile = async (file: File) => {
         await workbook.xlsx.load(buffer);
         const worksheet = workbook.getWorksheet(1);
         if (!worksheet) throw new Error("File Excel trống");
-
         const defects: DefectLibraryItem[] = [];
         worksheet.eachRow((row, rowNumber) => {
             if (rowNumber === 1) return;
             const code = row.getCell(1).value?.toString() || '';
             if (code) {
                 defects.push({
-                    id: code,
-                    code: code,
-                    name: row.getCell(2).value?.toString() || '',
-                    category: row.getCell(3).value?.toString() || 'Ngoại quan',
-                    stage: row.getCell(4).value?.toString() || 'Chung',
-                    severity: (row.getCell(5).value?.toString() as any) || 'MINOR',
-                    description: row.getCell(6).value?.toString() || '',
-                    suggestedAction: row.getCell(7).value?.toString() || ''
+                    id: code, code: code, name: row.getCell(2).value?.toString() || '', category: row.getCell(3).value?.toString() || 'Ngoại quan', stage: row.getCell(4).value?.toString() || 'Chung', severity: (row.getCell(5).value?.toString() as any) || 'MINOR', description: row.getCell(6).value?.toString() || '', suggestedAction: row.getCell(7).value?.toString() || ''
                 });
             }
         });
-
-        for (const def of defects) {
-            await db.saveDefectLibraryItem(def);
-        }
-
+        for (const def of defects) { await db.saveDefectLibraryItem(def); }
         return { success: true, count: defects.length };
-    } catch (e: any) {
-        throw new Error("Lỗi đọc file Excel: " + e.message);
-    }
+    } catch (e: any) { throw new Error("Lỗi đọc file Excel: " + e.message); }
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => { await db.saveInspection(inspection); return { success: true }; };
 export const deleteInspectionFromSheet = async (id: string) => { await db.deleteInspection(id); };
 export const fetchProjects = async () => await db.getProjects();
 export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
-export const fetchProjectsSummary = async () => {
-    const projects = await db.getProjects();
-    return projects;
-};
-
+export const fetchProjectsSummary = async () => { const projects = await db.getProjects(); return projects; };
 export const updateProject = async (project: Project) => { await db.saveProjectMetadata(project); return project; };
 export const fetchUsers = async () => await db.getUsers();
 export const saveUser = async (user: User) => { await db.saveUser(user); return user; };

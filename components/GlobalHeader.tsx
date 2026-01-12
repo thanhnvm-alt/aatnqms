@@ -1,11 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User, ViewState, Inspection } from '../types';
+import { User, ViewState, Inspection, Notification } from '../types';
 import { 
   ShieldCheck, UserCircle, Settings, LogOut, Search, 
   RefreshCw, QrCode, Bell, ChevronDown, Menu, X,
   LayoutDashboard, List, FileSpreadsheet, Briefcase, Box, Plus
 } from 'lucide-react';
+import { NotificationCenter } from './NotificationCenter';
+import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../services/apiService';
 
 interface GlobalHeaderProps {
   user: User;
@@ -19,25 +21,58 @@ interface GlobalHeaderProps {
   onScanClick?: () => void;
   onOpenSettingsTab?: (tab: 'PROFILE' | 'TEMPLATE' | 'USERS' | 'WORKSHOPS') => void;
   activeFormType?: string;
+  onNavigateToRecord?: (view: ViewState, id: string) => void;
 }
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   user, view, onNavigate, onLogout, onRefresh, onCreate,
   onSearchChange, searchTerm, onScanClick, onOpenSettingsTab,
-  activeFormType
+  activeFormType, onNavigateToRecord
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 30000); // Polling every 30s
+    return () => clearInterval(interval);
+  }, [user.id]);
+
+  const loadNotifications = async () => {
+      try {
+          const data = await fetchNotifications(user.id);
+          setNotifications(data);
+      } catch (e) {}
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleMarkRead = async (id: string) => {
+      await markNotificationAsRead(id);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  };
+
+  const handleMarkAllRead = async () => {
+      await markAllNotificationsAsRead(user.id);
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  };
 
   const getPageTitle = () => {
     if (view === 'FORM') {
@@ -162,6 +197,29 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             <QrCode className="w-5 h-5" />
           </button>
         )}
+
+        <div className="relative" ref={notifRef}>
+            <button 
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className={`p-2.5 rounded-xl transition-all active:scale-95 relative ${isNotifOpen ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                    <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full border-2 border-white ${isNotifOpen ? 'bg-white' : 'bg-red-500'}`}></span>
+                )}
+            </button>
+            {isNotifOpen && (
+                <div className="absolute right-0 mt-3 w-80 md:w-96 max-h-[600px] z-[120]">
+                    <NotificationCenter 
+                        notifications={notifications}
+                        onMarkRead={handleMarkRead}
+                        onMarkAllRead={handleMarkAllRead}
+                        onNavigate={(v, id) => onNavigateToRecord?.(v, id)}
+                        onClose={() => setIsNotifOpen(false)}
+                    />
+                </div>
+            )}
+        </div>
 
         {onCreate && (
           <button 

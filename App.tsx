@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment } from './types';
+import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
@@ -70,7 +70,8 @@ import {
   importPlans, 
   importInspections, 
   fetchProjects, 
-  fetchProjectByCode
+  fetchProjectByCode,
+  createNotification
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
@@ -134,14 +135,30 @@ const App = () => {
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data && data.length > 0) setWorkshops(data); } catch (e) {} };
   const loadProjects = async () => { if (!isDbReady) return; try { const data = await fetchProjects(); setProjects(data || []); } catch(e) {} };
   const loadPlans = async () => { if (!isDbReady) return; setIsLoadingPlans(true); try { const result = await fetchPlans(planSearchTerm, 1, 1000); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
-  
-  // Tăng limit lên 1000 để load toàn bộ danh sách kiểm tra thay vì mặc định 20
   const loadInspections = async () => { if (!isDbReady) return; setIsLoadingInspections(true); try { const data = await fetchInspections({ limit: 1000 }); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
   
   const handleSelectInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); } else alert("Không tìm thấy phiếu."); } catch (error) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); } };
-  const handleSelectProject = async (maCt: string) => { const found = (projects || []).find(p => p && p.ma_ct === maCt); if (found) { setActiveProject(found); setView('PROJECT_DETAIL'); } else { setIsDetailLoading(true); try { const freshProject = await fetchProjectByCode(maCt); if (freshProject) { setActiveProject(freshProject); setView('PROJECT_DETAIL'); } else alert("Không tìm thấy dự án."); } catch (e) { alert("Lỗi kết nối."); } finally { setIsDetailLoading(false); } } };
+  
   const handleEditInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('FORM'); } } catch (e) {} finally { setIsDetailLoading(false); } };
-  const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
+  
+  const handleSaveInspection = async (newInspection: Inspection) => { 
+      await saveInspectionToSheet(newInspection); 
+      // ISO-PUSH: Notify managers about new inspection
+      if (newInspection.status === InspectionStatus.PENDING) {
+          const managers = users.filter(u => u.role === 'MANAGER' || u.role === 'ADMIN');
+          for (const m of managers) {
+              await createNotification({
+                  userId: m.id,
+                  type: 'INSPECTION',
+                  title: 'Phiếu kiểm tra mới',
+                  message: `QC ${user?.name} vừa gửi phiếu ${newInspection.type} cho ${newInspection.ten_hang_muc}.`,
+                  link: { view: 'DETAIL', id: newInspection.id }
+              });
+          }
+      }
+      setView('LIST'); loadInspections(); loadProjects(); 
+  };
+
   const handleApproveInspection = async (id: string, signature: string, extraInfo?: any) => { 
     if (!activeInspection) return; 
     const isFullApproval = !!signature;
@@ -163,16 +180,61 @@ const App = () => {
         if (extraInfo.pmName !== undefined) updated.pmName = extraInfo.pmName;
     } 
     await saveInspectionToSheet(updated); 
+    
+    // ISO-PUSH: Notify QC about approval
+    if (isFullApproval) {
+        const qc = users.find(u => u.name === updated.inspectorName);
+        if (qc) {
+            await createNotification({
+                userId: qc.id,
+                type: 'INSPECTION',
+                title: 'Phiếu đã được duyệt',
+                message: `Quản lý ${user?.name} đã phê duyệt phiếu ${updated.id}.`,
+                link: { view: 'DETAIL', id: updated.id }
+            });
+        }
+    }
+
     loadInspections(); 
     setActiveInspection(updated);
   };
-  const handlePostComment = async (id: string, comment: NCRComment) => { if (!activeInspection) return; const updatedComments = [...(activeInspection.comments || []), comment]; const updated = { ...activeInspection, comments: updatedComments }; await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections(); };
+
+  const handlePostComment = async (id: string, comment: NCRComment) => { 
+      if (!activeInspection) return; 
+      const updatedComments = [...(activeInspection.comments || []), comment]; 
+      const updated = { ...activeInspection, comments: updatedComments }; 
+      await saveInspectionToSheet(updated); 
+      
+      // ISO-PUSH: Notify other involved parties
+      const participants = new Set<string>();
+      if (updated.inspectorName !== comment.userName) {
+          const qc = users.find(u => u.name === updated.inspectorName);
+          if (qc) participants.add(qc.id);
+      }
+      if (user?.role === 'QC') {
+          users.filter(u => u.role === 'MANAGER' || u.role === 'ADMIN').forEach(m => participants.add(m.id));
+      }
+
+      for (const pId of participants) {
+          await createNotification({
+              userId: pId,
+              type: 'COMMENT',
+              title: 'Phản hồi mới',
+              message: `${comment.userName} đã để lại bình luận trên phiếu ${updated.id}.`,
+              link: { view: 'DETAIL', id: updated.id }
+          });
+      }
+
+      setActiveInspection(updated); 
+      loadInspections(); 
+  };
+
   const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
   const handleQrScan = (scannedCode: string) => { setShowQrScanner(false); setPendingScannedCode(scannedCode); setShowModuleSelector(true); };
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false); setIsDetailLoading(true);
       let baseData: Partial<Inspection> = { ma_nha_may: pendingScannedCode || '' };
-      if (pendingScannedCode) { try { const searchResult = await fetchPlans(pendingScannedCode, 1, 5); const foundPlan = searchResult.items.find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); if (foundPlan) { baseData = { ma_nha_may: foundPlan.ma_nha_may, headcode: foundPlan.headcode, ma_ct: foundPlan.ma_ct, ten_ct: foundPlan.ten_ct, ten_hang_muc: foundPlan.ten_hang_muc, dvt: foundPlan.dvt, so_luong_ipo: foundPlan.so_luong_ipo }; } } catch (e) {} }
+      if (pendingScannedCode) { try { const searchResult = await fetchPlans(pendingScannedCode, 1, 5); const foundPlan = (searchResult.items || []).find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); if (foundPlan) { baseData = { ma_nha_may: foundPlan.ma_nha_may, headcode: foundPlan.headcode, ma_ct: foundPlan.ma_ct, ten_ct: foundPlan.ten_ct, ten_hang_muc: foundPlan.ten_hang_muc, dvt: foundPlan.dvt, so_luong_ipo: foundPlan.so_luong_ipo }; } } catch (e) {} }
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
       setInitialFormState({ ...baseData, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
       setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); setView('FORM');
@@ -181,16 +243,7 @@ const App = () => {
   const renderForm = () => {
     const data = activeInspection || initialFormState;
     if (!data) return null;
-    const commonProps = { 
-        initialData: data, 
-        onSave: handleSaveInspection, 
-        onCancel: () => setView('LIST'), 
-        plans, 
-        workshops, 
-        inspections, 
-        user: user!,
-        templates 
-    };
+    const commonProps = { initialData: data, onSave: handleSaveInspection, onCancel: () => setView('LIST'), plans, workshops, inspections, user: user!, templates };
     switch (data.type) {
         case 'IQC': return <InspectionFormIQC {...commonProps} />;
         case 'SQC_MAT': return <InspectionFormSQC_VT {...commonProps} />;
@@ -236,6 +289,7 @@ const App = () => {
           onCreate={() => { setPendingScannedCode(null); setInitialFormState(undefined); setShowModuleSelector(true); }} 
           onScanClick={() => { setPendingScannedCode(null); setShowQrScanner(true); }}
           activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined}
+          onNavigateToRecord={(v, id) => { if(v === 'DETAIL') handleSelectInspection(id); else setView(v); }}
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
@@ -248,12 +302,13 @@ const App = () => {
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => { setView('DEFECT_LIST'); setActiveDefect(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
-            {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={handleSelectProject} />}
-            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onUpdate={loadProjects} onBack={() => { setView('PROJECTS'); setActiveProject(null); }} />}
+            {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={async (maCt) => { const found = projects.find(p => p.ma_ct === maCt); if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} />}
+            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onUpdate={loadProjects} onBack={() => { setView('PROJECTS'); setActiveProject(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
+        {/* Fixed typo setShowScanner -> setShowQrScanner to fix Cannot find name 'setShowScanner' error */}
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={handleQrScan} />}
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

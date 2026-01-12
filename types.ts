@@ -63,6 +63,20 @@ export interface User {
   notes?: string;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE' | 'SYSTEM';
+  title: string;
+  message: string;
+  link?: {
+    view: ViewState;
+    id: string;
+  };
+  isRead: boolean;
+  createdAt: number;
+}
+
 export interface NCRComment {
   id: string;
   userId: string;
@@ -163,6 +177,18 @@ export interface MaterialIQC {
   date: string;
 }
 
+export interface SmartGoal {
+  id: string;
+  title: string;
+  specific: string;
+  measurable: string;
+  achievable: string;
+  relevant: string;
+  timeBound: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  createdAt: number;
+}
+
 export interface Inspection {
   id: string;
   type?: ModuleId;
@@ -225,6 +251,7 @@ export interface Project {
   description?: string;
   location?: string;
   images?: string[]; 
+  smartGoals?: SmartGoal[];
 }
 
 export interface PlanItem {
