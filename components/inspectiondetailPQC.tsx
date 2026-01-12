@@ -124,17 +124,19 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
 
   const workshopName = workshops.find(w => w.code === inspection.ma_nha_may)?.name || inspection.ma_nha_may || 'SITE WORK';
 
+  // --- STATISTICS (Pass/Fail Rate) ---
+  const insQty = parseFloat(String(inspection.inspectedQuantity || 0));
+  const passQty = parseFloat(String(inspection.passedQuantity || 0));
+  const failQty = parseFloat(String(inspection.failedQuantity || 0));
+  
+  const passRate = insQty > 0 ? ((passQty / insQty) * 100).toFixed(1) : "0.0";
+  const failRate = insQty > 0 ? ((failQty / insQty) * 100).toFixed(1) : "0.0";
+
   // --- PERMISSION LOGIC ---
-  // 1. Roll QC và QA không được xóa/sửa phiếu của người khác.
   const isOwner = inspection.inspectorName === user.name;
   const hasOwnershipRight = isAdmin || isManager || isOwner;
-
-  // 2. Phiếu sau khi được phê duyệt thì không được xóa/sửa (chỉ admin được quyền xóa/sửa).
   const isUnlocked = !isApproved || isAdmin;
-
-  // Combine permissions
   const canModify = hasOwnershipRight && isUnlocked;
-  // ------------------------
 
   const handleManagerApprove = async () => {
       if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }
@@ -200,9 +202,9 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
       <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
           <div className="flex items-center gap-2">
               <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors active:scale-90 border border-slate-200"><ArrowLeft className="w-4 h-4 text-slate-600" /></button>
-              <div>
+              <div className="flex items-center gap-2">
                   <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Báo cáo: {inspection.type}</h2>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-500 text-white border-orange-500'}`}>{inspection.status}</span>
                       <span className="text-[10px] text-slate-400 font-mono font-medium uppercase">#{inspection.id.split('-').pop()}</span>
                   </div>
@@ -216,22 +218,34 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar pb-32 bg-slate-50">
         
+        {/* TOP CARD: Reordered to match screenshot (Item Name > Project Name) */}
         <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="lg:col-span-2">
                     <p className="text-[9px] font-bold text-blue-600 uppercase tracking-wide mb-1">Thông tin dự án</p>
-                    <h1 className="text-lg font-bold text-slate-900 uppercase leading-tight">{inspection.ten_hang_muc}</h1>
-                    <p className="text-[11px] font-medium text-slate-500 mt-0.5 uppercase">{inspection.ten_ct}</p>
+                    
+                    {/* Item Name (SKIRTING...) prominently on top */}
+                    <h1 className="text-lg font-bold text-slate-900 uppercase leading-tight mb-1">
+                        {inspection.ten_hang_muc}
+                    </h1>
+                    
+                    {/* Project Name (TÀU KHÁCH...) smaller below */}
+                    <p className="text-[11px] font-medium text-slate-500 uppercase">
+                        {inspection.ten_ct}
+                    </p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-2 flex flex-col items-center justify-center border border-slate-100">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">SCORE</p>
-                    <p className={`text-xl font-bold ${inspection.score >= 90 ? 'text-green-600' : 'text-red-600'}`}>{inspection.score}</p>
+                
+                {/* Stats Cards: Pass/Fail Rate instead of Score */}
+                <div className="bg-green-50 rounded-lg p-2 flex flex-col items-center justify-center border border-green-100">
+                    <p className="text-[9px] font-bold text-green-600 uppercase tracking-wide mb-0.5">TỶ LỆ ĐẠT</p>
+                    <p className="text-xl font-bold text-green-700">{passRate}%</p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-2 flex flex-col items-center justify-center border border-slate-100">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">NCRs</p>
-                    <p className="text-xl font-bold text-red-600">{inspection.items.filter(i => i.status === CheckStatus.FAIL).length}</p>
+                <div className="bg-red-50 rounded-lg p-2 flex flex-col items-center justify-center border border-red-100">
+                    <p className="text-[9px] font-bold text-red-600 uppercase tracking-wide mb-0.5">TỶ LỆ LỖI</p>
+                    <p className="text-xl font-bold text-red-700">{failRate}%</p>
                 </div>
             </div>
+            
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100">
                 <InfoRow icon={Box} label="Mã dự án / PO" value={inspection.ma_ct} />
                 <InfoRow icon={Building2} label="Xưởng / Địa điểm" value={workshopName} iconColor="text-blue-500" />
@@ -374,6 +388,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
                     <button 
                         onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()}
                         className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-md flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all shrink-0"
+                        type="button"
                     >
                         {isSubmittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     </button>

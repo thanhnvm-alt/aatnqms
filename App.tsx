@@ -245,7 +245,7 @@ const App = () => {
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
-            {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
+            {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => { setView('DEFECT_LIST'); setActiveDefect(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={handleSelectProject} />}
@@ -260,7 +260,11 @@ const App = () => {
                 <div className="bg-white w-full max-sm rounded-[2.5rem] shadow-2xl p-6 space-y-4 animate-in zoom-in duration-200">
                     <div className="flex justify-between items-center mb-2"><h3 className="font-black text-slate-800 uppercase tracking-tighter">Chọn Loại Kiểm Tra</h3><button onClick={() => setShowModuleSelector(false)}><X className="w-6 h-6 text-slate-400"/></button></div>
                     <div className="grid grid-cols-1 gap-2">
-                        {ALL_MODULES.filter(m => m.group === 'QC' || m.group === 'QA').map(mod => (
+                        {ALL_MODULES.filter(m => {
+                            const isQcQa = m.group === 'QC' || m.group === 'QA';
+                            const hasPermission = user?.role === 'ADMIN' || user?.allowedModules?.includes(m.id);
+                            return isQcQa && hasPermission;
+                        }).map(mod => (
                             <button key={mod.id} onClick={() => startCreateInspection(mod.id)} className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-200 rounded-2xl flex items-center gap-4 transition-all group">
                                 <div className="p-2 bg-white rounded-xl shadow-sm text-blue-600 group-hover:scale-110 transition-transform"><FileText className="w-5 h-5" /></div>
                                 <span className="font-bold text-slate-700 group-hover:text-blue-700 uppercase text-xs">{mod.label}</span>

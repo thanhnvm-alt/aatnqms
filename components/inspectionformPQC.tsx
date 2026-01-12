@@ -122,6 +122,9 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const [uploadTarget, setUploadTarget] = useState<'BEFORE' | 'AFTER'>('BEFORE');
+    
+    // Image Editor State
+    const [editorState, setEditorState] = useState<{ images: string[]; index: number; type: 'BEFORE' | 'AFTER' } | null>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -174,6 +177,21 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
             const result = await generateNCRSuggestions(ncrData.issueDescription, itemName);
             setNcrData(prev => ({ ...prev, rootCause: result.rootCause, solution: result.solution }));
         } catch (e) { alert("Lỗi phân tích AI."); } finally { setIsAiLoading(false); }
+    };
+
+    const handleViewImage = (images: string[], index: number, type: 'BEFORE' | 'AFTER') => {
+        setEditorState({ images, index, type });
+    };
+
+    const handleImageSave = (index: number, newImage: string) => {
+        if (!editorState) return;
+        const { type } = editorState;
+        setNcrData(prev => {
+            const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+            const list = [...(prev[field] || [])];
+            list[index] = newImage;
+            return { ...prev, [field]: list };
+        });
     };
 
     if (!isOpen) return null;
@@ -235,7 +253,14 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesBefore?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover" /><button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group">
+                                        <img 
+                                            src={img} 
+                                            className="w-full h-full object-cover cursor-pointer" 
+                                            onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')}
+                                        />
+                                        <button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -249,7 +274,14 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesAfter?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover" /><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group">
+                                        <img 
+                                            src={img} 
+                                            className="w-full h-full object-cover cursor-pointer" 
+                                            onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')}
+                                        />
+                                        <button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -262,6 +294,15 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                     <button onClick={() => onSave(ncrData as NCR)} disabled={!ncrData.issueDescription} className="px-6 py-2 bg-red-600 text-white rounded-lg shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all font-black uppercase text-[10px] tracking-widest disabled:opacity-50">Lưu NCR</button>
                 </div>
             </div>
+            {editorState && (
+                <ImageEditorModal 
+                    images={editorState.images} 
+                    initialIndex={editorState.index} 
+                    onSave={handleImageSave}
+                    onClose={() => setEditorState(null)} 
+                    readOnly={false} 
+                />
+            )}
         </div>
     );
 };

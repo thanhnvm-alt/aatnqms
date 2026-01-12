@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus } from '../types';
 import { 
@@ -49,7 +50,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     const projects: Record<string, { 
       ten_ct: string, 
       factories: Record<string, Inspection[]>,
-      stats: { total: number, pass: number, fail: number }
+      stats: { total: number, pass: number, ncr: number }
     }> = {};
 
     filteredInspections.forEach(item => {
@@ -58,7 +59,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         projects[pKey] = { 
           ten_ct: item.ten_ct || 'Dự án khác', 
           factories: {},
-          stats: { total: 0, pass: 0, fail: 0 }
+          stats: { total: 0, pass: 0, ncr: 0 }
         };
       }
       
@@ -67,10 +68,14 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       projects[pKey].factories[fKey].push(item);
       
       projects[pKey].stats.total++;
-      if (item.status === InspectionStatus.APPROVED || item.status === InspectionStatus.COMPLETED) {
+      
+      // Determine if it counts as NCR or Pass for stats
+      const hasNCR = item.items?.some(i => i.status === CheckStatus.FAIL) || item.status === InspectionStatus.FLAGGED;
+      
+      if (hasNCR) {
+        projects[pKey].stats.ncr++;
+      } else if (item.status === InspectionStatus.APPROVED || item.status === InspectionStatus.COMPLETED) {
         projects[pKey].stats.pass++;
-      } else if (item.status === InspectionStatus.FLAGGED) {
-        projects[pKey].stats.fail++;
       }
     });
     return projects;
@@ -85,6 +90,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  };
+
+  const getInspectionDisplayInfo = (item: Inspection) => {
+      const total = item.inspectedQuantity || 0;
+      const passRate = total > 0 ? ((item.passedQuantity || 0) / total * 100).toFixed(0) : '0';
+      const failRate = total > 0 ? ((item.failedQuantity || 0) / total * 100).toFixed(0) : '0';
+      
+      const hasNCR = item.items?.some(i => i.status === CheckStatus.FAIL) || item.status === InspectionStatus.FLAGGED;
+      const displayStatus = hasNCR ? InspectionStatus.FLAGGED : item.status;
+      
+      return { passRate, failRate, displayStatus, hasNCR };
   };
 
   return (
@@ -146,14 +162,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight truncate">{project.ten_ct}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100" title="Tổng phiếu">
                            <span className="text-[8px] font-black text-slate-600">{project.stats.total}</span>
                         </div>
-                        <div className="flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg border border-red-100">
-                           <span className="text-[8px] font-black text-red-600">{project.stats.fail}</span>
+                        <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-lg border border-green-100" title="Phiếu đạt">
+                           <span className="text-[8px] font-black text-green-600">{project.stats.pass}</span>
                         </div>
-                        <ChevronDown className={`w-4 h-4 text-slate-300 transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                        <div className="flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg border border-red-100" title="Phiếu lỗi (NCR)">
+                           <span className="text-[8px] font-black text-red-600">{project.stats.ncr}</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-slate-300 transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : ''} ml-1`} />
                       </div>
                     </div>
                   </div>
@@ -167,7 +186,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                               <div className="h-px bg-slate-200 flex-1"></div>
                            </div>
                            <div className="grid grid-cols-1 gap-2">
-                              {(items as Inspection[]).map(item => (
+                              {(items as Inspection[]).map(item => {
+                                const { passRate, failRate, displayStatus, hasNCR } = getInspectionDisplayInfo(item);
+                                return (
                                 <div key={item.id} onClick={() => onSelect(item.id)} className="bg-white p-4 rounded-2xl border border-slate-200 active:bg-blue-50 transition-all flex items-center justify-between shadow-sm group">
                                   <div className="flex-1 min-w-0 pr-3">
                                     <h4 className="font-black text-slate-800 text-[11px] truncate uppercase tracking-tight mb-2 leading-tight">
@@ -175,23 +196,35 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </h4>
                                     <div className="flex flex-wrap items-center gap-2">
                                        <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest border ${
-                                           item.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600' : 
-                                           item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 
+                                           displayStatus === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600' : 
+                                           displayStatus === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 
                                            'bg-orange-50 text-orange-700 border-orange-200'
                                        }`}>
-                                           {item.status}
+                                           {displayStatus}
                                        </span>
-                                       <div className="flex items-center gap-1 text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded">
-                                           <FileText className="w-2.5 h-2.5" /> {item.type}
+                                       
+                                       {/* Type & Stage */}
+                                       <div className="flex items-center gap-1 text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                           <FileText className="w-2.5 h-2.5" /> 
+                                           {item.type} {item.inspectionStage ? `- ${item.inspectionStage}` : ''}
                                        </div>
+
+                                       {/* Date */}
                                        <div className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
                                            <Clock className="w-3 h-3 text-slate-300"/> {item.date}
+                                       </div>
+                                       
+                                       {/* Pass/Fail Rate */}
+                                       <div className="flex items-center gap-1 text-[8px] font-black">
+                                            <span className="text-green-600">{passRate}%</span>
+                                            <span className="text-slate-300">-</span>
+                                            <span className="text-red-600">{failRate}%</span>
                                        </div>
                                     </div>
                                   </div>
                                   <ChevronRight className="w-4 h-4 text-slate-300 group-active:text-blue-600 transition-colors" />
                                 </div>
-                              ))}
+                              )})}
                            </div>
                         </div>
                       ))}
@@ -203,7 +236,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           </div>
         )}
         
-        {/* Removed Pagination Controls */}
         <div className="text-center py-6 text-[9px] font-black text-slate-300 uppercase tracking-widest">
             {sortedProjectKeys.length > 0 ? 'Đã tải toàn bộ dự án' : ''}
         </div>

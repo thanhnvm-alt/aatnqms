@@ -139,12 +139,12 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   return (
     <header className="h-16 md:h-20 shrink-0 bg-white border-b border-slate-200 sticky top-0 z-[100] flex items-center px-4 md:px-8 shadow-sm">
       <div className="flex-1 flex items-center gap-4 overflow-hidden">
-        <div className="flex flex-col min-w-0">
+        <div className="flex flex-col md:flex-row md:items-baseline md:gap-3 min-w-0">
           <h1 className="text-lg md:text-2xl font-bold text-slate-900 tracking-tight truncate">
             {getPageTitle()}
           </h1>
           <div className="flex items-center gap-2">
-            {view !== 'FORM' && <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>}
+            {view !== 'FORM' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 hidden md:block"></div>}
             <span className="text-xs md:text-sm font-medium text-slate-500 truncate">{getPageSubtitle()}</span>
           </div>
         </div>
