@@ -118,10 +118,23 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
   const [prodName, setProdName] = useState(inspection.productionName || '');
 
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const isAdmin = user.role === 'ADMIN';
   const isApproved = inspection.status === InspectionStatus.COMPLETED || inspection.status === InspectionStatus.APPROVED;
   const isProdSigned = !!inspection.productionSignature;
 
   const workshopName = workshops.find(w => w.code === inspection.ma_nha_may)?.name || inspection.ma_nha_may || 'SITE WORK';
+
+  // --- PERMISSION LOGIC ---
+  // 1. Roll QC và QA không được xóa/sửa phiếu của người khác.
+  const isOwner = inspection.inspectorName === user.name;
+  const hasOwnershipRight = isAdmin || isManager || isOwner;
+
+  // 2. Phiếu sau khi được phê duyệt thì không được xóa/sửa (chỉ admin được quyền xóa/sửa).
+  const isUnlocked = !isApproved || isAdmin;
+
+  // Combine permissions
+  const canModify = hasOwnershipRight && isUnlocked;
+  // ------------------------
 
   const handleManagerApprove = async () => {
       if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }
@@ -196,8 +209,8 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
               </div>
           </div>
           <div className="flex items-center gap-2">
-              {!isApproved && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit3 className="w-4 h-4" /></button>}
-              <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
+              {canModify && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit3 className="w-4 h-4" /></button>}
+              {canModify && <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>}
           </div>
       </div>
 
@@ -341,8 +354,8 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-3">
                         <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}&background=random`} className="w-8 h-8 rounded-full border border-slate-200 shrink-0" alt="" />
-                        <div className="flex-1 space-y-1">
-                            <div className="flex justify-between items-center">
+                        <div className="flex-1 space-y-1.5">
+                            <div className="flex justify-between items-center px-1">
                                 <span className="font-bold text-slate-800 text-[10px]">{comment.userName}</span>
                                 <span className="text-[9px] font-medium text-slate-400">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
                             </div>
@@ -443,18 +456,18 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                          <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">QA Manager Phê Duyệt</h3>
+                      <div className="flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                          <h3 className="font-bold text-slate-800 uppercase tracking-tighter text-sm">QA/QC Manager Phê Duyệt</h3>
                       </div>
                       <button onClick={() => setShowManagerModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
                   <div className="p-6 space-y-5">
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
                           <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Người phê duyệt</p>
                           <p className="text-sm font-bold text-slate-800 uppercase">{user.name}</p>
                       </div>
-                      <SignaturePad label="Chữ ký điện tử" value={managerSig} onChange={setManagerSig} />
+                      <SignaturePad label="Chữ ký điện tử Manager" value={managerSig} onChange={setManagerSig} />
                   </div>
                   <div className="p-5 border-t bg-slate-50/50 flex gap-3">
                       <button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px] rounded-xl hover:bg-white border border-transparent hover:border-slate-200 transition-all">Hủy</button>
