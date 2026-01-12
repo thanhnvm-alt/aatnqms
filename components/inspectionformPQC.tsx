@@ -8,7 +8,7 @@ import {
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, BookOpen, Search,
   Loader2, Sparkles, CheckCircle2, ArrowLeft, History, Clock,
-  Calendar, UserCheck
+  Calendar, UserCheck, Eye
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchPlans, fetchDefectLibrary } from '../services/apiService';
@@ -41,9 +41,14 @@ const resizeImage = (base64Str: string, maxWidth = 1280): Promise<string> => {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
+      
+      // Compress to < 100KB (approx 133333 base64 chars)
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 133333 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
+      while (dataUrl.length > 133333 && quality > 0.1) { 
+          quality -= 0.1; 
+          dataUrl = canvas.toDataURL('image/jpeg', quality); 
+      }
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
@@ -287,6 +292,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
   const availableStages = useMemo(() => { 
       if (!formData.workshop) return []; 
@@ -377,10 +383,37 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     const files = req.target.files; if (!files) return;
     Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
-      reader.onloadend = async () => { if (typeof reader.result === 'string') { const processed = await resizeImage(reader.result); if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), processed] })); else setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === activeUploadId ? { ...i, images: [...(i.images || []), processed] } : i) })); } };
+      reader.onloadend = async () => { 
+          if (typeof reader.result === 'string') { 
+              const processed = await resizeImage(reader.result); 
+              if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), processed] })); 
+              else setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === activeUploadId ? { ...i, images: [...(i.images || []), processed] } : i) })); 
+          } 
+      };
       reader.readAsDataURL(file);
     });
     req.target.value = '';
+  };
+
+  const handleEditImage = (type: 'MAIN' | 'ITEM', images: string[], index: number, itemId?: string) => {
+      setEditorState({ images, index, context: { type, itemId } });
+  };
+
+  const onImageSave = (idx: number, updatedImg: string) => {
+      if (!editorState) return;
+      const { type, itemId } = editorState.context;
+      if (type === 'MAIN') {
+          setFormData(prev => {
+              const newImgs = [...(prev.images || [])];
+              newImgs[idx] = updatedImg;
+              return { ...prev, images: newImgs };
+          });
+      } else if (type === 'ITEM' && itemId) {
+          setFormData(prev => ({
+              ...prev,
+              items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? updatedImg : img) } : i)
+          }));
+      }
   };
 
   return (
@@ -450,8 +483,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 shadow-sm transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 shadow-sm transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
-                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0">
-                        <img src={img} className="w-full h-full object-cover" />
+                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
+                        <img 
+                            src={img} 
+                            className="w-full h-full object-cover cursor-pointer" 
+                            onClick={() => handleEditImage('MAIN', formData.images || [], idx)}
+                        />
                         <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
@@ -513,30 +550,63 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             <div key={item.id} className={`bg-white rounded-xl p-3 border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-200'}`}>
                                 <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
                                     <div className="flex-1">
-                                        <div className="flex gap-1 mb-0.5"><span className="bg-slate-100 font-bold uppercase text-slate-500 px-1.5 py-0.5 rounded border border-slate-200 text-[8px]">{item.category}</span></div>
-                                        <input value={item.label} onChange={e => handleItemChange(originalIndex, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase tracking-tight mt-0.5 text-[11px]" placeholder="Nội dung..." />
+                                        <input value={item.label} onChange={e => handleItemChange(originalIndex, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase tracking-tight text-[11px]" placeholder="Nội dung..." />
+                                        
+                                        {/* New Method & Standard Block */}
+                                        <div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1">
+                                            <div className="flex items-start gap-2">
+                                                <Microscope className="w-3 h-3 text-blue-500 shrink-0 mt-0.5" />
+                                                <div className="text-[10px] text-slate-600 leading-tight">
+                                                    <span className="font-bold text-slate-800">PP:</span> {item.method || '---'}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start gap-2">
+                                                <Ruler className="w-3 h-3 text-orange-500 shrink-0 mt-0.5" />
+                                                <div className="text-[10px] text-slate-600 leading-tight">
+                                                    <span className="font-bold text-slate-800">TC:</span> {item.standard || '---'}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button>
                                 </div>
                                 <div className="flex flex-wrap gap-2 items-center">
                                     <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200 shadow-inner w-fit">
-                                        {[CheckStatus.PASS, CheckStatus.FAIL].map(st => (
-                                            <button key={st} onClick={() => handleItemChange(originalIndex, 'status', st)} className={`px-3 py-1.5 rounded-md font-bold uppercase tracking-tight transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : 'bg-red-600 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`} type="button">{st}</button>
+                                        {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
+                                            <button key={st} onClick={() => handleItemChange(originalIndex, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase tracking-tight transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-orange-500 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`} type="button">
+                                                {st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}
+                                            </button>
                                         ))}
                                     </div>
                                     <div className="flex items-center gap-1 ml-auto">
-                                        <div className="relative p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 active:text-blue-600 transition-all shadow-sm active:scale-90">
+                                        <div className="relative p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 active:text-blue-600 transition-all shadow-sm active:scale-90 hover:bg-slate-50 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}>
+                                            <ImageIcon className="w-4 h-4"/>
+                                        </div>
+                                        <div className="relative p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 active:text-blue-600 transition-all shadow-sm active:scale-90 hover:bg-slate-50 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}>
                                             <Camera className="w-4 h-4"/>
-                                            <input type="file" capture="environment" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={e => handleFileUpload(e)} />
                                         </div>
                                         {item.status === CheckStatus.FAIL && <button onClick={() => { setActiveNcrItemIndex(originalIndex); setIsNcrModalOpen(true); }} className="px-2.5 py-1.5 bg-slate-900 text-white rounded-lg font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm active:scale-95 transition-all text-[9px]" type="button"><AlertOctagon className="w-3 h-3"/> NCR</button>}
                                     </div>
                                 </div>
                                 <textarea value={item.notes || ''} onChange={e => handleItemChange(originalIndex, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg font-medium focus:bg-white outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
+                                {item.images && item.images.length > 0 && (
+                                    <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
+                                        {item.images.map((im, i) => (
+                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden shadow-sm group">
+                                                <img 
+                                                    src={im} 
+                                                    className="w-full h-full object-cover cursor-pointer" 
+                                                    onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}
+                                                />
+                                                <button onClick={() => { const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(originalIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )
                     ))}
-                    <button onClick={() => setFormData({...formData, items: [...(formData.items || []), { id: `new_${Date.now()}`, category: 'BỔ SUNG', label: 'TIÊU CHÍ MỚI', status: CheckStatus.PENDING, stage: formData.inspectionStage }]})} className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold uppercase tracking-[0.1em] hover:bg-white hover:text-blue-500 transition-all text-[10px]" type="button">+ THÊM TIÊU CHÍ</button>
+                    <button onClick={() => setFormData({...formData, items: [...(formData.items || []), { id: `new_${Date.now()}`, category: 'BỔ SUNG', label: 'TIÊU CHÍ MỚI', status: CheckStatus.PENDING, stage: formData.inspectionStage, method: 'Kiểm tra bổ sung', standard: 'Theo thực tế' }]})} className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold uppercase tracking-[0.1em] hover:bg-white hover:text-blue-500 transition-all text-[10px]" type="button">+ THÊM TIÊU CHÍ</button>
                 </div>
             )}
         </div>
@@ -611,6 +681,21 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           <NCRModal isOpen={isNcrModalOpen} onClose={() => setIsNcrModalOpen(false)} onSave={ncr => { setFormData(prev => { const newItems = [...(prev.items || [])]; newItems[activeNcrItemIndex] = { ...newItems[activeNcrItemIndex], status: CheckStatus.FAIL, ncr: { ...ncr, id: newItems[activeNcrItemIndex].ncr?.id || `NCR-${Date.now()}`, inspection_id: formData.id, itemId: newItems[activeNcrItemIndex].id, createdDate: new Date().toISOString() } }; return { ...prev, items: newItems }; }); setIsNcrModalOpen(false); }} initialData={formData.items[activeNcrItemIndex].ncr} itemName={formData.items[activeNcrItemIndex].label} inspectionStage={formData.inspectionStage} />
       )}
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); handleInputChange('ma_nha_may', data); lookupPlanInfo(data); setShowScanner(false); }} />}
+      
+      {/* Hidden inputs for file upload */}
+      <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
+      <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
+
+      {/* Editor Modal */}
+      {editorState && (
+          <ImageEditorModal 
+              images={editorState.images} 
+              initialIndex={editorState.index} 
+              onSave={onImageSave}
+              onClose={() => setEditorState(null)} 
+              readOnly={false} 
+          />
+      )}
     </div>
   );
 };
