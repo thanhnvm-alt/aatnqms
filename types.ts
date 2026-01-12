@@ -202,6 +202,7 @@ export interface Inspection {
   comments?: NCRComment[];
   updatedAt?: string;
   supplier?: string;
+  location?: string; // GPS Coordinates of Supplier/Site
   referenceDocs?: string[];
   reportImage?: string;
   deliveryNoteImage?: string;

@@ -5,7 +5,7 @@ import {
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate
 } from 'lucide-react';
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
@@ -119,6 +119,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
+    location: initialData?.location || '',
     reportImage: initialData?.reportImage || '',
     deliveryNoteImage: initialData?.deliveryNoteImage || '',
     summary: initialData?.summary || '',
@@ -128,6 +129,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
@@ -151,7 +153,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   useEffect(() => {
       fetchDefectLibrary().then(lib => {
-          // Filter for IQC relevant defects if needed, or just load all
           setDefectLibrary(lib);
       });
   }, []);
@@ -160,11 +161,30 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setFormData(prev => ({ ...prev, [field]: value })); 
   };
 
+  const handleGetLocation = () => {
+      setIsGettingLocation(true);
+      if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                  const loc = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+                  setFormData(prev => ({ ...prev, location: loc }));
+                  setIsGettingLocation(false);
+              },
+              (err) => {
+                  alert("Không thể lấy vị trí. Vui lòng bật định vị.");
+                  setIsGettingLocation(false);
+              }
+          );
+      } else {
+          alert("Trình duyệt không hỗ trợ định vị.");
+          setIsGettingLocation(false);
+      }
+  };
+
   const lookupMaterialProject = async (code: string, matIdx: number) => {
     if (!code || code.length < 3) return;
     try {
       const projects = await fetchProjects();
-      // Tìm tương đối
       const match = projects.find(p => 
           p.ma_ct.toLowerCase().includes(code.toLowerCase()) || 
           p.code?.toLowerCase().includes(code.toLowerCase())
@@ -174,7 +194,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             const nextMats = [...(prev.materials || [])];
             if (nextMats[matIdx]) {
                 nextMats[matIdx].projectName = match.ten_ct;
-                // Nếu tìm thấy chính xác, có thể update lại projectCode cho chuẩn
                 if (match.ma_ct) nextMats[matIdx].projectCode = match.ma_ct;
             }
             return { ...prev, materials: nextMats };
@@ -195,7 +214,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         deliveryQty: 0,
         unit: 'PCS',
         criteria: [],
-        items: [], // Start empty, populate on category select
+        items: [],
         inspectQty: 0,
         passQty: 0,
         failQty: 0,
@@ -216,12 +235,11 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
         if (field === 'category') {
             const iqcTpl = templates['IQC'] || [];
-            // Filter template items for this category and map to new instances
             const newItems = iqcTpl
                 .filter(i => i.category === value)
                 .map(i => ({
                     ...i,
-                    id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Generate unique IDs for instances
+                    id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     status: CheckStatus.PENDING,
                     notes: '',
                     images: []
@@ -229,24 +247,20 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             mat.items = newItems;
         }
 
-        // Logic tự động điền khi thay đổi Scope
         if (field === 'scope') {
             if (value === 'COMMON') {
                 mat.projectCode = 'VẬT TƯ DÙNG CHUNG';
                 mat.projectName = 'SỬ DỤNG TẤT CẢ CÔNG TRÌNH';
             } else {
-                // Reset nếu chuyển sang Project để người dùng nhập
                 mat.projectCode = '';
                 mat.projectName = '';
             }
         }
 
-        // Logic tính toán số lượng
         if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
         else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
         else if (field === 'failQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
         
-        // Sync project info back to global if this material is defining the context (Optional)
         if (field === 'projectCode' && idx === 0 && mat.scope === 'PROJECT') prev.ma_ct = value;
 
         nextMaterials[idx] = mat;
@@ -270,7 +284,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const selectDefect = (matIdx: number, itemIdx: number, defect: DefectLibraryItem) => {
-      updateMaterialItem(matIdx, itemIdx, 'notes', defect.name); // Simple copy defect name to notes
+      updateMaterialItem(matIdx, itemIdx, 'notes', defect.name);
       setShowDefectDropdown(null);
       setDefectSearch(prev => ({ ...prev, [formData.materials![matIdx].items[itemIdx].id]: defect.name }));
   };
@@ -376,6 +390,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     return inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number);
   }, [inspections, formData.po_number, formData.id]);
 
+  const moduleLabel = formData.type === 'IQC' ? 'IQC - Vật liệu' : formData.type === 'SQC_MAT' ? 'SQC - Vật tư' : 'SQC - BTP';
+
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
@@ -383,7 +399,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         {/* I. General Information */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1">
-                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN QUẢN LÝ PO</h3>
+                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN QUẢN LÝ {moduleLabel}</h3>
                 <button 
                   onClick={() => setShowHistory(true)}
                   className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 rounded-lg font-bold uppercase tracking-wide flex items-center gap-1 transition-all shadow-sm text-[9px]"
@@ -397,18 +413,34 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             {/* Row 1: PO & Supplier */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Mã PO (Purchase Order) *</label>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Mã PO / Chứng từ *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] text-slate-800 h-8" placeholder="Nhập mã PO..."/>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] text-slate-800 h-8" placeholder="Nhập mã..."/>
                         <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 hover:text-blue-600" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Cung Cấp (Supplier) *</label>
-                    <div className="relative flex items-center">
-                        <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên nhà cung cấp..."/>
-                        <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Cung Cấp / Đối Tác *</label>
+                    <div className="flex gap-1.5 items-center">
+                        <div className="relative flex-1 flex items-center">
+                            <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên đơn vị..."/>
+                            <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
+                        </div>
+                        <button 
+                            onClick={handleGetLocation} 
+                            disabled={isGettingLocation}
+                            className={`p-1.5 rounded-md border flex items-center justify-center transition-all active:scale-90 ${formData.location ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-blue-50 hover:text-blue-600'}`}
+                            title="Xác định vị trí hiện tại"
+                            type="button"
+                        >
+                            {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin"/> : <Locate className="w-4 h-4" />}
+                        </button>
                     </div>
+                    {formData.location && (
+                        <p className="text-[8px] font-mono text-slate-400 mt-1 ml-1 flex items-center gap-1">
+                            <MapPin className="w-2.5 h-2.5" /> GPS: {formData.location}
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -471,7 +503,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 </div>
                 {/* IQC Report */}
                 <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Phiếu IQC</label>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Báo Cáo QC</label>
                     {formData.reportImage ? (
                         <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group">
                             <img 
@@ -491,13 +523,13 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
         </section>
 
-        {/* II. Materials Details (Previously III) */}
+        {/* II. Materials Details */}
         <section className="space-y-3">
             <div className="flex justify-between items-center px-1">
-                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs"><ClipboardList className="w-4 h-4 text-blue-600"/> II. CHI TIẾT VẬT TƯ ({formData.materials?.length || 0})</h3>
+                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs"><ClipboardList className="w-4 h-4 text-blue-600"/> II. DANH MỤC KIỂM TRA ({formData.materials?.length || 0})</h3>
                 <button onClick={handleAddMaterial} className="bg-blue-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3 hover:bg-blue-700" type="button">
                     <Plus className="w-3 h-3"/>
-                    <span className="text-[10px] font-bold uppercase">Thêm Vật Tư</span>
+                    <span className="text-[10px] font-bold uppercase">Thêm Mục</span>
                 </button>
             </div>
             
@@ -516,22 +548,21 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     {matIdx + 1}
                                 </div>
                                 <div className="flex-1 overflow-hidden">
-                                    <h4 className="font-bold text-slate-800 uppercase tracking-tight truncate text-xs">{mat.name || 'VẬT TƯ MỚI'}</h4>
+                                    <h4 className="font-bold text-slate-800 uppercase tracking-tight truncate text-xs">{mat.name || 'HẠNG MỤC MỚI'}</h4>
                                     <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">DN: {mat.deliveryQty} {mat.unit}</span>
+                                        <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">SL: {mat.deliveryQty} {mat.unit}</span>
                                         <span className="text-[9px] font-bold text-green-600 uppercase border border-green-200 bg-green-50 px-1.5 py-0.5 rounded">{passRate}% ĐẠT</span>
                                     </div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa vật tư này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors hover:bg-red-50 rounded-md" type="button"><Trash2 className="w-4 h-4"/></button>
+                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors hover:bg-red-50 rounded-md" type="button"><Trash2 className="w-4 h-4"/></button>
                                 {isExp ? <ChevronUp className="w-4 h-4 text-blue-500"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
                             </div>
                         </div>
 
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white">
-                                {/* Row 1: Category & Name - Merged */}
                                 <div className="grid grid-cols-12 gap-3">
                                   <div className="col-span-4">
                                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Chủng loại</label>
@@ -545,12 +576,11 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                       </select>
                                   </div>
                                   <div className="col-span-8">
-                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên Vật Tư *</label>
-                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên vật liệu..."/>
+                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên Hạng Mục *</label>
+                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên sản phẩm/vật tư..."/>
                                   </div>
                                 </div>
 
-                                {/* Row 2: Scope & Project Code - Merged */}
                                 <div className="grid grid-cols-12 gap-3">
                                     <div className="col-span-5">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Loại sử dụng *</label>
@@ -579,7 +609,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     </div>
                                 </div>
 
-                                {/* Row 3: Project Name (Auto-filled or Lookup result) */}
                                 <div>
                                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên Công Trình</label>
                                     <input 
@@ -590,7 +619,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     />
                                 </div>
                                 
-                                {/* Row 4: Quantities */}
                                 <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">SL ĐH</label>
@@ -645,7 +673,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                             <button 
                                                                 key={st} 
                                                                 onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)}
-                                                                className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-orange-500 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`}
+                                                                className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-orange-50 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`}
                                                                 type="button"
                                                             >
                                                                 {st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}
@@ -747,7 +775,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     {(!mat.items || mat.items.length === 0) && (
                                         <div className="p-4 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                                             <p className="text-[10px] font-bold uppercase">Chưa có tiêu chí kiểm tra</p>
-                                            <p className="text-[9px]">Vui lòng chọn chủng loại vật tư để tải danh sách</p>
+                                            <p className="text-[9px]">Vui lòng chọn chủng loại để tải danh sách</p>
                                         </div>
                                     )}
                                 </div>
@@ -760,12 +788,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
         {/* IV. Ghi chú tổng quát */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
-            <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT IQC</h3>
+            <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT</h3>
             <textarea 
                 value={formData.summary}
                 onChange={e => handleInputChange('summary', e.target.value)}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white focus:ring-1 ring-blue-500 transition-all resize-none min-h-[80px] text-[11px] leading-relaxed"
-                placeholder="Nhập nhận xét tổng quan về lô hàng..."
+                placeholder="Nhập nhận xét tổng quan..."
             />
         </section>
 
@@ -792,13 +820,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             type="button"
         >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-            <span>GỬI DUYỆT IQC</span>
+            <span>GỬI DUYỆT BÁO CÁO</span>
         </button>
       </div>
-
-      {/* Hidden Inputs for File Upload */}
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-      <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
 
       {/* History Side Panel */}
       {showHistory && (
@@ -809,7 +833,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                       <div className="flex items-center gap-3">
                           <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg"><History className="w-4 h-4" /></div>
                           <div>
-                              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-tight">Lịch sử kiểm tra PO</h3>
+                              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-tight">Lịch sử kiểm tra</h3>
                               <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{formData.po_number || 'TRỐNG'}</p>
                           </div>
                       </div>
@@ -825,7 +849,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                               <h4 className="font-bold text-slate-800 uppercase line-clamp-1 mb-2 text-xs">PO: {record.po_number}</h4>
                               <div className="flex items-center justify-between border-t border-slate-50 pt-2">
                                   <div className="flex items-center gap-1.5 text-[10px] text-slate-500"><UserCheck className="w-3 h-3" /><span>{record.inspectorName}</span></div>
-                                  <span className="font-bold text-blue-600 uppercase text-[9px]">{record.materials?.length || 0} VẬT TƯ</span>
+                                  <span className="font-bold text-blue-600 uppercase text-[9px]">{record.materials?.length || 0} MỤC</span>
                               </div>
                           </div>
                       )) : (

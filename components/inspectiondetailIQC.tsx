@@ -108,14 +108,19 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [showPmModal, setShowPmModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Form states for modals
+  // Form states
   const [managerSig, setManagerSig] = useState('');
   const [pmSig, setPmSig] = useState(inspection.pmSignature || '');
   const [pmName, setPmName] = useState(inspection.pmName || '');
   const [pmComment, setPmComment] = useState(inspection.pmComment || '');
 
+  const isAdmin = user.role === 'ADMIN';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isApproved = inspection.status === InspectionStatus.APPROVED || inspection.status === InspectionStatus.COMPLETED;
+
+  // --- ISO PERMISSION LOGIC ---
+  const isOwner = inspection.inspectorName === user.name;
+  const canModify = isAdmin || (!isApproved && (isManager || isOwner));
 
   const handleManagerApprove = async () => {
     if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }
@@ -177,8 +182,8 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
               </div>
           </div>
           <div className="flex items-center gap-2">
-              {!isApproved && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>}
-              <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all" type="button"><Trash2 className="w-4 h-4" /></button>
+              {canModify && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>}
+              {canModify && <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all" type="button"><Trash2 className="w-4 h-4" /></button>}
           </div>
       </div>
 
@@ -206,7 +211,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
             </div>
             
-            {/* Supporting Docs Display */}
+            {/* Supporting Docs */}
             {inspection.referenceDocs && inspection.referenceDocs.length > 0 && (
                 <div className="border-t border-slate-100 pt-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileCheck className="w-3 h-3"/> Tài liệu hỗ trợ</p>
@@ -262,7 +267,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                         </div>
                         {isExp && (
                             <div className="p-5 space-y-5 animate-in slide-in-from-top-4 duration-300 border-t border-slate-50">
-                                {/* Material Info & Project */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <p className="text-[9px] font-bold text-slate-400 uppercase">Chủng loại</p>
@@ -303,7 +307,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                                 <div className="flex items-start gap-3">
                                                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${item.status === CheckStatus.PASS ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                                     <div className="flex-1 overflow-hidden"><p className="text-[10px] font-bold text-slate-800 uppercase leading-tight line-clamp-1">{item.label}</p><p className="text-[9px] text-slate-500 mt-0.5 italic leading-relaxed">{item.notes || '---'}</p></div>
-                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${item.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-100' : 'text-red-600 bg-red-50 border-red-100'} border`}>{item.status}</span>
+                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${item.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-100'} border`}>{item.status}</span>
                                                 </div>
                                                 {item.images && item.images.length > 0 && (
                                                     <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -323,33 +327,28 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
             })}
         </div>
 
-        {/* LOGGED SIGNATURES (ISO LOG) */}
+        {/* LOGGED SIGNATURES */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-6">
             <h3 className="text-blue-700 border-b border-blue-50 pb-3 font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-green-500"/> NHẬT KÝ PHÊ DUYỆT (ISO)</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* QC Block */}
                 <div className="space-y-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-blue-500 pl-2">QC Thực Hiện</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-28 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
                         {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <div className="text-[9px] text-slate-300 font-bold uppercase">N/A</div>}
                     </div>
-                    <div className="text-center font-bold uppercase text-[9px] text-slate-400 mb-0.5 tracking-widest">Họ và tên QC</div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.inspectorName}</div>
                 </div>
 
-                {/* Manager Block */}
                 <div className="space-y-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-emerald-500 pl-2">QA Manager</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-28 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
                         {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" /> : <div className="text-[9px] text-orange-400 font-bold uppercase tracking-widest animate-pulse">ĐANG CHỜ DUYỆT</div>}
                     </div>
-                    <div className="text-center font-bold uppercase text-[9px] text-slate-400 mb-0.5 tracking-widest">Cấp phê duyệt</div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || 'Manager Approval'}</div>
                 </div>
 
-                {/* PM Block */}
                 <div className="space-y-3">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-indigo-500 pl-2">Project Manager (PM)</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-indigo-500 pl-2">Project Manager</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-28 flex flex-col items-center justify-center overflow-hidden border border-slate-100 shadow-inner relative group">
                         {inspection.pmSignature ? (
                             <img src={inspection.pmSignature} className="h-full object-contain" />
@@ -357,63 +356,44 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                             <div className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">CHƯA XÁC NHẬN</div>
                         )}
                     </div>
-                    <div className="text-center font-bold uppercase text-[9px] text-slate-400 mb-0.5 tracking-widest">PM XÁC NHẬN</div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.pmName || '---'}</div>
-                    
                     {inspection.pmComment && (
                         <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 mt-1">
-                             <div className="flex items-center gap-1.5 mb-1">
-                                <MessageCircle className="w-3 h-3 text-indigo-400" />
-                                <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest">PM Comment</span>
-                             </div>
-                             <p className="text-[10px] font-bold text-indigo-700 italic leading-relaxed">
-                                "{inspection.pmComment}"
-                             </p>
+                             <p className="text-[10px] font-bold text-indigo-700 italic leading-relaxed">"{inspection.pmComment}"</p>
                         </div>
                     )}
                 </div>
             </div>
         </section>
 
-        {/* Discussions Area */}
+        {/* Discussions */}
         <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mt-4">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-blue-600" />
-                <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-[0.2em]">Trao đổi nội bộ & Audit Trail</h3>
+                <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-[0.2em]">Audit Trail</h3>
             </div>
             <div className="p-5 space-y-5 max-h-[400px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}&background=random`} className="w-10 h-10 rounded-full border border-slate-200 shrink-0 shadow-sm" alt="" />
+                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-full border border-slate-200 shrink-0 shadow-sm" alt="" />
                         <div className="flex-1 space-y-1.5">
                             <div className="flex justify-between items-center px-1">
-                                <span className="font-bold text-slate-800 text-[10px] uppercase tracking-tight">{comment.userName}</span>
+                                <span className="font-bold text-slate-800 text-[10px] uppercase">{comment.userName}</span>
                                 <span className="text-[9px] font-bold text-slate-400 font-mono">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
                             </div>
-                            <div className="bg-slate-50 p-3 rounded-xl rounded-tl-none border border-slate-100 shadow-sm text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">
-                                {comment.content}
-                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xl rounded-tl-none border border-slate-100 text-xs text-slate-700">{comment.content}</div>
                         </div>
                     </div>
                 ))}
-                {(!inspection.comments || inspection.comments.length === 0) && (
-                    <div className="py-6 text-center text-slate-400 italic text-[10px]">Chưa có thảo luận nào cho báo cáo này.</div>
-                )}
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50/30">
                 <div className="flex gap-3">
                     <textarea 
                         value={newComment} onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Nhập nội dung thảo luận hoặc chỉ thị phê duyệt..."
-                        className="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 ring-blue-100 outline-none resize-none shadow-inner h-16 transition-all"
+                        placeholder="Nhập phản hồi..."
+                        className="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-xs outline-none h-16 transition-all"
                     />
-                    <button 
-                        onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()}
-                        className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/30 flex items-center justify-center active:scale-90 disabled:opacity-50 transition-all shrink-0 mt-auto"
-                        type="button"
-                    >
-                        {isSubmittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    </button>
+                    <button onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()} className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-lg flex items-center justify-center disabled:opacity-50 mt-auto"><Send className="w-4 h-4" /></button>
                 </div>
             </div>
         </section>
@@ -421,99 +401,57 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
 
       {/* BOTTOM ACTIONS */}
       {!isApproved && (
-          <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex flex-wrap justify-center gap-3 z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-              <button 
-                onClick={() => setShowPmModal(true)} 
-                className="px-5 py-3 bg-indigo-50 text-indigo-700 font-bold uppercase text-[9px] tracking-widest border border-indigo-200 rounded-xl flex items-center gap-1.5 hover:bg-indigo-100 transition-all active:scale-95 shadow-sm"
-              >
-                  <UserPlus className="w-3.5 h-3.5"/> PM Xác Nhận
-              </button>
-              
-              {isManager && (
-                  <button 
-                    onClick={() => setShowManagerModal(true)} 
-                    className="px-8 py-3 bg-emerald-600 text-white font-bold uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all"
-                  >
-                      <ShieldCheck className="w-4 h-4"/> Manager Phê Duyệt
-                  </button>
-              )}
-              
-              <button onClick={onBack} className="px-5 py-3 text-slate-500 font-bold uppercase text-[9px] tracking-[0.2em] hover:bg-slate-50 rounded-xl transition-all border border-transparent hover:border-slate-200">Quay lại</button>
+          <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex flex-wrap justify-center gap-3 z-40 shadow-lg pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+              <button onClick={() => setShowPmModal(true)} className="px-5 py-3 bg-indigo-50 text-indigo-700 font-bold uppercase text-[9px] tracking-widest border border-indigo-200 rounded-xl">PM Xác Nhận</button>
+              {isManager && <button onClick={() => setShowManagerModal(true)} className="px-8 py-3 bg-emerald-600 text-white font-bold uppercase text-[10px] tracking-widest rounded-xl">Manager Phê Duyệt</button>}
+              <button onClick={onBack} className="px-5 py-3 text-slate-500 font-bold uppercase text-[9px] tracking-[0.2em] rounded-xl border border-transparent">Quay lại</button>
           </div>
       )}
 
-      {/* MODAL: QA/QC MANAGER APPROVE */}
+      {/* MODALS */}
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tighter text-sm">QA/QC Manager Phê Duyệt</h3>
-                      </div>
+                      <h3 className="font-bold text-slate-800 uppercase text-sm">QA/QC Manager Phê Duyệt</h3>
                       <button onClick={() => setShowManagerModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
                   <div className="p-6 space-y-5">
                       <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Cấp Phê Duyệt</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase">Cấp Phê Duyệt</p>
                           <p className="text-sm font-bold text-slate-800 uppercase">{user.name}</p>
                       </div>
                       <SignaturePad label="Chữ ký điện tử Manager" value={managerSig} onChange={setManagerSig} />
                   </div>
-                  <div className="p-5 border-t bg-slate-50/50 flex gap-3">
-                      <button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy bỏ</button>
-                      <button 
-                        onClick={handleManagerApprove} disabled={isProcessing || !managerSig}
-                        className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg active:scale-95 disabled:opacity-50"
-                      >
-                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'DUYỆT & NHẬP KHO'}
-                      </button>
+                  <div className="p-5 border-t bg-slate-50 flex gap-3">
+                      <button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy</button>
+                      <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg disabled:opacity-50">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'DUYỆT & NHẬP KHO'}</button>
                   </div>
               </div>
           </div>
       )}
 
-      {/* MODAL: PROJECT MANAGER CONFIRM */}
       {showPmModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                          <UserPlus className="w-4 h-4 text-indigo-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tighter text-sm">PM Dự Án Xác Nhận</h3>
-                      </div>
+                      <h3 className="font-bold text-slate-800 uppercase text-sm">PM Dự Án Xác Nhận</h3>
                       <button onClick={() => setShowPmModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
                   <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh] no-scrollbar">
                       <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Họ và tên PM xác nhận *</label>
-                          <div className="relative">
-                            <input 
-                                value={pmName} onChange={e => setPmName(e.target.value.toUpperCase())}
-                                className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-[11px] uppercase focus:ring-2 ring-blue-500 outline-none h-10"
-                                placeholder="NHẬP HỌ TÊN PM..."
-                            />
-                            <UserIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          </div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Họ tên PM *</label>
+                          <input value={pmName} onChange={e => setPmName(e.target.value.toUpperCase())} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-[11px] uppercase h-10" placeholder="HỌ TÊN PM..." />
                       </div>
                       <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nhận xét hướng xử lý (Comment) *</label>
-                          <textarea 
-                              value={pmComment} onChange={e => setPmComment(e.target.value)}
-                              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 italic focus:ring-2 ring-blue-500 outline-none resize-none h-24"
-                              placeholder="Nhập ý kiến xác nhận từ PM..."
-                          />
+                          <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Nhận xét PM *</label>
+                          <textarea value={pmComment} onChange={e => setPmComment(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold h-24" placeholder="Ý kiến PM..." />
                       </div>
                       <SignaturePad label="Chữ ký PM" value={pmSig} onChange={setPmSig} />
                   </div>
-                  <div className="p-5 border-t bg-slate-50/50 flex gap-3">
-                      <button onClick={() => setShowPmModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy bỏ</button>
-                      <button 
-                        onClick={handlePmConfirm} disabled={isProcessing || !pmSig || !pmName.trim() || !pmComment.trim()}
-                        className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-lg active:scale-95 disabled:opacity-50"
-                      >
-                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN PM'}
-                      </button>
+                  <div className="p-5 border-t bg-slate-50 flex gap-3">
+                      <button onClick={() => setShowPmModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy</button>
+                      <button onClick={handlePmConfirm} disabled={isProcessing || !pmSig || !pmName.trim() || !pmComment.trim()} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg disabled:opacity-50">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN PM'}</button>
                   </div>
               </div>
           </div>

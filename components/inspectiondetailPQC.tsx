@@ -117,26 +117,26 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
   const [prodSig, setProdSig] = useState(inspection.productionSignature || '');
   const [prodName, setProdName] = useState(inspection.productionName || '');
 
-  const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const isQA = user.role === 'QA';
   const isApproved = inspection.status === InspectionStatus.COMPLETED || inspection.status === InspectionStatus.APPROVED;
   const isProdSigned = !!inspection.productionSignature;
 
   const workshopName = workshops.find(w => w.code === inspection.ma_nha_may)?.name || inspection.ma_nha_may || 'SITE WORK';
 
-  // --- STATISTICS (Pass/Fail Rate) ---
+  // --- STATISTICS ---
   const insQty = parseFloat(String(inspection.inspectedQuantity || 0));
   const passQty = parseFloat(String(inspection.passedQuantity || 0));
   const failQty = parseFloat(String(inspection.failedQuantity || 0));
-  
   const passRate = insQty > 0 ? ((passQty / insQty) * 100).toFixed(1) : "0.0";
   const failRate = insQty > 0 ? ((failQty / insQty) * 100).toFixed(1) : "0.0";
 
-  // --- PERMISSION LOGIC ---
+  // --- ISO PERMISSION LOGIC ---
   const isOwner = inspection.inspectorName === user.name;
-  const hasOwnershipRight = isAdmin || isManager || isOwner;
-  const isUnlocked = !isApproved || isAdmin;
-  const canModify = hasOwnershipRight && isUnlocked;
+  
+  // Rule 1 & 3: QC/QA không được sửa phiếu người khác. Đã phê duyệt thì chỉ Admin được sửa.
+  const canModify = isAdmin || (!isApproved && (isManager || isOwner));
 
   const handleManagerApprove = async () => {
       if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }
@@ -155,7 +155,6 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
       if (!onApprove) return;
       setIsProcessing(true);
       try {
-          // Signature blank for non-manager approval
           await onApprove(inspection.id, "", { signature: prodSig, name: prodName.toUpperCase() });
           alert("Đã xác nhận từ bộ phận sản xuất.");
           setShowProductionModal(false);
@@ -218,24 +217,19 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar pb-32 bg-slate-50">
         
-        {/* TOP CARD: Reordered to match screenshot (Item Name > Project Name) */}
+        {/* TOP CARD */}
         <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="lg:col-span-2">
                     <p className="text-[9px] font-bold text-blue-600 uppercase tracking-wide mb-1">Thông tin dự án</p>
-                    
-                    {/* Item Name (SKIRTING...) prominently on top */}
                     <h1 className="text-lg font-bold text-slate-900 uppercase leading-tight mb-1">
                         {inspection.ten_hang_muc}
                     </h1>
-                    
-                    {/* Project Name (TÀU KHÁCH...) smaller below */}
                     <p className="text-[11px] font-medium text-slate-500 uppercase">
                         {inspection.ten_ct}
                     </p>
                 </div>
                 
-                {/* Stats Cards: Pass/Fail Rate instead of Score */}
                 <div className="bg-green-50 rounded-lg p-2 flex flex-col items-center justify-center border border-green-100">
                     <p className="text-[9px] font-bold text-green-600 uppercase tracking-wide mb-0.5">TỶ LỆ ĐẠT</p>
                     <p className="text-xl font-bold text-green-700">{passRate}%</p>
@@ -320,11 +314,9 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                     <p className="text-[9px] font-bold text-slate-500 uppercase border-l-4 border-blue-500 pl-2">Nhân viên QC</p>
-                    {inspection.signature ? (
-                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 h-24 flex items-center justify-center overflow-hidden">
-                            <img src={inspection.signature} className="h-full object-contain" />
-                        </div>
-                    ) : <div className="h-24 flex items-center justify-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-[9px] text-slate-400 uppercase">Chưa ký</div>}
+                    <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 h-24 flex items-center justify-center overflow-hidden">
+                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <div className="text-[9px] text-slate-400 uppercase">Chưa ký</div>}
+                    </div>
                     <div className="text-center px-2">
                         <p className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Họ và Tên</p>
                         <p className="text-[11px] font-bold text-slate-800 uppercase">{inspection.inspectorName}</p>
@@ -397,10 +389,9 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
         </section>
       </div>
 
-      {/* BOTTOM ACTIONS - FIXED LAYOUT */}
+      {/* BOTTOM ACTIONS */}
       {!isApproved && (
           <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-              {/* Row for main action buttons */}
               <div className="flex gap-3 w-full">
                   <button 
                     onClick={() => setShowProductionModal(true)} 
@@ -431,14 +422,14 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
           </div>
       )}
 
-      {/* PRODUCTION MODAL */}
+      {/* MODAL: PRODUCTION CONFIRM */}
       {showProductionModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                           <UserPlus className="w-5 h-5 text-indigo-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Đại diện Xưởng Xác Nhận</h3>
+                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Đại diện Xưởng</h3>
                       </div>
                       <button onClick={() => setShowProductionModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
@@ -466,7 +457,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
           </div>
       )}
 
-      {/* MANAGER MODAL */}
+      {/* MODAL: MANAGER APPROVE */}
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
