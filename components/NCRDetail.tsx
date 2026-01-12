@@ -6,7 +6,7 @@ import {
     CheckCircle2, Clock, MessageSquare, Camera, Paperclip, 
     Send, Loader2, BrainCircuit, Maximize2, Plus, 
     X, FileText, Image as ImageIcon, Save, Sparkles, BookOpen,
-    ChevronDown, Filter, RefreshCw
+    ChevronDown, Filter, RefreshCw, ShieldCheck
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
@@ -66,7 +66,21 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const afterFileRef = useRef<HTMLInputElement>(null);
   const afterCameraRef = useRef<HTMLInputElement>(null);
 
-  const isLocked = ncr.status === 'CLOSED';
+  // --- PERMISSIONS ---
+  const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const isQA = user.role === 'QA';
+  // Allow owner edit if they created it. Fallback to name check if createdBy is missing
+  const isOwner = ncr.createdBy === user.name;
+  
+  const isClosed = ncr.status === 'CLOSED';
+  // Locked if CLOSED and user is not ADMIN
+  const isLocked = isClosed && !isAdmin;
+  
+  // Only Owner, Manager, Admin can edit/save
+  const canModify = isAdmin || isManager || isOwner;
+  // Approver: Manager, Admin, QA
+  const canApprove = (isAdmin || isManager || isQA) && !isClosed;
 
   // Load Defect Library
   useEffect(() => {
@@ -132,14 +146,40 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const handleSaveChanges = async () => {
       setIsSaving(true);
       try {
-          await saveNcrMapped(formData.inspection_id || '', formData, user.name);
-          setNcr(formData);
+          // Auto-update status logic
+          let statusToSave = formData.status;
+          if (statusToSave === 'OPEN' && (formData.imagesAfter?.length || 0) > 0) {
+              statusToSave = 'IN_PROGRESS';
+          }
+
+          const finalData = { ...formData, status: statusToSave };
+          
+          await saveNcrMapped(finalData.inspection_id || '', finalData, ncr.createdBy || user.name);
+          setNcr(finalData);
+          setFormData(finalData);
           setIsEditing(false);
           if (onUpdate) onUpdate();
           alert("Đã lưu cập nhật NCR thành công!");
       } catch (error) {
           console.error(error);
           alert("Lỗi khi lưu NCR.");
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
+  const handleApprove = async () => {
+      if (!window.confirm("Xác nhận phê duyệt và đóng NCR này?")) return;
+      setIsSaving(true);
+      try {
+          const approvedData = { ...formData, status: 'CLOSED' };
+          await saveNcrMapped(approvedData.inspection_id || '', approvedData, ncr.createdBy || user.name);
+          setNcr(approvedData);
+          setFormData(approvedData);
+          setIsEditing(false);
+          if (onUpdate) onUpdate();
+      } catch (error) {
+          alert("Lỗi khi phê duyệt.");
       } finally {
           setIsSaving(false);
       }
@@ -182,7 +222,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       if (!newComment.trim() && commentAttachments.length === 0) return;
       setIsSubmitting(true);
       
-      // Simulate comment structure since we don't have a separate comment table in this scope
       const newCommentObj = {
           id: Date.now().toString(),
           userId: user.id,
@@ -197,9 +236,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       const updatedNcr = { ...formData, comments: updatedComments };
 
       try {
-          await saveNcrMapped(ncr.inspection_id || '', updatedNcr, user.name);
+          await saveNcrMapped(ncr.inspection_id || '', updatedNcr, ncr.createdBy || user.name);
           setFormData(updatedNcr);
-          setNcr(updatedNcr); // Update view state immediately
+          setNcr(updatedNcr); 
           setNewComment('');
           setCommentAttachments([]);
       } catch (e) {
@@ -223,6 +262,11 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:inline">Chi tiết NCR</span>
           </div>
           <div className="flex gap-2">
+              {canApprove && (
+                  <button onClick={handleApprove} disabled={isSaving} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 shadow-lg active:scale-95 hover:bg-teal-700">
+                      <ShieldCheck className="w-3 h-3" /> Phê duyệt / Đóng
+                  </button>
+              )}
               {isEditing ? (
                   <>
                     <button onClick={() => { setFormData(ncr); setIsEditing(false); }} className="px-3 py-1.5 text-slate-500 font-bold text-[10px] hover:bg-slate-100 rounded-lg">Hủy</button>
@@ -231,9 +275,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     </button>
                   </>
               ) : (
-                  !isLocked && (
+                  canModify && !isLocked && (
                       <button onClick={() => setIsEditing(true)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 shadow-lg active:scale-95">
-                          <AlertTriangle className="w-3 h-3"/> Review / Sửa
+                          <AlertTriangle className="w-3 h-3"/> Sửa
                       </button>
                   )
               )}
@@ -284,7 +328,11 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                     <option value="CLOSED">CLOSED</option>
                                 </select>
                             ) : (
-                                <span className="bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest">{formData.status}</span>
+                                <span className={`border px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${
+                                    formData.status === 'CLOSED' ? 'bg-green-100 text-green-700 border-green-200' : 
+                                    formData.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700 border-blue-200' : 
+                                    'bg-red-50 text-red-700 border-red-200'
+                                }`}>{formData.status}</span>
                             )}
                         </div>
 
@@ -390,12 +438,19 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             <div className="w-12 h-12 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-200">
                                 <CheckCircle2 className="w-6 h-6" />
                             </div>
+                        ) : formData.status === 'IN_PROGRESS' ? (
+                            <div className="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-200 animate-pulse">
+                                <RefreshCw className="w-6 h-6" />
+                            </div>
                         ) : (
-                            <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-pulse">
+                            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-pulse">
                                 <AlertTriangle className="w-6 h-6" />
                             </div>
                         )}
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{formData.status}</span>
+                        <span className={`text-[9px] font-bold uppercase tracking-widest ${
+                            formData.status === 'CLOSED' ? 'text-green-600' : 
+                            formData.status === 'IN_PROGRESS' ? 'text-blue-600' : 'text-red-500'
+                        }`}>{formData.status}</span>
                     </div>
                 </div>
             </div>
@@ -541,8 +596,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                 rows={2}
                             />
                             <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                                <button onClick={() => commentCameraRef.current?.click()} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg active:scale-90 transition-all"><Camera className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => commentFileRef.current?.click()} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg active:scale-90 transition-all"><Paperclip className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => commentCameraRef.current?.click()} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg active:scale-90 transition-all"><Camera className="w-3.5 h-3.5"/></button>
+                                <button onClick={() => commentFileRef.current?.click()} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg active:scale-90 transition-all"><Paperclip className="w-3.5 h-3.5"/></button>
                                 <button 
                                     onClick={handlePostComment}
                                     disabled={isSubmitting || (!newComment.trim() && commentAttachments.length === 0)}

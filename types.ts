@@ -89,6 +89,7 @@ export interface NCR {
   imagesBefore: string[];
   imagesAfter: string[];
   comments?: NCRComment[];
+  createdBy?: string;
 }
 
 export interface DefectLibraryItem {

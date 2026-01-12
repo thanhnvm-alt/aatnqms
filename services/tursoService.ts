@@ -330,7 +330,8 @@ export const getNcrs = async (options: { inspection_id?: string, status?: string
         imagesBefore: JSON.parse(r.images_before_json as string || '[]'),
         imagesAfter: JSON.parse(r.images_after_json as string || '[]'),
         comments: JSON.parse(r.comments_json as string || '[]'),
-        createdDate: new Date(Number(r.created_at) * 1000).toISOString()
+        createdDate: new Date(Number(r.created_at) * 1000).toISOString(),
+        createdBy: r.created_by // Mapped created_by
     } as NCR));
 };
 
@@ -353,7 +354,8 @@ export const getNcrById = async (id: string): Promise<NCR | null> => {
         imagesBefore: JSON.parse(r.images_before_json as string || '[]'),
         imagesAfter: JSON.parse(r.images_after_json as string || '[]'),
         comments: JSON.parse(r.comments_json as string || '[]'),
-        createdDate: new Date(Number(r.created_at) * 1000).toISOString()
+        createdDate: new Date(Number(r.created_at) * 1000).toISOString(),
+        createdBy: r.created_by // Mapped created_by
     } as NCR;
 };
 
