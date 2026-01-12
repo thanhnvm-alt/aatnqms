@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment } from './types';
 import { 
@@ -68,7 +69,7 @@ import {
   saveTemplate, 
   importPlans, 
   importInspections, 
-  fetchProjects,
+  fetchProjects, 
   fetchProjectByCode
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
@@ -180,7 +181,16 @@ const App = () => {
   const renderForm = () => {
     const data = activeInspection || initialFormState;
     if (!data) return null;
-    const commonProps = { initialData: data, onSave: handleSaveInspection, onCancel: () => setView('LIST'), plans, workshops, inspections, user: user! };
+    const commonProps = { 
+        initialData: data, 
+        onSave: handleSaveInspection, 
+        onCancel: () => setView('LIST'), 
+        plans, 
+        workshops, 
+        inspections, 
+        user: user!,
+        templates 
+    };
     switch (data.type) {
         case 'IQC': return <InspectionFormIQC {...commonProps} />;
         case 'SQC_MAT': return <InspectionFormSQC_VT {...commonProps} />;

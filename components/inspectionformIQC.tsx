@@ -1,13 +1,13 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle
 } from 'lucide-react';
-import { fetchProjects } from '../services/apiService';
+import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -17,6 +17,7 @@ interface InspectionFormProps {
   onCancel: () => void;
   inspections: Inspection[];
   user: User;
+  templates: Record<string, CheckItem[]>;
 }
 
 const PRESET_DOCS = [
@@ -106,7 +107,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
     );
 };
 
-export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user }) => {
+export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({
     id: initialData?.id || `IQC-${Date.now()}`,
     type: 'IQC' as ModuleId,
@@ -132,11 +133,28 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [customDoc, setCustomDoc] = useState('');
   
+  // Defect Library State
+  const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
+  const [defectSearch, setDefectSearch] = useState<Record<string, string>>({}); // Keyed by item.id
+  const [showDefectDropdown, setShowDefectDropdown] = useState<string | null>(null); // item.id
+
   // Image Editing State
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'DELIVERY' | 'REPORT' | 'ITEM' | 'MATERIAL', matIdx?: number, itemIdx?: number } | null>(null);
+
+  const iqcGroups = useMemo(() => {
+      const iqcTpl = templates['IQC'] || [];
+      return Array.from(new Set(iqcTpl.map(i => i.category))).filter(Boolean).sort();
+  }, [templates]);
+
+  useEffect(() => {
+      fetchDefectLibrary().then(lib => {
+          // Filter for IQC relevant defects if needed, or just load all
+          setDefectLibrary(lib);
+      });
+  }, []);
 
   const handleInputChange = (field: keyof Inspection, value: any) => { 
     setFormData(prev => ({ ...prev, [field]: value })); 
@@ -166,7 +184,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
   
   const handleAddMaterial = () => {
-    const templateItems = formData.items ? JSON.parse(JSON.stringify(formData.items)) : [];
     const newMaterial: MaterialIQC = {
         id: `mat-${Date.now()}`,
         name: '',
@@ -178,7 +195,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         deliveryQty: 0,
         unit: 'PCS',
         criteria: [],
-        items: templateItems.map((it: CheckItem) => ({ ...it, images: [] })),
+        items: [], // Start empty, populate on category select
         inspectQty: 0,
         passQty: 0,
         failQty: 0,
@@ -196,6 +213,21 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         if (!nextMaterials[idx]) return prev;
         
         let mat = { ...nextMaterials[idx], [field]: value };
+
+        if (field === 'category') {
+            const iqcTpl = templates['IQC'] || [];
+            // Filter template items for this category and map to new instances
+            const newItems = iqcTpl
+                .filter(i => i.category === value)
+                .map(i => ({
+                    ...i,
+                    id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Generate unique IDs for instances
+                    status: CheckStatus.PENDING,
+                    notes: '',
+                    images: []
+                }));
+            mat.items = newItems;
+        }
 
         // Logic tự động điền khi thay đổi Scope
         if (field === 'scope') {
@@ -220,17 +252,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
     });
-
-    // Trigger lookup nếu đang nhập mã dự án
-    if (field === 'projectCode' && typeof value === 'string' && value.length >= 3) {
-        // Debounce hoặc gọi trực tiếp (ở đây gọi trực tiếp cho đơn giản)
-        // Cần check scope trong state cũ hoặc logic trên đã set
-        const currentScope = formData.materials?.[idx]?.scope; 
-        
-        if (currentScope === 'PROJECT') {
-            lookupMaterialProject(value, idx);
-        }
-    }
   };
 
   const updateMaterialItem = (matIdx: number, itemIdx: number, field: keyof CheckItem, value: any) => {
@@ -241,6 +262,43 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       matItems[itemIdx] = { ...matItems[itemIdx], [field]: value };
       nextMaterials[matIdx].items = matItems;
       setFormData(prev => ({ ...prev, materials: nextMaterials }));
+  };
+
+  const handleDefectSearch = (text: string, itemId: string) => {
+      setDefectSearch(prev => ({ ...prev, [itemId]: text }));
+      setShowDefectDropdown(itemId);
+  };
+
+  const selectDefect = (matIdx: number, itemIdx: number, defect: DefectLibraryItem) => {
+      updateMaterialItem(matIdx, itemIdx, 'notes', defect.name); // Simple copy defect name to notes
+      setShowDefectDropdown(null);
+      setDefectSearch(prev => ({ ...prev, [formData.materials![matIdx].items[itemIdx].id]: defect.name }));
+  };
+
+  const quickAddDefect = async (matIdx: number, itemIdx: number) => {
+      const itemId = formData.materials![matIdx].items[itemIdx].id;
+      const text = defectSearch[itemId];
+      if (!text) return;
+
+      const newDefect: DefectLibraryItem = {
+          id: `DEF_${Date.now()}`,
+          code: `DEF_${Date.now()}`,
+          name: text,
+          category: 'Ngoại quan',
+          stage: 'IQC',
+          severity: 'MINOR',
+          description: text,
+          createdAt: Math.floor(Date.now() / 1000),
+          createdBy: user.name
+      };
+
+      try {
+          await saveDefectLibraryItem(newDefect);
+          setDefectLibrary(prev => [...prev, newDefect]);
+          selectDefect(matIdx, itemIdx, newDefect);
+      } catch (e) {
+          alert("Lỗi thêm lỗi mới.");
+      }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -476,8 +534,15 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 {/* Row 1: Category & Name - Merged */}
                                 <div className="grid grid-cols-12 gap-3">
                                   <div className="col-span-4">
-                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Chủng loại vật tư</label>
-                                      <input value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-800 h-8" placeholder="VD: Gỗ, Sơn..."/>
+                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Chủng loại</label>
+                                      <select 
+                                          value={mat.category || ''} 
+                                          onChange={e => updateMaterial(matIdx, 'category', e.target.value)}
+                                          className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-800 h-8 bg-white"
+                                      >
+                                          <option value="">-- Chọn --</option>
+                                          {iqcGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                                      </select>
                                   </div>
                                   <div className="col-span-8">
                                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên Vật Tư *</label>
@@ -506,6 +571,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         <input 
                                             value={mat.projectCode || ''} 
                                             onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
+                                            onBlur={() => lookupMaterialProject(mat.projectCode || '', matIdx)} 
                                             className={`w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-800 h-8 ${mat.scope === 'COMMON' ? 'bg-slate-100 text-slate-500' : 'bg-white'}`} 
                                             placeholder="Nhập mã..."
                                             readOnly={mat.scope === 'COMMON'}
@@ -565,21 +631,24 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tiêu chí kiểm soát</label>
                                     {(mat.items || []).map((item, itemIdx) => (
                                         <div key={item.id} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm space-y-2 hover:border-blue-300 transition-colors group">
-                                            <div className="flex flex-col gap-2">
-                                                <div className="flex-1 min-w-0">
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5 bg-slate-50 w-fit px-1.5 py-0.5 rounded border border-slate-100">{item.category}</span>
-                                                    <p className="font-bold text-slate-800 uppercase tracking-tight leading-snug text-xs">{item.label}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2 shrink-0 pt-1.5 border-t border-slate-50">
+                                            <div className="flex flex-col gap-1">
+                                                <p className="font-bold text-slate-800 uppercase tracking-tight leading-snug text-xs">{item.label}</p>
+                                                {(item.method || item.standard) && (
+                                                    <div className="flex flex-col gap-0.5 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
+                                                        {item.method && <p className="text-[9px] text-slate-500"><span className="font-bold">PP:</span> {item.method}</p>}
+                                                        {item.standard && <p className="text-[9px] text-slate-500"><span className="font-bold">TC:</span> {item.standard}</p>}
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-2 shrink-0 pt-2 border-t border-slate-50 mt-1">
                                                     <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200">
-                                                        {[CheckStatus.PASS, CheckStatus.FAIL].map(st => (
+                                                        {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
                                                             <button 
                                                                 key={st} 
                                                                 onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)}
-                                                                className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : 'bg-red-600 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`}
+                                                                className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-orange-500 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`}
                                                                 type="button"
                                                             >
-                                                                {st}
+                                                                {st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}
                                                             </button>
                                                         ))}
                                                     </div>
@@ -599,6 +668,50 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                     </div>
                                                 </div>
                                             </div>
+                                            
+                                            {item.status === CheckStatus.FAIL && (
+                                                <div className="relative mt-2">
+                                                    <div className="flex items-center bg-red-50 border border-red-100 rounded-lg px-2">
+                                                        <Search className="w-3.5 h-3.5 text-red-400 mr-2" />
+                                                        <input 
+                                                            value={defectSearch[item.id] || ''} 
+                                                            onChange={(e) => handleDefectSearch(e.target.value, item.id)}
+                                                            onFocus={() => setShowDefectDropdown(item.id)}
+                                                            className="w-full py-1.5 bg-transparent text-[10px] font-bold text-red-700 placeholder-red-300 outline-none"
+                                                            placeholder="Tìm kiếm lỗi..."
+                                                        />
+                                                        {defectSearch[item.id] && (
+                                                            <button 
+                                                                onClick={() => quickAddDefect(matIdx, itemIdx)}
+                                                                className="ml-2 text-[9px] font-black text-red-600 bg-white border border-red-200 px-2 py-0.5 rounded shadow-sm hover:bg-red-50 active:scale-95 transition-all whitespace-nowrap"
+                                                            >
+                                                                + Lỗi "{defectSearch[item.id]}"
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {showDefectDropdown === item.id && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 max-h-40 overflow-y-auto no-scrollbar animate-in slide-in-from-top-1">
+                                                            {defectLibrary
+                                                                .filter(d => !defectSearch[item.id] || d.name.toLowerCase().includes(defectSearch[item.id].toLowerCase()))
+                                                                .map(def => (
+                                                                    <div 
+                                                                        key={def.code} 
+                                                                        onClick={() => selectDefect(matIdx, itemIdx, def)}
+                                                                        className="p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
+                                                                    >
+                                                                        <span className="text-[10px] font-bold text-slate-700">{def.name}</span>
+                                                                        <span className="text-[8px] bg-slate-100 text-slate-500 px-1 rounded">{def.code}</span>
+                                                                    </div>
+                                                                ))
+                                                            }
+                                                            {defectLibrary.length === 0 && <div className="p-3 text-center text-[10px] text-slate-400">Thư viện trống</div>}
+                                                        </div>
+                                                    )}
+                                                    {showDefectDropdown === item.id && <div className="fixed inset-0 z-10" onClick={() => setShowDefectDropdown(null)}></div>}
+                                                </div>
+                                            )}
+
                                             <input 
                                                 value={item.notes || ''} 
                                                 onChange={(e) => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)}
@@ -631,6 +744,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                             )}
                                         </div>
                                     ))}
+                                    {(!mat.items || mat.items.length === 0) && (
+                                        <div className="p-4 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                            <p className="text-[10px] font-bold uppercase">Chưa có tiêu chí kiểm tra</p>
+                                            <p className="text-[9px]">Vui lòng chọn chủng loại vật tư để tải danh sách</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
