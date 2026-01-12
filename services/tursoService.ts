@@ -51,6 +51,33 @@ export const initDatabase = async () => {
       }
     }
 
+    // Migration: Ensure 'name' column exists in workshops table
+    try {
+      await turso.execute("ALTER TABLE workshops ADD COLUMN name TEXT");
+    } catch (e: any) {
+      if (!e.message.includes("duplicate column name")) {
+         console.log("Migration check (workshops.name):", e.message);
+      }
+    }
+
+    // Migration: Ensure 'created_at' column exists in workshops table
+    try {
+      await turso.execute("ALTER TABLE workshops ADD COLUMN created_at INTEGER");
+    } catch (e: any) {
+      if (!e.message.includes("duplicate column name")) {
+         console.log("Migration check (workshops.created_at):", e.message);
+      }
+    }
+
+    // Migration: Ensure 'updated_at' column exists in workshops table
+    try {
+      await turso.execute("ALTER TABLE workshops ADD COLUMN updated_at INTEGER");
+    } catch (e: any) {
+      if (!e.message.includes("duplicate column name")) {
+         console.log("Migration check (workshops.updated_at):", e.message);
+      }
+    }
+
     console.log("✅ QMS Database initialized and verified.");
   } catch (e) {
     console.error("❌ Turso initialization error:", e);
@@ -474,7 +501,7 @@ export const getTemplates = async (): Promise<Record<string, CheckItem[]>> => {
 export const saveTemplate = async (moduleId: string, data: CheckItem[]) => {
     const now = Math.floor(Date.now() / 1000);
     await turso.execute({
-        sql: `INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+        sql: `INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
         args: cleanArgs([moduleId, JSON.stringify(data), now])
     });
 };
