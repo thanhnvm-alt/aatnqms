@@ -1,15 +1,17 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem, PlanItem } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate
+  // Added CheckCircle2 to fix Error on line 337: Cannot find name 'CheckCircle2'
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate, Map, CheckCircle2
 } from 'lucide-react';
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
+import { GoogleGenAI } from "@google/genai";
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -20,15 +22,6 @@ interface InspectionFormProps {
   templates: Record<string, CheckItem[]>;
 }
 
-const PRESET_DOCS = [
-    'Biên bản giao nhận gia công', 
-    'Phiếu xuất kho', 
-    'Bản vẽ kỹ thuật', 
-    'Spec vật liệu', 
-    'Mẫu màu duyệt', 
-    'PO/Hợp đồng gia công'
-];
-
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -37,21 +30,15 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
-      if (width > height) {
-        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
-      } else {
-        if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; }
-      }
+      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
+      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(base64Str); return; }
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 130000 && quality > 0.1) {
-        quality -= 0.1;
-        dataUrl = canvas.toDataURL('image/jpeg', quality);
-      }
+      while (dataUrl.length > 130000 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
@@ -118,6 +105,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
+    supplierAddress: initialData?.supplierAddress || '',
     location: initialData?.location || '',
     reportImage: initialData?.reportImage || '',
     deliveryNoteImage: initialData?.deliveryNoteImage || '',
@@ -132,11 +120,6 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
-  const [customDoc, setCustomDoc] = useState('');
-  
-  const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
-  const [defectSearch, setDefectSearch] = useState<Record<string, string>>({});
-  const [showDefectDropdown, setShowDefectDropdown] = useState<string | null>(null);
 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,27 +131,42 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       return Array.from(new Set(sqcTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
 
-  useEffect(() => {
-      fetchDefectLibrary().then(setDefectLibrary);
-  }, []);
-
   const handleInputChange = (field: keyof Inspection, value: any) => { 
     setFormData(prev => ({ ...prev, [field]: value })); 
+  };
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Tọa độ GPS là: ${lat}, ${lng}. Hãy trả về địa chỉ văn bản chính xác nhất tại Việt Nam cho tọa độ này (bao gồm Tên đường/ Landmark, Phường, Quận/Huyện, Tỉnh/Thành phố). Chỉ trả về chuỗi văn bản địa chỉ, không thêm giải thích.`,
+        });
+        if (response.text) {
+            handleInputChange('supplierAddress', response.text.trim());
+        }
+    } catch (e) {
+        console.error("AI Reverse Geocoding failed", e);
+    }
   };
 
   const handleGetLocation = () => {
       setIsGettingLocation(true);
       if ("geolocation" in navigator) {
           navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                  const loc = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+              async (pos) => {
+                  const lat = pos.coords.latitude;
+                  const lng = pos.coords.longitude;
+                  const loc = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                   setFormData(prev => ({ ...prev, location: loc }));
+                  await reverseGeocode(lat, lng);
                   setIsGettingLocation(false);
               },
               (err) => {
-                  alert("Không thể lấy vị trí GPS. Vui lòng kiểm tra quyền.");
+                  alert("Không thể lấy vị trí GPS. Vui lòng kiểm tra quyền truy cập vị trí trên trình duyệt/thiết bị.");
                   setIsGettingLocation(false);
-              }
+              },
+              { enableHighAccuracy: true, timeout: 10000 }
           );
       } else {
           alert("Trình duyệt không hỗ trợ định vị.");
@@ -204,7 +202,6 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     setFormData(prev => {
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
-        
         let mat = { ...nextMaterials[idx], [field]: value };
         if (field === 'category') {
             const sqcTpl = templates['SQC_MAT'] || [];
@@ -221,7 +218,6 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
         else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
         else if (field === 'failQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
-        
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
     });
@@ -270,7 +266,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   };
 
   const handleSubmit = async () => {
-    if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã chứng từ và Nhà cung cấp gia công."); return; }
+    if (!formData.po_number || !formData.supplier || !formData.supplierAddress) { alert("Vui lòng nhập đầy đủ Mã chứng từ, Nhà cung cấp và Địa chỉ."); return; }
+    if (!formData.location) { alert("ISO REQUIREMENT: Bắt buộc phải xác định vị trí GPS tại xưởng gia công."); return; }
     if (!formData.signature) { alert("Bắt buộc QC phải ký tên xác nhận báo cáo."); return; }
     setIsSaving(true);
     try {
@@ -286,7 +283,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   }, [inspections, formData.po_number, formData.id]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
         
         {/* I. General Information */}
@@ -304,37 +301,50 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div className="md:col-span-2">
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Mã PO / Biên Bản Gia Công *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-teal-500 outline-none font-bold text-[11px] text-slate-800 h-8" placeholder="Nhập mã..."/>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-teal-500 outline-none font-bold text-[11px] text-slate-800 h-9" placeholder="Nhập mã..."/>
                         <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 hover:text-teal-600" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
                 <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Thầu / Xưởng Gia Công *</label>
+                    <div className="relative flex items-center">
+                        <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] text-slate-800 h-9 uppercase" placeholder="Tên đơn vị..."/>
+                        <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ / Vị trí hiện trường *</label>
                     <div className="flex gap-1.5 items-center">
                         <div className="relative flex-1 flex items-center">
-                            <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên đơn vị gia công..."/>
-                            <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
+                            <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] text-slate-800 h-9" placeholder="Địa chỉ chi tiết..."/>
+                            <MapPin className="absolute left-2 w-4 h-4 text-slate-400" />
                         </div>
                         <button 
                             onClick={handleGetLocation} 
                             disabled={isGettingLocation}
-                            className={`p-1.5 rounded-md border flex items-center justify-center transition-all active:scale-90 ${formData.location ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-teal-50 hover:text-teal-600'}`}
-                            title="Xác định vị trí hiện tại"
+                            className={`p-2.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 shadow-sm ${formData.location ? 'bg-teal-600 text-white border-teal-600' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-teal-50 hover:text-teal-600'}`}
+                            title="Xác định GPS (Bắt buộc)"
                             type="button"
                         >
                             {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin"/> : <Locate className="w-4 h-4" />}
                         </button>
                     </div>
-                    {formData.location && <p className="text-[8px] font-mono text-slate-400 mt-1 ml-1 flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> GPS: {formData.location}</p>}
+                    {formData.location && (
+                        <div className="flex items-center justify-between mt-1 px-1">
+                            <p className="text-[8px] font-mono text-teal-600 font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-2.5 h-2.5" /> GPS VERIFIED: {formData.location}
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
 
             <div>
                 <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày thực hiện kiểm tra</label>
-                <input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-8"/>
+                <input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9"/>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-50">
@@ -346,7 +356,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                             <button onClick={() => setFormData({...formData, deliveryNoteImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
                         </div>
                     ) : (
-                        <div className="flex gap-2 h-8">
+                        <div className="flex gap-2 h-9">
                             <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center hover:bg-teal-100"><Camera className="w-4 h-4"/></button>
                             <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-100"><ImageIcon className="w-4 h-4"/></button>
                         </div>
@@ -360,7 +370,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                             <button onClick={() => setFormData({...formData, reportImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
                         </div>
                     ) : (
-                        <div className="flex gap-2 h-8">
+                        <div className="flex gap-2 h-9">
                             <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center hover:bg-teal-100"><Camera className="w-4 h-4"/></button>
                             <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-100"><ImageIcon className="w-4 h-4"/></button>
                         </div>
@@ -410,7 +420,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
-                                     <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-widest">Đạt (PASS)</label><span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{passRate}%</span></div><input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-green-700 bg-green-50/20 text-sm h-9"/></div>
+                                     <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-widest">Đạt (PASS)</label><span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{passRate}%</span></div><input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-teal-700 bg-green-50/20 text-sm h-9"/></div>
                                      <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-widest">Lỗi (FAIL)</label><span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0"}%</span></div><input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-red-300 rounded-md font-bold text-center text-red-700 bg-red-50/20 text-sm h-9"/></div>
                                 </div>
 
@@ -450,8 +460,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             </div>
         </section>
 
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-2">
-            <h3 className="text-teal-800 border-b border-teal-50 pb-2 mb-4 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC</h3>
+        {/* IV. Ghi chú tổng quát */}
+        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+            <h3 className="text-teal-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC</h3>
             <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
         </section>
       </div>

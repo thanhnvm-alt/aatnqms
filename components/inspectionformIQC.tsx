@@ -5,7 +5,7 @@ import {
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin
 } from 'lucide-react';
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
@@ -129,7 +129,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   });
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
@@ -159,26 +158,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleInputChange = (field: keyof Inspection, value: any) => { 
     setFormData(prev => ({ ...prev, [field]: value })); 
-  };
-
-  const handleGetLocation = () => {
-      setIsGettingLocation(true);
-      if ("geolocation" in navigator) {
-          navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                  const loc = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
-                  setFormData(prev => ({ ...prev, location: loc }));
-                  setIsGettingLocation(false);
-              },
-              (err) => {
-                  alert("Không thể lấy vị trí. Vui lòng bật định vị.");
-                  setIsGettingLocation(false);
-              }
-          );
-      } else {
-          alert("Trình duyệt không hỗ trợ định vị.");
-          setIsGettingLocation(false);
-      }
   };
 
   const lookupMaterialProject = async (code: string, matIdx: number) => {
@@ -421,26 +400,10 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 </div>
                 <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Cung Cấp / Đối Tác *</label>
-                    <div className="flex gap-1.5 items-center">
-                        <div className="relative flex-1 flex items-center">
-                            <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên đơn vị..."/>
-                            <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
-                        </div>
-                        <button 
-                            onClick={handleGetLocation} 
-                            disabled={isGettingLocation}
-                            className={`p-1.5 rounded-md border flex items-center justify-center transition-all active:scale-90 ${formData.location ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-blue-50 hover:text-blue-600'}`}
-                            title="Xác định vị trí hiện tại"
-                            type="button"
-                        >
-                            {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin"/> : <Locate className="w-4 h-4" />}
-                        </button>
+                    <div className="relative flex items-center">
+                        <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên đơn vị..."/>
+                        <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
                     </div>
-                    {formData.location && (
-                        <p className="text-[8px] font-mono text-slate-400 mt-1 ml-1 flex items-center gap-1">
-                            <MapPin className="w-2.5 h-2.5" /> GPS: {formData.location}
-                        </p>
-                    )}
                 </div>
             </div>
 

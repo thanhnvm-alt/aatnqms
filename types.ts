@@ -228,6 +228,7 @@ export interface Inspection {
   comments?: NCRComment[];
   updatedAt?: string;
   supplier?: string;
+  supplierAddress?: string; // MỚI: Địa chỉ nhà cung cấp
   location?: string; // GPS Coordinates of Supplier/Site
   referenceDocs?: string[];
   reportImage?: string;

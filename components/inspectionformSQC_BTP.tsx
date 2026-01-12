@@ -5,11 +5,13 @@ import {
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate
+  // Added CheckCircle2 to fix Error on line 322: Cannot find name 'CheckCircle2'
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate, CheckCircle2
 } from 'lucide-react';
-import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
+import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
+import { GoogleGenAI } from "@google/genai";
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -20,14 +22,6 @@ interface InspectionFormProps {
   templates: Record<string, CheckItem[]>;
 }
 
-const PRESET_DOCS = [
-    'Bản vẽ gia công BTP', 
-    'Phiếu xuất kho BTP', 
-    'Mẫu đối chứng', 
-    'Biên bản bàn giao BTP', 
-    'Lệnh sản xuất gia công'
-];
-
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -36,21 +30,15 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
-      if (width > height) {
-        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
-      } else {
-        if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; }
-      }
+      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
+      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(base64Str); return; }
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 130000 && quality > 0.1) {
-        quality -= 0.1;
-        dataUrl = canvas.toDataURL('image/jpeg', quality);
-      }
+      while (dataUrl.length > 130000 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
@@ -117,6 +105,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
+    supplierAddress: initialData?.supplierAddress || '',
     location: initialData?.location || '',
     reportImage: initialData?.reportImage || '',
     deliveryNoteImage: initialData?.deliveryNoteImage || '',
@@ -131,11 +120,6 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
-  const [customDoc, setCustomDoc] = useState('');
-  
-  const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
-  const [defectSearch, setDefectSearch] = useState<Record<string, string>>({});
-  const [showDefectDropdown, setShowDefectDropdown] = useState<string | null>(null);
 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,31 +131,45 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
       return Array.from(new Set(btpTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
 
-  // Added: Fix "Cannot find name 'historicalRecords'" error
   const historicalRecords = useMemo(() => {
     if (!inspections || !formData.po_number) return [];
     return inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number);
   }, [inspections, formData.po_number, formData.id]);
 
-  useEffect(() => {
-      fetchDefectLibrary().then(setDefectLibrary);
-  }, []);
-
   const handleInputChange = (field: keyof Inspection, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Tọa độ GPS là: ${lat}, ${lng}. Hãy trả về địa chỉ văn bản chính xác nhất tại Việt Nam cho tọa độ này. Chỉ trả về chuỗi văn bản địa chỉ, không thêm giải thích.`,
+        });
+        if (response.text) {
+            handleInputChange('supplierAddress', response.text.trim());
+        }
+    } catch (e) {
+        console.error("AI Reverse Geocoding failed", e);
+    }
+  };
 
   const handleGetLocation = () => {
       setIsGettingLocation(true);
       if ("geolocation" in navigator) {
           navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                  const loc = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+              async (pos) => {
+                  const lat = pos.coords.latitude;
+                  const lng = pos.coords.longitude;
+                  const loc = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
                   setFormData(prev => ({ ...prev, location: loc }));
+                  await reverseGeocode(lat, lng);
                   setIsGettingLocation(false);
               },
               (err) => {
-                  alert("Lỗi định vị GPS. Vui lòng bật định vị.");
+                  alert("Không thể lấy vị trí GPS. Vui lòng kiểm tra quyền.");
                   setIsGettingLocation(false);
-              }
+              },
+              { enableHighAccuracy: true }
           );
       } else {
           alert("Trình duyệt không hỗ trợ.");
@@ -271,7 +269,8 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   };
 
   const handleSubmit = async () => {
-    if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã LSX và Nhà gia công BTP."); return; }
+    if (!formData.po_number || !formData.supplier || !formData.supplierAddress) { alert("Vui lòng nhập đầy đủ Mã LSX, Nhà cung cấp và Địa chỉ gia công."); return; }
+    if (!formData.location) { alert("ISO REQUIREMENT: Bắt buộc xác định vị trí GPS tại xưởng đối tác."); return; }
     if (!formData.signature) { alert("QC bắt buộc ký tên."); return; }
     setIsSaving(true);
     try {
@@ -280,7 +279,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
         
         {/* I. THÔNG TIN QUẢN LÝ GIA CÔNG BTP */}
@@ -291,43 +290,55 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
+                <div className="md:col-span-2">
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Lệnh Sản Xuất / PO Gia Công *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-8" placeholder="Mã LSX..."/>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-9" placeholder="Mã LSX..."/>
                         <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
                 <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Đối Tác Gia Công BTP *</label>
+                    <div className="relative flex items-center">
+                        <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold text-[11px] text-slate-800 h-9 uppercase" placeholder="Tên đơn vị..."/>
+                        <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ xưởng gia công *</label>
                     <div className="flex gap-1.5 items-center">
                         <div className="relative flex-1 flex items-center">
-                            <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold text-[11px] text-slate-800 h-8" placeholder="Tên đơn vị..."/>
-                            <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
+                            <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold text-[11px] text-slate-800 h-9" placeholder="Địa chỉ chi tiết..."/>
+                            <MapPin className="absolute left-2 w-4 h-4 text-slate-400" />
                         </div>
-                        <button onClick={handleGetLocation} disabled={isGettingLocation} className={`p-1.5 rounded-md border flex items-center justify-center transition-all ${formData.location ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-teal-50'}`} type="button">
+                        <button 
+                            onClick={handleGetLocation} 
+                            disabled={isGettingLocation} 
+                            className={`p-2.5 rounded-lg border flex items-center justify-center transition-all shadow-sm ${formData.location ? 'bg-teal-600 text-white border-teal-600' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-teal-50'}`} 
+                            type="button"
+                        >
                             {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin"/> : <Locate className="w-4 h-4" />}
                         </button>
                     </div>
-                    {formData.location && <p className="text-[8px] font-mono text-slate-400 mt-1 ml-1 flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> GPS: {formData.location}</p>}
+                    {formData.location && <p className="text-[8px] font-mono text-teal-600 font-bold mt-1 ml-1 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> GPS VERIFIED: {formData.location}</p>}
                 </div>
             </div>
 
-            <div><label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày thực hiện</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-8"/></div>
+            <div><label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày thực hiện</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-9"/></div>
 
             <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-50">
                 <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Giao Nhận BTP</label>
                     {formData.deliveryNoteImage ? (
                         <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group"><img src={formData.deliveryNoteImage} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage([formData.deliveryNoteImage!], 0, { type: 'DELIVERY' })}/><button onClick={() => setFormData({...formData, deliveryNoteImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full"><X className="w-3 h-3"/></button></div>
                     ) : (
-                        <div className="flex gap-2 h-8"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center"><Camera className="w-4 h-4"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center"><ImageIcon className="w-4 h-4"/></button></div>
+                        <div className="flex gap-2 h-9"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center"><Camera className="w-4 h-4"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center"><ImageIcon className="w-4 h-4"/></button></div>
                     )}
                 </div>
                 <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh QC Gia Công</label>
                     {formData.reportImage ? (
                         <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group"><img src={formData.reportImage} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage([formData.reportImage!], 0, { type: 'REPORT' })}/><button onClick={() => setFormData({...formData, reportImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full"><X className="w-3 h-3"/></button></div>
                     ) : (
-                        <div className="flex gap-2 h-8"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center"><Camera className="w-4 h-4"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center"><ImageIcon className="w-4 h-4"/></button></div>
+                        <div className="flex gap-2 h-9"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center"><Camera className="w-4 h-4"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center"><ImageIcon className="w-4 h-4"/></button></div>
                     )}
                 </div>
             </div>
@@ -349,8 +360,8 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white">
                                 <div className="grid grid-cols-12 gap-3">
-                                  <div className="col-span-4"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Công đoạn</label><select value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] text-slate-800 h-8 bg-white"><option value="">-- Chọn --</option>{btpGroups.map(g => <option key={g} value={g}>{g}</option>)}</select></div>
-                                  <div className="col-span-8"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên BTP Gia Công *</label><input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] h-8" placeholder="Tên BTP..."/></div>
+                                  <div className="col-span-4"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Công đoạn</label><select value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] text-slate-800 h-8 bg-white"><option value="">-- Chọn --</option>{btpGroups.map(g => <option key={g} value={g}>{g}</option>)}</select></div>
+                                  <div className="col-span-8"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Tên BTP Gia Công *</label><input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] h-8" placeholder="Tên BTP..."/></div>
                                 </div>
                                 <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">Giao(DN)</label><input type="number" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', Number(e.target.value))} className="w-full px-2 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/></div>
@@ -382,7 +393,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
       {showHistory && (
           <div className="fixed inset-0 z-[170] flex justify-end">
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowHistory(false)}></div>
-              <div className="relative w-full max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+              <div className="relative w-full max-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <div className="flex items-center gap-3">
                           <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg"><History className="w-4 h-4" /></div>
