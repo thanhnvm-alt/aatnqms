@@ -32,8 +32,8 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
   const visibleTabs = tabs.slice(0, 5);
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-xl border-t border-slate-200 shadow-[0_-10px_25px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
-      <div className="flex justify-around items-center h-16">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-[0_-10px_25px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
+      <div className="flex justify-around items-center h-[70px]">
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = view === tab.id;
@@ -42,23 +42,23 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
             <button
               key={tab.id}
               onClick={() => onNavigate(tab.id as ViewState)}
-              className="flex flex-col items-center justify-center flex-1 h-full relative group"
+              className="flex flex-col items-center justify-center flex-1 h-full relative group active:bg-slate-50 transition-colors"
             >
-              <div className={`p-1.5 rounded-xl transition-all duration-300 ${
+              <div className={`p-1.5 rounded-2xl transition-all duration-300 ${
                 isActive 
-                ? 'text-blue-600 scale-110' 
-                : 'text-slate-400 active:scale-90'
+                ? 'text-blue-600 bg-blue-50' 
+                : 'text-slate-400 group-active:scale-90'
               }`}>
                 <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-[2px]'}`} />
               </div>
-              <span className={`text-[9px] font-black uppercase tracking-tighter transition-colors ${
-                isActive ? 'text-blue-600' : 'text-slate-400'
+              <span className={`text-[10px] font-bold mt-1 transition-colors ${
+                isActive ? 'text-blue-600' : 'text-slate-500'
               }`}>
                 {tab.label}
               </span>
               
               {isActive && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-600 rounded-b-full shadow-[0_2px_10px_rgba(37,99,235,0.4)]"></div>
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-1 bg-blue-600 rounded-b-full shadow-[0_2px_8px_rgba(37,99,235,0.4)]"></div>
               )}
             </button>
           );

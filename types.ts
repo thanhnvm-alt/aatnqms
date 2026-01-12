@@ -20,7 +20,7 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'formIQC' | 'formSQC_MAT' | 'formSQC_BTP' | 'formPQC' | 'formFSR' | 'formSTEP' | 'formFQC' | 'formSPR' | 'formSITE';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST';
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
 
@@ -129,10 +129,12 @@ export interface Defect {
 export interface CheckItem {
   id: string;
   stage?: string;
-  category: string;
+  category: string; // Used as Material Group in IQC
   label: string;
   method?: string;
   standard?: string;
+  frequency?: string; // Tần suất kiểm tra
+  defectIds?: string[]; // Link to Defect Library IDs
   status: CheckStatus;
   notes?: string;
   images?: string[];
@@ -143,6 +145,7 @@ export interface CheckItem {
 export interface MaterialIQC {
   id: string;
   name: string;
+  category?: string; // Chủng loại vật tư
   scope: 'COMMON' | 'PROJECT'; 
   projectCode?: string;         
   projectName?: string;         

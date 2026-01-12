@@ -19,6 +19,7 @@ export const initDatabase = async () => {
   try {
     await withRetry(() => turso.execute("SELECT 1"), { maxRetries: 5, initialDelay: 500 });
     
+    // Core Tables
     await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, stt INTEGER, ma_nha_may TEXT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo INTEGER, plannedDate TEXT, assignee TEXT, status TEXT, pthsp TEXT, created_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS inspections (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER, created_by TEXT, ma_ct TEXT, ten_ct TEXT, ma_nha_may TEXT, ten_hang_muc TEXT, workshop TEXT, status TEXT, type TEXT, score INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS projects (ma_ct TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
@@ -28,6 +29,27 @@ export const initDatabase = async () => {
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, data TEXT, code TEXT UNIQUE, name TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, data TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
+
+    // Form-Specific Tables (Normalized Data for Reporting)
+    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_iqc (id TEXT PRIMARY KEY, po_number TEXT, supplier TEXT, material_count INTEGER, created_at INTEGER, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, workshop TEXT, stage TEXT, qty_total REAL, qty_pass REAL, qty_fail REAL, created_at INTEGER, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_sqc (id TEXT PRIMARY KEY, partner_code TEXT, type TEXT, created_at INTEGER, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_site (id TEXT PRIMARY KEY, location TEXT, created_at INTEGER, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_qa (id TEXT PRIMARY KEY, type TEXT, stage TEXT, created_at INTEGER, updated_at INTEGER)`); // FQC, FSR, SPR
+
+    // Migration: Ensure 'code' column exists in workshops table
+    try {
+      await turso.execute("ALTER TABLE workshops ADD COLUMN code TEXT");
+      // Optionally add unique index if needed, though ALTER TABLE ADD COLUMN does not support adding constraints directly easily in older SQLite
+      // We'll rely on the app logic or subsequent CREATE INDEX
+      await turso.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_workshops_code ON workshops(code)");
+    } catch (e: any) {
+      // Ignore error if column already exists (duplicate column name error)
+      if (!e.message.includes("duplicate column name")) {
+         // Log real errors if they aren't just "column exists"
+         console.log("Migration check (workshops.code):", e.message);
+      }
+    }
 
     console.log("✅ QMS Database initialized and verified.");
   } catch (e) {
@@ -150,6 +172,47 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
     return inspection;
 };
 
+// Helper to save specific forms
+const saveSpecificForm = async (inspection: Inspection, now: number) => {
+    const { id, type } = inspection;
+    
+    if (type === 'IQC') {
+        await turso.execute({
+            sql: `INSERT INTO forms_iqc (id, po_number, supplier, material_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) 
+                  ON CONFLICT(id) DO UPDATE SET po_number = excluded.po_number, supplier = excluded.supplier, material_count = excluded.material_count, updated_at = excluded.updated_at`,
+            args: cleanArgs([id, inspection.po_number, inspection.supplier, inspection.materials?.length || 0, now, now])
+        });
+    } 
+    else if (type === 'PQC' || type === 'STEP') {
+        await turso.execute({
+            sql: `INSERT INTO forms_pqc (id, workshop, stage, qty_total, qty_pass, qty_fail, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET workshop = excluded.workshop, stage = excluded.stage, qty_total = excluded.qty_total, qty_pass = excluded.qty_pass, qty_fail = excluded.qty_fail, updated_at = excluded.updated_at`,
+            args: cleanArgs([id, inspection.workshop || inspection.ma_nha_may, inspection.inspectionStage, inspection.inspectedQuantity || 0, inspection.passedQuantity || 0, inspection.failedQuantity || 0, now, now])
+        });
+    }
+    else if (type === 'SQC_MAT' || type === 'SQC_BTP') {
+        await turso.execute({
+            sql: `INSERT INTO forms_sqc (id, partner_code, type, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET partner_code = excluded.partner_code, type = excluded.type, updated_at = excluded.updated_at`,
+            args: cleanArgs([id, inspection.ma_nha_may, type, now, now])
+        });
+    }
+    else if (type === 'SITE') {
+        await turso.execute({
+            sql: `INSERT INTO forms_site (id, location, created_at, updated_at) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET location = excluded.location, updated_at = excluded.updated_at`,
+            args: cleanArgs([id, inspection.ma_nha_may || inspection.ma_ct, now, now]) // Fallback to project code if location code missing
+        });
+    }
+    else if (['FQC', 'FSR', 'SPR'].includes(type || '')) {
+        await turso.execute({
+            sql: `INSERT INTO forms_qa (id, type, stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET type = excluded.type, stage = excluded.stage, updated_at = excluded.updated_at`,
+            args: cleanArgs([id, type, inspection.inspectionStage || 'N/A', now, now])
+        });
+    }
+};
+
 export const saveInspection = async (inspection: Inspection) => {
     const now = Math.floor(Date.now() / 1000);
     
@@ -160,8 +223,10 @@ export const saveInspection = async (inspection: Inspection) => {
         }
     }
 
-    // 2. Tạo bản sao rút gọn để lưu vào column data (không chứa chi tiết NCR)
-    // Đáp ứng yêu cầu: "inspection và NCR được link với nhau qua inspection.id và NCR.id"
+    // 2. Lưu vào bảng chi tiết theo loại (Normalization Layer)
+    await saveSpecificForm(inspection, now);
+
+    // 3. Tạo bản sao rút gọn để lưu vào column data (Main JSON Storage)
     const slimInspection = JSON.parse(JSON.stringify(inspection));
     slimInspection.items = slimInspection.items.map((item: any) => {
         if (item.ncr) {
@@ -203,6 +268,12 @@ export const saveInspection = async (inspection: Inspection) => {
 export const deleteInspection = async (id: string) => {
     await turso.execute({ sql: `DELETE FROM inspections WHERE id = ?`, args: cleanArgs([id]) });
     await turso.execute({ sql: `DELETE FROM ncrs WHERE inspection_id = ?`, args: cleanArgs([id]) });
+    // Also cleanup specific tables to maintain referential integrity (manual)
+    await turso.execute({ sql: `DELETE FROM forms_iqc WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_pqc WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_sqc WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_site WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_qa WHERE id = ?`, args: cleanArgs([id]) });
 };
 
 export const getNcrs = async (options: { inspection_id?: string, status?: string, page?: number, limit?: number }) => {

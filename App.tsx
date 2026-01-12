@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment } from './types';
 import { 
@@ -134,14 +133,13 @@ const App = () => {
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data && data.length > 0) setWorkshops(data); } catch (e) {} };
   const loadProjects = async () => { if (!isDbReady) return; try { const data = await fetchProjects(); setProjects(data || []); } catch(e) {} };
   const loadPlans = async () => { if (!isDbReady) return; setIsLoadingPlans(true); try { const result = await fetchPlans(planSearchTerm, 1, 1000); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
-  const loadInspections = async () => { if (!isDbReady) return; setIsLoadingInspections(true); try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
+  
+  // Tăng limit lên 1000 để load toàn bộ danh sách kiểm tra thay vì mặc định 20
+  const loadInspections = async () => { if (!isDbReady) return; setIsLoadingInspections(true); try { const data = await fetchInspections({ limit: 1000 }); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
+  
   const handleSelectInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); } else alert("Không tìm thấy phiếu."); } catch (error) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); } };
   const handleSelectProject = async (maCt: string) => { const found = (projects || []).find(p => p && p.ma_ct === maCt); if (found) { setActiveProject(found); setView('PROJECT_DETAIL'); } else { setIsDetailLoading(true); try { const freshProject = await fetchProjectByCode(maCt); if (freshProject) { setActiveProject(freshProject); setView('PROJECT_DETAIL'); } else alert("Không tìm thấy dự án."); } catch (e) { alert("Lỗi kết nối."); } finally { setIsDetailLoading(false); } } };
-  const handleEditInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { 
-    setActiveInspection(fullInspection); 
-    const formView = `form${fullInspection.type}` as ViewState;
-    setView(formView); 
-  } } catch (e) {} finally { setIsDetailLoading(false); } };
+  const handleEditInspection = async (id: string) => { setIsDetailLoading(true); try { const fullInspection = await fetchInspectionById(id); if (fullInspection) { setActiveInspection(fullInspection); setView('FORM'); } } catch (e) {} finally { setIsDetailLoading(false); } };
   const handleSaveInspection = async (newInspection: Inspection) => { await saveInspectionToSheet(newInspection); setView('LIST'); loadInspections(); loadProjects(); };
   const handleApproveInspection = async (id: string, signature: string, extraInfo?: any) => { 
     if (!activeInspection) return; 
@@ -176,9 +174,7 @@ const App = () => {
       if (pendingScannedCode) { try { const searchResult = await fetchPlans(pendingScannedCode, 1, 5); const foundPlan = searchResult.items.find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); if (foundPlan) { baseData = { ma_nha_may: foundPlan.ma_nha_may, headcode: foundPlan.headcode, ma_ct: foundPlan.ma_ct, ten_ct: foundPlan.ten_ct, ten_hang_muc: foundPlan.ten_hang_muc, dvt: foundPlan.dvt, so_luong_ipo: foundPlan.so_luong_ipo }; } } catch (e) {} }
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
       setInitialFormState({ ...baseData, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
-      setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); 
-      const formView = `form${moduleId}` as ViewState;
-      setView(formView);
+      setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); setView('FORM');
   };
 
   const renderForm = () => {
@@ -224,11 +220,17 @@ const App = () => {
       <div className="hidden lg:block h-full shrink-0"><Sidebar view={view} onNavigate={setView} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} /></div>
       <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center"><div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200"><Loader2 className="w-12 h-12 text-blue-600 animate-spin" /><p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải...</p></div></div>}
-        <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(); }} onCreate={() => { setPendingScannedCode(null); setInitialFormState(undefined); setShowModuleSelector(true); }} onScanClick={() => { setPendingScannedCode(null); setShowQrScanner(true); }} />
+        <GlobalHeader 
+          user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} 
+          onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(); }} 
+          onCreate={() => { setPendingScannedCode(null); setInitialFormState(undefined); setShowModuleSelector(true); }} 
+          onScanClick={() => { setPendingScannedCode(null); setShowQrScanner(true); }}
+          activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined}
+        />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} />}
-            {view.startsWith('form') && renderForm()}
+            {view === 'FORM' && renderForm()}
             {view === 'DETAIL' && renderDetail()}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}

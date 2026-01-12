@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus } from '../types';
 import { 
@@ -19,8 +18,6 @@ interface InspectionListProps {
   isLoading?: boolean;
 }
 
-const PROJECTS_PER_PAGE = 8;
-
 export const InspectionList: React.FC<InspectionListProps> = ({ 
   inspections, onSelect, userRole, selectedModule, onModuleChange, 
   onRefresh, currentUserName, isLoading
@@ -28,7 +25,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  // Removed page state as we want to show all
+  // const [currentPage, setCurrentPage] = useState(1);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
   const filteredInspections = useMemo(() => {
@@ -78,8 +76,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     return projects;
   }, [filteredInspections]);
 
+  // Sort projects but no slicing (no pagination)
   const sortedProjectKeys = Object.keys(projectsData).sort((a, b) => projectsData[b].stats.total - projectsData[a].stats.total);
-  const pagedProjectKeys = sortedProjectKeys.slice((currentPage - 1) * PROJECTS_PER_PAGE, currentPage * PROJECTS_PER_PAGE);
 
   const toggleProject = (key: string) => {
     setExpandedProjects(prev => {
@@ -125,11 +123,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar pb-24">
         {isLoading ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" /><p className="font-black uppercase tracking-widest text-[8px]">Đang tải dữ liệu...</p></div>
-        ) : pagedProjectKeys.length === 0 ? (
+        ) : sortedProjectKeys.length === 0 ? (
           <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center"><Box className="w-10 h-10 text-slate-200 mb-3" /><p className="font-black uppercase text-slate-400 text-[9px] tracking-widest">Không có báo cáo nào</p></div>
         ) : (
           <div className="space-y-4">
-            {pagedProjectKeys.map(maCt => {
+            {sortedProjectKeys.map(maCt => {
               const project = projectsData[maCt];
               const isExpanded = expandedProjects.has(maCt);
               return (
@@ -169,7 +167,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                               <div className="h-px bg-slate-200 flex-1"></div>
                            </div>
                            <div className="grid grid-cols-1 gap-2">
-                              {/* Fix: Casting items to Inspection[] to avoid Property 'map' does not exist on type 'unknown' error */}
                               {(items as Inspection[]).map(item => (
                                 <div key={item.id} onClick={() => onSelect(item.id)} className="bg-white p-4 rounded-2xl border border-slate-200 active:bg-blue-50 transition-all flex items-center justify-between shadow-sm group">
                                   <div className="flex-1 min-w-0 pr-3">
@@ -205,14 +202,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             })}
           </div>
         )}
-
-        {sortedProjectKeys.length > PROJECTS_PER_PAGE && (
-          <div className="flex justify-center gap-3 py-6">
-              <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-sm disabled:opacity-30 active:scale-90 transition-all"><ChevronLeft className="w-5 h-5" /></button>
-              <div className="flex items-center px-4 bg-white border border-slate-200 rounded-xl text-[9px] font-black text-slate-500 uppercase tracking-widest">Trang {currentPage}</div>
-              <button disabled={currentPage >= Math.ceil(sortedProjectKeys.length / PROJECTS_PER_PAGE)} onClick={() => setCurrentPage(p => p + 1)} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-sm disabled:opacity-30 active:scale-90 transition-all"><ChevronRight className="w-5 h-5" /></button>
-          </div>
-        )}
+        
+        {/* Removed Pagination Controls */}
+        <div className="text-center py-6 text-[9px] font-black text-slate-300 uppercase tracking-widest">
+            {sortedProjectKeys.length > 0 ? 'Đã tải toàn bộ dự án' : ''}
+        </div>
       </div>
     </div>
   );
