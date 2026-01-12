@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem } from '../types';
 import { Button } from './Button';
-import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid } from 'lucide-react';
+import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
 import { fetchWorkshops, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 
@@ -33,9 +33,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
   // State for Active Group (IQC)
   const [activeGroup, setActiveGroup] = useState<string>('');
+  // State for Active Stage (PQC / SQC_BTP)
+  const [activeStage, setActiveStage] = useState<string>('');
 
-  const isPQC = moduleId === 'PQC';
-  const isIQC = moduleId === 'IQC';
+  // Module Logic flags
+  const isStandardPQC = moduleId === 'PQC';
+  const isCustomStagePQC = moduleId === 'SQC_BTP';
+  const isPQC = isStandardPQC || isCustomStagePQC;
+  const isIQC = moduleId === 'IQC' || moduleId === 'SQC_MAT';
+  
   const moduleLabel = ALL_MODULES.find(m => m.id === moduleId)?.label || moduleId || 'Mặc định';
 
   useEffect(() => {
@@ -45,23 +51,28 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
     }
   }, [isIQC]);
 
-  const allAvailableStages = useMemo(() => {
-    const stages = new Set<string>();
-    workshops.forEach(w => w.stages?.forEach(s => stages.add(s)));
-    return Array.from(stages).sort();
-  }, [workshops]);
+  // Derive available stages based on mode
+  const stageOptions = useMemo(() => {
+    if (isStandardPQC) {
+        // PQC: Stages from Workshops
+        const stages = new Set<string>();
+        workshops.forEach(w => w.stages?.forEach(s => stages.add(s)));
+        return Array.from(stages).sort();
+    } else if (isCustomStagePQC) {
+        // SQC_BTP: Custom stages from existing items
+        const stages = new Set<string>();
+        items.forEach(i => { if (i.stage) stages.add(i.stage); });
+        // Include activeStage if it's new and has no items yet (though we usually add item immediately)
+        if (activeStage) stages.add(activeStage);
+        return Array.from(stages).sort();
+    }
+    return [];
+  }, [workshops, items, isStandardPQC, isCustomStagePQC, activeStage]);
 
-  const groupedItems = useMemo(() => {
+  // Group items for IQC (still needed)
+  const iqcGroups = useMemo(() => {
     const groups: Record<string, CheckItem[]> = {};
-    
-    if (isPQC) {
-      allAvailableStages.forEach(s => groups[s] = []);
-      items.forEach(item => {
-        const s = item.stage || 'CHUNG';
-        if (!groups[s]) groups[s] = [];
-        groups[s].push(item);
-      });
-    } else if (isIQC) {
+    if (isIQC) {
         items.forEach(item => {
             const cat = item.category || 'CHUNG';
             if (!groups[cat]) groups[cat] = [];
@@ -69,21 +80,33 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
         });
     }
     return groups;
-  }, [items, isPQC, isIQC, allAvailableStages]);
+  }, [items, isIQC]);
 
-  // Set initial active group for IQC
+  // Filter items for current active stage (PQC)
+  const activeStageItems = useMemo(() => {
+      if (!isPQC || !activeStage) return [];
+      return items.filter(i => i.stage === activeStage);
+  }, [items, isPQC, activeStage]);
+
+  // Initial Selection Effects
   useEffect(() => {
-      if (isIQC && !activeGroup && Object.keys(groupedItems).length > 0) {
-          setActiveGroup(Object.keys(groupedItems)[0]);
+      if (isIQC && !activeGroup && Object.keys(iqcGroups).length > 0) {
+          setActiveGroup(Object.keys(iqcGroups)[0]);
       }
-  }, [groupedItems, isIQC, activeGroup]);
+  }, [iqcGroups, isIQC, activeGroup]);
+
+  useEffect(() => {
+      if (isPQC && !activeStage && stageOptions.length > 0) {
+          setActiveStage(stageOptions[0]);
+      }
+  }, [isPQC, stageOptions, activeStage]);
 
   // General Handlers
   const handleAddItem = (stageOrCategory?: string) => {
     const newItem: CheckItem = {
       id: Date.now().toString(),
-      stage: isPQC ? (stageOrCategory || allAvailableStages[0] || 'CHUNG') : undefined,
-      category: isIQC ? (stageOrCategory || activeGroup || 'Nhóm mới') : (isPQC ? 'PQC' : 'Chung'),
+      stage: isPQC ? (stageOrCategory || activeStage || 'CHUNG') : undefined,
+      category: isIQC ? (stageOrCategory || activeGroup || 'Nhóm mới') : (isPQC ? (moduleId === 'SQC_BTP' ? 'SQC' : 'PQC') : 'Chung'),
       label: 'Hạng mục kiểm tra mới',
       method: '',
       standard: '',
@@ -93,9 +116,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       notes: ''
     };
     setItems([...items, newItem]);
-    if (isIQC && stageOrCategory) {
-        setActiveGroup(stageOrCategory);
-    }
+    
+    if (isIQC && stageOrCategory) setActiveGroup(stageOrCategory);
+    if (isPQC && stageOrCategory) setActiveStage(stageOrCategory);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -108,7 +131,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
   // IQC Specific Handlers
   const handleAddIQCGroup = () => {
-      const newGroupName = `Nhóm vật tư ${Object.keys(groupedItems).length + 1}`;
+      const newGroupName = `Nhóm vật tư ${Object.keys(iqcGroups).length + 1}`;
       handleAddItem(newGroupName);
   };
 
@@ -122,9 +145,43 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       if (window.confirm(`Bạn có chắc muốn xóa nhóm "${groupName}" và toàn bộ tiêu chí bên trong?`)) {
           setItems(items.filter(i => i.category !== groupName));
           if (activeGroup === groupName) {
-              const remainingGroups = Object.keys(groupedItems).filter(g => g !== groupName);
+              const remainingGroups = Object.keys(iqcGroups).filter(g => g !== groupName);
               setActiveGroup(remainingGroups[0] || '');
           }
+      }
+  };
+
+  // SQC_BTP Custom Stage Handlers
+  const handleAddCustomStage = () => {
+      const name = prompt("Nhập tên công đoạn mới (VD: Khoan, Dán cạnh...):");
+      if (name && name.trim()) {
+          const cleanName = name.trim();
+          if (stageOptions.includes(cleanName)) {
+              alert("Công đoạn này đã tồn tại!");
+              setActiveStage(cleanName);
+              return;
+          }
+          setActiveStage(cleanName);
+          // Add a dummy item to persist the stage immediately
+          handleAddItem(cleanName);
+      }
+  };
+
+  const handleRenameCustomStage = () => {
+      if (!activeStage) return;
+      const newName = prompt("Đổi tên công đoạn:", activeStage);
+      if (newName && newName.trim() && newName !== activeStage) {
+          setItems(items.map(i => i.stage === activeStage ? { ...i, stage: newName.trim() } : i));
+          setActiveStage(newName.trim());
+      }
+  };
+
+  const handleDeleteCustomStage = () => {
+      if (!activeStage) return;
+      if (window.confirm(`Bạn có chắc muốn xóa công đoạn "${activeStage}" và toàn bộ tiêu chí bên trong?`)) {
+          setItems(items.filter(i => i.stage !== activeStage));
+          const remaining = stageOptions.filter(s => s !== activeStage);
+          setActiveStage(remaining[0] || '');
       }
   };
 
@@ -155,7 +212,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
               description: newDefect.description || newDefect.name,
               severity: newDefect.severity || 'MINOR',
               category: newDefect.category || 'Ngoại quan',
-              stage: 'IQC', 
+              stage: isIQC ? 'IQC' : 'Chung', 
               createdAt: Math.floor(Date.now() / 1000),
               createdBy: 'Template Editor'
           } as DefectLibraryItem;
@@ -201,20 +258,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
       <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-6 no-scrollbar bg-slate-50/30">
         
-        {/* IQC CONFIGURATION UI */}
+        {/* IQC / SQC_MAT CONFIGURATION UI */}
         {isIQC && (
             <div className="space-y-4">
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start">
                     <Package className="w-5 h-5 text-blue-500 mt-1" />
                     <div className="text-xs text-blue-900">
-                        <p className="font-black uppercase tracking-tight mb-1">Cấu hình IQC - Vật liệu đầu vào</p>
+                        <p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_MAT' ? 'SQC - Vật Tư' : 'IQC - Vật liệu đầu vào'}</p>
                         <p>Thiết lập theo cấu trúc: <strong>Nhóm Vật Tư</strong> {'>'} <strong>Hạng mục kiểm tra</strong>. Liên kết lỗi từ thư viện để QC chọn nhanh.</p>
                     </div>
                 </div>
 
                 {/* Group Tabs (Horizontal Scroll) */}
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-                    {Object.keys(groupedItems).map(groupName => (
+                    {Object.keys(iqcGroups).map(groupName => (
                         <button
                             key={groupName}
                             onClick={() => setActiveGroup(groupName)}
@@ -229,7 +286,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                             <Grid className="w-3.5 h-3.5" />
                             {groupName}
                             <span className={`ml-1 text-[9px] px-1.5 py-0.5 rounded-full ${activeGroup === groupName ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                {groupedItems[groupName].length}
+                                {iqcGroups[groupName].length}
                             </span>
                         </button>
                     ))}
@@ -242,7 +299,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                 </div>
 
                 {/* Active Group Editor */}
-                {activeGroup && groupedItems[activeGroup] ? (
+                {activeGroup && iqcGroups[activeGroup] ? (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
                         {/* Group Header Editable */}
                         <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -273,7 +330,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
                         {/* Items List */}
                         <div className="p-4 space-y-4 bg-slate-50/30">
-                            {groupedItems[activeGroup].map((item) => (
+                            {iqcGroups[activeGroup].map((item) => (
                                 <div key={item.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group relative">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {/* Left Column */}
@@ -344,7 +401,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                     <ChevronDown className="w-4 h-4 text-slate-400"/>
                                                 </div>
                                                 
-                                                {/* Defect Selector Dropdown */}
+                                                {/* Defect Selector Dropdown Logic... (Same as before) */}
                                                 {openDefectSelector === item.id && (
                                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
                                                         <div className="p-2 border-b border-slate-100 bg-slate-50 flex flex-col gap-2">
@@ -429,31 +486,71 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
             </div>
         )}
 
-        {/* PQC CONFIGURATION UI */}
+        {/* PQC / SQC_BTP CONFIGURATION UI */}
         {isPQC && (
-          <div className="space-y-8">
+          <div className="space-y-4">
             <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex gap-3 items-start">
                 <Factory className="w-5 h-5 text-indigo-500 mt-1" />
                 <div className="text-xs text-indigo-900">
-                    <p className="font-black uppercase tracking-tight mb-1">Cấu hình PQC 2 Lớp (ISO Compliance)</p>
-                    <p>Hạng mục được gán trực tiếp vào <strong>Công đoạn sản xuất</strong>. Dữ liệu công đoạn được đồng bộ từ module Quản lý xưởng.</p>
+                    <p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_BTP' ? 'SQC - Bán Thành Phẩm' : 'PQC 2 Lớp (ISO Compliance)'}</p>
+                    <p>
+                        {isCustomStagePQC 
+                            ? "Tự do quản lý danh sách công đoạn và các tiêu chí kiểm tra cho Bán thành phẩm." 
+                            : "Hạng mục được gán trực tiếp vào Công đoạn sản xuất. Dữ liệu công đoạn được đồng bộ từ module Quản lý xưởng."}
+                    </p>
                 </div>
             </div>
 
-            {(Object.entries(groupedItems) as [string, CheckItem[]][]).map(([stageName, stageItems]) => (
-                <div key={stageName} className="space-y-4">
-                    <div className="flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">CÔNG ĐOẠN: {stageName}</h3>
-                            <span className="text-[10px] font-bold text-slate-400">({stageItems.length})</span>
+            {/* Stage Selector */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+                    <div className="flex-1 w-full">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Chọn Công Đoạn Cần Cấu Hình</label>
+                        <div className="relative">
+                            <select 
+                                value={activeStage} 
+                                onChange={e => setActiveStage(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm focus:ring-2 focus:ring-blue-100 outline-none appearance-none cursor-pointer"
+                            >
+                                <option value="" disabled>-- Chọn công đoạn --</option>
+                                {stageOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                         </div>
-                        <button onClick={() => handleAddItem(stageName)} className="text-[10px] font-black text-blue-600 uppercase hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Thêm hạng mục</button>
+                    </div>
+                    {isCustomStagePQC && (
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <button 
+                                onClick={handleAddCustomStage} 
+                                className="flex-1 md:flex-none h-[46px] px-4 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
+                            >
+                                <Plus className="w-4 h-4" /> Thêm mới
+                            </button>
+                            {activeStage && (
+                                <>
+                                    <button onClick={handleRenameCustomStage} className="h-[46px] w-[46px] bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 hover:bg-blue-50 transition-all"><Pencil className="w-4 h-4"/></button>
+                                    <button onClick={handleDeleteCustomStage} className="h-[46px] w-[46px] bg-white border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4"/></button>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Items List for Active Stage */}
+            {activeStage ? (
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between px-2">
+                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-indigo-500" />
+                            Tiêu chí: {activeStage}
+                            <span className="text-[10px] font-bold text-slate-400 px-2 py-0.5 bg-slate-100 rounded-full">{activeStageItems.length}</span>
+                        </h3>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
-                        {stageItems.map((item) => (
-                            <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 group">
+                        {activeStageItems.map((item) => (
+                            <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 group transition-all hover:border-indigo-300">
                                 <div className="flex justify-between items-start gap-4">
                                     <div className="flex-1 space-y-3">
                                         <div className="space-y-1">
@@ -473,8 +570,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                     type="text"
                                                     value={item.method || ''}
                                                     onChange={(e) => handleChange(item.id, 'method', e.target.value)}
-                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none"
-                                                    placeholder="VD: Kiểm tra bằng mắt, thước cặp..."
+                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none focus:bg-white"
+                                                    placeholder="VD: Kiểm tra bằng mắt..."
                                                 />
                                             </div>
                                             <div className="space-y-1">
@@ -483,19 +580,31 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                     type="text"
                                                     value={item.standard || ''}
                                                     onChange={(e) => handleChange(item.id, 'standard', e.target.value)}
-                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none"
-                                                    placeholder="VD: +/- 0.5mm, không trầy xước..."
+                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none focus:bg-white"
+                                                    placeholder="VD: +/- 0.5mm..."
                                                 />
                                             </div>
                                         </div>
                                     </div>
-                                    <button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 active:scale-90 transition-all"><Trash2 className="w-4.5 h-4.5" /></button>
+                                    <button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 active:scale-90 transition-all rounded-lg hover:bg-red-50"><Trash2 className="w-4.5 h-4.5" /></button>
                                 </div>
                             </div>
                         ))}
                     </div>
+                    
+                    <button 
+                        onClick={() => handleAddItem(activeStage)} 
+                        className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 group"
+                    >
+                        <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> Thêm tiêu chí vào {activeStage}
+                    </button>
                 </div>
-            ))}
+            ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-4 border-2 border-dashed border-slate-200 rounded-2xl">
+                    <Factory className="w-12 h-12 opacity-20" />
+                    <p className="font-bold uppercase tracking-widest text-xs">Vui lòng chọn công đoạn để bắt đầu</p>
+                </div>
+            )}
           </div>
         )}
 
