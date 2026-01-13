@@ -5,7 +5,6 @@ import {
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  // Added CheckCircle2 to fix Error on line 337: Cannot find name 'CheckCircle2'
   ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin, Locate, Map, CheckCircle2
 } from 'lucide-react';
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans } from '../services/apiService';
@@ -38,7 +37,8 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 130000 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
+      // Aggressively compress to < 100KB
+      while (dataUrl.length > 133333 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
@@ -108,7 +108,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     supplierAddress: initialData?.supplierAddress || '',
     location: initialData?.location || '',
     reportImage: initialData?.reportImage || '',
+    reportImages: initialData?.reportImages || (initialData?.reportImage ? [initialData.reportImage] : []),
     deliveryNoteImage: initialData?.deliveryNoteImage || '',
+    deliveryNoteImages: initialData?.deliveryNoteImages || (initialData?.deliveryNoteImage ? [initialData.deliveryNoteImage] : []),
     summary: initialData?.summary || '',
     score: 0,
     items: initialData?.items || [], 
@@ -233,22 +235,51 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       setFormData(prev => ({ ...prev, materials: nextMaterials }));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeUploadContext) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-        const compressed = await resizeImage(reader.result as string);
-        const { type, matIdx, itemIdx } = activeUploadContext;
-        if (type === 'DELIVERY') setFormData(prev => ({ ...prev, deliveryNoteImage: compressed }));
-        else if (type === 'REPORT') setFormData(prev => ({ ...prev, reportImage: compressed }));
-        else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-            const nextMats = [...(formData.materials || [])];
-            nextMats[matIdx].items[itemIdx].images = [...(nextMats[matIdx].items[itemIdx].images || []), compressed];
-            setFormData(prev => ({ ...prev, materials: nextMats }));
-        }
-    };
-    reader.readAsDataURL(file);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeUploadContext) return;
+
+    const { type, matIdx, itemIdx } = activeUploadContext;
+    
+    const processedImages = await Promise.all(
+        Array.from(files).map(async (file) => {
+            return new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const compressed = await resizeImage(reader.result as string);
+                    resolve(compressed);
+                };
+                reader.readAsDataURL(file);
+            });
+        })
+    );
+
+    if (type === 'DELIVERY') {
+        setFormData(prev => ({ 
+            ...prev, 
+            deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...processedImages],
+            deliveryNoteImage: processedImages[0] || prev.deliveryNoteImage 
+        }));
+    }
+    else if (type === 'REPORT') {
+        setFormData(prev => ({ 
+            ...prev, 
+            reportImages: [...(prev.reportImages || []), ...processedImages],
+            reportImage: processedImages[0] || prev.reportImage 
+        }));
+    }
+    else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+        setFormData(prev => {
+            const nextMats = [...(prev.materials || [])];
+            if (!nextMats[matIdx]) return prev;
+            const items = [...nextMats[matIdx].items];
+            const currentItem = { ...items[itemIdx] };
+            currentItem.images = [...(currentItem.images || []), ...processedImages];
+            items[itemIdx] = currentItem;
+            nextMats[matIdx] = { ...nextMats[matIdx], items };
+            return { ...prev, materials: nextMats };
+        });
+    }
     e.target.value = '';
   };
 
@@ -256,8 +287,21 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const onImageSave = (idx: number, updatedImg: string) => {
       if (!editorState) return;
       const { type, matIdx, itemIdx } = editorState.context;
-      if (type === 'DELIVERY') setFormData(prev => ({ ...prev, deliveryNoteImage: updatedImg }));
-      else if (type === 'REPORT') setFormData(prev => ({ ...prev, reportImage: updatedImg }));
+      
+      if (type === 'DELIVERY') {
+          setFormData(prev => {
+              const newImgs = [...(prev.deliveryNoteImages || [])];
+              newImgs[idx] = updatedImg;
+              return { ...prev, deliveryNoteImages: newImgs, deliveryNoteImage: idx === 0 ? updatedImg : prev.deliveryNoteImage };
+          });
+      }
+      else if (type === 'REPORT') {
+          setFormData(prev => {
+              const newImgs = [...(prev.reportImages || [])];
+              newImgs[idx] = updatedImg;
+              return { ...prev, reportImages: newImgs, reportImage: idx === 0 ? updatedImg : prev.reportImage };
+          });
+      }
       else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
           const nextMats = [...(formData.materials || [])];
           nextMats[matIdx].items[itemIdx].images![idx] = updatedImg;
@@ -350,31 +394,39 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-50">
                 <div className="space-y-1">
                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Giao Nhận Gia Công</label>
-                    {formData.deliveryNoteImage ? (
-                        <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group">
-                            <img src={formData.deliveryNoteImage} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage([formData.deliveryNoteImage!], 0, { type: 'DELIVERY' })}/>
-                            <button onClick={() => setFormData({...formData, deliveryNoteImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        <div className="flex flex-col gap-1 shrink-0">
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="w-12 h-12 bg-teal-50 text-teal-600 rounded-lg border border-teal-100 flex items-center justify-center hover:bg-teal-100" type="button"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="w-12 h-12 bg-slate-50 text-slate-500 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-100" type="button"><ImageIcon className="w-5 h-5"/></button>
                         </div>
-                    ) : (
-                        <div className="flex gap-2 h-9">
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center hover:bg-teal-100"><Camera className="w-4 h-4"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-100"><ImageIcon className="w-4 h-4"/></button>
-                        </div>
-                    )}
+                        {formData.deliveryNoteImages?.map((img, idx) => (
+                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-300 shrink-0 group shadow-sm">
+                                <img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage(formData.deliveryNoteImages || [], idx, { type: 'DELIVERY' })}/>
+                                <button onClick={() => setFormData({...formData, deliveryNoteImages: formData.deliveryNoteImages?.filter((_, i) => i !== idx), deliveryNoteImage: (idx === 0 && formData.deliveryNoteImages && formData.deliveryNoteImages.length > 1) ? formData.deliveryNoteImages[1] : (idx === 0 ? '' : formData.deliveryNoteImage) })} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                            </div>
+                        ))}
+                        {(!formData.deliveryNoteImages || formData.deliveryNoteImages.length === 0) && (
+                            <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 shrink-0"><span className="text-[9px] font-bold uppercase">Trống</span></div>
+                        )}
+                    </div>
                 </div>
                 <div className="space-y-1">
                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Báo Cáo Chất Lượng</label>
-                    {formData.reportImage ? (
-                        <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group">
-                            <img src={formData.reportImage} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage([formData.reportImage!], 0, { type: 'REPORT' })}/>
-                            <button onClick={() => setFormData({...formData, reportImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        <div className="flex flex-col gap-1 shrink-0">
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="w-12 h-12 bg-teal-50 text-teal-600 rounded-lg border border-teal-100 flex items-center justify-center hover:bg-teal-100" type="button"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="w-12 h-12 bg-slate-50 text-slate-500 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-100" type="button"><ImageIcon className="w-5 h-5"/></button>
                         </div>
-                    ) : (
-                        <div className="flex gap-2 h-9">
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="flex-1 bg-teal-50 text-teal-600 rounded-md border border-teal-100 flex items-center justify-center hover:bg-teal-100"><Camera className="w-4 h-4"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-100"><ImageIcon className="w-4 h-4"/></button>
-                        </div>
-                    )}
+                        {formData.reportImages?.map((img, idx) => (
+                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-300 shrink-0 group shadow-sm">
+                                <img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage(formData.reportImages || [], idx, { type: 'REPORT' })}/>
+                                <button onClick={() => setFormData({...formData, reportImages: formData.reportImages?.filter((_, i) => i !== idx), reportImage: (idx === 0 && formData.reportImages && formData.reportImages.length > 1) ? formData.reportImages[1] : (idx === 0 ? '' : formData.reportImage) })} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                            </div>
+                        ))}
+                        {(!formData.reportImages || formData.reportImages.length === 0) && (
+                            <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 shrink-0"><span className="text-[9px] font-bold uppercase">Trống</span></div>
+                        )}
+                    </div>
                 </div>
             </div>
         </section>
@@ -474,7 +526,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('po_number', data); setShowScanner(false); }} />}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
     </div>
   );

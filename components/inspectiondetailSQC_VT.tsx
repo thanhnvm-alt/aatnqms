@@ -178,6 +178,9 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
       </div>
   );
 
+  const deliveryNoteImages = inspection.deliveryNoteImages || (inspection.deliveryNoteImage ? [inspection.deliveryNoteImage] : []);
+  const reportImages = inspection.reportImages || (inspection.reportImage ? [inspection.reportImage] : []);
+
   if (viewingNcr) {
       return (
           <NCRDetail 
@@ -241,18 +244,58 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
             </div>
         </div>
 
-        <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
+        {/* Images Section */}
+        <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <h3 className="text-slate-800 font-bold text-[11px] uppercase tracking-wide flex items-center gap-2 border-b border-slate-100 pb-2"><Box className="w-3.5 h-3.5 text-blue-500"/> Hình ảnh tổng quan</h3>
-            {inspection.images && inspection.images.length > 0 ? (
-                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                    {inspection.images.map((img, idx) => (
-                        <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm hover:shadow-md transition-all" onClick={() => setLightboxState({ images: inspection.images!, index: idx })}>
-                            <img src={img} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
-                        </div>
-                    ))}
+            
+            {/* Delivery Note Images */}
+            {deliveryNoteImages.length > 0 && (
+                <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Giao Nhận Gia Công</label>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        {deliveryNoteImages.map((img, idx) => (
+                            <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm hover:shadow-md transition-all" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })}>
+                                <img src={img} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            ) : <p className="text-[10px] text-slate-400 italic">Không có hình ảnh tổng quan.</p>}
+            )}
+
+            {/* Report Images */}
+            {reportImages.length > 0 && (
+                <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Báo Cáo Chất Lượng</label>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        {reportImages.map((img, idx) => (
+                            <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm hover:shadow-md transition-all" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
+                                <img src={img} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Generic Images (Fallback for old data) */}
+            {inspection.images && inspection.images.length > 0 && (
+                <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Khác</label>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        {inspection.images.map((img, idx) => (
+                            <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm hover:shadow-md transition-all" onClick={() => setLightboxState({ images: inspection.images!, index: idx })}>
+                                <img src={img} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {deliveryNoteImages.length === 0 && reportImages.length === 0 && (!inspection.images || inspection.images.length === 0) && (
+                <p className="text-[10px] text-slate-400 italic">Không có hình ảnh tổng quan.</p>
+            )}
         </section>
 
         <div className="space-y-2">
@@ -262,22 +305,15 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                     <div className="flex items-start justify-between gap-3 mb-2 border-b border-slate-50 pb-2">
                         <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                                    item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : 
-                                    item.status === CheckStatus.FAIL ? 'text-red-700 bg-red-50 border-red-200' : 'text-slate-600 bg-slate-50 border-slate-200'
-                                }`}>{item.status}</span>
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : item.status === CheckStatus.FAIL ? 'text-red-700 bg-red-50 border-red-200' : 'text-slate-600 bg-slate-50 border-slate-200'}`}>{item.status}</span>
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{item.category}</span>
                             </div>
                             <p className="text-[11px] font-bold text-slate-800">{item.label}</p>
                             {item.notes && <p className="text-[10px] text-slate-500 mt-0.5 italic">"{item.notes}"</p>}
                         </div>
                     </div>
-                    
                     {item.ncr && (
-                        <div 
-                            onClick={() => setViewingNcr(item.ncr || null)}
-                            className="mb-2 p-2 bg-red-50/50 rounded-lg border border-red-100 space-y-1 hover:bg-red-100/50 transition-all cursor-pointer group"
-                        >
+                        <div onClick={() => setViewingNcr(item.ncr || null)} className="mb-2 p-2 bg-red-50/50 rounded-lg border border-red-100 space-y-1 hover:bg-red-100/50 transition-all cursor-pointer group">
                             <div className="flex items-center justify-between">
                                 <span className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1.5"><AlertOctagon className="w-3.5 h-3.5"/> NCR Details</span>
                                 <div className="flex items-center gap-2">
@@ -288,7 +324,6 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                             <p className="text-[10px] text-slate-700 italic">"{item.ncr.issueDescription}"</p>
                         </div>
                     )}
-
                     {item.images && item.images.length > 0 && (
                         <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
                             {item.images.map((img, i) => (
@@ -317,7 +352,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase border-l-4 border-orange-500 pl-2">Đại diện Nhà Cung Cấp</p>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase border-l-4 border-orange-500 pl-2">Đại diện Đối Tác</p>
                     <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 h-24 flex items-center justify-center overflow-hidden">
                         {(inspection.productionSignature || prodSig) ? (
                             <img src={inspection.productionSignature || prodSig} className="h-full object-contain" />
@@ -452,7 +487,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                           <UserPlus className="w-5 h-5 text-indigo-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Nhà Cung Cấp</h3>
+                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Đối Tác Gia Công</h3>
                       </div>
                       <button onClick={() => setShowProductionModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
