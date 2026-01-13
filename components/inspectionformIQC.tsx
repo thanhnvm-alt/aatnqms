@@ -30,6 +30,9 @@ const PRESET_DOCS = [
     'Mẫu đối chứng'
 ];
 
+/**
+ * Optimized Image Resize & Compress (< 100KB)
+ */
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -46,10 +49,16 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(base64Str); return; }
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
+      
+      ctx.fillStyle = '#FFFFFF'; 
+      ctx.fillRect(0, 0, width, height); 
+      ctx.drawImage(img, 0, 0, width, height);
+      
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 130000 && quality > 0.1) {
+      
+      // Target ~100KB (approx 133,333 base64 chars)
+      while (dataUrl.length > 133333 && quality > 0.1) {
         quality -= 0.1;
         dataUrl = canvas.toDataURL('image/jpeg', quality);
       }
@@ -121,10 +130,13 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     supplier: initialData?.supplier || '',
     location: initialData?.location || '',
     reportImage: initialData?.reportImage || '',
+    reportImages: initialData?.reportImages || (initialData?.reportImage ? [initialData.reportImage] : []),
     deliveryNoteImage: initialData?.deliveryNoteImage || '',
+    deliveryNoteImages: initialData?.deliveryNoteImages || (initialData?.deliveryNoteImage ? [initialData.deliveryNoteImage] : []),
     summary: initialData?.summary || '',
     score: 0,
     items: initialData?.items || [], 
+    images: initialData?.images || [],
     ...initialData
   });
 
@@ -143,7 +155,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'DELIVERY' | 'REPORT' | 'ITEM' | 'MATERIAL', matIdx?: number, itemIdx?: number } | null>(null);
+  const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'MAIN' | 'DELIVERY' | 'REPORT' | 'ITEM' | 'MATERIAL', matIdx?: number, itemIdx?: number } | null>(null);
 
   const iqcGroups = useMemo(() => {
       const iqcTpl = templates['IQC'] || [];
@@ -294,26 +306,58 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeUploadContext) return;
-    
-    const reader = new FileReader();
-    reader.onload = async () => {
-        const compressed = await resizeImage(reader.result as string);
-        const { type, matIdx, itemIdx } = activeUploadContext;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeUploadContext) return;
 
-        if (type === 'DELIVERY') setFormData(prev => ({ ...prev, deliveryNoteImage: compressed }));
-        else if (type === 'REPORT') setFormData(prev => ({ ...prev, reportImage: compressed }));
-        else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-            const nextMats = [...(formData.materials || [])];
+    const { type, matIdx, itemIdx } = activeUploadContext;
+    
+    // Process multiple files in parallel
+    const processedImages = await Promise.all(
+        Array.from(files).map(async (file) => {
+            return new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const compressed = await resizeImage(reader.result as string);
+                    resolve(compressed);
+                };
+                reader.readAsDataURL(file);
+            });
+        })
+    );
+
+    if (type === 'MAIN') {
+        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processedImages] }));
+    }
+    else if (type === 'DELIVERY') {
+        setFormData(prev => ({ 
+            ...prev, 
+            deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...processedImages],
+            deliveryNoteImage: processedImages[0] || prev.deliveryNoteImage
+        }));
+    }
+    else if (type === 'REPORT') {
+        setFormData(prev => ({ 
+            ...prev, 
+            reportImages: [...(prev.reportImages || []), ...processedImages],
+            reportImage: processedImages[0] || prev.reportImage
+        }));
+    }
+    else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+        setFormData(prev => {
+            const nextMats = [...(prev.materials || [])];
+            if (!nextMats[matIdx]) return prev;
+            
             const items = [...nextMats[matIdx].items];
-            items[itemIdx].images = [...(items[itemIdx].images || []), compressed];
-            nextMats[matIdx].items = items;
-            setFormData(prev => ({ ...prev, materials: nextMats }));
-        }
-    };
-    reader.readAsDataURL(file);
+            const currentItem = { ...items[itemIdx] };
+            currentItem.images = [...(currentItem.images || []), ...processedImages];
+            items[itemIdx] = currentItem;
+            
+            nextMats[matIdx] = { ...nextMats[matIdx], items };
+            return { ...prev, materials: nextMats };
+        });
+    }
+    
     e.target.value = '';
   };
 
@@ -325,8 +369,35 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       if (!editorState) return;
       const { type, matIdx, itemIdx } = editorState.context;
 
-      if (type === 'DELIVERY') setFormData(prev => ({ ...prev, deliveryNoteImage: updatedImg }));
-      else if (type === 'REPORT') setFormData(prev => ({ ...prev, reportImage: updatedImg }));
+      if (type === 'MAIN') {
+          setFormData(prev => {
+              const newImgs = [...(prev.images || [])];
+              newImgs[idx] = updatedImg;
+              return { ...prev, images: newImgs };
+          });
+      }
+      else if (type === 'DELIVERY') {
+          setFormData(prev => {
+              const newImgs = [...(prev.deliveryNoteImages || [])];
+              if (newImgs[idx]) newImgs[idx] = updatedImg;
+              return { 
+                  ...prev, 
+                  deliveryNoteImages: newImgs,
+                  deliveryNoteImage: idx === 0 ? updatedImg : prev.deliveryNoteImage
+              };
+          });
+      }
+      else if (type === 'REPORT') {
+          setFormData(prev => {
+              const newImgs = [...(prev.reportImages || [])];
+              if (newImgs[idx]) newImgs[idx] = updatedImg;
+              return { 
+                  ...prev, 
+                  reportImages: newImgs,
+                  reportImage: idx === 0 ? updatedImg : prev.reportImage
+              };
+          });
+      }
       else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
           const nextMats = [...(formData.materials || [])];
           const items = [...nextMats[matIdx].items];
@@ -448,40 +519,52 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 {/* Delivery Note */}
                 <div className="space-y-1">
                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Phiếu Giao Hàng</label>
-                    {formData.deliveryNoteImage ? (
-                        <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group">
-                            <img 
-                                src={formData.deliveryNoteImage} 
-                                className="w-full h-full object-cover cursor-pointer" 
-                                onClick={() => handleEditImage([formData.deliveryNoteImage!], 0, { type: 'DELIVERY' })}
-                            />
-                            <button onClick={() => setFormData({...formData, deliveryNoteImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        <div className="flex flex-col gap-1 shrink-0">
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex items-center justify-center hover:bg-blue-100 shadow-sm" type="button"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="w-12 h-12 bg-white text-slate-500 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 shadow-sm" type="button"><ImageIcon className="w-5 h-5"/></button>
                         </div>
-                    ) : (
-                        <div className="flex gap-2 h-8">
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="flex-1 bg-blue-50 text-blue-600 rounded-md border border-blue-100 flex items-center justify-center hover:bg-blue-100"><Camera className="w-4 h-4"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-100"><ImageIcon className="w-4 h-4"/></button>
-                        </div>
-                    )}
+                        {formData.deliveryNoteImages?.map((img, idx) => (
+                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-300 shrink-0 group shadow-sm">
+                                <img 
+                                    src={img} 
+                                    className="w-full h-full object-cover cursor-pointer" 
+                                    onClick={() => handleEditImage(formData.deliveryNoteImages || [], idx, { type: 'DELIVERY' })}
+                                />
+                                <button onClick={() => setFormData({...formData, deliveryNoteImages: formData.deliveryNoteImages?.filter((_, i) => i !== idx), deliveryNoteImage: (idx === 0 && formData.deliveryNoteImages && formData.deliveryNoteImages.length > 1) ? formData.deliveryNoteImages[1] : (idx === 0 ? '' : formData.deliveryNoteImage) })} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                            </div>
+                        ))}
+                        {(!formData.deliveryNoteImages || formData.deliveryNoteImages.length === 0) && (
+                            <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 shrink-0">
+                                <span className="text-[9px] font-bold uppercase">Trống</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 {/* IQC Report */}
                 <div className="space-y-1">
                     <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Báo Cáo QC</label>
-                    {formData.reportImage ? (
-                        <div className="relative h-24 rounded-lg overflow-hidden border border-slate-300 group">
-                            <img 
-                                src={formData.reportImage} 
-                                className="w-full h-full object-cover cursor-pointer"
-                                onClick={() => handleEditImage([formData.reportImage!], 0, { type: 'REPORT' })}
-                            />
-                            <button onClick={() => setFormData({...formData, reportImage: ''})} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        <div className="flex flex-col gap-1 shrink-0">
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex items-center justify-center hover:bg-blue-100 shadow-sm" type="button"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="w-12 h-12 bg-white text-slate-500 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 shadow-sm" type="button"><ImageIcon className="w-5 h-5"/></button>
                         </div>
-                    ) : (
-                        <div className="flex gap-2 h-8">
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="flex-1 bg-blue-50 text-blue-600 rounded-md border border-blue-100 flex items-center justify-center hover:bg-blue-100"><Camera className="w-4 h-4"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="flex-1 bg-slate-50 text-slate-500 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-100"><ImageIcon className="w-4 h-4"/></button>
-                        </div>
-                    )}
+                        {formData.reportImages?.map((img, idx) => (
+                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-300 shrink-0 group shadow-sm">
+                                <img 
+                                    src={img} 
+                                    className="w-full h-full object-cover cursor-pointer" 
+                                    onClick={() => handleEditImage(formData.reportImages || [], idx, { type: 'REPORT' })}
+                                />
+                                <button onClick={() => setFormData({...formData, reportImages: formData.reportImages?.filter((_, i) => i !== idx), reportImage: (idx === 0 && formData.reportImages && formData.reportImages.length > 1) ? formData.reportImages[1] : (idx === 0 ? '' : formData.reportImage) })} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                            </div>
+                        ))}
+                        {(!formData.reportImages || formData.reportImages.length === 0) && (
+                            <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 shrink-0">
+                                <span className="text-[9px] font-bold uppercase">Trống</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </section>
@@ -513,17 +596,13 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 <div className="flex-1 overflow-hidden">
                                     <h4 className="font-bold text-slate-800 uppercase tracking-tight truncate text-xs">{mat.name || 'HẠNG MỤC MỚI'}</h4>
                                     <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">SL: {mat.deliveryQty} {mat.unit}</span>
-                                        <span className="text-[9px] font-bold text-green-600 uppercase border border-green-200 bg-green-50 px-1.5 py-0.5 rounded">{passRate}% ĐẠT</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">DN: {mat.deliveryQty} {mat.unit}</span>
+                                        <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[9px] font-bold uppercase border border-green-100">{passRate}% ĐẠT</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors hover:bg-red-50 rounded-md" type="button"><Trash2 className="w-4 h-4"/></button>
-                                {isExp ? <ChevronUp className="w-4 h-4 text-blue-500"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
-                            </div>
+                            {isExp ? <ChevronUp className="w-5 h-5 text-blue-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
                         </div>
-
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white">
                                 <div className="grid grid-cols-12 gap-3">
@@ -749,7 +828,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
         </section>
 
-        {/* IV. Ghi chú tổng quát */}
+        {/* III. Ghi chú tổng quát */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
             <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT</h3>
             <textarea 
@@ -760,7 +839,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             />
         </section>
 
-        {/* V. QC Signature */}
+        {/* IV. QC Signature */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-2">
             <h3 className="text-blue-800 border-b border-blue-50 pb-2 mb-4 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC</h3>
             <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
@@ -837,6 +916,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
               readOnly={false}
           />
       )}
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileUpload} />
+      <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
     </div>
   );
 };

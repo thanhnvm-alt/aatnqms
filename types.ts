@@ -232,7 +232,9 @@ export interface Inspection {
   location?: string; // GPS Coordinates of Supplier/Site
   referenceDocs?: string[];
   reportImage?: string;
+  reportImages?: string[]; // Multiple report images
   deliveryNoteImage?: string;
+  deliveryNoteImages?: string[]; // Multiple delivery note images
 }
 
 export interface Project {

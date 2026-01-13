@@ -167,6 +167,9 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
       } catch (e) { alert("Lỗi gửi phản hồi."); } finally { setIsSubmittingComment(false); }
   };
 
+  const deliveryNoteImages = inspection.deliveryNoteImages || (inspection.deliveryNoteImage ? [inspection.deliveryNoteImage] : []);
+  const reportImages = inspection.reportImages || (inspection.reportImage ? [inspection.reportImage] : []);
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       {/* HEADER */}
@@ -224,18 +227,30 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
             )}
 
             {/* Images */}
-            {(inspection.deliveryNoteImage || inspection.reportImage) && (
-                <div className="flex gap-4 border-t border-slate-100 pt-3">
-                    {inspection.deliveryNoteImage && (
-                        <div className="relative group cursor-zoom-in" onClick={() => setLightboxState({ images: [inspection.deliveryNoteImage!], index: 0 })}>
-                            <p className="text-[9px] font-bold text-slate-400 mb-1">Phiếu Giao Hàng</p>
-                            <img src={inspection.deliveryNoteImage} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+            {(deliveryNoteImages.length > 0 || reportImages.length > 0) && (
+                <div className="flex flex-col gap-4 border-t border-slate-100 pt-3">
+                    {deliveryNoteImages.length > 0 && (
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Phiếu Giao Hàng</p>
+                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                {deliveryNoteImages.map((img, idx) => (
+                                    <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })}>
+                                        <img src={img} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
-                    {inspection.reportImage && (
-                        <div className="relative group cursor-zoom-in" onClick={() => setLightboxState({ images: [inspection.reportImage!], index: 0 })}>
-                            <p className="text-[9px] font-bold text-slate-400 mb-1">Báo Cáo IQC</p>
-                            <img src={inspection.reportImage} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+                    {reportImages.length > 0 && (
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Báo Cáo QC</p>
+                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                {reportImages.map((img, idx) => (
+                                    <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
+                                        <img src={img} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -367,12 +382,12 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
         </section>
 
         {/* Discussions */}
-        <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mt-4">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+        <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
+            <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-blue-600" />
-                <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-[0.2em]">Audit Trail</h3>
+                <h3 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">Trao đổi & Ghi chú</h3>
             </div>
-            <div className="p-5 space-y-5 max-h-[400px] overflow-y-auto no-scrollbar">
+            <div className="p-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
                         <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-full border border-slate-200 shrink-0 shadow-sm" alt="" />
@@ -391,9 +406,9 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <textarea 
                         value={newComment} onChange={(e) => setNewComment(e.target.value)}
                         placeholder="Nhập phản hồi..."
-                        className="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-xs outline-none h-16 transition-all"
+                        className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-[11px] focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-10 transition-all"
                     />
-                    <button onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()} className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-lg flex items-center justify-center disabled:opacity-50 mt-auto"><Send className="w-4 h-4" /></button>
+                    <button onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()} className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-lg flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all shrink-0"><Send className="w-4 h-4" /></button>
                 </div>
             </div>
         </section>
@@ -431,19 +446,22 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                      <h3 className="font-bold text-slate-800 uppercase text-sm">QA/QC Manager Phê Duyệt</h3>
+                      <div className="flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                          <h3 className="font-bold text-slate-800 uppercase tracking-tighter text-sm">QA/QC Manager Phê Duyệt</h3>
+                      </div>
                       <button onClick={() => setShowManagerModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
                   <div className="p-6 space-y-5">
                       <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                          <p className="text-[9px] font-bold text-slate-500 uppercase">Cấp Phê Duyệt</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Người phê duyệt</p>
                           <p className="text-sm font-bold text-slate-800 uppercase">{user.name}</p>
                       </div>
                       <SignaturePad label="Chữ ký điện tử Manager" value={managerSig} onChange={setManagerSig} />
                   </div>
                   <div className="p-5 border-t bg-slate-50 flex gap-3">
                       <button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy</button>
-                      <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg disabled:opacity-50">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'DUYỆT & NHẬP KHO'}</button>
+                      <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg disabled:opacity-50">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'PHÊ DUYỆT'}</button>
                   </div>
               </div>
           </div>
