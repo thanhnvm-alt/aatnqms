@@ -1,3 +1,4 @@
+
 import { createClient, Client } from "@libsql/client/web";
 
 /**
@@ -22,8 +23,12 @@ let authToken = getSafeValue(envToken, FALLBACK_TOKEN);
 // CRITICAL: Web client trình duyệt yêu cầu https:// thay vì libsql:// 
 // để tránh lỗi "Failed to fetch" (do trình duyệt không hiểu protocol libsql)
 let finalUrl = rawUrl;
+
+// Normalize URL: Ensure it starts with https:// for web client
 if (finalUrl.startsWith("libsql://")) {
     finalUrl = finalUrl.replace("libsql://", "https://");
+} else if (finalUrl.startsWith("wss://")) {
+    finalUrl = finalUrl.replace("wss://", "https://");
 }
 
 // Xóa trailing slash nếu có
@@ -32,7 +37,9 @@ finalUrl = finalUrl.replace(/\/$/, "");
 export const isTursoConfigured = finalUrl.length > 0 && !finalUrl.includes("placeholder");
 
 if (isTursoConfigured) {
-  console.log("📡 Turso DB connecting to:", finalUrl.substring(0, 20) + "...");
+  // Log masked URL for debugging purposes
+  const maskedUrl = finalUrl.replace(/:\/\/[^@]+@/, '://***@');
+  console.log("📡 Turso DB connecting to:", maskedUrl);
 }
 
 export const turso: Client = createClient({

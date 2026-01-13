@@ -173,7 +173,7 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
           </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-8 no-scrollbar pb-32 bg-slate-50/50">
+      <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-8 no-scrollbar pb-40 md:pb-32 bg-slate-50/50">
         
         <div className="bg-white rounded-[3rem] p-8 border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -365,14 +365,14 @@ export const InspectionDetail: React.FC<InspectionDetailProps> = ({ inspection, 
       </div>
 
       {isManager && !isApproved && (
-          <div className="fixed bottom-0 left-0 right-0 p-6 md:p-8 border-t border-slate-200 bg-white/90 backdrop-blur-xl flex justify-end gap-5 z-40 shadow-[0_-15px_40px_rgba(0,0,0,0.1)]">
-              <button onClick={onBack} className="px-8 py-4 text-slate-500 font-black uppercase text-[10px] tracking-[0.2em] hover:bg-slate-50 rounded-2xl transition-all">Quay lại</button>
+          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-4 md:p-8 border-t border-slate-200 bg-white/90 backdrop-blur-xl flex flex-row items-center justify-between gap-3 z-40 shadow-[0_-15px_40px_rgba(0,0,0,0.1)]">
+              <button onClick={onBack} className="px-4 py-3 md:px-8 md:py-4 text-slate-500 font-black uppercase text-[10px] tracking-[0.2em] hover:bg-slate-50 rounded-2xl transition-all border border-slate-200 shrink-0">Quay lại</button>
               <button 
                   onClick={handleApprove} disabled={isApproving || !managerSignature || (!isProductionSigned && !productionSignature)} 
-                  className="px-16 py-4 bg-green-600 text-white font-black uppercase text-xs tracking-[0.3em] rounded-2xl shadow-2xl shadow-green-500/30 hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                  className="flex-1 md:flex-none px-4 py-3 md:px-16 md:py-4 bg-green-600 text-white font-black uppercase text-[10px] md:text-xs tracking-[0.2em] rounded-2xl shadow-2xl shadow-green-500/30 hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
               >
-                  {isApproving ? <Loader2 className="w-5 h-5 animate-spin"/> : <CheckCircle className="w-5 h-5"/>}
-                  <span>PHÊ DUYỆT & HOÀN TẤT</span>
+                  {isApproving ? <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin"/> : <CheckCircle className="w-4 h-4 md:w-5 md:h-5"/>}
+                  <span>PHÊ DUYỆT</span>
               </button>
           </div>
       )}

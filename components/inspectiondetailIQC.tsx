@@ -168,7 +168,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       {/* HEADER */}
       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-30 shadow-sm flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
@@ -187,7 +187,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
           </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar bg-slate-50/50 pb-32">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar bg-slate-50/50 pb-40 md:pb-32">
         {/* Header Block */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5 relative overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -399,12 +399,30 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
         </section>
       </div>
 
-      {/* BOTTOM ACTIONS */}
+      {/* BOTTOM ACTIONS - FIXED FOR MOBILE */}
       {!isApproved && (
-          <div className="fixed bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex flex-wrap justify-center gap-3 z-40 shadow-lg pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-              <button onClick={() => setShowPmModal(true)} className="px-5 py-3 bg-indigo-50 text-indigo-700 font-bold uppercase text-[9px] tracking-widest border border-indigo-200 rounded-xl">PM Xác Nhận</button>
-              {isManager && <button onClick={() => setShowManagerModal(true)} className="px-8 py-3 bg-emerald-600 text-white font-bold uppercase text-[10px] tracking-widest rounded-xl">Manager Phê Duyệt</button>}
-              <button onClick={onBack} className="px-5 py-3 text-slate-500 font-bold uppercase text-[9px] tracking-[0.2em] rounded-xl border border-transparent">Quay lại</button>
+          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-3 md:p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex items-center justify-between gap-2 z-40 shadow-lg">
+              <button onClick={onBack} className="px-3 py-3 text-slate-500 font-bold uppercase text-[9px] tracking-widest hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all shrink-0">
+                  Quay lại
+              </button>
+              
+              <div className="flex gap-2 flex-1 justify-end">
+                  <button 
+                    onClick={() => setShowPmModal(true)} 
+                    className="flex-1 py-3 bg-indigo-50 text-indigo-700 font-bold uppercase text-[9px] tracking-wide border border-indigo-200 rounded-xl hover:bg-indigo-100 active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                      <UserPlus className="w-3.5 h-3.5"/> PM Ký
+                  </button>
+                  
+                  {isManager && (
+                      <button 
+                        onClick={() => setShowManagerModal(true)} 
+                        className="flex-1 py-3 bg-emerald-600 text-white font-bold uppercase text-[9px] tracking-wide rounded-xl shadow-lg hover:bg-emerald-700 active:scale-95 flex items-center justify-center gap-1.5"
+                      >
+                          <ShieldCheck className="w-3.5 h-3.5"/> Duyệt
+                      </button>
+                  )}
+              </div>
           </div>
       )}
 

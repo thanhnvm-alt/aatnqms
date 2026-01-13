@@ -17,6 +17,7 @@ export const initDatabase = async () => {
   }
 
   try {
+    // Retry "SELECT 1" to warm up connection or handle transient network issues
     await withRetry(() => turso.execute("SELECT 1"), { maxRetries: 5, initialDelay: 500 });
     
     // Core Tables
@@ -40,8 +41,12 @@ export const initDatabase = async () => {
     try { await turso.execute("ALTER TABLE workshops ADD COLUMN updated_at INTEGER"); } catch (e) {}
 
     console.log("✅ QMS Database initialized and verified.");
-  } catch (e) {
+  } catch (e: any) {
     console.error("❌ Turso initialization error:", e);
+    // Add specific help text for Failed to fetch
+    if (e.message && e.message.includes("Failed to fetch")) {
+        console.error("👉 Hint: Check if the Turso Database URL starts with 'https://' (not 'libsql://') and is reachable from this network.");
+    }
     throw e; 
   }
 };
