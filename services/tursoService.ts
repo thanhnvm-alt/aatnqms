@@ -408,7 +408,7 @@ export const getTemplates = async (): Promise<Record<string, CheckItem[]>> => {
 export const saveTemplate = async (moduleId: string, data: CheckItem[]) => {
     const now = Math.floor(Date.now() / 1000);
     await turso.execute({
-        sql: `INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+        sql: `INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
         args: cleanArgs([moduleId, JSON.stringify(data), now])
     });
 };
