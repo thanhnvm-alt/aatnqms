@@ -11,7 +11,7 @@ import {
   Calendar, UserCheck, Eye
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { fetchPlans, fetchDefectLibrary } from '../services/apiService';
+import { fetchPlans, fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 
@@ -25,7 +25,7 @@ interface InspectionFormProps {
   user: User;
 }
 
-const resizeImage = (base64Str: string, maxWidth = 1280): Promise<string> => {
+const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -38,16 +38,15 @@ const resizeImage = (base64Str: string, maxWidth = 1280): Promise<string> => {
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(base64Str); return; }
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
       
-      // Compress to < 100KB (approx 133333 base64 chars)
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 133333 && quality > 0.1) { 
-          quality -= 0.1; 
-          dataUrl = canvas.toDataURL('image/jpeg', quality); 
+      
+      // Strict compression loop: Target < 100KB (approx 133,333 base64 chars)
+      while (dataUrl.length > 133333 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
       }
       resolve(dataUrl);
     };

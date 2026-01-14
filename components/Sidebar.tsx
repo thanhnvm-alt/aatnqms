@@ -11,35 +11,45 @@ import {
   PanelLeftClose,
   PanelLeft,
   AlertTriangle,
-  Hammer,
   BookOpen
 } from 'lucide-react';
 
 interface SidebarProps {
   view: ViewState;
-  onNavigate: (view: ViewState) => void;
+  currentModule?: string;
+  onNavigate: (id: string) => void;
   user: User;
   onLogout: () => void;
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ view, onNavigate, user, onLogout, collapsed, setCollapsed }) => {
-  // Lọc menu dựa trên vai trò QC
+export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigate, user, onLogout, collapsed, setCollapsed }) => {
+  // Lọc menu: Đã xóa PQC_MODE
   const menuItems = [
+    { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
     { id: 'PLAN', label: 'Kế Hoạch', icon: FileSpreadsheet },
-    { id: 'LIST', label: 'Danh Sách Kiểm Tra', icon: List },
+    { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
     { id: 'DEFECT_LIBRARY', label: 'Thư Viện Lỗi', icon: BookOpen },
-    { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
   ].filter(item => {
+    // Logic phân quyền đơn giản
     if (user.role === 'QC') {
-      return item.id === 'LIST' || item.id === 'NCR_LIST' || item.id === 'DEFECT_LIBRARY' || item.id === 'SETTINGS';
+      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS'].includes(item.id);
     }
     return true;
   });
+
+  const isMenuItemActive = (itemId: string) => {
+      if (itemId === 'LIST') {
+          return view === 'LIST';
+      }
+      if (itemId === 'SETTINGS') return view === 'SETTINGS';
+      if (itemId === 'DEFECT_LIBRARY') return view === 'DEFECT_LIBRARY' || view === 'DEFECT_DETAIL';
+      return view === itemId;
+  };
 
   return (
     <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-72'}`}>
@@ -73,11 +83,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, onNavigate, user, onLogo
       <nav className="flex-1 px-4 space-y-1.5 mt-2 overflow-y-auto no-scrollbar">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = view === item.id || (item.id === 'SETTINGS' && view === 'SETTINGS') || (item.id === 'DEFECT_LIBRARY' && view === 'DEFECT_DETAIL');
+          const isActive = isMenuItemActive(item.id);
+          
           return (
             <button
               key={item.id}
-              onClick={() => onNavigate(item.id as ViewState)}
+              onClick={() => onNavigate(item.id)}
               className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl transition-all group relative font-medium text-sm ${
                 isActive 
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 

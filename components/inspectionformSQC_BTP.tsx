@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
@@ -37,8 +36,11 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      // Aggressively compress to < 100KB
-      while (dataUrl.length > 133333 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
+      // Strict compression loop: Target < 100KB (approx 133,333 base64 chars)
+      while (dataUrl.length > 133333 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
@@ -245,8 +247,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
     const { type, matIdx, itemIdx } = activeUploadContext;
     
     // Process multiple files
+    // Fixed: Added explicit "File" type to the map callback to resolve "Argument of type unknown is not assignable to parameter of type Blob"
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file) => {
+        Array.from(files).map(async (file: File) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {
@@ -341,7 +344,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Lệnh Sản Xuất / PO Gia Công *</label>
                     <div className="relative flex items-center">
                         <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-9" placeholder="Mã LSX..."/>
-                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button>
+                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 hover:text-teal-600" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
                 <div>
@@ -438,7 +441,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">ĐVT</label><input value={mat.unit} onChange={e => updateMaterial(matIdx, 'unit', e.target.value.toUpperCase())} className="w-full px-2 py-1 border border-slate-300 rounded-md text-center uppercase font-bold bg-white text-[11px] h-7"/></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                     <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-widest">Đạt (PASS)</label><span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{passRate}%</span></div><input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-green-700 bg-green-50/20 text-sm h-9"/></div>
+                                     <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-widest">Đạt (PASS)</label><span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{passRate}%</span></div><input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-teal-700 bg-green-50/20 text-sm h-9"/></div>
                                      <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-widest">Lỗi (FAIL)</label><span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0"}%</span></div><input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-red-300 rounded-md font-bold text-center text-red-700 bg-red-50/20 text-sm h-9"/></div>
                                 </div>
                                 <div className="space-y-2 mt-3">

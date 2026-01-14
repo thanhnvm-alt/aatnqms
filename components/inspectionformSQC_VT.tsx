@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
@@ -37,8 +36,11 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      // Aggressively compress to < 100KB
-      while (dataUrl.length > 133333 && quality > 0.1) { quality -= 0.1; dataUrl = canvas.toDataURL('image/jpeg', quality); }
+      // Strict compression loop: Target < 100KB (approx 133,333 base64 chars)
+      while (dataUrl.length > 133333 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
       resolve(dataUrl);
     };
     img.onerror = () => resolve(base64Str);
@@ -87,7 +89,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             </div>
             <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-28 shadow-sm">
                 <canvas ref={canvasRef} width={400} height={112} className="w-full h-full touch-none cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] uppercase font-bold tracking-widest">Ký xác nhận</div>}
+                {!value && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] uppercase font-bold tracking-widest">Ký tại đây</div>}
             </div>
         </div>
     );
@@ -241,8 +243,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
     const { type, matIdx, itemIdx } = activeUploadContext;
     
+    // Fixed: Added explicit "File" type to the map callback to resolve "Argument of type unknown is not assignable to parameter of type Blob"
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file) => {
+        Array.from(files).map(async (file: File) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {

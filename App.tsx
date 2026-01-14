@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification } from './types';
 import { 
@@ -28,7 +30,8 @@ import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
 import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
-import { InspectionDetailPQC } from './components/inspectiondetailPQC';
+// Fixed casing conflict: standardized on Uppercase import matching File 83 components/InspectionDetailPQC.tsx
+import { InspectionDetailPQC } from './components/InspectionDetailPQC'; 
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
 import { InspectionDetailSQC_BTP } from './components/inspectiondetailSQC_BTP';
@@ -38,6 +41,7 @@ import { InspectionDetailFQC } from './components/inspectiondetailFQC';
 import { InspectionDetailSPR } from './components/inspectiondetailSPR';
 import { InspectionDetailSITE } from './components/inspectiondetailSITE';
 import { PlanList } from './components/PlanList';
+import { PlanDetail } from './components/PlanDetail';
 import { Settings } from './components/Settings';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
@@ -68,9 +72,7 @@ import {
   fetchTemplates, 
   saveTemplate, 
   importPlans, 
-  importInspections, 
   fetchProjects, 
-  fetchProjectByCode,
   createNotification
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
@@ -87,6 +89,7 @@ const App = () => {
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]); 
+  const [activePlan, setActivePlan] = useState<PlanItem | null>(null);
   const [planSearchTerm, setPlanSearchTerm] = useState('');
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -128,7 +131,7 @@ const App = () => {
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (Array.isArray(data) && data.length > 0) { setUsers(prev => { const combined = [...MOCK_USERS]; data.forEach(dbUser => { if (dbUser && dbUser.username && !combined.find(u => u.username.toLowerCase() === dbUser.username.toLowerCase())) { combined.push(dbUser); } }); return combined; }); } } catch (e) {} };
   const handleLogin = (loggedInUser: User, remember: boolean) => { const { password, ...safeUser } = loggedInUser; setUser(safeUser as User); const storage = remember ? localStorage : sessionStorage; storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser)); setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); };
-  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
+  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY) || sessionStorage.removeItem(AUTH_STORAGE_KEY); };
   useEffect(() => { if (user && isDbReady) { loadInspections(); loadProjects(); loadPlans(); } }, [user, isDbReady, planSearchTerm]);
   const checkConn = async () => { try { const status = await checkApiConnection(); setConnectionError(!status.ok); } catch (e) { setConnectionError(true); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
@@ -174,6 +177,7 @@ const App = () => {
             updated.productionSignature = extraInfo.signature;
             updated.productionName = extraInfo.name;
             updated.productionConfirmedDate = new Date().toISOString();
+            if (extraInfo.comment) updated.productionComment = extraInfo.comment;
         }
         if (extraInfo.pmSignature !== undefined) updated.pmSignature = extraInfo.pmSignature;
         if (extraInfo.pmComment !== undefined) updated.pmComment = extraInfo.pmComment;
@@ -231,13 +235,44 @@ const App = () => {
 
   const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
   const handleQrScan = (scannedCode: string) => { setShowQrScanner(false); setPendingScannedCode(scannedCode); setShowModuleSelector(true); };
+  
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false); setIsDetailLoading(true);
-      let baseData: Partial<Inspection> = { ma_nha_may: pendingScannedCode || '' };
-      if (pendingScannedCode) { try { const searchResult = await fetchPlans(pendingScannedCode, 1, 5); const foundPlan = (searchResult.items || []).find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); if (foundPlan) { baseData = { ma_nha_may: foundPlan.ma_nha_may, headcode: foundPlan.headcode, ma_ct: foundPlan.ma_ct, ten_ct: foundPlan.ten_ct, ten_hang_muc: foundPlan.ten_hang_muc, dvt: foundPlan.dvt, so_luong_ipo: foundPlan.so_luong_ipo }; } } catch (e) {} }
+      // Prioritize existing initialFormState if set from PlanList
+      let baseData: Partial<Inspection> = initialFormState || { ma_nha_may: pendingScannedCode || '' };
+      
+      // Only if no initial state and we have a scanned code, try to lookup
+      if (!initialFormState && pendingScannedCode) { 
+          try { 
+              const searchResult = await fetchPlans(pendingScannedCode, 1, 5); 
+              const foundPlan = (searchResult.items || []).find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); 
+              if (foundPlan) { 
+                  baseData = { 
+                      ma_nha_may: foundPlan.ma_nha_may, 
+                      headcode: foundPlan.headcode, 
+                      ma_ct: foundPlan.ma_ct, 
+                      ten_ct: foundPlan.ten_ct, 
+                      ten_hang_muc: foundPlan.ten_hang_muc, 
+                      dvt: foundPlan.dvt, 
+                      so_luong_ipo: foundPlan.so_luong_ipo 
+                  }; 
+              } 
+          } catch (e) {} 
+      }
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
-      setInitialFormState({ ...baseData, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
+      // Merge base data with new type/template, ensuring we don't lose the pre-filled info
+      setInitialFormState({ 
+          ...baseData, 
+          type: moduleId, 
+          items: JSON.parse(JSON.stringify(template)) 
+      });
       setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); setView('FORM');
+  };
+
+  const handleSidebarNavigate = (id: string) => {
+      // PQC_MODE removed per request, fallback to generic list
+      if (id === 'LIST') setCurrentModule('ALL');
+      setView(id as ViewState);
   };
 
   const renderForm = () => {
@@ -275,12 +310,39 @@ const App = () => {
     }
   };
 
+  const renderList = () => {
+      // InspectionListPQC removed per request
+      return (
+          <InspectionList 
+              inspections={inspections} 
+              onSelect={handleSelectInspection} 
+              userRole={user!.role} 
+              currentUserName={user!.name} 
+              selectedModule={currentModule} 
+              onRefresh={loadInspections} 
+              onModuleChange={setCurrentModule} 
+              isLoading={isLoadingInspections} 
+              workshops={workshops} 
+          />
+      );
+  };
+
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} />;
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo...</p></div>;
 
   return (
     <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
-      <div className="hidden lg:block h-full shrink-0"><Sidebar view={view} onNavigate={setView} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} /></div>
+      <div className="hidden lg:block h-full shrink-0">
+          <Sidebar 
+              view={view} 
+              currentModule={currentModule}
+              onNavigate={handleSidebarNavigate} 
+              user={user} 
+              onLogout={handleLogout} 
+              collapsed={sidebarCollapsed} 
+              setCollapsed={setSidebarCollapsed} 
+          />
+      </div>
       <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center"><div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200"><Loader2 className="w-12 h-12 text-blue-600 animate-spin" /><p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải...</p></div></div>}
         <GlobalHeader 
@@ -293,10 +355,10 @@ const App = () => {
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
-            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user.role} currentUserName={user.name} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} workshops={workshops} />}
+            {view === 'LIST' && renderList()}
             {view === 'FORM' && renderForm()}
             {view === 'DETAIL' && renderDetail()}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_nha_may: item.ma_nha_may, headcode: item.headcode, ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewPlan={(item) => setActivePlan(item)} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => { setView('DEFECT_LIST'); setActiveDefect(null); }} onViewInspection={handleSelectInspection} />}
@@ -308,7 +370,6 @@ const App = () => {
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
-        {/* Fixed typo setShowScanner -> setShowQrScanner to fix Cannot find name 'setShowScanner' error */}
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={handleQrScan} />}
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -328,6 +389,36 @@ const App = () => {
                     </div>
                 </div>
             </div>
+        )}
+        
+        {/* Plan Detail Modal */}
+        {activePlan && (
+            <PlanDetail 
+                item={activePlan} 
+                onBack={() => setActivePlan(null)}
+                onCreateInspection={(template) => {
+                    setInitialFormState({ 
+                        ma_nha_may: activePlan.ma_nha_may, 
+                        headcode: activePlan.headcode, 
+                        ma_ct: activePlan.ma_ct, 
+                        ten_ct: activePlan.ten_ct, 
+                        ten_hang_muc: activePlan.ten_hang_muc, 
+                        dvt: activePlan.dvt, 
+                        so_luong_ipo: activePlan.so_luong_ipo,
+                        items: template 
+                    });
+                    setActivePlan(null);
+                    setShowModuleSelector(true);
+                }}
+                relatedInspections={inspections.filter(i => 
+                    i.ma_nha_may === activePlan.ma_nha_may || 
+                    (i.ma_ct === activePlan.ma_ct && i.ten_hang_muc === activePlan.ten_hang_muc)
+                )}
+                onViewInspection={(id) => {
+                    setActivePlan(null);
+                    handleSelectInspection(id);
+                }}
+            />
         )}
       </div>
     </div>

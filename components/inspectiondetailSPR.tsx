@@ -1,4 +1,7 @@
 
+
+
 import React from 'react';
-import { InspectionDetailPQC } from './inspectiondetailPQC';
+// Fixed casing conflict: standardized import path to Uppercase './InspectionDetailPQC' matching File 83
+import { InspectionDetailPQC } from './InspectionDetailPQC';
 export const InspectionDetailSPR: React.FC<any> = (props) => <InspectionDetailPQC {...props} />;

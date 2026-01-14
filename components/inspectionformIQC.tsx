@@ -1,11 +1,10 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, MapPin
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle
 } from 'lucide-react';
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
@@ -32,6 +31,7 @@ const PRESET_DOCS = [
 
 /**
  * Optimized Image Resize & Compress (< 100KB)
+ * Using iterative compression to guarantee size limit
  */
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
@@ -41,12 +41,16 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
+      
+      // Calculate aspect ratio to fit within maxWidth
       if (width > height) {
         if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
       } else {
         if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; }
       }
-      canvas.width = width; canvas.height = height;
+      
+      canvas.width = width; 
+      canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(base64Str); return; }
       
@@ -57,7 +61,7 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
       
-      // Target ~100KB (approx 133,333 base64 chars)
+      // Strict compression loop: Target < 100KB (approx 133,333 base64 chars)
       while (dataUrl.length > 133333 && quality > 0.1) {
         quality -= 0.1;
         dataUrl = canvas.toDataURL('image/jpeg', quality);
@@ -128,6 +132,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
+    supplierAddress: initialData?.supplierAddress || '', 
     location: initialData?.location || '',
     reportImage: initialData?.reportImage || '',
     reportImages: initialData?.reportImages || (initialData?.reportImage ? [initialData.reportImage] : []),
@@ -148,8 +153,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   
   // Defect Library State
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
-  const [defectSearch, setDefectSearch] = useState<Record<string, string>>({}); // Keyed by item.id
-  const [showDefectDropdown, setShowDefectDropdown] = useState<string | null>(null); // item.id
+  const [defectSearch, setDefectSearch] = useState<Record<string, string>>({}); 
+  const [showDefectDropdown, setShowDefectDropdown] = useState<string | null>(null); 
 
   // Image Editing State
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
@@ -313,8 +318,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     const { type, matIdx, itemIdx } = activeUploadContext;
     
     // Process multiple files in parallel
+    // Fixed: Added explicit "File" type to the map callback to resolve "Argument of type unknown is not assignable to parameter of type Blob"
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file) => {
+        Array.from(files).map(async (file: File) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {
@@ -430,8 +436,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsSaving(true);
     try {
         await onSave({ ...formData, status: InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection);
-    } catch (e) {
-        alert("Lỗi hệ thống khi lưu IQC.");
+    } catch (e: any) {
+        console.error(e);
+        alert(`Lỗi hệ thống khi lưu IQC: ${e.message || 'Unknown Error'}`);
     } finally { setIsSaving(false); }
   };
 

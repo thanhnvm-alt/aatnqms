@@ -114,6 +114,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
   const [managerSig, setManagerSig] = useState('');
   const [prodSig, setProdSig] = useState(inspection.productionSignature || '');
   const [prodName, setProdName] = useState(inspection.productionName || '');
+  const [prodComment, setProdComment] = useState(inspection.productionComment || '');
 
   const isAdmin = user.role === 'ADMIN';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -148,7 +149,11 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
       if (!onApprove) return;
       setIsProcessing(true);
       try {
-          await onApprove(inspection.id, "", { signature: prodSig, name: prodName.toUpperCase() });
+          await onApprove(inspection.id, "", { 
+              signature: prodSig, 
+              name: prodName.toUpperCase(),
+              comment: prodComment
+          });
           alert("Đã xác nhận từ đại diện Nhà cung cấp.");
           setShowProductionModal(false);
       } catch (e) { alert("Lỗi xác nhận."); } finally { setIsProcessing(false); }
@@ -362,6 +367,11 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         <p className="text-[9px] font-bold text-slate-400 uppercase">Họ và Tên</p>
                         <p className="text-[11px] font-bold text-slate-800 uppercase">{inspection.productionName || prodName || '---'}</p>
                     </div>
+                    {inspection.productionComment && (
+                        <div className="bg-orange-50 p-2 rounded-lg border border-orange-100 mt-1">
+                             <p className="text-[9px] font-bold text-orange-700 italic leading-tight">"{inspection.productionComment}"</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-2">
@@ -498,6 +508,15 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                               value={prodName} onChange={e => setProdName(e.target.value.toUpperCase())}
                               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-[11px] uppercase focus:ring-2 focus:ring-indigo-500 outline-none h-10"
                               placeholder="NHẬP HỌ TÊN..."
+                          />
+                      </div>
+                      <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Ghi chú (Tùy chọn)</label>
+                          <textarea
+                              value={prodComment}
+                              onChange={e => setProdComment(e.target.value)}
+                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-[11px] focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none"
+                              placeholder="Nhập ghi chú hoặc ý kiến..."
                           />
                       </div>
                       <SignaturePad label="Chữ ký xác nhận" value={prodSig} onChange={setProdSig} />

@@ -1,20 +1,24 @@
 
 import React, { useState } from 'react';
-import { PlanItem, CheckItem, CheckStatus } from '../types';
+import { PlanItem, CheckItem, CheckStatus, Inspection, InspectionStatus } from '../types';
 import { PQC_CHECKLIST_TEMPLATE } from '../constants';
 import { 
   X, Calendar, Building2, Box, Hash, Edit3, Plus, 
   CheckCircle2, ArrowRight, Save, Trash2, GripVertical,
-  ClipboardCheck, Info, Tag, Clock
+  ClipboardCheck, Info, Tag, Clock, FileText, User, ChevronRight, AlertOctagon
 } from 'lucide-react';
 
 interface PlanDetailProps {
   item: PlanItem;
   onBack: () => void;
   onCreateInspection: (customItems: CheckItem[]) => void;
+  relatedInspections?: Inspection[];
+  onViewInspection: (id: string) => void;
 }
 
-export const PlanDetail: React.FC<PlanDetailProps> = ({ item, onBack, onCreateInspection }) => {
+export const PlanDetail: React.FC<PlanDetailProps> = ({ 
+    item, onBack, onCreateInspection, relatedInspections = [], onViewInspection 
+}) => {
   // Khởi tạo checklist từ template PQC mặc định
   const [checklist, setChecklist] = useState<CheckItem[]>(() => {
       return JSON.parse(JSON.stringify(PQC_CHECKLIST_TEMPLATE));
@@ -50,7 +54,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({ item, onBack, onCreateIn
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0f172a]/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-300">
         
-        {/* Header - Dark Theme (Match Screenshot) */}
+        {/* Header - Dark Theme */}
         <div className="bg-[#1e293b] p-6 relative shrink-0">
             <button 
                 onClick={onBack} 
@@ -123,6 +127,51 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({ item, onBack, onCreateIn
                 </div>
             </div>
 
+            {/* Related Inspections Section */}
+            {relatedInspections.length > 0 && (
+                <div className="space-y-3">
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <FileText className="w-4 h-4 text-green-600"/> Phiếu đã tạo ({relatedInspections.length})
+                    </h3>
+                    <div className="space-y-2">
+                        {relatedInspections.map(insp => {
+                            const ncrCount = insp.items.filter(i => i.status === CheckStatus.FAIL).length;
+                            return (
+                                <div 
+                                    key={insp.id}
+                                    onClick={() => onViewInspection(insp.id)}
+                                    className="bg-white border border-slate-200 p-3 rounded-2xl flex items-center justify-between cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-xl ${
+                                            insp.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-600' :
+                                            insp.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            <ClipboardCheck className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase text-slate-700">{insp.type} - {insp.id.split('-').pop()}</p>
+                                            <div className="flex items-center gap-2 text-[9px] text-slate-400 font-medium">
+                                                <span className="flex items-center gap-1"><User className="w-2.5 h-2.5"/> {insp.inspectorName}</span>
+                                                <span>{insp.date}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {ncrCount > 0 && (
+                                            <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[8px] font-black border border-red-100 flex items-center gap-1">
+                                                <AlertOctagon className="w-2.5 h-2.5"/> {ncrCount}
+                                            </span>
+                                        )}
+                                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500" />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             {/* Checklist Selection */}
             <div className="bg-blue-50/30 rounded-[2rem] border border-blue-100 overflow-hidden shadow-sm">
                 <div className="px-6 py-4 border-b border-blue-50 flex items-center justify-between">
@@ -146,7 +195,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({ item, onBack, onCreateIn
                     </div>
                 </div>
                 
-                <div className="p-4 space-y-4 max-h-[350px] overflow-y-auto no-scrollbar">
+                <div className="p-4 space-y-4 max-h-[250px] overflow-y-auto no-scrollbar">
                     {checklist.map((check, idx) => (
                         <div key={check.id} className="flex items-start gap-4 group">
                             <div className="w-2 h-2 rounded-full bg-blue-400 mt-2 shrink-0 shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
@@ -186,13 +235,13 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({ item, onBack, onCreateIn
                 onClick={() => onCreateInspection(checklist)}
                 className="order-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl text-sm font-black uppercase tracking-[0.1em] shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
             >
-                Bắt đầu kiểm tra <ArrowRight className="w-5 h-5" />
+                <Plus className="w-5 h-5" /> Tạo phiếu mới
             </button>
             <button 
                 onClick={onBack}
                 className="order-2 bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-2xl text-sm font-black uppercase tracking-[0.1em] active:scale-[0.98] transition-all"
             >
-                Hủy bỏ
+                Đóng
             </button>
         </div>
 
