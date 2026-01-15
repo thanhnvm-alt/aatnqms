@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
@@ -318,9 +319,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     const { type, matIdx, itemIdx } = activeUploadContext;
     
     // Process multiple files in parallel
-    // Fixed: Added explicit "File" type to the map callback to resolve "Argument of type unknown is not assignable to parameter of type Blob"
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file: File) => {
+        Array.from(files).map(async (file) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {

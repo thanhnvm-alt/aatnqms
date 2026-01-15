@@ -19,6 +19,7 @@ import {
 } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { InspectionList } from './components/InspectionList';
+import { InspectionListPQC } from './components/InspectionListPQC'; 
 import { InspectionFormPQC } from './components/inspectionformPQC';
 import { InspectionFormIQC } from './components/inspectionformIQC';
 import { InspectionFormSQC_VT } from './components/inspectionformSQC_VT';
@@ -28,7 +29,7 @@ import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
 import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
-import { InspectionDetailPQC } from './components/InspectionDetailPQC';
+import { InspectionDetailPQC } from './components/InspectionDetailPQC'; 
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
 import { InspectionDetailSQC_BTP } from './components/inspectiondetailSQC_BTP';
@@ -69,7 +70,9 @@ import {
   fetchTemplates, 
   saveTemplate, 
   importPlans, 
+  importInspections, 
   fetchProjects, 
+  fetchProjectByCode,
   createNotification
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
@@ -267,9 +270,13 @@ const App = () => {
   };
 
   const handleSidebarNavigate = (id: string) => {
-      // PQC_MODE removed per request, fallback to generic list
-      if (id === 'LIST') setCurrentModule('ALL');
-      setView(id as ViewState);
+      if (id === 'PQC_MODE') {
+          setCurrentModule('PQC');
+          setView('LIST');
+      } else {
+          if (id === 'LIST') setCurrentModule('ALL'); // Reset to generic list
+          setView(id as ViewState);
+      }
   };
 
   const renderForm = () => {
@@ -308,6 +315,20 @@ const App = () => {
   };
 
   const renderList = () => {
+      // If current module is specifically 'PQC', use the specialized component
+      if (currentModule === 'PQC') {
+          return (
+              <InspectionListPQC 
+                  inspections={inspections} 
+                  onSelect={handleSelectInspection} 
+                  onRefresh={loadInspections} 
+                  isLoading={isLoadingInspections} 
+                  workshops={workshops} 
+              />
+          );
+      }
+      
+      // Default Generic List
       return (
           <InspectionList 
               inspections={inspections} 
@@ -387,7 +408,7 @@ const App = () => {
             </div>
         )}
         
-        {/* Plan Detail Modal */}
+        {/* Plan Detail Modal - Rendered globally to avoid navigating away if needed, or just cleaner */}
         {activePlan && (
             <PlanDetail 
                 item={activePlan} 
@@ -401,7 +422,7 @@ const App = () => {
                         ten_hang_muc: activePlan.ten_hang_muc, 
                         dvt: activePlan.dvt, 
                         so_luong_ipo: activePlan.so_luong_ipo,
-                        items: template 
+                        items: template // Pass the checklist from PlanDetail if available
                     });
                     setActivePlan(null);
                     setShowModuleSelector(true);

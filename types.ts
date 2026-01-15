@@ -1,7 +1,4 @@
 
-
-
-
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -231,15 +228,6 @@ export interface Inspection {
   confirmedDate?: string;
   comments?: NCRComment[];
   updatedAt?: string;
-  // Added created_at and updated_at properties (Unix timestamps) to fix destructuring errors in tursoService.ts
-  created_at?: number;
-  updated_at?: number;
-  // Added missing properties to fix type errors in InspectionList.tsx
-  qty_total?: number;
-  qty_pass?: number;
-  qty_fail?: number;
-  sl_ipo?: number;
-  stage?: string;
   supplier?: string;
   supplierAddress?: string; // MỚI: Địa chỉ nhà cung cấp
   location?: string; // GPS Coordinates of Supplier/Site

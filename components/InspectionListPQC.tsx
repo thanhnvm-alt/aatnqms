@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop } from '../types';
 import { 
@@ -276,8 +277,7 @@ export const InspectionListPQC: React.FC<InspectionListPQCProps> = ({
                                                 <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{pKey === 'NO_PROJECT' ? 'Dự án khác' : pKey}</h4>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                {/* Fixed: cast items as Inspection[] to resolve mapping error */}
-                                                {(items as Inspection[]).map(item => {
+                                                {items.map(item => {
                                                     // Map Data from forms_pqc table schema
                                                     const iTotal = Number(getField(item, 'qty_total', 'inspectedQuantity', 0));
                                                     // Use calculated pass/fail if available, else derive

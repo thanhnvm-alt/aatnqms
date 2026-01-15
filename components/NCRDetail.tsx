@@ -32,15 +32,7 @@ const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
       else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); 
-          let quality = 0.7;
-          let dataUrl = canvas.toDataURL('image/jpeg', quality);
-          while (dataUrl.length > 133333 && quality > 0.1) {
-              quality -= 0.1;
-              dataUrl = canvas.toDataURL('image/jpeg', quality);
-          }
-          resolve(dataUrl); 
-      }
+      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
       else resolve(base64Str);
     };
     img.onerror = () => resolve(base64Str);
@@ -65,7 +57,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const [showLibrary, setShowLibrary] = useState(false);
 
   // UI State
-  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; isEditing?: boolean } | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
 
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
@@ -224,23 +216,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           });
           setIsEditing(true);
       }
-  };
-
-  const handleAddCommentImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-      
-      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-          const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(f);
-          });
-          return resizeImage(base64);
-      }));
-      
-      setCommentAttachments(prev => [...prev, ...processed]);
-      e.target.value = '';
   };
 
   const handlePostComment = async () => {
@@ -600,12 +575,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                 {comment.attachments && comment.attachments.length > 0 && (
                                     <div className="flex gap-2 pt-1">
                                         {comment.attachments.map((att, idx) => (
-                                            <img 
-                                                key={idx} 
-                                                src={att} 
-                                                onClick={() => setLightboxState({ images: comment.attachments!, index: idx })} 
-                                                className="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-zoom-in" 
-                                            />
+                                            <img key={idx} src={att} onClick={() => openGallery(comment.attachments!, idx)} className="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-zoom-in" />
                                         ))}
                                     </div>
                                 )}
@@ -616,27 +586,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 </div>
 
                 <div className="p-3 border-t border-slate-100 bg-slate-50">
-                    {/* Image Preview before sending */}
-                    {commentAttachments.length > 0 && (
-                        <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
-                            {commentAttachments.map((img, idx) => (
-                                <div key={idx} className="relative w-16 h-16 shrink-0 group">
-                                    <img 
-                                        src={img} 
-                                        className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer" 
-                                        onClick={() => setLightboxState({ images: commentAttachments, index: idx, isEditing: true })}
-                                    />
-                                    <button 
-                                        onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))}
-                                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-sm"
-                                    >
-                                        <X className="w-2.5 h-2.5" />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    
                     <div className="flex items-start gap-3">
                         <div className="flex-1 relative">
                             <textarea 
@@ -665,24 +614,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
         </div>
       </div>
 
-      {lightboxState && (
-          <ImageEditorModal 
-            images={lightboxState.images} 
-            initialIndex={lightboxState.index} 
-            onClose={() => setLightboxState(null)} 
-            readOnly={!lightboxState.isEditing}
-            onSave={(idx, newImg) => {
-                // If editing from the comment preview
-                if (lightboxState.isEditing) {
-                    setCommentAttachments(prev => {
-                        const next = [...prev];
-                        next[idx] = newImg;
-                        return next;
-                    });
-                }
-            }}
-          />
-      )}
+      {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
       
       <input type="file" ref={beforeFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
       <input type="file" ref={beforeCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
@@ -690,22 +622,16 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       <input type="file" ref={afterFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
       <input type="file" ref={afterCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
 
-      <input 
-          type="file" 
-          ref={commentFileRef} 
-          className="hidden" 
-          multiple 
-          accept="image/*" 
-          onChange={handleAddCommentImage} 
-      />
-      <input 
-          type="file" 
-          ref={commentCameraRef} 
-          className="hidden" 
-          accept="image/*" 
-          capture="environment" 
-          onChange={handleAddCommentImage} 
-      />
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={async (e) => {
+           const files = e.target.files; if(!files) return;
+           const processed = await Promise.all(Array.from(files).map(async (f: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(f);}))));
+           setCommentAttachments(prev => [...prev, ...processed]);
+      }} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={async (e) => {
+           const files = e.target.files; if(!files) return;
+           const processed = await Promise.all(Array.from(files).map(async (f: File) => await resizeImage(await new Promise<string>(res => {const r=new FileReader(); r.onload=()=>res(r.result as string); r.readAsDataURL(f);}))));
+           setCommentAttachments(prev => [...prev, ...processed]);
+      }} />
     </div>
   );
 };

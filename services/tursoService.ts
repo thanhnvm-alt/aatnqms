@@ -43,31 +43,19 @@ export const initDatabase = async () => {
     await turso.execute(`CREATE TABLE IF NOT EXISTS forms_iqc (id TEXT PRIMARY KEY, po_number TEXT, supplier TEXT, supplier_address TEXT, inspection_date TEXT, inspector_name TEXT, status TEXT, reference_docs TEXT, data TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS forms_sqc_vt (id TEXT PRIMARY KEY, po_number TEXT, supplier TEXT, supplier_address TEXT, location TEXT, inspection_date TEXT, inspector_name TEXT, status TEXT, data TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS forms_sqc_btp (id TEXT PRIMARY KEY, po_number TEXT, supplier TEXT, supplier_address TEXT, location TEXT, inspection_date TEXT, inspector_name TEXT, status TEXT, data TEXT, created_at INTEGER, updated_at INTEGER)`);
-    
-    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_pqc (
-        id TEXT PRIMARY KEY, 
-        ma_ct TEXT, 
-        ten_ct TEXT, 
-        ten_hang_muc TEXT,
-        ma_nha_may TEXT, 
-        workshop TEXT, 
-        stage TEXT, 
-        inspector TEXT, 
-        status TEXT, 
-        qty_total REAL, 
-        qty_pass REAL, 
-        qty_fail REAL, 
-        sl_ipo REAL,
-        dvt TEXT,
-        data TEXT, 
-        created_at INTEGER, 
-        updated_at INTEGER, 
-        created_by TEXT
-    )`);
-    
+    await turso.execute(`CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, ma_nha_may TEXT, workshop TEXT, stage TEXT, inspector TEXT, status TEXT, qty_total REAL, qty_pass REAL, qty_fail REAL, data TEXT, created_at INTEGER, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS forms_site (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, location TEXT, inspector TEXT, status TEXT, data TEXT, created_at INTEGER, updated_at INTEGER)`);
 
-    await ensureTableColumns('forms_pqc', ['sl_ipo', 'dvt', 'ten_hang_muc', 'created_by']);
+    try { await turso.execute("ALTER TABLE workshops ADD COLUMN code TEXT"); await turso.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_workshops_code ON workshops(code)"); } catch (e) {}
+    try { await turso.execute("ALTER TABLE workshops ADD COLUMN name TEXT"); } catch (e) {}
+    try { await turso.execute("ALTER TABLE workshops ADD COLUMN created_at INTEGER"); } catch (e) {}
+    try { await turso.execute("ALTER TABLE workshops ADD COLUMN updated_at INTEGER"); } catch (e) {}
+    
+    await ensureTableColumns('forms_iqc', ['po_number', 'supplier', 'supplier_address', 'inspection_date', 'inspector_name', 'status', 'reference_docs', 'data']);
+    await ensureTableColumns('forms_sqc_vt', ['po_number', 'supplier', 'supplier_address', 'location', 'inspection_date', 'inspector_name', 'status', 'data', 'created_at', 'updated_at']);
+    await ensureTableColumns('forms_sqc_btp', ['po_number', 'supplier', 'supplier_address', 'location', 'inspection_date', 'inspector_name', 'status', 'data', 'created_at', 'updated_at']);
+    await ensureTableColumns('forms_pqc', ['ma_ct', 'ten_ct', 'ma_nha_may', 'workshop', 'stage', 'inspector', 'status', 'qty_total', 'qty_pass', 'qty_fail', 'data', 'created_at', 'updated_at', 'created_by']);
+    await ensureTableColumns('forms_site', ['ma_ct', 'ten_ct', 'location', 'inspector', 'status', 'data', 'created_at', 'updated_at']);
 
     console.log("✅ QMS Database initialized and verified.");
   } catch (e: any) {
@@ -187,18 +175,42 @@ export const importPlansBatch = async (plans: PlanItem[]) => {
 };
 
 export const getInspectionsPaginated = async (filters: any) => {
-    const { page = 1, limit = 20, status, type } = filters;
+    const { page = 1, limit = 20, status, type, ma_ct } = filters;
     const offset = (page - 1) * limit;
     
-    let sqlIns = `SELECT id, data, created_at, 'GENERIC' as src, created_by as col5, ma_ct as col_ma_ct, ten_ct as col_ten_ct, ten_hang_muc as col_ten_hang_muc, ma_nha_may as col_ma_nha_may, NULL as col_qty_total, NULL as col_qty_pass, NULL as col_qty_fail, NULL as col_sl_ipo, NULL as col_dvt FROM inspections WHERE 1=1`;
-    let sqlIqc = `SELECT id, data, created_at, 'IQC' as src, inspector_name as col5, NULL as col_ma_ct, NULL as col_ten_ct, NULL as col_ten_hang_muc, po_number as col_ma_nha_may, NULL as col_qty_total, NULL as col_qty_pass, NULL as col_qty_fail, NULL as col_sl_ipo, NULL as col_dvt FROM forms_iqc WHERE 1=1`;
-    let sqlPqc = `SELECT id, data, created_at, 'PQC' as src, created_by as col5, ma_ct as col_ma_ct, ten_ct as col_ten_ct, ten_hang_muc as col_ten_hang_muc, ma_nha_may as col_ma_nha_may, qty_total as col_qty_total, qty_pass as col_qty_pass, qty_fail as col_qty_fail, sl_ipo as col_sl_ipo, dvt as col_dvt FROM forms_pqc WHERE 1=1`;
-    let sqlSqcVt = `SELECT id, data, created_at, 'SQC_MAT' as src, inspector_name as col5, NULL as col_ma_ct, NULL as col_ten_ct, NULL as col_ten_hang_muc, po_number as col_ma_nha_may, NULL as col_qty_total, NULL as col_qty_pass, NULL as col_qty_fail, NULL as col_sl_ipo, NULL as col_dvt FROM forms_sqc_vt WHERE 1=1`;
-    let sqlSqcBtp = `SELECT id, data, created_at, 'SQC_BTP' as src, inspector_name as col5, NULL as col_ma_ct, NULL as col_ten_ct, NULL as col_ten_hang_muc, po_number as col_ma_nha_may, NULL as col_qty_total, NULL as col_qty_pass, NULL as col_qty_fail, NULL as col_sl_ipo, NULL as col_dvt FROM forms_sqc_btp WHERE 1=1`;
-    let sqlSite = `SELECT id, data, created_at, 'SITE' as src, inspector as col5, ma_ct as col_ma_ct, ten_ct as col_ten_ct, NULL as col_ten_hang_muc, NULL as col_ma_nha_may, NULL as col_qty_total, NULL as col_qty_pass, NULL as col_qty_fail, NULL as col_sl_ipo, NULL as col_dvt FROM forms_site WHERE 1=1`;
+    // Updated queries to include explicit columns for all tables
+    // Common columns alias:
+    // col1: stage/location
+    // col2: qty_total / total
+    // col3: qty_pass
+    // col4: qty_fail
+    // col5: inspector / created_by
+    // col_ma_ct: ma_ct
+    // col_ten_ct: ten_ct
+    // col_ten_hang_muc: ten_hang_muc
+    // col_ma_nha_may: ma_nha_may/po_number
+    // col_created_by: created_by (explicit for PQC)
+    
+    let sqlIns = `SELECT id, data, created_at, 'GENERIC' as src, NULL as col1, NULL as col2, NULL as col3, NULL as col4, created_by as col5, ma_ct as col_ma_ct, ten_ct as col_ten_ct, ten_hang_muc as col_ten_hang_muc, ma_nha_may as col_ma_nha_may FROM inspections WHERE 1=1`;
+    
+    let sqlIqc = `SELECT id, data, created_at, 'IQC' as src, NULL as col1, NULL as col2, NULL as col3, NULL as col4, inspector_name as col5, NULL as col_ma_ct, NULL as col_ten_ct, NULL as col_ten_hang_muc, po_number as col_ma_nha_may FROM forms_iqc WHERE 1=1`;
+    
+    // Updated PQC query: Use 'created_by' as the primary inspector field (col5) and select 'ten_hang_muc' explicitly
+    let sqlPqc = `SELECT id, data, created_at, 'PQC' as src, stage as col1, qty_total as col2, qty_pass as col3, qty_fail as col4, created_by as col5, ma_ct as col_ma_ct, ten_ct as col_ten_ct, ten_hang_muc as col_ten_hang_muc, ma_nha_may as col_ma_nha_may FROM forms_pqc WHERE 1=1`;
+    
+    let sqlSqcVt = `SELECT id, data, created_at, 'SQC_MAT' as src, NULL as col1, NULL as col2, NULL as col3, NULL as col4, inspector_name as col5, NULL as col_ma_ct, NULL as col_ten_ct, NULL as col_ten_hang_muc, po_number as col_ma_nha_may FROM forms_sqc_vt WHERE 1=1`;
+    
+    let sqlSqcBtp = `SELECT id, data, created_at, 'SQC_BTP' as src, NULL as col1, NULL as col2, NULL as col3, NULL as col4, inspector_name as col5, NULL as col_ma_ct, NULL as col_ten_ct, NULL as col_ten_hang_muc, po_number as col_ma_nha_may FROM forms_sqc_btp WHERE 1=1`;
+    
+    let sqlSite = `SELECT id, data, created_at, 'SITE' as src, location as col1, NULL as col2, NULL as col3, NULL as col4, inspector as col5, ma_ct as col_ma_ct, ten_ct as col_ten_ct, NULL as col_ten_hang_muc, NULL as col_ma_nha_may FROM forms_site WHERE 1=1`;
     
     if (status && status !== 'ALL') { 
-        sqlIns += ` AND status = '${status}'`; sqlIqc += ` AND status = '${status}'`; sqlPqc += ` AND status = '${status}'`; sqlSqcVt += ` AND status = '${status}'`; sqlSqcBtp += ` AND status = '${status}'`; sqlSite += ` AND status = '${status}'`;
+        sqlIns += ` AND status = '${status}'`; 
+        sqlIqc += ` AND status = '${status}'`;
+        sqlPqc += ` AND status = '${status}'`;
+        sqlSqcVt += ` AND status = '${status}'`;
+        sqlSqcBtp += ` AND status = '${status}'`;
+        sqlSite += ` AND status = '${status}'`;
     }
     
     if (type && type !== 'ALL') { 
@@ -210,43 +222,103 @@ export const getInspectionsPaginated = async (filters: any) => {
         if (type !== 'SITE') sqlSite += ` AND 1=0`;
     }
     
-    const combinedSql = `SELECT * FROM (${sqlIns} UNION ALL ${sqlIqc} UNION ALL ${sqlPqc} UNION ALL ${sqlSqcVt} UNION ALL ${sqlSqcBtp} UNION ALL ${sqlSite}) ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-    const res = await turso.execute({ sql: combinedSql, args: [limit, offset] });
+    const combinedSql = `
+        SELECT * FROM (
+            ${sqlIns}
+            UNION ALL
+            ${sqlIqc}
+            UNION ALL
+            ${sqlPqc}
+            UNION ALL
+            ${sqlSqcVt}
+            UNION ALL
+            ${sqlSqcBtp}
+            UNION ALL
+            ${sqlSite}
+        ) 
+        ORDER BY created_at DESC 
+        LIMIT ? OFFSET ?
+    `;
+    
+    const res = await turso.execute({ 
+        sql: combinedSql, 
+        args: [limit, offset] 
+    });
 
     const items = res.rows.map(r => {
         const jsonData = JSON.parse(r.data as string || '{}');
         const base = { ...jsonData, id: r.id, created_at: r.created_at };
+        
+        // Merge explicit columns if JSON is missing data (Common issue with PQC)
         if (r.col_ma_ct) base.ma_ct = r.col_ma_ct;
         if (r.col_ten_ct) base.ten_ct = r.col_ten_ct;
         if (r.col_ma_nha_may) base.ma_nha_may = r.col_ma_nha_may;
         if (r.col_ten_hang_muc) base.ten_hang_muc = r.col_ten_hang_muc;
-        
-        if (r.src === 'PQC') {
+
+        if (r.src === 'IQC') {
+            base.type = 'IQC';
+            if (r.col5) base.inspectorName = r.col5;
+        } else if (r.src === 'PQC') {
             base.type = 'PQC';
-            base.qty_total = r.col_qty_total;
-            base.qty_pass = r.col_qty_pass;
-            base.qty_fail = r.col_qty_fail;
-            base.sl_ipo = r.col_sl_ipo;
-            base.dvt = r.col_dvt;
-            base.inspectedQuantity = r.col_qty_total;
-            base.passedQuantity = r.col_qty_pass;
-            base.failedQuantity = r.col_qty_fail;
-            base.so_luong_ipo = r.col_sl_ipo;
+            if (r.col1) { base.stage = r.col1; base.inspectionStage = r.col1; }
+            if (r.col2 !== null) { base.qty_total = r.col2; base.inspectedQuantity = r.col2; }
+            if (r.col3 !== null) { base.qty_pass = r.col3; base.passedQuantity = r.col3; }
+            if (r.col4 !== null) { base.qty_fail = r.col4; base.failedQuantity = r.col4; }
+            if (r.col5) { base.inspector = r.col5; base.inspectorName = r.col5; base.created_by = r.col5; }
+            
+            // Map created_at to date for List View
+            if (r.created_at && !base.date) {
+                 if (typeof r.created_at === 'number') {
+                     base.date = new Date(r.created_at * 1000).toISOString().split('T')[0];
+                 } else {
+                     base.date = String(r.created_at).split(' ')[0];
+                 }
+            }
+        } else if (r.src === 'SQC_MAT') {
+            base.type = 'SQC_MAT';
+            if (r.col5) base.inspectorName = r.col5;
+        } else if (r.src === 'SQC_BTP') {
+            base.type = 'SQC_BTP';
+            if (r.col5) base.inspectorName = r.col5;
+        } else if (r.src === 'SITE') {
+            base.type = 'SITE';
+            if (r.col1) base.location = r.col1;
+            if (r.col5) base.inspectorName = r.col5;
         }
+        
         return base;
     });
     
-    return { items, total: 100 };
+    return { items, total: 100 }; // Pagination count to be improved
 };
 
 export const getInspectionById = async (id: string): Promise<Inspection | null> => {
-    let res = await turso.execute({ sql: `SELECT data FROM inspections WHERE id = ?`, args: [id] });
+    // Check Generic
+    let res = await turso.execute({ sql: `SELECT data FROM inspections WHERE id = ?`, args: cleanArgs([id]) });
     if (res.rows.length > 0) return processInspectionResult(res.rows[0].data as string, id);
 
-    res = await turso.execute({ sql: `SELECT * FROM forms_pqc WHERE id = ?`, args: [id] });
+    // Check IQC
+    res = await turso.execute({ sql: `SELECT data FROM forms_iqc WHERE id = ?`, args: cleanArgs([id]) });
+    if (res.rows.length > 0) return processInspectionResult(res.rows[0].data as string, id, 'IQC');
+
+    // Check PQC
+    res = await turso.execute({ sql: `SELECT * FROM forms_pqc WHERE id = ?`, args: cleanArgs([id]) });
     if (res.rows.length > 0) {
+        // Merge columns into JSON data for PQC to ensure data integrity
         const row = res.rows[0];
         const json = JSON.parse(row.data as string || '{}');
+        
+        // Map created_at to date
+        let mappedDate = json.date;
+        if (row.created_at) {
+             // Try to format it nicely or just use it
+             if (typeof row.created_at === 'number') {
+                 mappedDate = new Date(row.created_at * 1000).toISOString().split('T')[0];
+             } else {
+                 mappedDate = String(row.created_at).split(' ')[0];
+             }
+        }
+
         const merged = {
             ...json,
             id: row.id,
@@ -257,74 +329,157 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             workshop: row.workshop || json.workshop,
             inspectionStage: row.stage || json.inspectionStage,
             inspectorName: row.created_by || row.inspector || json.inspectorName,
-            qty_total: row.qty_total ?? json.qty_total,
-            qty_pass: row.qty_pass ?? json.qty_pass,
-            qty_fail: row.qty_fail ?? json.qty_fail,
-            sl_ipo: row.sl_ipo ?? json.sl_ipo,
-            dvt: row.dvt ?? json.dvt,
             inspectedQuantity: row.qty_total ?? json.inspectedQuantity,
             passedQuantity: row.qty_pass ?? json.passedQuantity,
             failedQuantity: row.qty_fail ?? json.failedQuantity,
-            so_luong_ipo: row.sl_ipo ?? json.so_luong_ipo,
-            created_at: row.created_at
+            created_at: row.created_at,
+            date: mappedDate
         };
         return processInspectionResult(JSON.stringify(merged), id, 'PQC');
     }
 
-    const tables = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_site'];
-    const types = ['IQC', 'SQC_MAT', 'SQC_BTP', 'SITE'];
-    for(let i=0; i<tables.length; i++) {
-        res = await turso.execute({ sql: `SELECT data FROM ${tables[i]} WHERE id = ?`, args: [id] });
-        if (res.rows.length > 0) return processInspectionResult(res.rows[0].data as string, id, types[i]);
-    }
+    // Check SQC_VT
+    res = await turso.execute({ sql: `SELECT data FROM forms_sqc_vt WHERE id = ?`, args: cleanArgs([id]) });
+    if (res.rows.length > 0) return processInspectionResult(res.rows[0].data as string, id, 'SQC_MAT');
+
+    // Check SQC_BTP
+    res = await turso.execute({ sql: `SELECT data FROM forms_sqc_btp WHERE id = ?`, args: cleanArgs([id]) });
+    if (res.rows.length > 0) return processInspectionResult(res.rows[0].data as string, id, 'SQC_BTP');
+
+    // Check SITE
+    res = await turso.execute({ sql: `SELECT data FROM forms_site WHERE id = ?`, args: cleanArgs([id]) });
+    if (res.rows.length > 0) return processInspectionResult(res.rows[0].data as string, id, 'SITE');
+
     return null;
 };
 
 const processInspectionResult = async (dataStr: string, id: string, forceType?: string): Promise<Inspection> => {
     const inspection: Inspection = JSON.parse(dataStr);
     if (forceType) inspection.type = forceType as any;
+    
+    // Safety check for arrays
     if (!inspection.items) inspection.items = [];
+    
     const ncrs = await getNcrs({ inspection_id: id });
-    if (ncrs.length > 0 && inspection.items) {
-        inspection.items = inspection.items.map(item => {
-            const relatedNcr = ncrs.find(n => n.itemId === item.id || n.id === item.ncr?.id);
-            if (relatedNcr) return { ...item, ncr: relatedNcr, ncrId: relatedNcr.id };
-            return item;
-        });
+    if (ncrs.length > 0) {
+        if (inspection.items) {
+            inspection.items = inspection.items.map(item => {
+                const relatedNcr = ncrs.find(n => n.itemId === item.id || n.id === item.ncr?.id);
+                if (relatedNcr) { return { ...item, ncr: relatedNcr, ncrId: relatedNcr.id }; }
+                return item;
+            });
+        }
+        if (inspection.materials) {
+             inspection.materials = inspection.materials.map((mat: any) => ({
+                ...mat,
+                items: mat.items.map((item: any) => {
+                    const relatedNcr = ncrs.find(n => n.itemId === item.id);
+                    if (relatedNcr) return { ...item, ncr: relatedNcr, ncrId: relatedNcr.id };
+                    return item;
+                })
+            }));
+        }
     }
     return inspection;
 };
 
+// ... IQC Save Logic (Existing) ...
+export const saveIQCForm = async (inspection: Inspection) => {
+    try {
+        const now = Math.floor(Date.now() / 1000);
+        // Save mapped NCRs first
+        if (inspection.materials) {
+            for (const mat of inspection.materials) {
+                if (mat.items) {
+                    for (const item of mat.items) {
+                        if (item.ncr) {
+                            await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
+                        }
+                    }
+                }
+            }
+        }
+        const jsonPayload = {
+            materials: inspection.materials?.map((m: any) => ({
+                ...m,
+                items: (m.items || []).map((i: any) => { const { ncr, ...itemData } = i; return itemData; })
+            })) || [],
+            images: inspection.images || [],
+            deliveryNoteImages: inspection.deliveryNoteImages || [],
+            reportImages: inspection.reportImages || [],
+            deliveryNoteImage: inspection.deliveryNoteImage,
+            reportImage: inspection.reportImage,
+            summary: inspection.summary,
+            signature: inspection.signature,
+            supplierAddress: inspection.supplierAddress,
+            // Store common fields in JSON too for easier retrieval if columns missing
+            ...inspection
+        };
+
+        const supplierAddress = inspection.supplierAddress || null;
+
+        await turso.execute({
+            sql: `INSERT INTO forms_iqc (
+                id, po_number, supplier, supplier_address, inspection_date, inspector_name, 
+                status, reference_docs, data, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET 
+                po_number = excluded.po_number,
+                supplier = excluded.supplier,
+                supplier_address = excluded.supplier_address,
+                inspection_date = excluded.inspection_date,
+                inspector_name = excluded.inspector_name,
+                status = excluded.status,
+                reference_docs = excluded.reference_docs,
+                data = excluded.data,
+                updated_at = excluded.updated_at`,
+            args: cleanArgs([
+                inspection.id,
+                inspection.po_number,
+                inspection.supplier,
+                supplierAddress,
+                inspection.date,
+                inspection.inspectorName,
+                inspection.status,
+                JSON.stringify(inspection.referenceDocs || []),
+                JSON.stringify(jsonPayload),
+                now,
+                now
+            ])
+        });
+    } catch (e: any) {
+        console.error("SQL Error in saveIQCForm:", e);
+        throw new Error(`DB Error: ${e.message}`);
+    }
+};
+
+/**
+ * Saves PQC Form specifically to forms_pqc table
+ */
 export const savePQCForm = async (inspection: Inspection) => {
     try {
         const now = Math.floor(Date.now() / 1000);
+
+        // Save mapped NCRs first
         if (inspection.items) {
             for (const item of inspection.items) {
-                if (item.ncr) await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
+                if (item.ncr) {
+                    await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
+                }
             }
         }
-        
-        // Chuẩn hóa ISO: Loại bỏ các trường đã có cột riêng khỏi đối tượng lưu vào cột JSON data
-        const { 
-            id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, 
-            inspectionStage, inspectorName, status, inspectedQuantity, 
-            passedQuantity, failedQuantity, so_luong_ipo, dvt, 
-            created_at, updated_at, type, ...rest 
-        } = inspection;
 
-        // Xóa ncr object khỏi từng item trong data để tránh lặp lại (vì đã lưu table ncrs riêng)
-        const itemsCleaned = (rest.items || []).map((i: any) => { 
-            const { ncr, ...itemData } = i; 
-            return itemData; 
-        });
-        
-        const dataToSave = { ...rest, items: itemsCleaned };
+        // Prepare JSON Payload (Full data)
+        const jsonPayload = {
+            ...inspection,
+            items: (inspection.items || []).map((i: any) => { const { ncr, ...itemData } = i; return itemData; })
+        };
 
         await turso.execute({
             sql: `INSERT INTO forms_pqc (
                 id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, inspector, created_by, status, 
-                qty_total, qty_pass, qty_fail, sl_ipo, dvt, data, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                qty_total, qty_pass, qty_fail, data, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET 
                 ma_ct = excluded.ma_ct,
                 ten_ct = excluded.ten_ct,
@@ -338,8 +493,6 @@ export const savePQCForm = async (inspection: Inspection) => {
                 qty_total = excluded.qty_total,
                 qty_pass = excluded.qty_pass,
                 qty_fail = excluded.qty_fail,
-                sl_ipo = excluded.sl_ipo,
-                dvt = excluded.dvt,
                 data = excluded.data,
                 updated_at = excluded.updated_at`,
             args: cleanArgs([
@@ -351,15 +504,13 @@ export const savePQCForm = async (inspection: Inspection) => {
                 inspection.workshop,
                 inspection.inspectionStage,
                 inspection.inspectorName,
-                inspection.inspectorName,
+                inspection.inspectorName, // created_by
                 inspection.status,
-                inspection.inspectedQuantity || 0,
-                inspection.passedQuantity || 0,
-                inspection.failedQuantity || 0,
-                inspection.so_luong_ipo || 0,
-                inspection.dvt || 'PCS',
-                JSON.stringify(dataToSave),
-                created_at || now,
+                inspection.inspectedQuantity,
+                inspection.passedQuantity,
+                inspection.failedQuantity,
+                JSON.stringify(jsonPayload),
+                now,
                 now
             ])
         });
@@ -369,27 +520,242 @@ export const savePQCForm = async (inspection: Inspection) => {
     }
 };
 
+/**
+ * Saves SQC-VT Form specifically to forms_sqc_vt table
+ */
+export const saveSQCVTForm = async (inspection: Inspection) => {
+    try {
+        const now = Math.floor(Date.now() / 1000);
+
+        // Save mapped NCRs first from materials
+        if (inspection.materials) {
+            for (const mat of inspection.materials) {
+                if (mat.items) {
+                    for (const item of mat.items) {
+                        if (item.ncr) {
+                            await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
+                        }
+                    }
+                }
+            }
+        }
+
+        const jsonPayload = {
+            materials: inspection.materials?.map((m: any) => ({
+                ...m,
+                items: (m.items || []).map((i: any) => { const { ncr, ...itemData } = i; return itemData; })
+            })) || [],
+            images: inspection.images || [],
+            deliveryNoteImages: inspection.deliveryNoteImages || [],
+            reportImages: inspection.reportImages || [],
+            deliveryNoteImage: inspection.deliveryNoteImage,
+            reportImage: inspection.reportImage,
+            summary: inspection.summary,
+            signature: inspection.signature,
+            supplierAddress: inspection.supplierAddress,
+            location: inspection.location,
+            ...inspection
+        };
+
+        await turso.execute({
+            sql: `INSERT INTO forms_sqc_vt (
+                id, po_number, supplier, supplier_address, location, inspection_date, 
+                inspector_name, status, data, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET 
+                po_number = excluded.po_number,
+                supplier = excluded.supplier,
+                supplier_address = excluded.supplier_address,
+                location = excluded.location,
+                inspection_date = excluded.inspection_date,
+                inspector_name = excluded.inspector_name,
+                status = excluded.status,
+                data = excluded.data,
+                updated_at = excluded.updated_at`,
+            args: cleanArgs([
+                inspection.id,
+                inspection.po_number,
+                inspection.supplier,
+                inspection.supplierAddress,
+                inspection.location,
+                inspection.date,
+                inspection.inspectorName,
+                inspection.status,
+                JSON.stringify(jsonPayload),
+                now,
+                now
+            ])
+        });
+    } catch (e: any) {
+        console.error("SQL Error in saveSQCVTForm:", e);
+        throw new Error(`DB Error: ${e.message}`);
+    }
+};
+
+/**
+ * Saves SQC-BTP Form specifically to forms_sqc_btp table
+ */
+export const saveSQCBTPForm = async (inspection: Inspection) => {
+    try {
+        const now = Math.floor(Date.now() / 1000);
+
+        // Save mapped NCRs first from materials
+        if (inspection.materials) {
+            for (const mat of inspection.materials) {
+                if (mat.items) {
+                    for (const item of mat.items) {
+                        if (item.ncr) {
+                            await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
+                        }
+                    }
+                }
+            }
+        }
+
+        const jsonPayload = {
+            materials: inspection.materials?.map((m: any) => ({
+                ...m,
+                items: (m.items || []).map((i: any) => { const { ncr, ...itemData } = i; return itemData; })
+            })) || [],
+            images: inspection.images || [],
+            deliveryNoteImages: inspection.deliveryNoteImages || [],
+            reportImages: inspection.reportImages || [],
+            deliveryNoteImage: inspection.deliveryNoteImage,
+            reportImage: inspection.reportImage,
+            summary: inspection.summary,
+            signature: inspection.signature,
+            supplierAddress: inspection.supplierAddress,
+            location: inspection.location,
+            ...inspection
+        };
+
+        await turso.execute({
+            sql: `INSERT INTO forms_sqc_btp (
+                id, po_number, supplier, supplier_address, location, inspection_date, 
+                inspector_name, status, data, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET 
+                po_number = excluded.po_number,
+                supplier = excluded.supplier,
+                supplier_address = excluded.supplier_address,
+                location = excluded.location,
+                inspection_date = excluded.inspection_date,
+                inspector_name = excluded.inspector_name,
+                status = excluded.status,
+                data = excluded.data,
+                updated_at = excluded.updated_at`,
+            args: cleanArgs([
+                inspection.id,
+                inspection.po_number,
+                inspection.supplier,
+                inspection.supplierAddress,
+                inspection.location,
+                inspection.date,
+                inspection.inspectorName,
+                inspection.status,
+                JSON.stringify(jsonPayload),
+                now,
+                now
+            ])
+        });
+    } catch (e: any) {
+        console.error("SQL Error in saveSQCBTPForm:", e);
+        throw new Error(`DB Error: ${e.message}`);
+    }
+};
+
+/**
+ * Saves SITE Form specifically to forms_site table
+ */
+export const saveSiteForm = async (inspection: Inspection) => {
+    try {
+        const now = Math.floor(Date.now() / 1000);
+
+        // Save mapped NCRs first
+        for (const item of inspection.items) {
+            if (item.ncr) {
+                await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName);
+            }
+        }
+
+        const jsonPayload = {
+            ...inspection,
+            items: inspection.items.map((i: any) => { const { ncr, ...itemData } = i; return itemData; })
+        };
+
+        await turso.execute({
+            sql: `INSERT INTO forms_site (
+                id, ma_ct, ten_ct, location, inspector, status, 
+                data, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET 
+                ma_ct = excluded.ma_ct,
+                ten_ct = excluded.ten_ct,
+                location = excluded.location,
+                inspector = excluded.inspector,
+                status = excluded.status,
+                data = excluded.data,
+                updated_at = excluded.updated_at`,
+            args: cleanArgs([
+                inspection.id,
+                inspection.ma_ct,
+                inspection.ten_ct,
+                inspection.location,
+                inspection.inspectorName,
+                inspection.status,
+                JSON.stringify(jsonPayload),
+                now,
+                now
+            ])
+        });
+    } catch (e: any) {
+        console.error("SQL Error in saveSiteForm:", e);
+        throw new Error(`DB Error: ${e.message}`);
+    }
+};
+
 export const saveInspection = async (inspection: Inspection) => {
-    if (inspection.type === 'PQC') return savePQCForm(inspection);
+    if (inspection.type === 'IQC') {
+        return saveIQCForm(inspection);
+    }
+    if (inspection.type === 'PQC') {
+        return savePQCForm(inspection);
+    }
+    if (inspection.type === 'SQC_MAT') {
+        return saveSQCVTForm(inspection);
+    }
+    if (inspection.type === 'SQC_BTP') {
+        return saveSQCBTPForm(inspection);
+    }
+    if (inspection.type === 'SITE') {
+        return saveSiteForm(inspection);
+    }
+
     const now = Math.floor(Date.now() / 1000);
+    for (const item of inspection.items) { if (item.ncr) { await saveNcrMapped(inspection.id, item.ncr, inspection.inspectorName); } }
+    
+    const slimInspection = JSON.parse(JSON.stringify(inspection));
+    slimInspection.items = slimInspection.items.map((item: any) => { if (item.ncr) { return { ...item, ncrId: item.ncr.id, ncr: { id: item.ncr.id, status: item.ncr.status } }; } return item; });
+    
     await turso.execute({
         sql: `INSERT INTO inspections (id, data, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, workshop, status, type, score) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
               ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, status = excluded.status, score = excluded.score`,
-        args: cleanArgs([inspection.id, JSON.stringify(inspection), now, now, inspection.inspectorName, inspection.ma_ct, inspection.ten_ct, inspection.ma_nha_may, inspection.ten_hang_muc, inspection.workshop, inspection.status, inspection.type, inspection.score])
+        args: cleanArgs([inspection.id, JSON.stringify(slimInspection), now, now, inspection.inspectorName, inspection.ma_ct, inspection.ten_ct, inspection.ma_nha_may, inspection.ten_hang_muc, inspection.workshop, inspection.status, inspection.type, inspection.score])
     });
 };
 
 export const deleteInspection = async (id: string) => {
-    await turso.execute({ sql: `DELETE FROM inspections WHERE id = ?`, args: [id] });
-    await turso.execute({ sql: `DELETE FROM forms_iqc WHERE id = ?`, args: [id] });
-    await turso.execute({ sql: `DELETE FROM forms_pqc WHERE id = ?`, args: [id] });
-    await turso.execute({ sql: `DELETE FROM forms_sqc_vt WHERE id = ?`, args: [id] });
-    await turso.execute({ sql: `DELETE FROM forms_sqc_btp WHERE id = ?`, args: [id] });
-    await turso.execute({ sql: `DELETE FROM forms_site WHERE id = ?`, args: [id] });
-    await turso.execute({ sql: `DELETE FROM ncrs WHERE inspection_id = ?`, args: [id] });
+    await turso.execute({ sql: `DELETE FROM inspections WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_iqc WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_pqc WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_sqc_vt WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_sqc_btp WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM forms_site WHERE id = ?`, args: cleanArgs([id]) });
+    await turso.execute({ sql: `DELETE FROM ncrs WHERE inspection_id = ?`, args: cleanArgs([id]) });
 };
 
+// ... Rest of the file (getNcrs, getNcrById, etc.) remains same ...
 export const getNcrs = async (options: { inspection_id?: string, status?: string, page?: number, limit?: number }) => {
     const { inspection_id, status, page = 1, limit = 50 } = options;
     const offset = (page - 1) * limit;
@@ -420,7 +786,7 @@ export const getNcrs = async (options: { inspection_id?: string, status?: string
 };
 
 export const getNcrById = async (id: string): Promise<NCR | null> => {
-    const res = await turso.execute({ sql: `SELECT * FROM ncrs WHERE id = ?`, args: [id] });
+    const res = await turso.execute({ sql: `SELECT * FROM ncrs WHERE id = ?`, args: cleanArgs([id]) });
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     return {
@@ -500,7 +866,7 @@ export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
     });
 };
 
-export const deleteDefectLibraryItem = async (id: string) => { await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: [id] }); };
+export const deleteDefectLibraryItem = async (id: string) => { await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: cleanArgs([id]) }); };
 
 export const getUsers = async (): Promise<User[]> => {
     const res = await turso.execute("SELECT data FROM users");
@@ -517,7 +883,7 @@ export const saveUser = async (user: User) => {
 
 export const importUsers = async (users: User[]) => { for (const user of users) { await saveUser(user); } };
 
-export const deleteUser = async (id: string) => { await turso.execute({ sql: `DELETE FROM users WHERE id = ?`, args: [id] }); };
+export const deleteUser = async (id: string) => { await turso.execute({ sql: `DELETE FROM users WHERE id = ?`, args: cleanArgs([id]) }); };
 
 export const getWorkshops = async (): Promise<Workshop[]> => {
     const res = await turso.execute("SELECT data FROM workshops");
@@ -532,7 +898,7 @@ export const saveWorkshop = async (ws: Workshop) => {
     });
 };
 
-export const deleteWorkshop = async (id: string) => { await turso.execute({ sql: `DELETE FROM workshops WHERE id = ?`, args: [id] }); };
+export const deleteWorkshop = async (id: string) => { await turso.execute({ sql: `DELETE FROM workshops WHERE id = ?`, args: cleanArgs([id]) }); };
 
 export const getTemplates = async (): Promise<Record<string, CheckItem[]>> => {
     const res = await turso.execute("SELECT moduleId, data FROM templates");
@@ -562,4 +928,4 @@ export const saveRole = async (role: Role) => {
     });
 };
 
-export const deleteRole = async (id: string) => { await turso.execute({ sql: `DELETE FROM roles WHERE id = ?`, args: [id] }); };
+export const deleteRole = async (id: string) => { await turso.execute({ sql: `DELETE FROM roles WHERE id = ?`, args: cleanArgs([id]) }); };
