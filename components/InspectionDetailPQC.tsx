@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR } from '../types';
 import { 
@@ -120,24 +121,11 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
   
   const formatDisplayDate = (val: any) => {
       if (!val) return '---';
-      
-      // Handle Unix Timestamp (created_at)
       if (typeof val === 'number') {
           const date = new Date(val * 1000);
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const year = date.getFullYear();
-          return `${day}/${month}/${year}`;
+          return date.toISOString().split('T')[0];
       }
-      
-      // Handle String YYYY-MM-DD
-      const strVal = String(val).split(' ')[0];
-      if (strVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          const [y, m, d] = strVal.split('-');
-          return `${d}/${m}/${y}`;
-      }
-      
-      return strVal;
+      return String(val).split(' ')[0];
   };
   const displayDate = formatDisplayDate(inspection.created_at || inspection.date);
 
@@ -420,7 +408,6 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
         </section>
       </div>
 
-      {/* BOTTOM ACTIONS */}
       {!isApproved && (
           <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-3 md:p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex items-center gap-2 z-40 shadow-lg">
               <button onClick={onBack} className="px-3 py-3 text-slate-500 font-bold uppercase text-[9px] tracking-widest hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all shrink-0">
@@ -438,7 +425,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
                     disabled={isProdSigned}
                   >
                       {isProdSigned ? <CheckCircle2 className="w-3.5 h-3.5"/> : <UserPlus className="w-3.5 h-3.5"/>} 
-                      {isProdSigned ? 'Đã Xác Nhận' : 'NCC Ký'}
+                      {isProdSigned ? 'Đã Xác Nhận' : 'Xưởng Ký'}
                   </button>
                   
                   {isManager && (
@@ -490,7 +477,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                           <UserPlus className="w-5 h-5 text-indigo-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Đối Tác Gia Công</h3>
+                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Đại diện Xưởng</h3>
                       </div>
                       <button onClick={() => setShowProductionModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>

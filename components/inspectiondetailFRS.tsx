@@ -1,7 +1,4 @@
 
 import React from 'react';
-import { InspectionDetailPQC } from './inspectiondetailPQC';
-
-export const InspectionDetailFRS: React.FC<any> = (props) => {
-  return <InspectionDetailPQC {...props} />;
-};
+import { InspectionDetailPQC } from './InspectionDetailPQC';
+export const InspectionDetailFRS: React.FC<any> = (props) => <InspectionDetailPQC {...props} />;
