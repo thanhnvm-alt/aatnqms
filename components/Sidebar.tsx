@@ -32,24 +32,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
     { id: 'PLAN', label: 'Kế Hoạch', icon: FileSpreadsheet },
     { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
-    { id: 'PQC_MODE', label: 'Kiểm Soát PQC', icon: Factory },
+    // Removed PQC_MODE as requested
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
     { id: 'DEFECT_LIBRARY', label: 'Thư Viện Lỗi', icon: BookOpen },
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
   ].filter(item => {
     // Logic phân quyền đơn giản
     if (user.role === 'QC') {
-      return ['LIST', 'PQC_MODE', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS'].includes(item.id);
+      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS'].includes(item.id);
     }
     return true;
   });
 
   const isMenuItemActive = (itemId: string) => {
-      if (itemId === 'PQC_MODE') {
-          return view === 'LIST' && currentModule === 'PQC';
-      }
       if (itemId === 'LIST') {
-          return view === 'LIST' && currentModule !== 'PQC';
+          return view === 'LIST';
       }
       if (itemId === 'SETTINGS') return view === 'SETTINGS';
       if (itemId === 'DEFECT_LIBRARY') return view === 'DEFECT_LIBRARY' || view === 'DEFECT_DETAIL';
