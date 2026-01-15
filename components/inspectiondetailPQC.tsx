@@ -443,7 +443,6 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
           </div>
       )}
 
-      {/* MODALS */}
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">

@@ -2,11 +2,9 @@
 import React, { useState, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop } from '../types';
 import { 
-  Search, RefreshCw, FolderOpen, Clock, Tag, 
-  UserCheck, Loader2, X, ChevronDown, ChevronLeft, ChevronRight,
-  CheckCircle2, AlertCircle, SlidersHorizontal, Box, FileText,
-  CheckSquare, XCircle, AlertTriangle, Filter, Building2, Layers, User, Calendar,
-  ArrowRight, Activity
+  Search, RefreshCw, FolderOpen, 
+  UserCheck, Loader2, X, ChevronDown, ChevronRight,
+  XCircle, Filter, Building2, Layers, User, Calendar, SlidersHorizontal
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -22,8 +20,7 @@ interface InspectionListProps {
 }
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, userRole, selectedModule, onModuleChange, 
-  onRefresh, currentUserName, isLoading, workshops = []
+  inspections, onSelect, onRefresh, isLoading, workshops = []
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -42,7 +39,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const uniqueTypes = useMemo(() => Array.from(new Set(inspections.map(i => i.type).filter(Boolean))).sort(), [inspections]);
   
   const uniqueWorkshops = useMemo(() => {
-    const rawValues = Array.from(new Set(inspections.map(i => i.workshop || i.ma_nha_may).filter(Boolean)));
+    // Explicitly cast to string[] to avoid unknown type error
+    const rawValues = Array.from(new Set(inspections.map(i => i.workshop || i.ma_nha_may).filter(Boolean))) as string[];
     return rawValues.map(val => {
         const found = workshops.find(w => w.code === val || w.id === val);
         let label = val;
@@ -256,7 +254,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           <div className="h-full flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" /><p className="font-black uppercase tracking-widest text-[8px]">Đang tải dữ liệu...</p></div>
         ) : sortedProjectKeys.length === 0 ? (
           <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center mx-2 shadow-sm">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3"><Box className="w-8 h-8 text-slate-300" /></div>
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3"><FolderOpen className="w-8 h-8 text-slate-300" /></div>
               <p className="font-black uppercase text-slate-400 text-[10px] tracking-widest mb-1">Không tìm thấy báo cáo</p>
               <p className="text-[9px] text-slate-300">Thử thay đổi bộ lọc.</p>
           </div>
@@ -308,14 +306,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                   <div className="flex-1 min-w-0 pr-3">
                                     <div className="flex items-center gap-2 mb-1.5">
                                         <span className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-widest border ${item.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600' : item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>{item.status}</span>
-                                       {/* Requirement 1: Loại phiếu - Công đoạn */}
                                        <span className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 truncate max-w-[150px]">
                                           {item.type} {item.inspectionStage || item.stage ? `- ${item.inspectionStage || item.stage}` : ''}
                                        </span>
                                     </div>
                                     <h4 className="font-bold text-slate-800 text-[10px] truncate uppercase tracking-tight mb-2 leading-tight group-hover:text-blue-700 transition-colors">{item.ten_hang_muc}</h4>
                                     
-                                    {/* Requirement 3: Tỷ lệ đạt / lỗi */}
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className="flex items-center gap-1">
                                             <div className="w-2 h-2 rounded-full bg-green-500"></div>
@@ -328,7 +324,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </div>
 
                                     <div className="flex items-center justify-between">
-                                       {/* Requirement 2: Ngày kiểm | QC */}
                                        <div className="text-[8px] font-bold text-slate-400 flex items-center gap-1.5">
                                            <span className="flex items-center gap-1"><Calendar className="w-2.5 h-2.5"/> {item.date}</span>
                                            <span className="w-px h-2 bg-slate-300"></span>

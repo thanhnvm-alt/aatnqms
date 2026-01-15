@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification } from './types';
 import { 
@@ -30,8 +28,7 @@ import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
 import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
-// Fixed casing conflict: standardized on Uppercase import matching File 83 components/InspectionDetailPQC.tsx
-import { InspectionDetailPQC } from './components/InspectionDetailPQC'; 
+import { InspectionDetailPQC } from './components/InspectionDetailPQC';
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
 import { InspectionDetailSQC_BTP } from './components/inspectiondetailSQC_BTP';
@@ -131,7 +128,7 @@ const App = () => {
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (Array.isArray(data) && data.length > 0) { setUsers(prev => { const combined = [...MOCK_USERS]; data.forEach(dbUser => { if (dbUser && dbUser.username && !combined.find(u => u.username.toLowerCase() === dbUser.username.toLowerCase())) { combined.push(dbUser); } }); return combined; }); } } catch (e) {} };
   const handleLogin = (loggedInUser: User, remember: boolean) => { const { password, ...safeUser } = loggedInUser; setUser(safeUser as User); const storage = remember ? localStorage : sessionStorage; storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser)); setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); };
-  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY) || sessionStorage.removeItem(AUTH_STORAGE_KEY); };
+  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
   useEffect(() => { if (user && isDbReady) { loadInspections(); loadProjects(); loadPlans(); } }, [user, isDbReady, planSearchTerm]);
   const checkConn = async () => { try { const status = await checkApiConnection(); setConnectionError(!status.ok); } catch (e) { setConnectionError(true); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
