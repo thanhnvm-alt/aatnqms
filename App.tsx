@@ -29,7 +29,7 @@ import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
 import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
-import { InspectionDetailPQC } from './components/InspectionDetailPQC';
+import { InspectionDetailPQC } from './components/inspectiondetailPQC';
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
 import { InspectionDetailSQC_BTP } from './components/inspectiondetailSQC_BTP';

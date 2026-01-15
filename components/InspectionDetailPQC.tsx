@@ -529,7 +529,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({
                     disabled={isProdSigned}
                   >
                       {isProdSigned ? <CheckCircle2 className="w-3.5 h-3.5"/> : <UserPlus className="w-3.5 h-3.5"/>} 
-                      {isProdSigned ? 'Đã Xác Nhận' : 'NCC Ký'}
+                      {isProdSigned ? 'Đã Xác Nhận' : 'SX Xác Nhận'}
                   </button>
                   
                   {isManager && (
