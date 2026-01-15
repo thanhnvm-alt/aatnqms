@@ -41,7 +41,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full bg-white shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-200 origin-top-right">
+        <div className="flex flex-col h-full bg-white shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-200 origin-top-right max-h-[600px]">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="relative">
@@ -73,7 +73,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar bg-white">
+            <div className="flex-1 overflow-y-auto bg-white scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                 {notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                         <Bell className="w-12 h-12 opacity-10 mb-4" />
@@ -120,10 +120,10 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
             <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0 text-center">
                 <button 
-                    onClick={() => { onMarkAllRead(); onClose(); }}
-                    className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] hover:underline"
+                    onClick={onClose}
+                    className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:text-slate-800 hover:underline"
                 >
-                    Tải thêm thông báo cũ
+                    Đóng danh sách
                 </button>
             </div>
         </div>
