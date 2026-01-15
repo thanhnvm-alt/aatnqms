@@ -1,352 +1,380 @@
 
 import React, { useState, useMemo } from 'react';
-import { Inspection, InspectionStatus, CheckStatus, Workshop } from '../types';
+import { Inspection, InspectionStatus, Workshop, CheckStatus } from '../types';
 import { 
-  Search, RefreshCw, FolderOpen, 
-  UserCheck, Loader2, X, ChevronDown, ChevronRight,
-  XCircle, Filter, Building2, Layers, User, Calendar, SlidersHorizontal
+  Search, RefreshCw, Calendar, 
+  CheckCircle2, AlertTriangle, 
+  Factory, Box, User,
+  ArrowRight, Filter, X, Layers, AlertOctagon
 } from 'lucide-react';
+import { ALL_MODULES } from '../constants';
 
 interface InspectionListProps {
   inspections: Inspection[];
   onSelect: (id: string) => void;
-  userRole?: string;
-  selectedModule?: string;
-  onModuleChange?: (module: string) => void;
   onRefresh?: () => void;
-  currentUserName?: string;
   isLoading?: boolean;
   workshops?: Workshop[];
+  currentUserName?: string;
+  userRole?: string;
+  selectedModule: string;
+  onModuleChange: (module: string) => void;
 }
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, onRefresh, isLoading, workshops = []
+  inspections, onSelect, onRefresh, isLoading, workshops,
+  selectedModule, onModuleChange
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [inspectorFilter, setInspectorFilter] = useState<string>('ALL');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [workshopFilter, setWorkshopFilter] = useState<string>('ALL');
   
-  const [dateFilterMode, setDateFilterMode] = useState<'7DAYS' | 'ALL' | 'RANGE'>('7DAYS');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  // Advanced Filters State
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [filterInspector, setFilterInspector] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL');
+  const [filterWorkshop, setFilterWorkshop] = useState('ALL');
+  const [filterStage, setFilterStage] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('ALL');
 
-  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  // Helper to get Inspector Name consistently
+  const getInspectorName = (item: any) => {
+      return item.inspectorName || item.created_by || item.inspector || 'N/A';
+  };
 
-  const uniqueInspectors = useMemo(() => Array.from(new Set(inspections.map(i => i.inspectorName).filter(Boolean))).sort(), [inspections]);
-  const uniqueTypes = useMemo(() => Array.from(new Set(inspections.map(i => i.type).filter(Boolean))).sort(), [inspections]);
-  
-  const uniqueWorkshops = useMemo(() => {
-    // Explicitly cast to string[] to avoid unknown type error
-    const rawValues = Array.from(new Set(inspections.map(i => i.workshop || i.ma_nha_may).filter(Boolean))) as string[];
-    return rawValues.map(val => {
-        const found = workshops.find(w => w.code === val || w.id === val);
-        let label = val;
-        if (found) {
-            label = found.name;
-        } else if (/^\d+$/.test(val)) {
-            label = `Xưởng ${val}`;
-        }
-        return { code: val, label };
-    }).sort((a, b) => a.label.localeCompare(b.label));
-  }, [inspections, workshops]);
+  // Helper to get Workshop Name
+  const getWorkshopName = (code?: string) => {
+      if (!code) return '---';
+      const ws = workshops?.find(w => w.code === code);
+      return ws ? ws.name : code;
+  };
 
-  const filteredInspections = useMemo(() => {
+  // Extract Unique Lists for Dropdowns
+  const uniqueData = useMemo(() => {
+      const inspectors = new Set<string>();
+      const types = new Set<string>();
+      const workshopCodes = new Set<string>();
+      const stages = new Set<string>();
+
+      inspections.forEach(item => {
+          inspectors.add(getInspectorName(item));
+          if (item.type) types.add(item.type);
+          if (item.workshop || item.ma_nha_may) workshopCodes.add(item.workshop || item.ma_nha_may || '');
+          if (item.inspectionStage || item.stage) stages.add(item.inspectionStage || item.stage || '');
+      });
+
+      return {
+          inspectors: Array.from(inspectors).filter(Boolean).sort(),
+          types: Array.from(types).filter(Boolean).sort(),
+          workshops: Array.from(workshopCodes).filter(Boolean).sort(),
+          stages: Array.from(stages).filter(Boolean).sort(),
+      };
+  }, [inspections]);
+
+  const filteredData = useMemo(() => {
     const term = (searchTerm || '').toLowerCase().trim();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const sevenDaysAgo = new Date(today);
-    sevenDaysAgo.setDate(today.getDate() - 7);
-
     return inspections.filter(item => {
-      if (!item) return false;
-      const itemDate = new Date(item.date);
-      itemDate.setHours(0, 0, 0, 0);
+      // 1. Module Tab Filter (Top Level)
+      // Note: We keep this logic but remove the UI buttons, assuming selectedModule is managed by parent or defaults to ALL
+      if (selectedModule !== 'ALL' && item.type !== selectedModule) return false;
 
-      if (dateFilterMode === '7DAYS') {
-          if (itemDate < sevenDaysAgo) return false;
-      } else if (dateFilterMode === 'RANGE') {
-          if (startDate) {
-              const start = new Date(startDate);
-              start.setHours(0,0,0,0);
-              if (itemDate < start) return false;
-          }
-          if (endDate) {
-              const end = new Date(endDate);
-              end.setHours(23,59,59,999);
-              if (itemDate > end) return false;
-          }
-      }
-
-      const matchesSearch = !term || (
-        (item.ma_ct || '').toLowerCase().includes(term) ||
-        (item.ten_ct || '').toLowerCase().includes(term) ||
-        (item.ten_hang_muc || '').toLowerCase().includes(term) ||
-        (item.inspectorName || '').toLowerCase().includes(term) ||
-        (item.ma_nha_may || '').toLowerCase().includes(term) ||
-        (item.workshop || '').toLowerCase().includes(term)
-      );
-
-      const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
-      const matchesInspector = inspectorFilter === 'ALL' || item.inspectorName === inspectorFilter;
-      const matchesType = typeFilter === 'ALL' || item.type === typeFilter;
+      // 2. Search Box
+      const searchContent = `
+        ${item.ma_ct || ''} 
+        ${item.ten_ct || ''} 
+        ${item.ten_hang_muc || ''} 
+        ${getInspectorName(item)}
+      `.toLowerCase();
       
-      const itemWorkshop = item.workshop || item.ma_nha_may;
-      const matchesWorkshop = workshopFilter === 'ALL' || itemWorkshop === workshopFilter;
+      const matchesSearch = !term || searchContent.includes(term);
 
-      return matchesSearch && matchesStatus && matchesInspector && matchesType && matchesWorkshop;
-    }).sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-  }, [inspections, searchTerm, statusFilter, inspectorFilter, typeFilter, workshopFilter, dateFilterMode, startDate, endDate]);
+      // 3. Advanced Filters
+      let matchesAdvanced = true;
 
-  const projectsData = useMemo(() => {
-    const projects: Record<string, { 
-      ten_ct: string, 
-      factories: Record<string, Inspection[]>, 
-      stats: { total: number, pass: number, ncr: number }
-    }> = {};
+      // Status
+      if (filterStatus !== 'ALL' && item.status !== filterStatus) matchesAdvanced = false;
 
-    filteredInspections.forEach(item => {
-      const pKey = item.ma_ct || 'DÙNG CHUNG';
-      if (!projects[pKey]) {
-        projects[pKey] = { 
-          ten_ct: item.ten_ct || 'Dự án khác', 
-          factories: {},
-          stats: { total: 0, pass: 0, ncr: 0 }
-        };
+      // Type (Dropdown)
+      if (filterType !== 'ALL' && item.type !== filterType) matchesAdvanced = false;
+
+      // Inspector
+      if (filterInspector !== 'ALL' && getInspectorName(item) !== filterInspector) matchesAdvanced = false;
+
+      // Workshop
+      const itemWs = item.workshop || item.ma_nha_may;
+      if (filterWorkshop !== 'ALL' && itemWs !== filterWorkshop) matchesAdvanced = false;
+
+      // Stage
+      const itemStage = item.inspectionStage || item.stage;
+      if (filterStage !== 'ALL' && itemStage !== filterStage) matchesAdvanced = false;
+
+      // Date Range
+      if (dateRange.start || dateRange.end) {
+          const itemDate = new Date(item.date).getTime();
+          if (dateRange.start && itemDate < new Date(dateRange.start).getTime()) matchesAdvanced = false;
+          if (dateRange.end) {
+              const endDate = new Date(dateRange.end);
+              endDate.setHours(23, 59, 59, 999);
+              if (itemDate > endDate.getTime()) matchesAdvanced = false;
+          }
       }
-      const fKey = item.ma_nha_may || item.workshop || 'SITE';
-      if (!projects[pKey].factories[fKey]) projects[pKey].factories[fKey] = [];
-      projects[pKey].factories[fKey].push(item);
-      projects[pKey].stats.total++;
-      const hasNCR = item.items?.some(i => i.status === CheckStatus.FAIL) || item.status === InspectionStatus.FLAGGED;
-      if (hasNCR) projects[pKey].stats.ncr++;
-      else if (item.status === InspectionStatus.APPROVED || item.status === InspectionStatus.COMPLETED) projects[pKey].stats.pass++;
-    });
-    return projects;
-  }, [filteredInspections]);
 
-  const sortedProjectKeys = Object.keys(projectsData).sort((a, b) => projectsData[b].stats.total - projectsData[a].stats.total);
+      return matchesSearch && matchesAdvanced;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [
+      inspections, searchTerm, selectedModule, 
+      filterStatus, filterType, filterInspector, filterWorkshop, filterStage, dateRange
+  ]);
 
-  const toggleProject = (key: string) => {
-    setExpandedProjects(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
+  const formatDate = (dateString: string) => {
+      if (!dateString) return '---';
+      return new Date(dateString).toLocaleDateString('vi-VN');
+  };
+
+  const getStats = (item: Inspection) => {
+      // Ưu tiên dữ liệu đã tính toán sẵn trong DB
+      let total = item.qty_total || item.inspectedQuantity || 0;
+      let pass = item.qty_pass || item.passedQuantity || 0;
+      let fail = item.qty_fail || item.failedQuantity || 0;
+
+      // Nếu không có, tính từ danh sách items
+      if (total === 0 && item.items && item.items.length > 0) {
+          total = item.items.length;
+          pass = item.items.filter(i => i.status === CheckStatus.PASS).length;
+          fail = item.items.filter(i => i.status === CheckStatus.FAIL).length;
+      }
+
+      const passRate = total > 0 ? Math.round((pass / total) * 100) : 0;
+      const failRate = total > 0 ? Math.round((fail / total) * 100) : 0; // Hoặc 100 - passRate
+
+      return { passRate, failRate, hasStats: total > 0 };
   };
 
   const activeFiltersCount = [
-      statusFilter !== 'ALL', 
-      inspectorFilter !== 'ALL', 
-      typeFilter !== 'ALL', 
-      workshopFilter !== 'ALL', 
-      dateFilterMode === 'RANGE' && (startDate || endDate)
+      filterStatus !== 'ALL',
+      filterType !== 'ALL',
+      filterInspector !== 'ALL',
+      filterWorkshop !== 'ALL',
+      filterStage !== 'ALL',
+      dateRange.start !== '',
+      dateRange.end !== ''
   ].filter(Boolean).length;
 
   const clearFilters = () => {
-      setStatusFilter('ALL'); setInspectorFilter('ALL'); setTypeFilter('ALL'); setWorkshopFilter('ALL'); setDateFilterMode('7DAYS'); setStartDate(''); setEndDate('');
+      setFilterStatus('ALL');
+      setFilterType('ALL');
+      setFilterInspector('ALL');
+      setFilterWorkshop('ALL');
+      setFilterStage('ALL');
+      setDateRange({ start: '', end: '' });
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 no-scroll-x relative">
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-3 py-3 shadow-sm shrink-0">
+    <div className="flex flex-col h-full bg-slate-50 relative">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 py-3 shadow-sm shrink-0">
+          
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
               <input 
-                type="text" placeholder="Tìm kiếm nhanh..." value={searchTerm}
+                type="text" placeholder="Tìm kiếm phiếu..." value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
+                className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-2 ring-blue-100 transition-all"
               />
-              {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400"><X className="w-3.5 h-3.5" /></button>}
             </div>
+            
             <button 
-                onClick={() => setShowFiltersPanel(!showFiltersPanel)} 
-                className={`p-2 rounded-xl border transition-all relative ${showFiltersPanel || activeFiltersCount > 0 ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200' : 'bg-white text-slate-500 border-slate-200'}`}
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all relative ${
+                    showFilters || activeFiltersCount > 0 
+                    ? 'bg-blue-50 text-blue-600 border-blue-200' 
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
             >
-                <SlidersHorizontal className="w-4 h-4" />
-                {activeFiltersCount > 0 && !showFiltersPanel && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
+                <Filter className="w-4 h-4" />
+                <span className="hidden sm:inline">Bộ lọc</span>
+                {activeFiltersCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] flex items-center justify-center border-2 border-white">
+                        {activeFiltersCount}
+                    </span>
+                )}
             </button>
-            <button onClick={onRefresh} className="p-2 text-slate-500 bg-slate-100 rounded-xl active:scale-90 transition-all"><RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /></button>
-          </div>
-          
-          {showFiltersPanel && (
-            <div className="mt-3 p-4 bg-white rounded-[2rem] border border-blue-100 shadow-2xl animate-in slide-in-from-top-2 duration-300 relative z-50 overflow-hidden">
-                <div className="flex justify-between items-center mb-4 border-b border-slate-50 pb-2">
-                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Filter className="w-3.5 h-3.5 text-blue-600"/> BỘ LỌC NÂNG CAO</h3>
-                    {activeFiltersCount > 0 && <button onClick={clearFilters} className="text-[10px] font-black text-red-500 hover:underline flex items-center gap-1 uppercase tracking-tighter"><XCircle className="w-3 h-3" /> XÓA LỌC ({activeFiltersCount})</button>}
-                </div>
-                
-                <div className="mb-5 bg-slate-50/80 p-3 rounded-2xl border border-slate-100 shadow-inner">
-                    <label className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] block mb-3 flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> THỜI GIAN KIỂM TRA</label>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        <button onClick={() => { setDateFilterMode('7DAYS'); setStartDate(''); setEndDate(''); }} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter border transition-all ${dateFilterMode === '7DAYS' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>7 Ngày gần nhất</button>
-                        <button onClick={() => { setDateFilterMode('ALL'); setStartDate(''); setEndDate(''); }} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter border transition-all ${dateFilterMode === 'ALL' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>Toàn bộ lịch sử</button>
-                        <button onClick={() => setDateFilterMode('RANGE')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter border transition-all ${dateFilterMode === 'RANGE' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}>Khoảng thời gian</button>
-                    </div>
-                    {dateFilterMode === 'RANGE' && (
-                        <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-1">
-                            <div className="space-y-1">
-                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Từ ngày</span>
-                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 ring-blue-100 shadow-sm"/>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Đến ngày</span>
-                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 ring-blue-100 shadow-sm"/>
-                            </div>
-                        </div>
-                    )}
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">TRẠNG THÁI</label>
-                        <div className="relative">
-                            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] font-bold text-slate-700 outline-none appearance-none focus:ring-2 focus:ring-blue-100 shadow-sm">
-                                <option value="ALL">Tất cả trạng thái</option>
-                                <option value={InspectionStatus.APPROVED}>APPROVED</option>
-                                <option value={InspectionStatus.FLAGGED}>FLAGGED</option>
-                                <option value={InspectionStatus.COMPLETED}>COMPLETED</option>
-                                <option value={InspectionStatus.DRAFT}>DRAFT</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">LOẠI PHIẾU</label>
-                        <div className="relative">
-                            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] font-bold text-slate-700 outline-none appearance-none focus:ring-2 focus:ring-blue-100 shadow-sm">
-                                <option value="ALL">Tất cả loại</option>
-                                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <Layers className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">NGƯỜI TẠO (QC)</label>
-                        <div className="relative">
-                            <select value={inspectorFilter} onChange={e => setInspectorFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] font-bold text-slate-700 outline-none appearance-none focus:ring-2 focus:ring-blue-100 shadow-sm">
-                                <option value="ALL">Tất cả QC</option>
-                                {uniqueInspectors.map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                            <User className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">XƯỞNG / NHÀ MÁY</label>
-                        <div className="relative">
-                            <select value={workshopFilter} onChange={e => setWorkshopFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-[11px] font-bold text-slate-700 outline-none appearance-none focus:ring-2 focus:ring-blue-100 shadow-sm">
-                                <option value="ALL">Tất cả xưởng</option>
-                                {uniqueWorkshops.map(w => <option key={w.code} value={w.code}>{w.label}</option>)}
-                            </select>
-                            <Building2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <button onClick={onRefresh} className="p-2 text-blue-500 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all border border-blue-100">
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {/* Filter Panel */}
+          {showFilters && (
+              <div className="mt-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-lg animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Bộ lọc nâng cao</h3>
+                      <button onClick={clearFilters} className="text-[10px] font-bold text-red-500 hover:underline flex items-center gap-1">
+                          <X className="w-3 h-3" /> Xóa lọc
+                      </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {/* Date Range */}
+                      <div className="col-span-2 md:col-span-1 flex gap-2">
+                          <div className="flex-1 space-y-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Từ ngày</label>
+                              <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-400" />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                              <label className="text-[9px] font-bold text-slate-400 uppercase">Đến ngày</label>
+                              <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-400" />
+                          </div>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Trạng thái</label>
+                          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+                              <option value="ALL">Tất cả trạng thái</option>
+                              <option value={InspectionStatus.PENDING}>Chờ duyệt</option>
+                              <option value={InspectionStatus.COMPLETED}>Hoàn thành</option>
+                              <option value={InspectionStatus.FLAGGED}>Có lỗi (NCR)</option>
+                              <option value={InspectionStatus.APPROVED}>Đã phê duyệt</option>
+                              <option value={InspectionStatus.DRAFT}>Nháp</option>
+                          </select>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Inspector</label>
+                          <select value={filterInspector} onChange={e => setFilterInspector(e.target.value)} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+                              <option value="ALL">Tất cả Inspector</option>
+                              {uniqueData.inspectors.map(i => <option key={i} value={i}>{i}</option>)}
+                          </select>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Loại phiếu</label>
+                          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+                              <option value="ALL">Tất cả loại</option>
+                              {uniqueData.types.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Xưởng sản xuất</label>
+                          <select value={filterWorkshop} onChange={e => setFilterWorkshop(e.target.value)} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+                              <option value="ALL">Tất cả xưởng</option>
+                              {uniqueData.workshops.map(w => <option key={w} value={w}>{getWorkshopName(w)}</option>)}
+                          </select>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">Công đoạn</label>
+                          <select value={filterStage} onChange={e => setFilterStage(e.target.value)} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+                              <option value="ALL">Tất cả công đoạn</option>
+                              {uniqueData.stages.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                      </div>
+                  </div>
+              </div>
           )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar pb-24">
-        {isLoading ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" /><p className="font-black uppercase tracking-widest text-[8px]">Đang tải dữ liệu...</p></div>
-        ) : sortedProjectKeys.length === 0 ? (
-          <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center mx-2 shadow-sm">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3"><FolderOpen className="w-8 h-8 text-slate-300" /></div>
-              <p className="font-black uppercase text-slate-400 text-[10px] tracking-widest mb-1">Không tìm thấy báo cáo</p>
-              <p className="text-[9px] text-slate-300">Thử thay đổi bộ lọc.</p>
-          </div>
+      {/* List */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar pb-24">
+        {filteredData.length === 0 ? (
+             <div className="py-20 text-center flex flex-col items-center justify-center">
+                <Box className="w-12 h-12 text-slate-200 mb-3" />
+                <p className="font-bold text-slate-400 text-xs uppercase tracking-widest">Không có dữ liệu</p>
+                <button onClick={clearFilters} className="mt-2 text-blue-500 text-[10px] font-bold hover:underline">Xóa bộ lọc</button>
+             </div>
         ) : (
-          <div className="space-y-4">
-            {sortedProjectKeys.map(maCt => {
-              const project = projectsData[maCt];
-              const isExpanded = expandedProjects.has(maCt);
-              return (
-                <div key={maCt} className="space-y-3">
-                  <div onClick={() => toggleProject(maCt)} className={`bg-white rounded-[1.5rem] border transition-all active:scale-[0.99] shadow-sm cursor-pointer group ${isExpanded ? 'border-blue-300 ring-2 ring-blue-50' : 'border-slate-200 hover:border-blue-200'}`}>
-                    <div className="p-4 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className={`p-2.5 rounded-xl shrink-0 transition-colors ${isExpanded ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}><FolderOpen className="w-4 h-4" /></div>
-                        <div className="overflow-hidden">
-                          <h3 className="font-black text-xs text-slate-900 uppercase truncate leading-none mb-1 group-hover:text-blue-700 transition-colors">{maCt}</h3>
-                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight truncate">{project.ten_ct}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 min-w-[32px] justify-center"><span className="text-[8px] font-black text-slate-600">{project.stats.total}</span></div>
-                        {project.stats.ncr > 0 && <div className="flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg border border-red-100 min-w-[32px] justify-center"><span className="text-[8px] font-black text-red-600">{project.stats.ncr}</span></div>}
-                        <ChevronDown className={`w-4 h-4 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''} ml-1`} />
-                      </div>
-                    </div>
-                  </div>
-                  {isExpanded && (
-                    <div className="ml-2 pl-2 border-l-2 border-slate-100 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                      {Object.entries(project.factories).sort().map(([factoryCode, items]) => {
-                        const workshopName = workshops.find(w => w.code === factoryCode || w.id === factoryCode)?.name || (/^\d+$/.test(factoryCode) ? `Xưởng ${factoryCode}` : factoryCode);
-                        return (
-                        <div key={factoryCode} className="space-y-2">
-                           <div className="flex items-center gap-2 px-2 py-1 bg-slate-50/50 rounded-lg">
-                              <Building2 className="w-3 h-3 text-slate-400" />
-                              <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex-1">{workshopName}</h4>
-                              <span className="text-[8px] font-bold bg-white text-slate-500 px-1.5 border border-slate-200 rounded">{(items as Inspection[]).length}</span>
-                           </div>
-                           <div className="grid grid-cols-1 gap-2">
-                              {(items as Inspection[]).map(item => {
-                                // Calculate rates for display
-                                const total = Number(item.qty_total || item.inspectedQuantity || 0);
-                                const pass = Number(item.qty_pass || item.passedQuantity || 0);
-                                const fail = Number(item.qty_fail || item.failedQuantity || 0);
-                                const passRate = total > 0 ? Math.round((pass / total) * 100) : 0;
-                                const failRate = total > 0 ? Math.round((fail / total) * 100) : 0;
-                                
-                                return (
-                                <div key={item.id} onClick={() => onSelect(item.id)} className="bg-white p-3.5 rounded-2xl border border-slate-200 active:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between shadow-sm group cursor-pointer relative overflow-hidden">
-                                  <div className="flex-1 min-w-0 pr-3">
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <span className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-widest border ${item.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600' : item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>{item.status}</span>
-                                       <span className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 truncate max-w-[150px]">
-                                          {item.type} {item.inspectionStage || item.stage ? `- ${item.inspectionStage || item.stage}` : ''}
-                                       </span>
-                                    </div>
-                                    <h4 className="font-bold text-slate-800 text-[10px] truncate uppercase tracking-tight mb-2 leading-tight group-hover:text-blue-700 transition-colors">{item.ten_hang_muc}</h4>
-                                    
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className="flex items-center gap-1">
-                                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                            <span className="text-[8px] font-black text-slate-500 uppercase">Đạt: {passRate}%</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                            <span className="text-[8px] font-black text-slate-500 uppercase">Lỗi: {failRate}%</span>
-                                        </div>
-                                    </div>
+            filteredData.map(item => {
+                const stats = getStats(item);
+                const inspectorName = getInspectorName(item);
+                const workshopName = getWorkshopName(item.workshop || item.ma_nha_may);
 
-                                    <div className="flex items-center justify-between">
-                                       <div className="text-[8px] font-bold text-slate-400 flex items-center gap-1.5">
-                                           <span className="flex items-center gap-1"><Calendar className="w-2.5 h-2.5"/> {item.date}</span>
-                                           <span className="w-px h-2 bg-slate-300"></span>
-                                           <span className="flex items-center gap-1 uppercase truncate max-w-[120px]"><User className="w-2.5 h-2.5"/> {item.inspectorName}</span>
-                                       </div>
+                return (
+                    <div 
+                        key={item.id} 
+                        onClick={() => onSelect(item.id)}
+                        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
+                    >
+                        {/* Status Bar */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                            item.status === InspectionStatus.APPROVED ? 'bg-green-500' :
+                            item.status === InspectionStatus.FLAGGED ? 'bg-red-500' :
+                            item.status === InspectionStatus.COMPLETED ? 'bg-blue-500' : 'bg-slate-300'
+                        }`}></div>
+
+                        <div className="pl-2">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">{item.type || 'N/A'}</span>
+                                        <span className="text-[10px] font-mono text-slate-400 font-bold">#{item.id.split('-').pop()}</span>
                                     </div>
-                                  </div>
-                                  <div className="p-1 rounded-full text-slate-300 group-hover:text-blue-500 group-hover:bg-blue-50 transition-all"><ChevronRight className="w-4 h-4" /></div>
+                                    
+                                    {/* Pass/Fail Rates Display */}
+                                    {stats.hasStats && (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 rounded flex items-center gap-0.5">
+                                                <CheckCircle2 className="w-2.5 h-2.5" /> {stats.passRate}%
+                                            </span>
+                                            {stats.failRate > 0 && (
+                                                <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 rounded flex items-center gap-0.5">
+                                                    <AlertTriangle className="w-2.5 h-2.5" /> {stats.failRate}%
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                              )})}
-                           </div>
+
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
+                                    item.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600 border-green-200' :
+                                    item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-200' :
+                                    item.status === InspectionStatus.COMPLETED ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                                    'bg-slate-50 text-slate-500 border-slate-200'
+                                }`}>
+                                    {item.status}
+                                </span>
+                            </div>
+
+                            <h4 className="font-bold text-slate-800 text-sm uppercase line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">
+                                {item.ten_hang_muc || item.ten_ct || 'Sản phẩm chưa đặt tên'}
+                            </h4>
+
+                            <div className="flex flex-wrap gap-y-1 gap-x-3 text-[10px] text-slate-500 font-medium">
+                                <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                    <Box className="w-3 h-3 text-slate-400" /> 
+                                    <span className="font-bold text-slate-700">{item.ma_ct}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Factory className="w-3 h-3 text-slate-400" />
+                                    <span>{workshopName}</span>
+                                </div>
+                                {(item.inspectionStage || item.stage) && (
+                                    <div className="flex items-center gap-1">
+                                        <Layers className="w-3 h-3 text-slate-400" />
+                                        <span>{item.inspectionStage || item.stage}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+                                <div className="flex items-center gap-3">
+                                    <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                                        <Calendar className="w-3 h-3"/> {formatDate(item.date)}
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                                        <User className="w-3 h-3"/> {inspectorName}
+                                    </span>
+                                </div>
+                                <div className="p-1 rounded-full bg-slate-50 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                </div>
+                            </div>
                         </div>
-                      )})}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+            })
         )}
-        <div className="text-center py-6 text-[9px] font-black text-slate-300 uppercase tracking-widest flex items-center justify-center gap-2">
-            {sortedProjectKeys.length > 0 && <><div className="h-px w-8 bg-slate-200"></div><span>Đã tải toàn bộ dữ liệu</span><div className="h-px w-8 bg-slate-200"></div></>}
-        </div>
       </div>
     </div>
   );

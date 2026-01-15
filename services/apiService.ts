@@ -56,8 +56,6 @@ export const createNotification = async (params: {
     return notif;
 };
 
-// ... existing code below ...
-
 export const fetchPlans = async (search: string = '', page?: number, limit?: number): Promise<PagedResult<PlanItem>> => {
   const result = await db.getPlans({ search, page, limit });
   return { items: result.items, total: result.total, page, limit };
@@ -176,8 +174,8 @@ export const importDefectLibraryFile = async (file: File) => {
     } catch (e: any) { throw new Error("Lỗi đọc file Excel: " + e.message); }
 };
 
-export const saveInspectionToSheet = async (inspection: Inspection) => { await db.saveInspection(inspection); return { success: true }; };
-export const deleteInspectionFromSheet = async (id: string) => { await db.deleteInspection(id); };
+export const saveInspection = async (inspection: Inspection) => { await db.saveInspection(inspection); return { success: true }; };
+export const deleteInspection = async (id: string) => { await db.deleteInspection(id); };
 export const fetchProjects = async () => await db.getProjects();
 export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
 export const fetchProjectsSummary = async () => { const projects = await db.getProjects(); return projects; };
