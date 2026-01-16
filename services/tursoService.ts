@@ -87,9 +87,9 @@ export const initDatabase = async () => {
       )
     `);
 
-    // Tables initialization - Updated users table with 'data' column instead of 'data_json'
+    // Tables initialization - Updated workshops to use 'data' column
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, role TEXT, data TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, data_json TEXT, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, data TEXT, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, ma_ct TEXT, ma_nha_may TEXT, headcode TEXT, data_json TEXT, created_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, ma_ct TEXT UNIQUE, name TEXT, data_json TEXT, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS templates (module_id TEXT PRIMARY KEY, data_json TEXT, updated_at INTEGER)`);
@@ -99,15 +99,17 @@ export const initDatabase = async () => {
 
     // AUTO-MIGRATION: Ensure correct columns exist for 'users'
     try { await turso.execute(`ALTER TABLE users ADD COLUMN data TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE users ADD COLUMN name TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE users ADD COLUMN role TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE users ADD COLUMN updated_at INTEGER`); } catch (e) {}
-
-    // AUTO-MIGRATION: Ensure 'workshops' columns
-    try { await turso.execute(`ALTER TABLE workshops ADD COLUMN data_json TEXT`); } catch (e) {}
+    
+    // AUTO-MIGRATION: Ensure 'workshops' use 'data' column and migrate if needed
+    try { await turso.execute(`ALTER TABLE workshops ADD COLUMN data TEXT`); } catch (e) {}
     try { await turso.execute(`ALTER TABLE workshops ADD COLUMN code TEXT`); } catch (e) {}
     try { await turso.execute(`ALTER TABLE workshops ADD COLUMN name TEXT`); } catch (e) {}
     try { await turso.execute(`ALTER TABLE workshops ADD COLUMN updated_at INTEGER`); } catch (e) {}
+
+    // TRƯỜNG HỢP KHẨN CẤP: Chép dữ liệu từ data_json sang data nếu cột cũ còn tồn tại và có dữ liệu
+    try {
+        await turso.execute(`UPDATE workshops SET data = data_json WHERE data IS NULL AND data_json IS NOT NULL`);
+    } catch (e) {}
 
     console.log("✔ ISO Server-authoritative DB Initialized & Migrated.");
   } catch (e: any) {
@@ -295,12 +297,19 @@ export const importUsers = async (users: User[]) => {
 
 export const getWorkshops = async (): Promise<Workshop[]> => {
     const res = await turso.execute("SELECT * FROM workshops");
-    return res.rows.map(r => safeJsonParse(r.data_json, {} as any));
+    // Updated mapping to 'data' column
+    return res.rows.map(r => ({
+        ...safeJsonParse(r.data, {} as any),
+        id: r.id as string,
+        code: r.code as string,
+        name: r.name as string
+    }));
 };
 
 export const saveWorkshop = async (ws: Workshop) => {
+    // Updated SQL to use 'data' column
     await turso.execute({
-        sql: "INSERT INTO workshops (id, code, name, data_json, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name, data_json=excluded.data_json, updated_at=excluded.updated_at",
+        sql: "INSERT INTO workshops (id, code, name, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name, data=excluded.data, updated_at=excluded.updated_at",
         args: [ws.id, ws.code, ws.name, JSON.stringify(ws), Math.floor(Date.now()/1000)]
     });
 };
