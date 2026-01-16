@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@libsql/client/web';
 import ExcelJS from 'exceljs';
@@ -45,17 +46,38 @@ export async function POST(request: NextRequest) {
 
     // Thực hiện nhập dữ liệu theo lô (Batch insert/upsert)
     for (const d of defects) {
+        const itemJson = JSON.stringify({
+            id: d.code,
+            code: d.code,
+            name: d.name,
+            category: d.category,
+            stage: d.stage,
+            severity: d.severity,
+            description: d.description,
+            suggestedAction: d.suggested_action
+        });
+
         await turso.execute({
-            sql: `INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, created_by, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(defect_code) DO UPDATE SET 
+            sql: `INSERT INTO defect_library (
+                    id, defect_code, name, stage, category, description, severity, 
+                    suggested_action, created_by, created_at, updated_at, data
+                  )
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET 
+                    defect_code = excluded.defect_code,
                     name = excluded.name,
                     stage = excluded.stage,
                     category = excluded.category,
                     description = excluded.description,
                     severity = excluded.severity,
-                    suggested_action = excluded.suggested_action`,
-            args: [d.code, d.code, d.name, d.stage, d.category, d.description, d.severity, d.suggested_action, 'System Import', Math.floor(Date.now()/1000)]
+                    suggested_action = excluded.suggested_action,
+                    updated_at = excluded.updated_at,
+                    data = excluded.data`,
+            args: [
+                d.code, d.code, d.name, d.stage, d.category, d.description, d.severity, 
+                d.suggested_action, 'System Import', Math.floor(Date.now()/1000), 
+                Math.floor(Date.now()/1000), itemJson
+            ]
         });
     }
 

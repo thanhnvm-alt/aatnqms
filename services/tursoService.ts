@@ -87,28 +87,56 @@ export const initDatabase = async () => {
       )
     `);
 
-    // Tables initialization - Updated workshops to use 'data' column
+    // Tables initialization
     await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, role TEXT, data TEXT, updated_at INTEGER)`);
     await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, data TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, ma_ct TEXT, ma_nha_may TEXT, headcode TEXT, data_json TEXT, created_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, ma_ct TEXT UNIQUE, name TEXT, data_json TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS templates (module_id TEXT PRIMARY KEY, data_json TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data_json TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT UNIQUE, name TEXT, data_json TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, user_id TEXT, is_read INTEGER, data_json TEXT, created_at INTEGER)`);
-
-    // AUTO-MIGRATION: Ensure correct columns exist for 'users'
-    try { await turso.execute(`ALTER TABLE users ADD COLUMN data TEXT`); } catch (e) {}
+    await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, ma_ct TEXT, ma_nha_may TEXT, headcode TEXT, data TEXT, created_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, ma_ct TEXT UNIQUE, name TEXT, data TEXT, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS templates (module_id TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
+    await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER)`);
     
-    // AUTO-MIGRATION: Ensure 'workshops' use 'data' column and migrate if needed
-    try { await turso.execute(`ALTER TABLE workshops ADD COLUMN data TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE workshops ADD COLUMN code TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE workshops ADD COLUMN name TEXT`); } catch (e) {}
-    try { await turso.execute(`ALTER TABLE workshops ADD COLUMN updated_at INTEGER`); } catch (e) {}
+    // NORMALIZED DEFECT LIBRARY TABLE (ISO 9001:2015 Compliant)
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS defect_library (
+        id TEXT PRIMARY KEY, 
+        defect_code TEXT UNIQUE, 
+        name TEXT, 
+        description TEXT,
+        stage TEXT,
+        category TEXT,
+        severity TEXT,
+        suggested_action TEXT,
+        correct_image TEXT,
+        incorrect_image TEXT,
+        created_by TEXT,
+        data TEXT, 
+        updated_at INTEGER
+      )
+    `);
+    
+    await turso.execute(`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, user_id TEXT, is_read INTEGER, data TEXT, created_at INTEGER)`);
 
-    // TRƯỜNG HỢP KHẨN CẤP: Chép dữ liệu từ data_json sang data nếu cột cũ còn tồn tại và có dữ liệu
+    // AUTO-MIGRATIONS FOR CONSISTENCY
+    const tablesToMigrate = ['users', 'workshops', 'plans', 'projects', 'templates', 'roles', 'notifications'];
+    for (const table of tablesToMigrate) {
+        try { await turso.execute(`ALTER TABLE ${table} ADD COLUMN data TEXT`); } catch (e) {}
+        try {
+            // Trường hợp bảng cũ có data_json nhưng chưa có data
+            await turso.execute(`UPDATE ${table} SET data = data_json WHERE data IS NULL AND data_json IS NOT NULL`);
+        } catch (e) {}
+    }
+
+    // MIGRATION FOR defect_library
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN description TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN stage TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN category TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN severity TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN suggested_action TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN created_by TEXT`); } catch (e) {}
+    try { await turso.execute(`ALTER TABLE defect_library ADD COLUMN data TEXT`); } catch (e) {}
+    
     try {
-        await turso.execute(`UPDATE workshops SET data = data_json WHERE data IS NULL AND data_json IS NOT NULL`);
+        await turso.execute(`UPDATE defect_library SET data = data_json WHERE data IS NULL AND data_json IS NOT NULL`);
     } catch (e) {}
 
     console.log("✔ ISO Server-authoritative DB Initialized & Migrated.");
@@ -270,7 +298,6 @@ export const getNcrById = async (id: string) => {
 };
 
 export const getDefects = async (filters: any) => {
-    // Simulated unified view
     const ncrs = await getNcrs(filters);
     return { items: ncrs.items as any[], total: ncrs.total };
 };
@@ -297,7 +324,6 @@ export const importUsers = async (users: User[]) => {
 
 export const getWorkshops = async (): Promise<Workshop[]> => {
     const res = await turso.execute("SELECT * FROM workshops");
-    // Updated mapping to 'data' column
     return res.rows.map(r => ({
         ...safeJsonParse(r.data, {} as any),
         id: r.id as string,
@@ -307,7 +333,6 @@ export const getWorkshops = async (): Promise<Workshop[]> => {
 };
 
 export const saveWorkshop = async (ws: Workshop) => {
-    // Updated SQL to use 'data' column
     await turso.execute({
         sql: "INSERT INTO workshops (id, code, name, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name, data=excluded.data, updated_at=excluded.updated_at",
         args: [ws.id, ws.code, ws.name, JSON.stringify(ws), Math.floor(Date.now()/1000)]
@@ -323,7 +348,7 @@ export const getTemplates = async () => {
     const dict: any = {};
     res.rows.forEach(r => {
       if (r.module_id) {
-        dict[r.module_id as string] = safeJsonParse(r.data_json, []);
+        dict[r.module_id as string] = safeJsonParse(r.data, []);
       }
     });
     return dict;
@@ -331,7 +356,7 @@ export const getTemplates = async () => {
 
 export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
     await turso.execute({
-        sql: "INSERT INTO templates (module_id, data_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(module_id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at",
+        sql: "INSERT INTO templates (module_id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(module_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
         args: [moduleId, JSON.stringify(items), Math.floor(Date.now()/1000)]
     });
 };
@@ -339,7 +364,7 @@ export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
 export const getPlansPaginated = async (search: string, page: number, limit: number) => {
     const res = await turso.execute("SELECT * FROM plans ORDER BY created_at DESC");
     return { 
-      items: res.rows.map(r => safeJsonParse(r.data_json, {} as any)), 
+      items: res.rows.map(r => safeJsonParse(r.data, {} as any)), 
       total: res.rows.length 
     };
 };
@@ -347,7 +372,7 @@ export const getPlansPaginated = async (search: string, page: number, limit: num
 export const importPlans = async (plans: PlanItem[]) => {
     for (const p of plans) {
         await turso.execute({
-            sql: "INSERT INTO plans (ma_ct, ma_nha_may, headcode, data_json, created_at) VALUES (?, ?, ?, ?, ?)",
+            sql: "INSERT INTO plans (ma_ct, ma_nha_may, headcode, data, created_at) VALUES (?, ?, ?, ?, ?)",
             args: [p.ma_ct, p.ma_nha_may, p.headcode, JSON.stringify(p), Math.floor(Date.now()/1000)]
         });
     }
@@ -359,24 +384,24 @@ export const importInspections = async (insps: Inspection[]) => {
 
 export const getProjects = async (): Promise<Project[]> => {
     const res = await turso.execute("SELECT * FROM projects");
-    return res.rows.map(r => safeJsonParse(r.data_json, {} as any));
+    return res.rows.map(r => safeJsonParse(r.data, {} as any));
 };
 
 export const getProjectByCode = async (code: string) => {
     const res = await turso.execute({ sql: "SELECT * FROM projects WHERE ma_ct = ?", args: [code] });
-    return res.rows.length > 0 ? safeJsonParse(res.rows[0].data_json, null) : null;
+    return res.rows.length > 0 ? safeJsonParse(res.rows[0].data, null) : null;
 };
 
 export const updateProject = async (proj: Project) => {
     await turso.execute({
-        sql: "INSERT INTO projects (id, ma_ct, name, data_json, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ma_ct=excluded.ma_ct, name=excluded.name, data_json=excluded.data_json, updated_at=excluded.updated_at",
+        sql: "INSERT INTO projects (id, ma_ct, name, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ma_ct=excluded.ma_ct, name=excluded.name, data=excluded.data, updated_at=excluded.updated_at",
         args: [proj.id, proj.ma_ct, proj.name, JSON.stringify(proj), Math.floor(Date.now()/1000)]
     });
 };
 
 export const getNotifications = async (userId: string) => {
     const res = await turso.execute({ sql: "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC", args: [userId] });
-    return res.rows.map(r => ({ ...safeJsonParse(r.data_json, {} as any), id: r.id, isRead: r.is_read === 1 }));
+    return res.rows.map(r => ({ ...safeJsonParse(r.data, {} as any), id: r.id, isRead: r.is_read === 1 }));
 };
 
 export const markNotificationRead = async (id: string) => {
@@ -389,13 +414,13 @@ export const markAllNotificationsRead = async (userId: string) => {
 
 export const getRoles = async (): Promise<Role[]> => {
     const res = await turso.execute("SELECT * FROM roles");
-    return res.rows.map(r => safeJsonParse(r.data_json, {} as any))
-              .filter(r => r && r.id); // Ensure we only return valid objects
+    return res.rows.map(r => safeJsonParse(r.data, {} as any))
+              .filter(r => r && r.id);
 };
 
 export const saveRole = async (role: Role) => {
     await turso.execute({
-        sql: "INSERT INTO roles (id, name, data_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, data_json=excluded.data_json, updated_at=excluded.updated_at",
+        sql: "INSERT INTO roles (id, name, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, data=excluded.data, updated_at=excluded.updated_at",
         args: [role.id, role.name, JSON.stringify(role), Math.floor(Date.now()/1000)]
     });
 };
@@ -406,13 +431,35 @@ export const deleteRole = async (id: string) => {
 
 export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
     const res = await turso.execute("SELECT * FROM defect_library");
-    return res.rows.map(r => safeJsonParse(r.data_json, {} as any));
+    return res.rows.map(r => ({
+        ...safeJsonParse(r.data, {} as any),
+        id: r.id as string,
+        code: r.defect_code as string,
+        name: r.name as string,
+        description: r.description as string,
+        stage: r.stage as string,
+        category: r.category as string,
+        severity: r.severity as string,
+        suggestedAction: r.suggested_action as string
+    }));
 };
 
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
+    const now = Math.floor(Date.now() / 1000);
     await turso.execute({
-        sql: "INSERT INTO defect_library (id, defect_code, name, data_json, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET defect_code=excluded.defect_code, name=excluded.name, data_json=excluded.data_json, updated_at=excluded.updated_at",
-        args: [item.id, item.code, item.name, JSON.stringify(item), Math.floor(Date.now()/1000)]
+        sql: `INSERT INTO defect_library (
+          id, defect_code, name, description, stage, category, severity, suggested_action, 
+          correct_image, incorrect_image, created_by, data, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+        ON CONFLICT(id) DO UPDATE SET 
+          defect_code=excluded.defect_code, name=excluded.name, description=excluded.description,
+          stage=excluded.stage, category=excluded.category, severity=excluded.severity,
+          suggested_action=excluded.suggested_action, data=excluded.data, updated_at=excluded.updated_at`,
+        args: cleanArgs([
+          item.id, item.code, item.name, item.description, item.stage, item.category, 
+          item.severity, item.suggestedAction, item.correctImage, item.incorrectImage, 
+          item.createdBy, JSON.stringify(item), now
+        ])
     });
 };
 
