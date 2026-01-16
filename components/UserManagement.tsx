@@ -29,7 +29,7 @@ import {
   Hash
 } from 'lucide-react';
 // @ts-ignore
-import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
+import * as XLSX from 'xlsx';
 
 interface UserManagementProps {
   users: User[];
@@ -49,7 +49,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   const [filterRole, setFilterRole] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
 
@@ -169,41 +168,55 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
 
       setIsImporting(true);
       const reader = new FileReader();
+      
       reader.onload = async (evt) => {
           try {
-              const bstr = evt.target?.result;
-              const wb = XLSX.read(bstr, { type: 'binary' });
-              const wsname = wb.SheetNames[0];
-              const ws = wb.Sheets[wsname];
-              const data = XLSX.utils.sheet_to_json(ws);
+              const data = evt.target?.result;
+              const workbook = XLSX.read(data, { type: 'binary' });
+              const sheetName = workbook.SheetNames[0];
+              const sheet = workbook.Sheets[sheetName];
+              const json = XLSX.utils.sheet_to_json(sheet);
 
-              const importedUsers: User[] = data.map((row: any) => ({
-                  id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
-                  msnv: String(row['MÃ NV'] || ''),
-                  name: String(row['HỌ VÀ TÊN'] || ''),
-                  username: String(row['Tên Đăng Nhập'] || row['username'] || '').toLowerCase().trim(),
-                  role: (row['Vai Trò'] || 'QC') as UserRole,
-                  position: String(row['Chức Vụ'] || ''),
-                  status: String(row['Tình Trạng'] || 'Đang làm việc'),
-                  password: '123', // Mặc định
-                  avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(row['HỌ VÀ TÊN'] || 'U')}&background=random&color=fff`,
-                  allowedModules: ['PQC']
-              })).filter(u => u.username && u.name);
+              const importedUsers: User[] = json.map((row: any) => {
+                  const name = String(row['HỌ VÀ TÊN'] || row['name'] || '').trim();
+                  const username = String(row['Tên Đăng Nhập'] || row['username'] || '').toLowerCase().trim();
+                  
+                  if (!name || !username) return null;
+
+                  return {
+                      id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
+                      msnv: String(row['MÃ NV'] || row['msnv'] || ''),
+                      name: name,
+                      username: username,
+                      role: (row['Vai Trò'] || row['role'] || 'QC') as UserRole,
+                      position: String(row['Chức Vụ'] || row['position'] || ''),
+                      status: String(row['Tình Trạng'] || row['status'] || 'Đang làm việc'),
+                      password: '123', // Mật khẩu mặc định
+                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
+                      allowedModules: ['PQC']
+                  };
+              }).filter((u): u is User => u !== null);
 
               if (importedUsers.length > 0) {
                   await onImportUsers(importedUsers);
-                  alert(`Đã nhập thành công ${importedUsers.length} nhân sự.`);
+                  alert(`Đã nhập thành công ${importedUsers.length} nhân sự vào hệ thống.`);
               } else {
-                  alert("Không tìm thấy dữ liệu hợp lệ trong file.");
+                  alert("Không tìm thấy dữ liệu hợp lệ trong file Excel. Vui lòng kiểm tra tiêu đề cột.");
               }
           } catch (error) {
               console.error("Excel import error:", error);
-              alert("Lỗi khi đọc file Excel. Vui lòng kiểm tra lại định dạng.");
+              alert("Lỗi khi xử lý file Excel. Đảm bảo file đúng định dạng .xlsx");
           } finally {
               setIsImporting(false);
               if (excelImportRef.current) excelImportRef.current.value = '';
           }
       };
+
+      reader.onerror = () => {
+          alert("Lỗi khi đọc file.");
+          setIsImporting(false);
+      };
+
       reader.readAsBinaryString(file);
   };
 
