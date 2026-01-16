@@ -63,9 +63,11 @@ const ModuleCard: React.FC<ModuleCardProps> = ({ title, icon, onClick, color = "
   </div>
 );
 
+// Added SQC_VT to ICON_MAP to fix TS error: Property 'SQC_VT' is missing
 const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'IQC': <PackageCheck className="w-6 h-6"/>,
     'SQC_MAT': <Truck className="w-6 h-6"/>,
+    'SQC_VT': <Truck className="w-6 h-6"/>,
     'SQC_BTP': <Package className="w-6 h-6"/>,
     'PQC': <Factory className="w-6 h-6"/>,
     'FSR': <FileQuestion className="w-6 h-6"/>,
@@ -80,9 +82,11 @@ const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'DEFECTS': <Hammer className="w-6 h-6"/>
 };
 
+// Added SQC_VT to COLOR_MAP to fix TS error: Property 'SQC_VT' is missing
 const COLOR_MAP: Record<ModuleId, string> = {
     'IQC': "text-blue-600",
     'SQC_MAT': "text-teal-600",
+    'SQC_VT': "text-teal-600",
     'SQC_BTP': "text-teal-600",
     'PQC': "text-indigo-600",
     'FSR': "text-orange-600",

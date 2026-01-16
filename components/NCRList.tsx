@@ -62,7 +62,8 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         String(n.id || '').toLowerCase().includes(term) || 
         String(n.issueDescription || '').toLowerCase().includes(term) ||
         (n.responsiblePerson && String(n.responsiblePerson).toLowerCase().includes(term)) ||
-        String(n.inspection_id || '').toLowerCase().includes(term)
+        String(n.inspection_id || '').toLowerCase().includes(term) ||
+        String(n.defect_code || '').toLowerCase().includes(term)
     );
   }, [ncrs, searchTerm]);
 
@@ -108,7 +109,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         </div>
       )}
 
-      {/* Fixed Header Content (The GlobalHeader already provides the title, this is local toolbar) */}
+      {/* Header Toolbar */}
       <div className="bg-white border-b border-slate-200 shadow-sm shrink-0 z-40 sticky top-0 px-4 py-4">
           <div className="max-w-7xl mx-auto space-y-4">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -126,10 +127,10 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                     onChange={e => setStatusFilter(e.target.value as any)}
                     className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none cursor-pointer hover:border-blue-300 transition-all shadow-sm"
                   >
-                      <option value="ALL">Tất cả trạng thái</option>
-                      <option value="OPEN">Mới (OPEN)</option>
-                      <option value="IN_PROGRESS">Đang xử lý</option>
-                      <option value="CLOSED">Đã đóng (CLOSED)</option>
+                      <option value="ALL">TẤT CẢ TRẠNG THÁI</option>
+                      <option value="OPEN">OPEN</option>
+                      <option value="IN_PROGRESS">IN PROGRESS</option>
+                      <option value="CLOSED">CLOSED</option>
                   </select>
               </div>
           </div>
@@ -140,7 +141,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
           {isLoading ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400">
                   <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-                  <p className="font-black uppercase tracking-widest text-[9px]">Đang tải danh sách lỗi...</p>
+                  <p className="font-black uppercase tracking-widest text-[9px]">Đang tải danh sách NCR...</p>
               </div>
           ) : filteredNcrs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300 space-y-4">
@@ -156,13 +157,13 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       <table className="w-full text-left border-collapse">
                           <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px] sticky top-0 z-10">
                               <tr>
-                                  <th className="px-6 py-4">NCR Code</th>
-                                  <th className="px-6 py-4">Mô tả lỗi</th>
-                                  <th className="px-6 py-4">Mức độ</th>
-                                  <th className="px-6 py-4">Người phụ trách</th>
-                                  <th className="px-6 py-4">Hạn xử lý</th>
-                                  <th className="px-6 py-4">Trạng thái</th>
-                                  <th className="px-6 py-4 text-right">Action</th>
+                                  <th className="px-6 py-4">NCR CODE</th>
+                                  <th className="px-6 py-4">MÔ TẢ LỖI</th>
+                                  <th className="px-6 py-4">MỨC ĐỘ</th>
+                                  <th className="px-6 py-4">NGƯỜI PHỤ TRÁCH</th>
+                                  <th className="px-6 py-4">HẠN XỬ LÝ</th>
+                                  <th className="px-6 py-4">TRẠNG THÁI</th>
+                                  <th className="px-6 py-4 text-right">ACTION</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
@@ -212,7 +213,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           <button 
                                               className="bg-white border border-slate-200 text-blue-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm active:scale-95 flex items-center gap-1 ml-auto"
                                           >
-                                              Chi tiết <ChevronRight className="w-3 h-3" />
+                                              CHI TIẾT <ChevronRight className="w-3 h-3" />
                                           </button>
                                       </td>
                                   </tr>
@@ -221,7 +222,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       </table>
                   </div>
 
-                  {/* MOBILE/TABLET CARD VIEW (< 1024px) */}
+                  {/* MOBILE/TABLET CARD VIEW */}
                   <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4">
                       {filteredNcrs.map((ncr) => (
                           <div 
@@ -236,7 +237,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                               <AlertTriangle className="w-4 h-4" />
                                           </div>
                                           <div>
-                                              <span className="font-black text-slate-900 text-xs tracking-tight block">NCR: {ncr.id}</span>
+                                              <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">NCR: {ncr.id}</span>
                                               <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">ID: {ncr.inspection_id || 'LOCAL'}</span>
                                           </div>
                                       </div>
@@ -280,7 +281,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                       {ncr.status}
                                   </span>
                                   <div className="flex items-center gap-1.5 text-blue-600 text-[10px] font-black uppercase tracking-tighter hover:underline">
-                                      Chi tiết <ChevronRight className="w-3.5 h-3.5" />
+                                      CHI TIẾT <ChevronRight className="w-3.5 h-3.5" />
                                   </div>
                               </div>
                           </div>
@@ -293,16 +294,16 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
       {/* Pagination Summary Footer */}
       <div className="bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-[0_-5px_15px_rgba(0,0,0,0.02)] hidden md:flex">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Hiển thị {filteredNcrs.length} bản ghi NCR
+              HIỂN THỊ {filteredNcrs.length} BẢN GHI NCR
           </p>
           <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest">
               <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                  <span className="text-slate-500">Mới: {ncrs.filter(n => n.status !== 'CLOSED').length}</span>
+                  <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]"></div>
+                  <span className="text-slate-500">MỚI: {ncrs.filter(n => n.status !== 'CLOSED').length}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-slate-500">Đã đóng: {ncrs.filter(n => n.status === 'CLOSED').length}</span>
+                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
+                  <span className="text-slate-500">ĐÃ ĐÓNG: {ncrs.filter(n => n.status === 'CLOSED').length}</span>
               </div>
           </div>
       </div>

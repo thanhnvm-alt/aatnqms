@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, MaterialIQC, NCRComment } from '../types';
 import { 
@@ -7,7 +6,7 @@ import {
   CheckCircle, LayoutList, PenTool, ChevronDown, ChevronUp, Calculator,
   TrendingUp, Layers, MessageSquare, Loader2, Eraser, Info,
   ClipboardList, Send, ShieldAlert, Save, Check, UserCheck, 
-  Signature, MessageCircle, UserPlus, Tag, FileCheck
+  Signature, MessageCircle, UserPlus, Tag, FileCheck, Camera, Image as ImageIcon, MapPin
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -20,6 +19,25 @@ interface InspectionDetailProps {
   onApprove?: (id: string, signature: string, extraInfo?: any) => Promise<void>;
   onPostComment?: (id: string, comment: NCRComment) => Promise<void>;
 }
+
+const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
+      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
+      else resolve(base64Str);
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+};
 
 const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -99,9 +117,10 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
 
 export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
-  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; context?: any } | null>(null);
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
 
   // Modal states
   const [showManagerModal, setShowManagerModal] = useState(false);
@@ -113,6 +132,10 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [pmSig, setPmSig] = useState(inspection.pmSignature || '');
   const [pmName, setPmName] = useState(inspection.pmName || '');
   const [pmComment, setPmComment] = useState(inspection.pmComment || '');
+
+  // Refs for upload
+  const commentFileRef = useRef<HTMLInputElement>(null);
+  const commentCameraRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user.role === 'ADMIN';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -151,8 +174,24 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
     } catch (e) { alert("Lỗi khi lưu xác nhận PM."); } finally { setIsProcessing(false); }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+          const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(f);
+          });
+          return resizeImage(base64);
+      }));
+      setCommentAttachments(prev => [...prev, ...processed]);
+      e.target.value = '';
+  };
+
   const handlePostComment = async () => {
-      if (!newComment.trim() || !onPostComment) return;
+      if (!newComment.trim() && commentAttachments.length === 0) return;
+      if (!onPostComment) return;
       setIsSubmittingComment(true);
       try {
           await onPostComment(inspection.id, { 
@@ -161,14 +200,29 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
               userName: user.name, 
               userAvatar: user.avatar, 
               content: newComment, 
-              createdAt: new Date().toISOString() 
-          });
+              createdAt: new Date().toISOString(),
+              attachments: commentAttachments
+          } as any);
           setNewComment('');
+          setCommentAttachments([]);
       } catch (e) { alert("Lỗi gửi phản hồi."); } finally { setIsSubmittingComment(false); }
+  };
+
+  const handleEditCommentImage = (idx: number) => {
+      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
+  };
+
+  const updateCommentImage = (idx: number, newImg: string) => {
+      setCommentAttachments(prev => {
+          const next = [...prev];
+          next[idx] = newImg;
+          return next;
+      });
   };
 
   const deliveryNoteImages = inspection.deliveryNoteImages || (inspection.deliveryNoteImage ? [inspection.deliveryNoteImage] : []);
   const reportImages = inspection.reportImages || (inspection.reportImage ? [inspection.reportImage] : []);
+  const mainImages = inspection.images || [];
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -177,7 +231,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
           <div className="flex items-center gap-3">
               <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-100 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600" /></button>
               <div>
-                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight leading-none">IQC REVIEW REPORT</h2>
+                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight leading-none">IQC QUALITY REPORT</h2>
                   <div className="flex items-center gap-2 mt-0.5">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>{inspection.status}</span>
                       <span className="text-[10px] text-slate-400 font-mono font-bold tracking-tight uppercase">#{inspection.id.split('-').pop()}</span>
@@ -193,13 +247,21 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar bg-slate-50/50 pb-40 md:pb-32">
         {/* Header Block */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5 relative overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mb-1.5">Purchase Order</p>
                     <h1 className="text-xl font-bold text-slate-800 uppercase tracking-tight leading-tight">PO: {inspection.po_number || 'N/A'}</h1>
-                    <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100 w-fit">
-                        <Building2 className="w-3.5 h-3.5 text-blue-500" />
-                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Supplier: {inspection.supplier}</span>
+                    <div className="flex flex-col gap-2 mt-3">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100 w-fit">
+                            <Building2 className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">{inspection.supplier}</span>
+                        </div>
+                        {inspection.supplierAddress && (
+                            <div className="flex items-start gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                                <span className="text-[10px] font-medium text-slate-600 leading-relaxed uppercase">{inspection.supplierAddress}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -226,16 +288,31 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
             )}
 
-            {/* Images */}
-            {(deliveryNoteImages.length > 0 || reportImages.length > 0) && (
-                <div className="flex flex-col gap-4 border-t border-slate-100 pt-3">
+            {/* Images Gallery */}
+            <div className="flex flex-col gap-6 border-t border-slate-100 pt-4">
+                {mainImages.length > 0 && (
+                    <div className="space-y-2">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <ImageIcon className="w-3 h-3" /> Bằng chứng hiện trường ({mainImages.length})
+                        </p>
+                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                            {mainImages.map((img, idx) => (
+                                <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: mainImages, index: idx })}>
+                                    <img src={img} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {deliveryNoteImages.length > 0 && (
                         <div className="space-y-2">
                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Phiếu Giao Hàng</p>
                             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                                 {deliveryNoteImages.map((img, idx) => (
                                     <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })}>
-                                        <img src={img} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+                                        <img src={img} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
                                     </div>
                                 ))}
                             </div>
@@ -243,18 +320,18 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     )}
                     {reportImages.length > 0 && (
                         <div className="space-y-2">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Báo Cáo QC</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Báo Cáo NCC</p>
                             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                                 {reportImages.map((img, idx) => (
                                     <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
-                                        <img src={img} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+                                        <img src={img} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )}
                 </div>
-            )}
+            </div>
         </div>
 
         {/* Materials List */}
@@ -282,39 +359,34 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                         </div>
                         {isExp && (
                             <div className="p-5 space-y-5 animate-in slide-in-from-top-4 duration-300 border-t border-slate-50">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="space-y-1">
                                         <p className="text-[9px] font-bold text-slate-400 uppercase">Chủng loại</p>
-                                        <p className="text-[11px] font-bold">{mat.category || '---'}</p>
+                                        <p className="text-[11px] font-bold uppercase">{mat.category || '---'}</p>
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-[9px] font-bold text-slate-400 uppercase">Phạm vi</p>
-                                        <p className="text-[11px] font-bold">{mat.scope}</p>
+                                        <p className="text-[11px] font-bold uppercase">{mat.scope}</p>
                                     </div>
-                                    {mat.scope === 'PROJECT' && (
-                                        <>
-                                            <div className="space-y-1">
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Mã Dự Án</p>
-                                                <p className="text-[11px] font-bold">{mat.projectCode || '---'}</p>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase">Công trình</p>
-                                                <p className="text-[11px] font-bold truncate">{mat.projectName || '---'}</p>
-                                            </div>
-                                        </>
-                                    )}
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Mã Dự Án</p>
+                                        <p className="text-[11px] font-bold uppercase font-mono">{mat.projectCode || '---'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Tên Dự Án</p>
+                                        <p className="text-[11px] font-bold truncate uppercase">{mat.projectName || '---'}</p>
+                                    </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3 shadow-inner">
-                                        <div className="grid grid-cols-4 gap-2 text-center">
-                                            <div><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">SL ĐH</p><p className="text-lg font-bold text-slate-700">{mat.orderQty || 0}</p></div>
-                                            <div><p className="text-[8px] font-bold text-blue-400 uppercase tracking-widest">Kiểm</p><p className="text-lg font-bold text-blue-700">{mat.inspectQty}</p></div>
-                                            <div><p className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Đạt</p><p className="text-lg font-bold text-green-700">{mat.passQty}</p></div>
-                                            <div><p className="text-[8px] font-bold text-red-400 uppercase tracking-widest">Lỗi</p><p className="text-lg font-bold text-red-700">{mat.failQty}</p></div>
-                                        </div>
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3 shadow-inner">
+                                    <div className="grid grid-cols-4 gap-2 text-center">
+                                        <div><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">SL ĐH</p><p className="text-lg font-bold text-slate-700">{mat.orderQty || 0}</p></div>
+                                        <div><p className="text-[8px] font-bold text-blue-400 uppercase tracking-widest">Kiểm</p><p className="text-lg font-bold text-blue-700">{mat.inspectQty}</p></div>
+                                        <div><p className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Đạt</p><p className="text-lg font-bold text-green-700">{mat.passQty}</p></div>
+                                        <div><p className="text-[8px] font-bold text-red-400 uppercase tracking-widest">Lỗi</p><p className="text-lg font-bold text-red-700">{mat.failQty}</p></div>
                                     </div>
                                 </div>
+
                                 <div className="space-y-2">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                         {mat.items?.map(item => (
@@ -387,7 +459,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <MessageSquare className="w-4 h-4 text-blue-600" />
                 <h3 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">Trao đổi & Ghi chú</h3>
             </div>
-            <div className="p-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar">
+            <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
                         <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-full border border-slate-200 shrink-0 shadow-sm" alt="" />
@@ -397,18 +469,45 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <span className="text-[9px] font-bold text-slate-400 font-mono">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
                             </div>
                             <div className="bg-slate-50 p-3 rounded-xl rounded-tl-none border border-slate-100 text-xs text-slate-700">{comment.content}</div>
+                            {comment.attachments && comment.attachments.length > 0 && (
+                                <div className="flex gap-2 flex-wrap pt-1">
+                                    {comment.attachments.map((img, i) => (
+                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-transform hover:scale-105 shrink-0">
+                                            <img src={img} className="w-full h-full object-cover" alt=""/>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
+                {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-[10px] text-slate-400 py-6 italic uppercase tracking-widest">Chưa có ý kiến thảo luận</p>}
             </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50/30">
-                <div className="flex gap-3">
-                    <textarea 
-                        value={newComment} onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Nhập phản hồi..."
-                        className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-[11px] focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-10 transition-all"
-                    />
-                    <button onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()} className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-lg flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all shrink-0"><Send className="w-4 h-4" /></button>
+            <div className="p-3 border-t border-slate-100 bg-slate-50/30 space-y-3">
+                {commentAttachments.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                        {commentAttachments.map((img, idx) => (
+                            <div key={idx} className="relative w-16 h-16 shrink-0 group">
+                                <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
+                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                                <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><PenTool className="w-4 h-4 text-white drop-shadow-md"/></div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="flex gap-2 items-end">
+                    <div className="flex-1 relative">
+                        <textarea 
+                            value={newComment} onChange={(e) => setNewComment(e.target.value)}
+                            placeholder="Nhập phản hồi..."
+                            className="flex-1 w-full pl-3 pr-24 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-12 transition-all"
+                        />
+                        <div className="absolute right-2 bottom-2 flex items-center gap-1.5">
+                            <button onClick={() => commentCameraRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chụp ảnh"><Camera className="w-4 h-4"/></button>
+                            <button onClick={() => commentFileRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chọn ảnh"><ImageIcon className="w-4 h-4"/></button>
+                        </div>
+                    </div>
+                    <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-12 h-12 bg-blue-600 text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0"><Send className="w-4 h-4" /></button>
                 </div>
             </div>
         </section>
@@ -493,7 +592,18 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
           </div>
       )}
 
-      {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
+      {lightboxState && (
+          <ImageEditorModal 
+              images={lightboxState.images} 
+              initialIndex={lightboxState.index} 
+              onClose={() => setLightboxState(null)} 
+              onSave={lightboxState.context === 'PENDING_COMMENT' ? (idx, updated) => updateCommentImage(idx, updated) : undefined}
+              readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
+          />
+      )}
+
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
     </div>
   );
 };

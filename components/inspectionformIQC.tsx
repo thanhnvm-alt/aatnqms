@@ -1,13 +1,13 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
-  Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
-  Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
+  Save, X, Box, FileText, QrCode, Loader2, Building2, 
+  Calendar, PenTool, Eraser, Plus, Trash2, 
   Camera, Image as ImageIcon, ClipboardList, ChevronDown, 
-  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle
+  ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, Maximize2,
+  Layers, Briefcase, Hash
 } from 'lucide-react';
-import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
+import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -20,20 +20,6 @@ interface InspectionFormProps {
   templates: Record<string, CheckItem[]>;
 }
 
-const PRESET_DOCS = [
-    'Bản vẽ (Ký)', 
-    'Spec', 
-    'Test Report', 
-    'Rập/Cỡ (Ký)', 
-    'Mẫu màu', 
-    'Phiếu đặt mua (PO Detail)', 
-    'Mẫu đối chứng'
-];
-
-/**
- * Optimized Image Resize & Compress (< 100KB)
- * Using iterative compression to guarantee size limit
- */
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -42,27 +28,21 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
-      
-      // Calculate aspect ratio to fit within maxWidth
       if (width > height) {
         if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
       } else {
         if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; }
       }
-      
       canvas.width = width; 
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) { resolve(base64Str); return; }
-      
       ctx.fillStyle = '#FFFFFF'; 
       ctx.fillRect(0, 0, width, height); 
       ctx.drawImage(img, 0, 0, width, height);
       
       let quality = 0.7;
       let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      
-      // Strict compression loop: Target < 100KB (approx 133,333 base64 chars)
       while (dataUrl.length > 133333 && quality > 0.1) {
         quality -= 0.1;
         dataUrl = canvas.toDataURL('image/jpeg', quality);
@@ -133,15 +113,10 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
-    supplierAddress: initialData?.supplierAddress || '', 
     location: initialData?.location || '',
-    reportImage: initialData?.reportImage || '',
-    reportImages: initialData?.reportImages || (initialData?.reportImage ? [initialData.reportImage] : []),
-    deliveryNoteImage: initialData?.deliveryNoteImage || '',
-    deliveryNoteImages: initialData?.deliveryNoteImages || (initialData?.deliveryNoteImage ? [initialData.deliveryNoteImage] : []),
+    reportImages: initialData?.reportImages || [],
+    deliveryNoteImages: initialData?.deliveryNoteImages || [],
     summary: initialData?.summary || '',
-    score: 0,
-    items: initialData?.items || [], 
     images: initialData?.images || [],
     ...initialData
   });
@@ -150,14 +125,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
-  const [customDoc, setCustomDoc] = useState('');
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [isLookupLoading, setIsLookupLoading] = useState(false);
   
-  // Defect Library State
-  const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
-  const [defectSearch, setDefectSearch] = useState<Record<string, string>>({}); 
-  const [showDefectDropdown, setShowDefectDropdown] = useState<string | null>(null); 
-
-  // Image Editing State
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -168,35 +138,44 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       return Array.from(new Set(iqcTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
 
-  useEffect(() => {
-      fetchDefectLibrary().then(lib => {
-          setDefectLibrary(lib);
-      });
-  }, []);
-
   const handleInputChange = (field: keyof Inspection, value: any) => { 
     setFormData(prev => ({ ...prev, [field]: value })); 
   };
 
+  /**
+   * ISO-DB: Chức năng load tên công trình từ database plan khi nhập mã công trình xong
+   */
   const lookupMaterialProject = async (code: string, matIdx: number) => {
-    if (!code || code.length < 3) return;
+    const cleanCode = (code || '').trim().toUpperCase();
+    if (!cleanCode || cleanCode.length < 3) return;
+    
+    setIsLookupLoading(true);
     try {
-      const projects = await fetchProjects();
-      const match = projects.find(p => 
-          p.ma_ct.toLowerCase().includes(code.toLowerCase()) || 
-          p.code?.toLowerCase().includes(code.toLowerCase())
+      // Gọi API tra cứu từ bảng plans
+      const response = await fetchPlans(cleanCode, 1, 10);
+      const match = (response.items || []).find(p => 
+          (p.ma_ct || '').toUpperCase() === cleanCode || 
+          (p.ma_nha_may || '').toUpperCase() === cleanCode ||
+          (p.headcode || '').toUpperCase() === cleanCode
       );
+
       if (match) {
         setFormData(prev => {
             const nextMats = [...(prev.materials || [])];
             if (nextMats[matIdx]) {
                 nextMats[matIdx].projectName = match.ten_ct;
-                if (match.ma_ct) nextMats[matIdx].projectCode = match.ma_ct;
+                nextMats[matIdx].projectCode = match.ma_ct;
             }
-            return { ...prev, materials: nextMats };
+            // Đồng bộ mã dự án vào header nếu chưa có
+            const updatedHeaderMaCt = prev.ma_ct || match.ma_ct;
+            return { ...prev, materials: nextMats, ma_ct: updatedHeaderMaCt };
         });
       }
-    } catch (e) {}
+    } catch (e) {
+        console.error("ISO-INTERNAL: Plan lookup failed", e);
+    } finally {
+        setIsLookupLoading(false);
+    }
   };
   
   const handleAddMaterial = () => {
@@ -205,8 +184,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         name: '',
         category: '',
         scope: 'COMMON',
-        projectCode: 'VẬT TƯ DÙNG CHUNG',
-        projectName: 'SỬ DỤNG TẤT CẢ CÔNG TRÌNH',
+        projectCode: 'DÙNG CHUNG',
+        projectName: 'VẬT TƯ KHO DÙNG CHUNG',
         orderQty: 0,
         deliveryQty: 0,
         unit: 'PCS',
@@ -246,8 +225,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
         if (field === 'scope') {
             if (value === 'COMMON') {
-                mat.projectCode = 'VẬT TƯ DÙNG CHUNG';
-                mat.projectName = 'SỬ DỤNG TẤT CẢ CÔNG TRÌNH';
+                mat.projectCode = 'DÙNG CHUNG';
+                mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG';
             } else {
                 mat.projectCode = '';
                 mat.projectName = '';
@@ -257,8 +236,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
         else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
         else if (field === 'failQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
-        
-        if (field === 'projectCode' && idx === 0 && mat.scope === 'PROJECT') prev.ma_ct = value;
 
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
@@ -275,170 +252,89 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       setFormData(prev => ({ ...prev, materials: nextMaterials }));
   };
 
-  const handleDefectSearch = (text: string, itemId: string) => {
-      setDefectSearch(prev => ({ ...prev, [itemId]: text }));
-      setShowDefectDropdown(itemId);
-  };
-
-  const selectDefect = (matIdx: number, itemIdx: number, defect: DefectLibraryItem) => {
-      updateMaterialItem(matIdx, itemIdx, 'notes', defect.name);
-      setShowDefectDropdown(null);
-      setDefectSearch(prev => ({ ...prev, [formData.materials![matIdx].items[itemIdx].id]: defect.name }));
-  };
-
-  const quickAddDefect = async (matIdx: number, itemIdx: number) => {
-      const itemId = formData.materials![matIdx].items[itemIdx].id;
-      const text = defectSearch[itemId];
-      if (!text) return;
-
-      const newDefect: DefectLibraryItem = {
-          id: `DEF_${Date.now()}`,
-          code: `DEF_${Date.now()}`,
-          name: text,
-          category: 'Ngoại quan',
-          stage: 'IQC',
-          severity: 'MINOR',
-          description: text,
-          createdAt: Math.floor(Date.now() / 1000),
-          createdBy: user.name
-      };
-
-      try {
-          await saveDefectLibraryItem(newDefect);
-          setDefectLibrary(prev => [...prev, newDefect]);
-          selectDefect(matIdx, itemIdx, newDefect);
-      } catch (e) {
-          alert("Lỗi thêm lỗi mới.");
-      }
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadContext) return;
 
+    setIsProcessingImages(true);
     const { type, matIdx, itemIdx } = activeUploadContext;
     
-    // Process multiple files in parallel
-    const processedImages = await Promise.all(
-        Array.from(files).map(async (file: File) => {
-            return new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = async () => {
-                    const compressed = await resizeImage(reader.result as string);
-                    resolve(compressed);
-                };
-                reader.readAsDataURL(file);
-            });
-        })
-    );
+    try {
+        const processedImages = await Promise.all(
+            Array.from(files).map(async (file: File) => {
+                return new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        const compressed = await resizeImage(reader.result as string);
+                        resolve(compressed);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            })
+        );
 
-    if (type === 'MAIN') {
-        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processedImages] }));
-    }
-    else if (type === 'DELIVERY') {
-        setFormData(prev => ({ 
-            ...prev, 
-            deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...processedImages],
-            deliveryNoteImage: processedImages[0] || prev.deliveryNoteImage
-        }));
-    }
-    else if (type === 'REPORT') {
-        setFormData(prev => ({ 
-            ...prev, 
-            reportImages: [...(prev.reportImages || []), ...processedImages],
-            reportImage: processedImages[0] || prev.reportImage
-        }));
-    }
-    else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
         setFormData(prev => {
-            const nextMats = [...(prev.materials || [])];
-            if (!nextMats[matIdx]) return prev;
-            
-            const items = [...nextMats[matIdx].items];
-            const currentItem = { ...items[itemIdx] };
-            currentItem.images = [...(currentItem.images || []), ...processedImages];
-            items[itemIdx] = currentItem;
-            
-            nextMats[matIdx] = { ...nextMats[matIdx], items };
-            return { ...prev, materials: nextMats };
+            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...processedImages] };
+            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...processedImages] };
+            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...processedImages] };
+            if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+                const nextMats = [...(prev.materials || [])];
+                const items = [...nextMats[matIdx].items];
+                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...processedImages] };
+                nextMats[matIdx] = { ...nextMats[matIdx], items };
+                return { ...prev, materials: nextMats };
+            }
+            return prev;
         });
+    } catch (err) {
+        console.error("ISO-UPLOAD: Failed", err);
+    } finally {
+        setIsProcessingImages(false);
+        e.target.value = '';
     }
-    
-    e.target.value = '';
-  };
-
-  const handleEditImage = (images: string[], index: number, context: any) => {
-      setEditorState({ images, index, context });
   };
 
   const onImageSave = (idx: number, updatedImg: string) => {
       if (!editorState) return;
       const { type, matIdx, itemIdx } = editorState.context;
 
-      if (type === 'MAIN') {
-          setFormData(prev => {
+      setFormData(prev => {
+          if (type === 'MAIN') {
               const newImgs = [...(prev.images || [])];
               newImgs[idx] = updatedImg;
               return { ...prev, images: newImgs };
-          });
-      }
-      else if (type === 'DELIVERY') {
-          setFormData(prev => {
+          }
+          if (type === 'DELIVERY') {
               const newImgs = [...(prev.deliveryNoteImages || [])];
-              if (newImgs[idx]) newImgs[idx] = updatedImg;
-              return { 
-                  ...prev, 
-                  deliveryNoteImages: newImgs,
-                  deliveryNoteImage: idx === 0 ? updatedImg : prev.deliveryNoteImage
-              };
-          });
-      }
-      else if (type === 'REPORT') {
-          setFormData(prev => {
+              newImgs[idx] = updatedImg;
+              return { ...prev, deliveryNoteImages: newImgs };
+          }
+          if (type === 'REPORT') {
               const newImgs = [...(prev.reportImages || [])];
-              if (newImgs[idx]) newImgs[idx] = updatedImg;
-              return { 
-                  ...prev, 
-                  reportImages: newImgs,
-                  reportImage: idx === 0 ? updatedImg : prev.reportImage
-              };
-          });
-      }
-      else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-          const nextMats = [...(formData.materials || [])];
-          const items = [...nextMats[matIdx].items];
-          const imgs = [...(items[itemIdx].images || [])];
-          imgs[idx] = updatedImg;
-          items[itemIdx].images = imgs;
-          nextMats[matIdx].items = items;
-          setFormData(prev => ({ ...prev, materials: nextMats }));
-      }
-  };
-
-  const toggleDocType = (type: string) => {
-      setFormData(prev => {
-          const current = prev.referenceDocs || [];
-          const next = current.includes(type) ? current.filter(t => t !== type) : [...current, type];
-          return { ...prev, referenceDocs: next };
+              newImgs[idx] = updatedImg;
+              return { ...prev, reportImages: newImgs };
+          }
+          if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+              const nextMats = [...(prev.materials || [])];
+              const items = [...nextMats[matIdx].items];
+              const imgs = [...(items[itemIdx].images || [])];
+              imgs[idx] = updatedImg;
+              items[itemIdx] = { ...items[itemIdx], images: imgs };
+              nextMats[matIdx] = { ...nextMats[matIdx], items };
+              return { ...prev, materials: nextMats };
+          }
+          return prev;
       });
-  };
-
-  const addCustomDoc = () => {
-      if (customDoc.trim()) {
-          toggleDocType(customDoc.trim());
-          setCustomDoc('');
-      }
   };
 
   const handleSubmit = async () => {
     if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã PO và Nhà cung cấp."); return; }
-    if (!formData.signature) { alert("Bắt buộc QC phải ký tên xác nhận báo cáo."); return; }
+    if (!formData.signature) { alert("QC bắt buộc ký tên xác nhận báo cáo."); return; }
     setIsSaving(true);
     try {
         await onSave({ ...formData, status: InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection);
     } catch (e: any) {
-        console.error(e);
-        alert(`Lỗi hệ thống khi lưu IQC: ${e.message || 'Unknown Error'}`);
+        alert(`Lỗi hệ thống: ${e.message || 'Unknown Error'}`);
     } finally { setIsSaving(false); }
   };
 
@@ -447,130 +343,95 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     return inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number);
   }, [inspections, formData.po_number, formData.id]);
 
-  const moduleLabel = formData.type === 'IQC' ? 'IQC - Vật liệu' : formData.type === 'SQC_MAT' ? 'SQC - Vật tư' : 'SQC - BTP';
-
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {(isProcessingImages || isLookupLoading) && (
+          <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                    {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : "Đang nén hình ảnh ISO..."}
+                  </p>
+              </div>
+          </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
-        
         {/* I. General Information */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1">
-                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN QUẢN LÝ {moduleLabel}</h3>
-                <button 
-                  onClick={() => setShowHistory(true)}
-                  className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 rounded-lg font-bold uppercase tracking-wide flex items-center gap-1 transition-all shadow-sm text-[9px]"
-                  type="button"
-                >
-                    <History className="w-3 h-3" />
-                    Lịch sử ({historicalRecords.length})
+                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN QUẢN LÝ IQC</h3>
+                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1 shadow-sm" type="button">
+                    <History className="w-3 h-3" /> Lịch sử ({historicalRecords.length})
                 </button>
             </div>
             
-            {/* Row 1: PO & Supplier */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Mã PO / Chứng từ *</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] text-slate-800 h-8" placeholder="Nhập mã..."/>
-                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 hover:text-blue-600" type="button"><QrCode className="w-4 h-4"/></button>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] h-9" placeholder="Nhập mã..."/>
+                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
-                <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Cung Cấp / Đối Tác *</label>
+                <div className="space-y-1">
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nhà Cung Cấp *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên đơn vị..."/>
+                        <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] h-9 uppercase" placeholder="Tên NCC..."/>
                         <Building2 className="absolute left-2 w-4 h-4 text-slate-400" />
                     </div>
                 </div>
-            </div>
-
-            {/* Row 2: Date */}
-            <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày kiểm tra</label>
-                <input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-800 h-8"/>
-            </div>
-
-            {/* Row 3: Supporting Docs */}
-            <div>
-                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Tài liệu hỗ trợ</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                    {PRESET_DOCS.map(doc => (
-                        <button 
-                            key={doc}
-                            onClick={() => toggleDocType(doc)}
-                            className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase border transition-all ${
-                                formData.referenceDocs?.includes(doc) 
-                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-blue-300'
-                            }`}
-                            type="button"
-                        >
-                            {doc}
-                        </button>
-                    ))}
-                </div>
-                <div className="flex gap-2">
-                    <input 
-                        value={customDoc} 
-                        onChange={e => setCustomDoc(e.target.value)} 
-                        className="flex-1 px-2 py-1 border border-slate-300 rounded-md text-[10px] outline-none"
-                        placeholder="Nhập tài liệu khác..."
-                    />
-                    <button onClick={addCustomDoc} className="px-3 py-1 bg-slate-100 border border-slate-300 rounded-md text-[9px] font-bold hover:bg-slate-200" type="button">Thêm</button>
-                </div>
-            </div>
-
-            {/* Row 4: Images (Delivery & Report) */}
-            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-50">
-                {/* Delivery Note */}
                 <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Phiếu Giao Hàng</label>
-                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                        <div className="flex flex-col gap-1 shrink-0">
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex items-center justify-center hover:bg-blue-100 shadow-sm" type="button"><Camera className="w-5 h-5"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="w-12 h-12 bg-white text-slate-500 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 shadow-sm" type="button"><ImageIcon className="w-5 h-5"/></button>
-                        </div>
-                        {formData.deliveryNoteImages?.map((img, idx) => (
-                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-300 shrink-0 group shadow-sm">
-                                <img 
-                                    src={img} 
-                                    className="w-full h-full object-cover cursor-pointer" 
-                                    onClick={() => handleEditImage(formData.deliveryNoteImages || [], idx, { type: 'DELIVERY' })}
-                                />
-                                <button onClick={() => setFormData({...formData, deliveryNoteImages: formData.deliveryNoteImages?.filter((_, i) => i !== idx), deliveryNoteImage: (idx === 0 && formData.deliveryNoteImages && formData.deliveryNoteImages.length > 1) ? formData.deliveryNoteImages[1] : (idx === 0 ? '' : formData.deliveryNoteImage) })} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
-                            </div>
-                        ))}
-                        {(!formData.deliveryNoteImages || formData.deliveryNoteImages.length === 0) && (
-                            <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 shrink-0">
-                                <span className="text-[9px] font-bold uppercase">Trống</span>
-                            </div>
-                        )}
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Ngày kiểm tra</label>
+                    <div className="relative flex items-center">
+                        <input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9"/>
+                        <Calendar className="absolute left-2 w-4 h-4 text-slate-400" />
                     </div>
                 </div>
-                {/* IQC Report */}
-                <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Báo Cáo QC</label>
-                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                        <div className="flex flex-col gap-1 shrink-0">
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex items-center justify-center hover:bg-blue-100 shadow-sm" type="button"><Camera className="w-5 h-5"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="w-12 h-12 bg-white text-slate-500 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 shadow-sm" type="button"><ImageIcon className="w-5 h-5"/></button>
+            </div>
+
+            {/* Evidence Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-50">
+                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                    <label className="text-[8px] font-black text-blue-600 uppercase flex items-center justify-between">
+                        Ảnh Hiện Trường
+                        <div className="flex gap-1">
+                            <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><ImageIcon className="w-3 h-3"/></button>
                         </div>
-                        {formData.reportImages?.map((img, idx) => (
-                            <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border border-slate-300 shrink-0 group shadow-sm">
-                                <img 
-                                    src={img} 
-                                    className="w-full h-full object-cover cursor-pointer" 
-                                    onClick={() => handleEditImage(formData.reportImages || [], idx, { type: 'REPORT' })}
-                                />
-                                <button onClick={() => setFormData({...formData, reportImages: formData.reportImages?.filter((_, i) => i !== idx), reportImage: (idx === 0 && formData.reportImages && formData.reportImages.length > 1) ? formData.reportImages[1] : (idx === 0 ? '' : formData.reportImage) })} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
-                            </div>
+                    </label>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                        {formData.images?.map((img, i) => (
+                            <img key={i} src={img} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: formData.images!, index: i, context: { type: 'MAIN' } })} />
                         ))}
-                        {(!formData.reportImages || formData.reportImages.length === 0) && (
-                            <div className="w-24 h-24 rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 shrink-0">
-                                <span className="text-[9px] font-bold uppercase">Trống</span>
-                            </div>
-                        )}
+                    </div>
+                </div>
+                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                    <label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">
+                        Phiếu Giao Hàng
+                        <div className="flex gap-1">
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3 h-3"/></button>
+                        </div>
+                    </label>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                        {formData.deliveryNoteImages?.map((img, i) => (
+                            <img key={i} src={img} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })} />
+                        ))}
+                    </div>
+                </div>
+                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                    <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">
+                        Báo cáo NCC
+                        <div className="flex gap-1">
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3 h-3"/></button>
+                        </div>
+                    </label>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                        {formData.reportImages?.map((img, i) => (
+                            <img key={i} src={img} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })} />
+                        ))}
                     </div>
                 </div>
             </div>
@@ -579,10 +440,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         {/* II. Materials Details */}
         <section className="space-y-3">
             <div className="flex justify-between items-center px-1">
-                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs"><ClipboardList className="w-4 h-4 text-blue-600"/> II. DANH MỤC KIỂM TRA ({formData.materials?.length || 0})</h3>
+                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs"><ClipboardList className="w-4 h-4 text-blue-600"/> II. DANH MỤC VẬT TƯ ({formData.materials?.length || 0})</h3>
                 <button onClick={handleAddMaterial} className="bg-blue-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3 hover:bg-blue-700" type="button">
-                    <Plus className="w-3 h-3"/>
-                    <span className="text-[10px] font-bold uppercase">Thêm Mục</span>
+                    <Plus className="w-3 h-3"/> <span className="text-[10px] font-bold uppercase">Thêm Vật Tư</span>
                 </button>
             </div>
             
@@ -592,241 +452,117 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                     return (
                     <div key={mat.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in zoom-in duration-200">
-                        <div 
-                            className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${isExp ? 'bg-blue-50/50 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}
-                            onClick={() => setExpandedMaterial(isExp ? null : mat.id)}
-                        >
+                        <div className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${isExp ? 'bg-blue-50/50 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`} onClick={() => setExpandedMaterial(isExp ? null : mat.id)}>
                             <div className="flex items-center gap-3 flex-1 overflow-hidden">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${isExp ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                    {matIdx + 1}
-                                </div>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${isExp ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{matIdx + 1}</div>
                                 <div className="flex-1 overflow-hidden">
-                                    <h4 className="font-bold text-slate-800 uppercase tracking-tight truncate text-xs">{mat.name || 'HẠNG MỤC MỚI'}</h4>
+                                    <h4 className="font-bold text-slate-800 uppercase tracking-tight truncate text-xs">{mat.name || 'VẬT TƯ MỚI'}</h4>
                                     <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">DN: {mat.deliveryQty} {mat.unit}</span>
-                                        <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[9px] font-bold uppercase border border-green-100">{passRate}% ĐẠT</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{mat.scope === 'COMMON' ? 'Dùng chung' : mat.projectCode}</span>
+                                        <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[8px] font-bold uppercase border border-green-100">{passRate}% ĐẠT</span>
                                     </div>
                                 </div>
                             </div>
-                            {isExp ? <ChevronUp className="w-5 h-5 text-blue-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
+                            <div className="flex items-center gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600" type="button"><Trash2 className="w-4 h-4"/></button>
+                                {isExp ? <ChevronUp className="w-5 h-5 text-blue-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
+                            </div>
                         </div>
                         {isExp && (
-                            <div className="p-4 space-y-4 bg-white">
+                            <div className="p-4 space-y-4 bg-white border-t border-slate-50">
+                                {/* Scope Selection */}
+                                <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                    <div className="flex gap-2">
+                                        <button onClick={() => updateMaterial(matIdx, 'scope', 'COMMON')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 border ${mat.scope === 'COMMON' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
+                                            <Layers className="w-3.5 h-3.5" /> Dùng chung
+                                        </button>
+                                        <button onClick={() => updateMaterial(matIdx, 'scope', 'PROJECT')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 border ${mat.scope === 'PROJECT' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
+                                            <Briefcase className="w-3.5 h-3.5" /> Công trình
+                                        </button>
+                                    </div>
+                                    {mat.scope === 'PROJECT' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                                            <div className="space-y-1">
+                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Mã dự án (Tự động tra cứu)</label>
+                                                <div className="relative flex items-center">
+                                                    <input value={mat.projectCode} onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} onBlur={() => lookupMaterialProject(mat.projectCode || '', matIdx)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[10px] h-8 outline-none focus:border-blue-500" placeholder="Nhập mã dự án..."/>
+                                                    <Hash className="absolute right-2 w-3 h-3 text-slate-300" />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên công trình (Tự động)</label>
+                                                <div className="relative flex items-center">
+                                                  <input value={mat.projectName} readOnly className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-md font-bold text-[10px] h-8 text-slate-500 uppercase truncate" placeholder="Đang chờ mã..."/>
+                                                  {isLookupLoading && <Loader2 className="absolute right-2 w-3 h-3 animate-spin text-blue-500" />}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="grid grid-cols-12 gap-3">
-                                  <div className="col-span-4">
-                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Chủng loại</label>
-                                      <select 
-                                          value={mat.category || ''} 
-                                          onChange={e => updateMaterial(matIdx, 'category', e.target.value)}
-                                          className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-800 h-8 bg-white"
-                                      >
+                                  <div className="col-span-5">
+                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
+                                      <select value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-8 bg-white">
                                           <option value="">-- Chọn --</option>
                                           {iqcGroups.map(g => <option key={g} value={g}>{g}</option>)}
                                       </select>
                                   </div>
-                                  <div className="col-span-8">
-                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên Hạng Mục *</label>
-                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] text-slate-800 h-8" placeholder="Tên sản phẩm/vật tư..."/>
+                                  <div className="col-span-7">
+                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Tên Vật Tư *</label>
+                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] h-8" placeholder="Tên sản phẩm..."/>
                                   </div>
-                                </div>
-
-                                <div className="grid grid-cols-12 gap-3">
-                                    <div className="col-span-5">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Loại sử dụng *</label>
-                                        <div className="relative">
-                                            <select 
-                                                value={mat.scope} 
-                                                onChange={e => updateMaterial(matIdx, 'scope', e.target.value as any)}
-                                                className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none bg-white text-[11px] text-slate-800 appearance-none h-8"
-                                            >
-                                                <option value="COMMON">Dùng chung / Tổng kho</option>
-                                                <option value="PROJECT">Theo công trình</option>
-                                            </select>
-                                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                                        </div>
-                                    </div>
-                                    <div className="col-span-7">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Mã Dự Án</label>
-                                        <input 
-                                            value={mat.projectCode || ''} 
-                                            onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
-                                            onBlur={() => lookupMaterialProject(mat.projectCode || '', matIdx)} 
-                                            className={`w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-800 h-8 ${mat.scope === 'COMMON' ? 'bg-slate-100 text-slate-500' : 'bg-white'}`} 
-                                            placeholder="Nhập mã..."
-                                            readOnly={mat.scope === 'COMMON'}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1 block mb-1">Tên Công Trình</label>
-                                    <input 
-                                        value={mat.projectName || ''} 
-                                        readOnly 
-                                        className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] text-slate-600 h-8 bg-slate-50" 
-                                        placeholder="Tên công trình..."
-                                    />
                                 </div>
                                 
                                 <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">SL ĐH</label>
-                                        <input type="number" value={mat.orderQty || 0} onChange={e => updateMaterial(matIdx, 'orderQty', Number(e.target.value))} className="w-full px-2 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">Giao(DN)</label>
+                                        <input type="number" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', Number(e.target.value))} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">Giao(DN)</label>
-                                        <input type="number" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', Number(e.target.value))} className="w-full px-2 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
+                                        <label className="text-[9px] font-bold text-blue-600 uppercase block text-center">Kiểm tra</label>
+                                        <input type="number" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', Number(e.target.value))} className="w-full px-1 py-1 border border-blue-300 rounded-md font-bold text-center text-blue-700 bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-blue-600 uppercase tracking-widest block text-center">Kiểm tra</label>
-                                        <input type="number" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', Number(e.target.value))} className="w-full px-2 py-1 border border-blue-300 rounded-md font-bold text-center text-blue-700 bg-white text-[11px] h-7"/>
+                                        <label className="text-[9px] font-bold text-green-600 uppercase block text-center">Đạt</label>
+                                        <input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block text-center">ĐVT</label>
-                                        <input value={mat.unit} onChange={e => updateMaterial(matIdx, 'unit', e.target.value.toUpperCase())} className="w-full px-2 py-1 border border-slate-300 rounded-md text-center uppercase font-bold bg-white text-[11px] h-7"/>
+                                        <label className="text-[9px] font-bold text-red-600 uppercase block text-center">Hỏng</label>
+                                        <input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', Number(e.target.value))} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
-                                     <div className="space-y-1">
-                                        <div className="flex justify-between items-center px-1">
-                                            <label className="text-[9px] font-bold text-green-600 uppercase tracking-widest">Đạt (PASS)</label>
-                                            <span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{passRate}%</span>
-                                        </div>
-                                        <input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-green-700 bg-green-50/20 text-sm shadow-inner h-9"/>
-                                     </div>
-                                     <div className="space-y-1">
-                                        <div className="flex justify-between items-center px-1">
-                                            <label className="text-[9px] font-bold text-red-600 uppercase tracking-widest">Lỗi (FAIL)</label>
-                                            <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0"}%</span>
-                                        </div>
-                                        <input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', Number(e.target.value))} className="w-full px-2 py-1.5 border border-red-300 rounded-md font-bold text-center text-red-700 bg-red-50/20 text-sm shadow-inner h-9"/>
-                                     </div>
-                                </div>
-
-                                <div className="space-y-2 mt-3">
-                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tiêu chí kiểm soát</label>
-                                    {(mat.items || []).map((item, itemIdx) => (
-                                        <div key={item.id} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm space-y-2 hover:border-blue-300 transition-colors group">
-                                            <div className="flex flex-col gap-1">
-                                                <p className="font-bold text-slate-800 uppercase tracking-tight leading-snug text-xs">{item.label}</p>
-                                                {(item.method || item.standard) && (
-                                                    <div className="flex flex-col gap-0.5 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-1">
-                                                        {item.method && <p className="text-[9px] text-slate-500"><span className="font-bold">PP:</span> {item.method}</p>}
-                                                        {item.standard && <p className="text-[9px] text-slate-500"><span className="font-bold">TC:</span> {item.standard}</p>}
-                                                    </div>
-                                                )}
-                                                <div className="flex items-center gap-2 shrink-0 pt-2 border-t border-slate-50 mt-1">
-                                                    <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200">
-                                                        {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
-                                                            <button 
-                                                                key={st} 
-                                                                onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)}
-                                                                className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-orange-50 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`}
-                                                                type="button"
-                                                            >
-                                                                {st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 ml-auto">
+                                <div className="space-y-2 mt-2">
+                                    {mat.items?.map((item, itemIdx) => (
+                                        <div key={item.id} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:border-blue-300 transition-colors">
+                                            <p className="font-bold text-slate-800 uppercase tracking-tight text-xs mb-2">{item.label}</p>
+                                            <div className="flex items-center gap-2 shrink-0 border-t border-slate-50 pt-2">
+                                                <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200">
+                                                    {[CheckStatus.PASS, CheckStatus.FAIL].map(st => (
                                                         <button 
-                                                            onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }}
-                                                            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 active:scale-90 transition-all shadow-sm"
+                                                            key={st} 
+                                                            onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)}
+                                                            className={`px-4 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : 'bg-red-600 text-white shadow-sm') : 'text-slate-400'}`}
+                                                            type="button"
                                                         >
-                                                            <Camera className="w-4 h-4" />
+                                                            {st === CheckStatus.PASS ? 'Đạt' : 'Hỏng'}
                                                         </button>
-                                                        <button 
-                                                            onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }}
-                                                            className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 active:scale-90 transition-all shadow-sm"
-                                                        >
-                                                            <ImageIcon className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            {item.status === CheckStatus.FAIL && (
-                                                <div className="relative mt-2">
-                                                    <div className="flex items-center bg-red-50 border border-red-100 rounded-lg px-2">
-                                                        <Search className="w-3.5 h-3.5 text-red-400 mr-2" />
-                                                        <input 
-                                                            value={defectSearch[item.id] || ''} 
-                                                            onChange={(e) => handleDefectSearch(e.target.value, item.id)}
-                                                            onFocus={() => setShowDefectDropdown(item.id)}
-                                                            className="w-full py-1.5 bg-transparent text-[10px] font-bold text-red-700 placeholder-red-300 outline-none"
-                                                            placeholder="Tìm kiếm lỗi..."
-                                                        />
-                                                        {defectSearch[item.id] && (
-                                                            <button 
-                                                                onClick={() => quickAddDefect(matIdx, itemIdx)}
-                                                                className="ml-2 text-[9px] font-black text-red-600 bg-white border border-red-200 px-2 py-0.5 rounded shadow-sm hover:bg-red-50 active:scale-95 transition-all whitespace-nowrap"
-                                                            >
-                                                                + Lỗi "{defectSearch[item.id]}"
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {showDefectDropdown === item.id && (
-                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 max-h-40 overflow-y-auto no-scrollbar animate-in slide-in-from-top-1">
-                                                            {defectLibrary
-                                                                .filter(d => !defectSearch[item.id] || d.name.toLowerCase().includes(defectSearch[item.id].toLowerCase()))
-                                                                .map(def => (
-                                                                    <div 
-                                                                        key={def.code} 
-                                                                        onClick={() => selectDefect(matIdx, itemIdx, def)}
-                                                                        className="p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
-                                                                    >
-                                                                        <span className="text-[10px] font-bold text-slate-700">{def.name}</span>
-                                                                        <span className="text-[8px] bg-slate-100 text-slate-500 px-1 rounded">{def.code}</span>
-                                                                    </div>
-                                                                ))
-                                                            }
-                                                            {defectLibrary.length === 0 && <div className="p-3 text-center text-[10px] text-slate-400">Thư viện trống</div>}
-                                                        </div>
-                                                    )}
-                                                    {showDefectDropdown === item.id && <div className="fixed inset-0 z-10" onClick={() => setShowDefectDropdown(null)}></div>}
-                                                </div>
-                                            )}
-
-                                            <input 
-                                                value={item.notes || ''} 
-                                                onChange={(e) => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)}
-                                                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-slate-400 h-8"
-                                                placeholder="Ghi chú kết quả..."
-                                            />
-                                            {item.images && item.images.length > 0 && (
-                                                <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                                                    {item.images.map((img, i) => (
-                                                        <div key={i} className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
-                                                            <img 
-                                                                src={img} 
-                                                                className="w-full h-full object-cover cursor-pointer"
-                                                                onClick={() => handleEditImage(item.images || [], i, { type: 'ITEM', matIdx, itemIdx })}
-                                                            />
-                                                            <button 
-                                                                onClick={() => {
-                                                                    const nextMats = [...formData.materials!];
-                                                                    const nextImgs = nextMats[matIdx].items[itemIdx].images!.filter((_, idx) => idx !== i);
-                                                                    nextMats[matIdx].items[itemIdx].images = nextImgs;
-                                                                    setFormData(prev => ({...prev, materials: nextMats}));
-                                                                }}
-                                                                className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            >
-                                                                <X className="w-3 h-3" />
-                                                            </button>
-                                                        </div>
                                                     ))}
                                                 </div>
-                                            )}
+                                                <div className="flex items-center gap-2 ml-auto">
+                                                    <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600" type="button"><Camera className="w-4 h-4" /></button>
+                                                    <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600" type="button"><ImageIcon className="w-4 h-4" /></button>
+                                                </div>
+                                            </div>
+                                            <input value={item.notes || ''} onChange={(e) => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)} className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] h-8 mt-2" placeholder="Ghi chú kết quả..."/>
+                                            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 mt-1">
+                                                {item.images?.map((img, i) => (
+                                                    <img key={i} src={img} className="w-12 h-12 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: item.images!, index: i, context: { type: 'ITEM', matIdx, itemIdx } })} />
+                                                ))}
+                                            </div>
                                         </div>
                                     ))}
-                                    {(!mat.items || mat.items.length === 0) && (
-                                        <div className="p-4 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                                            <p className="text-[10px] font-bold uppercase">Chưa có tiêu chí kiểm tra</p>
-                                            <p className="text-[9px]">Vui lòng chọn chủng loại để tải danh sách</p>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         )}
@@ -835,94 +571,34 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
         </section>
 
-        {/* III. Ghi chú tổng quát */}
+        {/* III. Summary */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
             <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT</h3>
             <textarea 
                 value={formData.summary}
                 onChange={e => handleInputChange('summary', e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white focus:ring-1 ring-blue-500 transition-all resize-none min-h-[80px] text-[11px] leading-relaxed"
-                placeholder="Nhập nhận xét tổng quan..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white h-20 resize-none text-[11px]"
+                placeholder="Nhập nhận xét tổng quan của QC..."
             />
         </section>
 
         {/* IV. QC Signature */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-2">
+        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="text-blue-800 border-b border-blue-50 pb-2 mb-4 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC</h3>
             <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
         </section>
       </div>
 
-      {/* Footer Actions */}
-      <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 shadow-[0_-5px_15px_rgba(0,0,0,0.03)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-        <button 
-            onClick={onCancel} 
-            className="h-[44px] px-6 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all active:scale-95 border border-slate-200 flex items-center justify-center text-[10px]" 
-            type="button"
-        >
-            HỦY BỎ
-        </button>
-        <button 
-            onClick={handleSubmit} 
-            disabled={isSaving} 
-            className="h-[44px] flex-1 bg-blue-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-800 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" 
-            type="button"
-        >
+      <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 shadow-sm pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 text-[10px]" type="button">HỦY BỎ</button>
+        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="h-[44px] flex-1 bg-blue-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-            <span>GỬI DUYỆT BÁO CÁO</span>
+            <span>GỬI DUYỆT BÁO CÁO IQC</span>
         </button>
       </div>
 
-      {/* History Side Panel */}
-      {showHistory && (
-          <div className="fixed inset-0 z-[170] flex justify-end">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowHistory(false)}></div>
-              <div className="relative w-full max-w-sm bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                      <div className="flex items-center gap-3">
-                          <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg"><History className="w-4 h-4" /></div>
-                          <div>
-                              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-tight">Lịch sử kiểm tra</h3>
-                              <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{formData.po_number || 'TRỐNG'}</p>
-                          </div>
-                      </div>
-                      <button onClick={() => setShowHistory(false)} className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-all"><X className="w-5 h-5" /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
-                      {historicalRecords.length > 0 ? historicalRecords.map((record) => (
-                          <div key={record.id} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm hover:border-blue-300 transition-all">
-                              <div className="flex justify-between items-start mb-2">
-                                  <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><Calendar className="w-3 h-3 text-blue-500" /><span>{record.date}</span></div>
-                                  <span className={`font-bold px-2 py-0.5 rounded-full border uppercase text-[8px] ${record.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>{record.status}</span>
-                              </div>
-                              <h4 className="font-bold text-slate-800 uppercase line-clamp-1 mb-2 text-xs">PO: {record.po_number}</h4>
-                              <div className="flex items-center justify-between border-t border-slate-50 pt-2">
-                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-500"><UserCheck className="w-3 h-3" /><span>{record.inspectorName}</span></div>
-                                  <span className="font-bold text-blue-600 uppercase text-[9px]">{record.materials?.length || 0} MỤC</span>
-                              </div>
-                          </div>
-                      )) : (
-                          <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-                              <History className="w-12 h-12 opacity-10 mb-4" />
-                              <p className="font-bold uppercase tracking-widest text-[10px]">Không có bản ghi cũ</p>
-                          </div>
-                      )}
-                  </div>
-              </div>
-          </div>
-      )}
-
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('po_number', data); setShowScanner(false); }} />}
-      
-      {editorState && (
-          <ImageEditorModal 
-              images={editorState.images} 
-              initialIndex={editorState.index} 
-              onClose={() => setEditorState(null)} 
-              onSave={onImageSave}
-              readOnly={false}
-          />
-      )}
+      {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
     </div>

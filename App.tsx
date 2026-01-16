@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
-  MOCK_INSPECTIONS, 
   MOCK_WORKSHOPS, 
   IQC_CHECKLIST_TEMPLATE, 
   PQC_CHECKLIST_TEMPLATE, 
@@ -29,7 +28,6 @@ import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
 
-import { Inspectiondetail } from './components/Inspectiondetail'; 
 import { InspectionDetailPQC } from './components/inspectiondetailPQC'; 
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
@@ -41,7 +39,6 @@ import { InspectionDetailSPR } from './components/inspectiondetailSPR';
 import { InspectionDetailSITE } from './components/inspectiondetailSITE';
 
 import { PlanList } from './components/PlanList';
-import { PlanDetail } from './components/PlanDetail';
 import { Settings } from './components/Settings';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
@@ -66,22 +63,30 @@ import {
   fetchUsers, 
   saveUser, 
   deleteUser, 
-  importUsers,
   fetchWorkshops, 
   saveWorkshop, 
   deleteWorkshop, 
   fetchTemplates, 
   saveTemplate, 
-  importPlans, 
-  importInspections, 
   fetchProjects, 
-  fetchProjectByCode,
   createNotification
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
+
+const DETAIL_COMPONENT_MAP: Record<string, any> = {
+    'IQC': InspectionDetailIQC,
+    'SQC_MAT': InspectionDetailSQC_VT,
+    'SQC_BTP': InspectionDetailSQC_BTP,
+    'PQC': InspectionDetailPQC,
+    'FSR': InspectionDetailFRS,
+    'STEP': InspectionDetailStepVecni,
+    'FQC': InspectionDetailFQC,
+    'SPR': InspectionDetailSPR,
+    'SITE': InspectionDetailSITE
+};
 
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -92,28 +97,18 @@ const App = () => {
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]); 
-  const [activePlan, setActivePlan] = useState<PlanItem | null>(null);
-  const [planSearchTerm, setPlanSearchTerm] = useState('');
-  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [connectionError, setConnectionError] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES'>('PROFILE');
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [workshops, setWorkshops] = useState<Workshop[]>(MOCK_WORKSHOPS);
   
   const [templates, setTemplates] = useState<Record<string, CheckItem[]>>({
-      'SITE': SITE_CHECKLIST_TEMPLATE, 
-      'PQC': PQC_CHECKLIST_TEMPLATE, 
-      'IQC': IQC_CHECKLIST_TEMPLATE,
-      'SQC_MAT': SQC_MAT_CHECKLIST_TEMPLATE, 
-      'SQC_BTP': SQC_BTP_CHECKLIST_TEMPLATE, 
-      'FSR': FSR_CHECKLIST_TEMPLATE,
-      'STEP': STEP_CHECKLIST_TEMPLATE,
-      'FQC': FQC_CHECKLIST_TEMPLATE,
-      'SPR': SPR_CHECKLIST_TEMPLATE
+      'SITE': SITE_CHECKLIST_TEMPLATE, 'PQC': PQC_CHECKLIST_TEMPLATE, 'IQC': IQC_CHECKLIST_TEMPLATE,
+      'SQC_MAT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_BTP': SQC_BTP_CHECKLIST_TEMPLATE, 'FSR': FSR_CHECKLIST_TEMPLATE,
+      'STEP': STEP_CHECKLIST_TEMPLATE, 'FQC': FQC_CHECKLIST_TEMPLATE, 'SPR': SPR_CHECKLIST_TEMPLATE
   });
   const [initialFormState, setInitialFormState] = useState<Partial<Inspection> | undefined>(undefined);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -122,63 +117,60 @@ const App = () => {
   const [pendingScannedCode, setPendingScannedCode] = useState<string | null>(null);
 
   useEffect(() => {
-    const init = async () => {
+    const startup = async () => {
         try {
-            await initDatabase(); setIsDbReady(true);
+            await initDatabase(); 
+            setIsDbReady(true);
             const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
             if (localData) { 
                 try { 
                     const parsedUser = JSON.parse(localData); 
-                    if (parsedUser && parsedUser.role) {
+                    if (parsedUser?.role) {
                         setUser(parsedUser); 
                         setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
                     }
-                } catch (e) { console.error("Auth hydration failed", e); } 
+                } catch (e) { console.error("Auth hydrate failed", e); } 
             }
-            await Promise.allSettled([checkConn(), loadUsers(), loadWorkshops(), loadTemplates()]);
-        } catch (error) { setIsDbReady(true); setConnectionError(true); }
+            await Promise.allSettled([loadUsers(), loadWorkshops(), loadTemplates()]);
+        } catch (error) { 
+          setIsDbReady(true); 
+          console.error("Critical DB failure", error);
+        }
     };
-    init();
+    startup();
   }, []);
 
-  const loadUsers = async () => { 
-    try { 
-      const data = await fetchUsers(); 
-      if (Array.isArray(data) && data.length > 0) { 
-        setUsers(prev => { 
-          const combined = [...MOCK_USERS]; 
-          data.forEach(dbUser => { 
-            if (dbUser && dbUser.username) {
-              const dbUsername = String(dbUser.username).toLowerCase();
-              const exists = combined.some(u => u.username && String(u.username).toLowerCase() === dbUsername);
-              if (!exists) { combined.push(dbUser); }
-            }
-          }); 
-          return combined; 
-        }); 
-      } 
-    } catch (e) {} 
-  };
-  const handleLogin = (loggedInUser: User, remember: boolean) => { const { password, ...safeUser } = loggedInUser; setUser(safeUser as User); const storage = remember ? localStorage : sessionStorage; storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser)); setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); };
-  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
-  
-  useEffect(() => { if (user && isDbReady) { loadInspections(); loadProjects(); loadPlans(); } }, [user, isDbReady, planSearchTerm]);
-  
-  const checkConn = async () => { try { const status = await checkApiConnection(); setConnectionError(!status.ok); } catch (e) { setConnectionError(true); } };
+  useEffect(() => {
+    if (user && isDbReady) {
+        if (view === 'LIST' || view === 'DASHBOARD') loadInspections();
+        if (view === 'PLAN' || view === 'PROJECTS') loadPlans();
+        if (view === 'PROJECTS') loadProjects();
+    }
+  }, [user, isDbReady, view]);
+
+  const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers([...MOCK_USERS, ...data.filter((du:any) => !MOCK_USERS.some(u=>u.username === du.username))]); } catch (e) {} };
+  const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); } catch (e) {} };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
-  const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data && data.length > 0) setWorkshops(data); } catch (e) {} };
-  const loadProjects = async () => { if (!isDbReady) return; try { const data = await fetchProjects(); setProjects(data || []); } catch(e) {} };
-  const loadPlans = async () => { if (!isDbReady) return; setIsLoadingPlans(true); try { const result = await fetchPlans(planSearchTerm, 1, 1000); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
-  const loadInspections = async () => { if (!isDbReady) return; setIsLoadingInspections(true); try { const data = await fetchInspections({ limit: 1000 }); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
+  const loadProjects = async () => { try { const data = await fetchProjects(); setProjects(data || []); } catch(e) {} };
+  const loadPlans = async () => { setIsLoadingPlans(true); try { const result = await fetchPlans('', 1, 1000); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
+  const loadInspections = async () => { setIsLoadingInspections(true); try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
   
+  const handleLogin = (loggedInUser: User, remember: boolean) => { 
+    const { password, ...safeUser } = loggedInUser; 
+    setUser(safeUser as User); 
+    const storage = remember ? localStorage : sessionStorage; 
+    storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser)); 
+    setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
+  };
+  
+  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
+
   const handleSelectInspection = async (id: string) => { 
     setIsDetailLoading(true); 
     try { 
       const fullInspection = await fetchInspectionById(id); 
-      if (fullInspection) { 
-        setActiveInspection(fullInspection); 
-        setView('DETAIL'); 
-      } else alert("Không tìm thấy phiếu."); 
+      if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); } 
+      else { alert("Không tìm thấy phiếu."); }
     } catch (error) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); } 
   };
   
@@ -186,197 +178,83 @@ const App = () => {
     setIsDetailLoading(true); 
     try { 
       const fullInspection = await fetchInspectionById(id); 
-      if (fullInspection) { 
-        setActiveInspection(fullInspection);
-        setInitialFormState(fullInspection);
-        setView('FORM');
-      } 
+      if (fullInspection) { setActiveInspection(fullInspection); setInitialFormState(fullInspection); setView('FORM'); } 
     } catch (e) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); }
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => { 
       await saveInspectionToSheet(newInspection); 
-      if (newInspection.status === InspectionStatus.PENDING) {
-          const managers = users.filter(u => u.role === 'MANAGER' || u.role === 'ADMIN');
-          for (const m of managers) {
-              await createNotification({
-                  userId: m.id, type: 'INSPECTION', title: 'Phiếu kiểm tra mới',
-                  message: `QC ${user?.name} vừa gửi phiếu ${newInspection.type} cho ${newInspection.ten_hang_muc}.`,
-                  link: { view: 'DETAIL', id: newInspection.id }
-              });
-          }
-      }
-      setView('LIST'); loadInspections(); loadProjects(); 
+      setView('LIST'); loadInspections(); 
   };
 
   const handleApproveInspection = async (id: string, signature: string, extraInfo?: any) => { 
     if (!activeInspection) return; 
-    const isFullApproval = !!signature;
-    const updated: Inspection = { 
-        ...activeInspection, 
-        status: isFullApproval ? InspectionStatus.APPROVED : activeInspection.status, 
-        managerSignature: signature || activeInspection.managerSignature, 
-        managerName: isFullApproval ? user?.name : (activeInspection.managerName || extraInfo?.managerName), 
-        confirmedDate: isFullApproval ? new Date().toISOString() : activeInspection.confirmedDate 
-    }; 
+    const updated: Inspection = { ...activeInspection, status: signature ? InspectionStatus.APPROVED : activeInspection.status, managerSignature: signature || activeInspection.managerSignature, managerName: signature ? user?.name : (activeInspection.managerName || extraInfo?.managerName) }; 
     if (extraInfo) { 
-        if (extraInfo.signature) {
-            updated.productionSignature = extraInfo.signature;
-            updated.productionName = extraInfo.name;
-            updated.productionConfirmedDate = new Date().toISOString();
-            if (extraInfo.comment) updated.productionComment = extraInfo.comment;
-        }
+        if (extraInfo.signature) { updated.productionSignature = extraInfo.signature; updated.productionName = extraInfo.name; }
         if (extraInfo.pmSignature !== undefined) updated.pmSignature = extraInfo.pmSignature;
-        if (extraInfo.pmComment !== undefined) updated.pmComment = extraInfo.pmComment;
-        if (extraInfo.pmName !== undefined) updated.pmName = extraInfo.pmName;
     } 
     await saveInspectionToSheet(updated); 
-    if (isFullApproval) {
-        const qc = users.find(u => u.name === updated.inspectorName);
-        if (qc) {
-            await createNotification({
-                userId: qc.id, type: 'INSPECTION', title: 'Phiếu đã được duyệt',
-                message: `Quản lý ${user?.name} đã phê duyệt phiếu ${updated.id}.`,
-                link: { view: 'DETAIL', id: updated.id }
-            });
-        }
-    }
-    loadInspections(); setActiveInspection(updated);
+    setActiveInspection({...updated});
+    loadInspections();
   };
 
   const handlePostComment = async (id: string, comment: NCRComment) => { 
       if (!activeInspection) return; 
-      const updatedComments = [...(activeInspection.comments || []), comment]; 
-      const updated = { ...activeInspection, comments: updatedComments }; 
+      const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), comment] }; 
       await saveInspectionToSheet(updated); 
-      const participants = new Set<string>();
-      if (updated.inspectorName !== comment.userName) {
-          const qc = users.find(u => u.name === updated.inspectorName); if (qc) participants.add(qc.id);
-      }
-      if (user?.role === 'QC') {
-          users.filter(u => u.role === 'MANAGER' || u.role === 'ADMIN').forEach(m => participants.add(m.id));
-      }
-      for (const pId of participants) {
-          await createNotification({
-              userId: pId, type: 'COMMENT', title: 'Phản hồi mới',
-              message: `${comment.userName} đã để lại bình luận trên phiếu ${updated.id}.`,
-              link: { view: 'DETAIL', id: updated.id }
-          });
-      }
       setActiveInspection(updated); loadInspections(); 
   };
 
-  const handleNavigateToSettings = (tab: any) => { setSettingsInitialTab(tab); setView('SETTINGS'); };
-  const handleQrScan = (scannedCode: string) => { setShowQrScanner(false); setPendingScannedCode(scannedCode); setShowModuleSelector(true); };
-  
   const startCreateInspection = async (moduleId: ModuleId) => {
-      setShowModuleSelector(false); setIsDetailLoading(true);
-      let baseData: Partial<Inspection> = initialFormState || { ma_nha_may: pendingScannedCode || '' };
-      if (!initialFormState && pendingScannedCode) { 
-          try { 
-              const searchResult = await fetchPlans(pendingScannedCode, 1, 5); 
-              const foundPlan = (searchResult.items || []).find(p => String(p.headcode || '').toLowerCase() === pendingScannedCode.toLowerCase() || String(p.ma_nha_may || '').toLowerCase() === pendingScannedCode.toLowerCase()); 
-              if (foundPlan) { 
-                  baseData = { 
-                      ma_nha_may: foundPlan.ma_nha_may, headcode: foundPlan.headcode, ma_ct: foundPlan.ma_ct, 
-                      ten_ct: foundPlan.ten_ct, ten_hang_muc: foundPlan.ten_hang_muc, dvt: foundPlan.dvt, 
-                      so_luong_ipo: foundPlan.so_luong_ipo 
-                  }; 
-              } 
-          } catch (e) {} 
-      }
+      setShowModuleSelector(false);
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
-      setInitialFormState({ ...baseData, type: moduleId, items: JSON.parse(JSON.stringify(template)) });
-      setActiveInspection(null); setPendingScannedCode(null); setIsDetailLoading(false); setView('FORM');
+      setInitialFormState({ type: moduleId, items: JSON.parse(JSON.stringify(template)), ...initialFormState });
+      setActiveInspection(null); setView('FORM');
   };
 
-  const handleSidebarNavigate = (id: string) => {
-      if (id === 'PQC_MODE') { setCurrentModule('PQC'); setView('LIST'); } 
-      else { if (id === 'LIST') setCurrentModule('ALL'); setView(id as ViewState); }
-  };
-
-  const renderForm = () => {
-    const data = activeInspection || initialFormState; if (!data) return null;
-    const commonProps = { initialData: data, onSave: handleSaveInspection, onCancel: () => setView('LIST'), plans, workshops, inspections, user: user!, templates };
-    switch (data.type) {
-        case 'IQC': return <InspectionFormIQC {...commonProps} />;
-        case 'SQC_MAT': return <InspectionFormSQC_VT {...commonProps} />;
-        case 'SQC_BTP': return <InspectionFormSQC_BTP {...commonProps} />;
-        case 'FSR': return <InspectionFormFRS {...commonProps} />;
-        case 'STEP': return <InspectionFormStepVecni {...commonProps} />;
-        case 'FQC': return <InspectionFormFQC {...commonProps} />;
-        case 'SPR': return <InspectionFormSPR {...commonProps} />;
-        case 'SITE': return <InspectionFormSITE {...commonProps} />;
-        default: return <InspectionFormPQC {...commonProps} />;
-    }
-  };
-
-  const renderDetail = () => {
-    if (!activeInspection) return null;
-    const commonProps = { inspection: activeInspection, user: user!, onBack: () => { setView('LIST'); setActiveInspection(null); }, onEdit: handleEditInspection, onDelete: async (id: string) => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, onApprove: handleApproveInspection, onPostComment: handlePostComment, workshops };
-    switch (activeInspection.type) {
-        case 'IQC': return <InspectionDetailIQC {...commonProps} />;
-        case 'SQC_MAT': return <InspectionDetailSQC_VT {...commonProps} />;
-        case 'SQC_BTP': return <InspectionDetailSQC_BTP {...commonProps} />;
-        case 'FSR': return <InspectionDetailFRS {...commonProps} />;
-        case 'STEP': return <InspectionDetailStepVecni {...commonProps} />;
-        case 'FQC': return <InspectionDetailFQC {...commonProps} />;
-        case 'SPR': return <InspectionDetailSPR {...commonProps} />;
-        case 'SITE': return <InspectionDetailSITE {...commonProps} />;
-        case 'PQC': return <InspectionDetailPQC {...commonProps} />;
-        default: return <Inspectiondetail {...commonProps} />;
-    }
-  };
-
-  const renderList = () => {
-      return <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user?.role || ''} currentUserName={user?.name || ''} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} workshops={workshops} />;
-  };
-
-  if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} />;
+  if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
+  
+  // Show global loader only if user is logged in but database still syncing
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo...</p></div>;
 
   return (
     <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
       <div className="hidden lg:block h-full shrink-0">
-          <Sidebar view={view} currentModule={currentModule} onNavigate={handleSidebarNavigate} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+          <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
       </div>
       <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
-        {isDetailLoading && <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center"><div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200"><Loader2 className="w-12 h-12 text-blue-600 animate-spin" /><p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải...</p></div></div>}
-        <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onOpenSettingsTab={handleNavigateToSettings} onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(); }} onCreate={() => { setPendingScannedCode(null); setInitialFormState(undefined); setShowModuleSelector(true); }} onScanClick={() => { setPendingScannedCode(null); setShowQrScanner(true); }} activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined} onNavigateToRecord={(v, id) => { if(v === 'DETAIL') handleSelectInspection(id); else setView(v); }} />
+        {isDetailLoading && <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center"><div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200"><Loader2 className="w-12 h-12 text-blue-600 animate-spin" /><p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải chi tiết...</p></div></div>}
+        <GlobalHeader user={user} view={view} onNavigate={setView} onLogout={handleLogout} onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(); if(view==='PROJECTS') { loadProjects(); loadPlans(); } }} onCreate={() => { setInitialFormState(undefined); setShowModuleSelector(true); }} onScanClick={() => setShowQrScanner(true)} activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined} />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
-            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onLogout={handleLogout} onNavigate={setView} />}
-            {view === 'LIST' && renderList()}
-            {view === 'FORM' && renderForm()}
-            {view === 'DETAIL' && renderDetail()}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={(item) => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc, dvt: item.dvt, so_luong_ipo: item.so_luong_ipo }); setShowModuleSelector(true); }} onViewPlan={(item) => setActivePlan(item)} onViewInspection={handleSelectInspection} onRefresh={loadPlans} onImportPlans={async (p) => { await importPlans(p); }} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isLoadingPlans} totalItems={plans.length} />}
+            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} />}
+            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} isLoading={isLoadingInspections} workshops={workshops} />}
+            {view === 'FORM' && (
+                activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
+                activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
+                <InspectionFormPQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} inspections={inspections} user={user} templates={templates} />
+            )}
+            {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { inspection: activeInspection, user, onBack: () => setView('LIST'), onEdit: handleEditInspection, onDelete: async id => { if(window.confirm("Xóa?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, onApprove: handleApproveInspection, onPostComment: handlePostComment }) : null)}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={()=>{}} onImportPlans={async()=>{}} totalItems={plans.length} />}
+            {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} />}
+            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
-            {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
-            {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => { setView('DEFECT_LIST'); setActiveDefect(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
-            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} onImportUsers={async (u) => { await importUsers(u); await loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
-            {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={async (maCt) => { const found = projects.find(p => p.ma_ct === maCt); if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} />}
-            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onUpdate={loadProjects} onBack={() => { setView('PROJECTS'); setActiveProject(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
-        {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={handleQrScan} />}
+        {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setPendingScannedCode(code); setShowModuleSelector(true); }} />}
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white w-full max-sm rounded-[2.5rem] shadow-2xl p-6 space-y-4 animate-in zoom-in duration-200">
-                    <div className="flex justify-between items-center mb-2"><h3 className="font-black text-slate-800 uppercase tracking-tighter">Chọn Loại Kiểm Tra</h3><button onClick={() => setShowModuleSelector(false)}><X className="w-6 h-6 text-slate-400"/></button></div>
-                    <div className="grid grid-cols-1 gap-2">
-                        {ALL_MODULES.filter(m => {
-                            const isQcQa = m.group === 'QC' || m.group === 'QA';
-                            const hasPermission = user?.role === 'ADMIN' || user?.allowedModules?.includes(m.id);
-                            return isQcQa && hasPermission;
-                        }).map(mod => (
-                            <button key={mod.id} onClick={() => startCreateInspection(mod.id)} className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 rounded-2xl flex items-center gap-4 transition-all group">
-                                <div className="p-2 bg-white rounded-xl shadow-sm text-blue-600 group-hover:scale-110 transition-transform"><FileText className="w-5 h-5" /></div>
-                                <span className="font-bold text-slate-700 group-hover:text-blue-700 uppercase text-xs">{mod.label}</span>
-                            </button>
-                        ))}
-                    </div>
+                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 animate-in zoom-in duration-200">
+                    <div className="flex justify-between items-center"><h3 className="font-black text-slate-800 uppercase text-xs">Loại kiểm tra</h3><button onClick={() => setShowModuleSelector(false)}><X className="w-6 h-6 text-slate-400"/></button></div>
+                    {ALL_MODULES.filter(m => (m.group==='QC'||m.group==='QA') && (user.role==='ADMIN'||user.allowedModules?.includes(m.id))).map(mod => (
+                        <button key={mod.id} onClick={() => startCreateInspection(mod.id)} className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 rounded-2xl flex items-center gap-4 transition-all">
+                            <div className="p-2 bg-white rounded-xl shadow-sm text-blue-600"><FileText className="w-5 h-5" /></div>
+                            <span className="font-bold text-slate-700 text-xs uppercase">{mod.label}</span>
+                        </button>
+                    ))}
                 </div>
             </div>
         )}

@@ -1,5 +1,4 @@
 
-
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -23,13 +22,14 @@ export enum Priority {
 
 export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST';
 
-export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
+// Added 'SQC_VT' to ModuleId union to match database implementation and form usage
+export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
 
 export interface QMSImage {
   id: string;
   parent_entity_id: string;
   related_item_id?: string;
-  entity_type: 'INSPECTION' | 'NCR' | 'DEFECT' | 'USER';
+  entity_type: 'INSPECTION' | 'NCR' | 'DEFECT' | 'USER' | 'COMMENT';
   image_role: 'EVIDENCE' | 'BEFORE' | 'AFTER' | 'PREVIEW';
   url_hd: string;
   url_thumbnail: string;
@@ -48,7 +48,6 @@ export interface User {
   allowedModules?: ModuleId[];
   msnv?: string;
   status?: string;
-  // Added missing properties for UserManagement and Profile
   position?: string;
   workLocation?: string;
   joinDate?: string;
@@ -63,10 +62,9 @@ export interface NCRComment {
   userName: string;
   content: string;
   createdAt: string;
-  image_refs?: string[];
-  // Added missing properties for NCR discussions
+  image_refs?: string[]; // IDs for database
+  attachments?: string[]; // Base64 for UI state
   userAvatar?: string;
-  attachments?: string[];
 }
 
 export interface NCR {
@@ -83,9 +81,8 @@ export interface NCR {
   deadline?: string;
   status: string;
   severity?: 'MINOR' | 'MAJOR' | 'CRITICAL';
-  image_refs_before: string[]; // Decoupled: UUIDs only
-  image_refs_after: string[];  // Decoupled: UUIDs only
-  // Added base64 support for form state
+  image_refs_before: string[]; 
+  image_refs_after: string[];  
   imagesBefore?: string[];
   imagesAfter?: string[];
   comments?: NCRComment[];
@@ -101,8 +98,7 @@ export interface CheckItem {
   standard?: string;
   status: CheckStatus;
   notes?: string;
-  image_refs?: string[]; // Decoupled: UUIDs only
-  // Added missing properties for Inspection forms
+  image_refs?: string[]; 
   images?: string[];
   ncrId?: string;
   ncr?: NCR;
@@ -142,9 +138,8 @@ export interface Inspection {
   date: string;
   status: InspectionStatus;
   score: number;
-  items: CheckItem[]; // JSON only contains metadata and refs
-  image_refs?: string[]; // Top level images
-  // Added missing properties for forms and details
+  items: CheckItem[]; 
+  image_refs?: string[]; 
   images?: string[];
   summary?: string;
   workshop?: string;
@@ -154,7 +149,7 @@ export interface Inspection {
   inspectedQuantity?: number;
   passedQuantity?: number;
   failedQuantity?: number;
-  signature_ref?: string; // Signature as image reference
+  signature_ref?: string; 
   signature?: string;
   manager_signature_ref?: string;
   managerSignature?: string;
@@ -170,6 +165,7 @@ export interface Inspection {
   supplier?: string;
   location?: string;
   updatedAt?: string;
+  createdAt?: string;
   headcode?: string;
   materials?: MaterialIQC[];
   referenceDocs?: string[];
@@ -192,7 +188,6 @@ export interface PlanItem {
   dvt?: string;
   so_luong_ipo: number;
   plannedDate?: string;
-  // Added missing properties
   assignee?: string;
   status?: string;
 }
@@ -204,7 +199,6 @@ export interface Workshop {
   location: string;
   manager: string;
   stages?: string[];
-  // Added missing properties
   phone?: string;
   image?: string;
 }

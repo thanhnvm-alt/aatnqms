@@ -1,443 +1,236 @@
-
-import React, { useState, useMemo } from 'react';
-import { Inspection, InspectionStatus, CheckStatus, Workshop } from '../types';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId } from '../types';
 import { 
-  Search, RefreshCw, FolderOpen, Clock, Tag, 
-  UserCheck, Loader2, X, ChevronDown, ChevronLeft, ChevronRight,
-  CheckCircle2, AlertCircle, SlidersHorizontal, Box, FileText,
-  CheckSquare, XCircle, AlertTriangle, Filter, Building2, Layers, User, Calendar
+  Search, RefreshCw, FolderOpen, Clock, 
+  Loader2, X, ChevronDown, ChevronRight,
+  Filter, Building2, User, SlidersHorizontal,
+  PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
+  Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid
 } from 'lucide-react';
 
 interface InspectionListProps {
   inspections: Inspection[];
   onSelect: (id: string) => void;
-  userRole?: string;
-  selectedModule?: string;
-  onModuleChange?: (module: string) => void;
-  onRefresh?: () => void;
-  currentUserName?: string;
   isLoading?: boolean;
   workshops?: Workshop[];
+  onRefresh?: () => void;
 }
 
+const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+    'IQC': { label: 'IQC', color: 'text-blue-600', bg: 'bg-blue-50', icon: PackageCheck },
+    'PQC': { label: 'PQC', color: 'text-purple-600', bg: 'bg-purple-50', icon: Factory },
+    'SQC_MAT': { label: 'SQC-VT', color: 'text-teal-600', bg: 'bg-teal-50', icon: Truck },
+    'SQC_VT': { label: 'SQC-VT', color: 'text-teal-600', bg: 'bg-teal-50', icon: Truck },
+    'SQC_BTP': { label: 'SQC-BTP', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: Box },
+    'FQC': { label: 'FQC', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: ShieldCheck },
+    'SITE': { label: 'SITE', color: 'text-amber-600', bg: 'bg-amber-50', icon: MapPin },
+    'SPR': { label: 'SPR', color: 'text-slate-600', bg: 'bg-slate-50', icon: Filter },
+    'STEP': { label: 'STEP', color: 'text-rose-600', bg: 'bg-rose-50', icon: SlidersHorizontal },
+    'FSR': { label: 'FSR', color: 'text-orange-600', bg: 'bg-orange-50', icon: FolderOpen }
+};
+
+const SkeletonItem = () => (
+    <div className="bg-white p-4 rounded-2xl border border-slate-100 animate-pulse flex items-center justify-between">
+        <div className="flex-1 space-y-2">
+            <div className="h-3 w-20 bg-slate-100 rounded"></div>
+            <div className="h-4 w-3/4 bg-slate-100 rounded"></div>
+            <div className="h-2 w-1/2 bg-slate-100 rounded"></div>
+        </div>
+        <div className="w-8 h-8 bg-slate-50 rounded-lg"></div>
+    </div>
+);
+
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, userRole, selectedModule, onModuleChange, 
-  onRefresh, currentUserName, isLoading, workshops
+  inspections, onSelect, isLoading, workshops = [], onRefresh
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [inspectorFilter, setInspectorFilter] = useState<string>('ALL');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [workshopFilter, setWorkshopFilter] = useState<string>('ALL');
-  
-  // NEW: Date Filtering State
-  const [dateFilterMode, setDateFilterMode] = useState<'7DAYS' | 'ALL' | 'CUSTOM'>('7DAYS');
-  const [specificDate, setSpecificDate] = useState<string>('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
-  
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-
-  // Derive unique values for filters
-  const uniqueInspectors = useMemo(() => Array.from(new Set(inspections.map(i => i.inspectorName).filter(Boolean))).sort(), [inspections]);
-  const uniqueTypes = useMemo(() => Array.from(new Set(inspections.map(i => i.type).filter(Boolean))).sort(), [inspections]);
-  
-  const uniqueWorkshops = useMemo(() => {
-    const rawValues = Array.from(new Set(inspections.map(i => i.workshop || i.ma_nha_may).filter(Boolean)));
-    return rawValues.map(val => {
-        const found = workshops?.find(w => w.code === val);
-        return {
-            code: val,
-            label: found ? found.name : val
-        };
-    }).sort((a, b) => a.label.localeCompare(b.label));
-  }, [inspections, workshops]);
-
-  const filteredInspections = useMemo(() => {
-    const term = (searchTerm || '').toLowerCase().trim();
+  // ISO-GROUPING LOGIC
+  const groupedInspections = useMemo(() => {
+    const groups: Record<string, { inspections: Inspection[], projectName: string }> = {};
     
-    // Date Logic Helper
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const sevenDaysAgo = new Date(today);
-    sevenDaysAgo.setDate(today.getDate() - 7);
-
-    return inspections.filter(item => {
-      if (!item) return false;
-
-      // 1. Filter by Date
-      const itemDate = new Date(item.date);
-      itemDate.setHours(0, 0, 0, 0);
-
-      if (dateFilterMode === '7DAYS') {
-          if (itemDate < sevenDaysAgo) return false;
-      } else if (dateFilterMode === 'CUSTOM' && specificDate) {
-          if (item.date !== specificDate) return false;
-      }
-
-      // 2. Filter by Search Term
-      const matchesSearch = !term || (
-        (item.ma_ct || '').toLowerCase().includes(term) ||
-        (item.ten_ct || '').toLowerCase().includes(term) ||
-        (item.ten_hang_muc || '').toLowerCase().includes(term) ||
-        (item.inspectorName || '').toLowerCase().includes(term) ||
-        (item.ma_nha_may || '').toLowerCase().includes(term) ||
-        (item.workshop || '').toLowerCase().includes(term)
-      );
-
-      // 3. Other Filters
-      const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
-      const matchesInspector = inspectorFilter === 'ALL' || item.inspectorName === inspectorFilter;
-      const matchesType = typeFilter === 'ALL' || item.type === typeFilter;
-      
-      const itemWorkshop = item.workshop || item.ma_nha_may;
-      const matchesWorkshop = workshopFilter === 'ALL' || itemWorkshop === workshopFilter;
-
-      return matchesSearch && matchesStatus && matchesInspector && matchesType && matchesWorkshop;
-    }).sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-  }, [inspections, searchTerm, statusFilter, inspectorFilter, typeFilter, workshopFilter, dateFilterMode, specificDate]);
-
-  // Grouping Logic: Project -> Factory Code (ma_nha_may)
-  const projectsData = useMemo(() => {
-    const projects: Record<string, { 
-      ten_ct: string, 
-      factories: Record<string, Inspection[]>, // Key is ma_nha_may
-      stats: { total: number, pass: number, ncr: number }
-    }> = {};
-
-    filteredInspections.forEach(item => {
-      const pKey = item.ma_ct || 'DÙNG CHUNG';
-      if (!projects[pKey]) {
-        projects[pKey] = { 
-          ten_ct: item.ten_ct || 'Dự án khác', 
-          factories: {},
-          stats: { total: 0, pass: 0, ncr: 0 }
-        };
-      }
-      
-      // Strict grouping by ma_nha_may (Factory Code)
-      const fKey = item.ma_nha_may || item.workshop || 'SITE';
-      
-      if (!projects[pKey].factories[fKey]) projects[pKey].factories[fKey] = [];
-      projects[pKey].factories[fKey].push(item);
-      
-      projects[pKey].stats.total++;
-      
-      const hasNCR = item.items?.some(i => i.status === CheckStatus.FAIL) || item.status === InspectionStatus.FLAGGED;
-      
-      if (hasNCR) {
-        projects[pKey].stats.ncr++;
-      } else if (item.status === InspectionStatus.APPROVED || item.status === InspectionStatus.COMPLETED) {
-        projects[pKey].stats.pass++;
-      }
+    const filtered = (inspections || []).filter(item => {
+        const term = searchTerm.toLowerCase();
+        return !term || 
+               item.ma_ct?.toLowerCase().includes(term) ||
+               item.ten_ct?.toLowerCase().includes(term) ||
+               item.ten_hang_muc?.toLowerCase().includes(term) ||
+               item.po_number?.toLowerCase().includes(term);
     });
-    return projects;
-  }, [filteredInspections]);
 
-  const sortedProjectKeys = Object.keys(projectsData).sort((a, b) => projectsData[b].stats.total - projectsData[a].stats.total);
-
-  const toggleProject = (key: string) => {
-    setExpandedProjects(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
+    filtered.forEach(item => {
+        // Grouping key: If no ma_ct or ma_ct is 'DÙNG CHUNG' -> Group in 'COMMON'
+        const isCommon = !item.ma_ct || item.ma_ct === 'DÙNG CHUNG';
+        const key = isCommon ? 'DÙNG CHUNG' : (item.ma_ct || 'DỰ ÁN KHÁC');
+        
+        if (!groups[key]) {
+            groups[key] = {
+                inspections: [],
+                projectName: isCommon ? 'Vật tư / Thành phần dùng chung' : (item.ten_ct || 'Dự án chưa định danh')
+            };
+        }
+        groups[key].inspections.push(item);
     });
-  };
 
-  const getInspectionDisplayInfo = (item: Inspection) => {
-      const total = item.inspectedQuantity || 0;
-      const passRate = total > 0 ? ((item.passedQuantity || 0) / total * 100).toFixed(0) : '0';
-      const failRate = total > 0 ? ((item.failedQuantity || 0) / total * 100).toFixed(0) : '0';
-      
-      const hasNCR = item.items?.some(i => i.status === CheckStatus.FAIL) || item.status === InspectionStatus.FLAGGED;
-      const displayStatus = hasNCR ? InspectionStatus.FLAGGED : item.status;
-      
-      return { passRate, failRate, displayStatus, hasNCR };
-  };
+    // Auto-expand first few groups if searching
+    if (searchTerm && Object.keys(groups).length > 0) {
+        setExpandedGroups(new Set(Object.keys(groups)));
+    }
 
-  const activeFiltersCount = [
-      statusFilter !== 'ALL',
-      inspectorFilter !== 'ALL',
-      typeFilter !== 'ALL',
-      workshopFilter !== 'ALL',
-      dateFilterMode === 'CUSTOM'
-  ].filter(Boolean).length;
+    return groups;
+  }, [inspections, searchTerm]);
 
-  const clearFilters = () => {
-      setStatusFilter('ALL');
-      setInspectorFilter('ALL');
-      setTypeFilter('ALL');
-      setWorkshopFilter('ALL');
-      setDateFilterMode('7DAYS'); // Reset to default 7 days
-      setSpecificDate('');
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+    });
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 no-scroll-x relative">
-      {/* Header Toolbar */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-3 py-3 shadow-sm shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input 
-                type="text" placeholder="Mã CT, Sản phẩm, QC..." value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
-              />
-              {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400"><X className="w-3.5 h-3.5" /></button>}
-            </div>
-            <button 
-                onClick={() => setShowFiltersPanel(!showFiltersPanel)} 
-                className={`p-2 rounded-xl border transition-all relative ${showFiltersPanel || activeFiltersCount > 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'}`}
-            >
-                <SlidersHorizontal className="w-4 h-4" />
-                {activeFiltersCount > 0 && !showFiltersPanel && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
-                )}
-            </button>
-            <button onClick={onRefresh} className="p-2 text-slate-500 bg-slate-100 rounded-xl active:scale-90 transition-all"><RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} /></button>
+    <div className="h-full flex flex-col bg-slate-50 no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      <div className="shrink-0 bg-white px-4 py-4 border-b border-slate-200 z-30 shadow-sm">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-3">
+              <div className="relative flex-1 group">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  <input 
+                    type="text" 
+                    placeholder="Tìm theo Mã CT, Dự án, Sản phẩm..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm text-slate-700 focus:ring-4 focus:ring-blue-100 focus:bg-white focus:border-blue-500 outline-none transition-all shadow-inner"
+                  />
+                  {searchTerm && (
+                    <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                  )}
+              </div>
+              <button 
+                onClick={onRefresh} 
+                className="px-6 py-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                <span className="text-[10px] uppercase tracking-widest">Làm mới</span>
+              </button>
           </div>
-          
-          {showFiltersPanel && (
-            <div className="mt-3 p-4 bg-white rounded-2xl border border-blue-100 shadow-xl animate-in slide-in-from-top-2 duration-300 relative z-50">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                        <Filter className="w-3.5 h-3.5 text-blue-600"/> Bộ lọc nâng cao
-                    </h3>
-                    {activeFiltersCount > 0 && (
-                        <button onClick={clearFilters} className="text-[10px] font-bold text-red-500 hover:underline flex items-center gap-1">
-                            <XCircle className="w-3 h-3" /> Xóa lọc ({activeFiltersCount})
-                        </button>
-                    )}
-                </div>
-                
-                {/* Date Filter Section */}
-                <div className="mb-4 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
-                    <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest block mb-2 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> Thời gian kiểm tra
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                        <button 
-                            onClick={() => { setDateFilterMode('7DAYS'); setSpecificDate(''); }}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${dateFilterMode === '7DAYS' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'}`}
-                        >
-                            7 Ngày gần nhất
-                        </button>
-                        <button 
-                            onClick={() => { setDateFilterMode('ALL'); setSpecificDate(''); }}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${dateFilterMode === 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'}`}
-                        >
-                            Toàn bộ lịch sử
-                        </button>
-                        <button 
-                            onClick={() => setDateFilterMode('CUSTOM')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${dateFilterMode === 'CUSTOM' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200'}`}
-                        >
-                            Ngày cụ thể
-                        </button>
-                    </div>
-                    {dateFilterMode === 'CUSTOM' && (
-                        <div className="mt-2 animate-in slide-in-from-top-1">
-                            <input 
-                                type="date" 
-                                value={specificDate} 
-                                onChange={e => setSpecificDate(e.target.value)}
-                                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 ring-blue-200"
-                            />
-                        </div>
-                    )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Trạng thái</label>
-                        <div className="relative">
-                            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-100">
-                                <option value="ALL">Tất cả trạng thái</option>
-                                <option value={InspectionStatus.APPROVED}>APPROVED</option>
-                                <option value={InspectionStatus.FLAGGED}>FLAGGED</option>
-                                <option value={InspectionStatus.COMPLETED}>COMPLETED</option>
-                                <option value={InspectionStatus.DRAFT}>DRAFT</option>
-                            </select>
-                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Loại phiếu</label>
-                        <div className="relative">
-                            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-100">
-                                <option value="ALL">Tất cả loại</option>
-                                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <Layers className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Người tạo</label>
-                        <div className="relative">
-                            <select value={inspectorFilter} onChange={e => setInspectorFilter(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-100">
-                                <option value="ALL">Tất cả QC</option>
-                                {uniqueInspectors.map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                            <User className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Xưởng / Nhà máy</label>
-                        <div className="relative">
-                            <select value={workshopFilter} onChange={e => setWorkshopFilter(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none appearance-none focus:ring-2 focus:ring-blue-100">
-                                <option value="ALL">Tất cả xưởng</option>
-                                {uniqueWorkshops.map(w => <option key={w.code} value={w.code}>{w.label}</option>)}
-                            </select>
-                            <Building2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-          )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar pb-24">
-        {isLoading ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" /><p className="font-black uppercase tracking-widest text-[8px]">Đang tải dữ liệu...</p></div>
-        ) : sortedProjectKeys.length === 0 ? (
-          <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center mx-2 shadow-sm">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3">
-                  <Box className="w-8 h-8 text-slate-300" />
-              </div>
-              <p className="font-black uppercase text-slate-400 text-[10px] tracking-widest mb-1">Không tìm thấy báo cáo</p>
-              <p className="text-[9px] text-slate-300">
-                  {dateFilterMode === '7DAYS' ? 'Đang lọc 7 ngày gần nhất.' : 'Thử thay đổi bộ lọc.'}
-              </p>
-              {activeFiltersCount > 0 && (
-                  <button onClick={clearFilters} className="mt-4 text-blue-600 text-[10px] font-bold hover:underline">Xóa bộ lọc ({activeFiltersCount})</button>
-              )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sortedProjectKeys.map(maCt => {
-              const project = projectsData[maCt];
-              const isExpanded = expandedProjects.has(maCt);
-              return (
-                <div key={maCt} className="space-y-3">
-                  <div 
-                    onClick={() => toggleProject(maCt)} 
-                    className={`bg-white rounded-[1.5rem] border transition-all active:scale-[0.99] shadow-sm cursor-pointer group ${isExpanded ? 'border-blue-300 ring-2 ring-blue-50' : 'border-slate-200 hover:border-blue-200'}`}
-                  >
-                    <div className="p-4 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className={`p-2.5 rounded-xl shrink-0 transition-colors ${isExpanded ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500'}`}>
-                          <FolderOpen className="w-4 h-4" />
-                        </div>
-                        <div className="overflow-hidden">
-                          <h3 className="font-black text-xs text-slate-900 uppercase truncate leading-none mb-1 group-hover:text-blue-700 transition-colors">{maCt}</h3>
-                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight truncate">{project.ten_ct}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 min-w-[32px] justify-center" title="Tổng phiếu">
-                           <span className="text-[8px] font-black text-slate-600">{project.stats.total}</span>
-                        </div>
-                        {project.stats.ncr > 0 && (
-                            <div className="flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg border border-red-100 min-w-[32px] justify-center" title="Phiếu lỗi (NCR)">
-                               <span className="text-[8px] font-black text-red-600">{project.stats.ncr}</span>
-                            </div>
-                        )}
-                        <ChevronDown className={`w-4 h-4 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''} ml-1`} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="ml-2 pl-2 border-l-2 border-slate-100 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                      {Object.entries(project.factories).sort().map(([factoryCode, items]) => {
-                        // Find workshop name for display if possible
-                        const workshopName = workshops?.find(w => w.code === factoryCode)?.name || factoryCode;
-                        // Cast items to Inspection[] to fix property 'length' error
-                        const itemsList = items as Inspection[];
-                        
-                        return (
-                        <div key={factoryCode} className="space-y-2">
-                           <div className="flex items-center gap-2 px-2 py-1 bg-slate-50/50 rounded-lg">
-                              <Building2 className="w-3 h-3 text-slate-400" />
-                              <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex-1">
-                                {factoryCode} <span className="font-medium text-slate-400 ml-1">- {workshopName}</span>
-                              </h4>
-                              <span className="text-[8px] font-bold bg-white text-slate-500 px-1.5 py-0.5 border border-slate-200 rounded">{itemsList.length}</span>
-                           </div>
-                           <div className="grid grid-cols-1 gap-2">
-                              {itemsList.map(item => {
-                                const { passRate, failRate, displayStatus, hasNCR } = getInspectionDisplayInfo(item);
-                                return (
-                                <div 
-                                    key={item.id} 
-                                    onClick={() => onSelect(item.id)}
-                                    className="bg-white p-3.5 rounded-2xl border border-slate-200 active:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between shadow-sm group cursor-pointer relative overflow-hidden"
-                                >
-                                  {hasNCR && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-bl-lg z-10"></div>}
-                                  
-                                  <div className="flex-1 min-w-0 pr-3">
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <span className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-widest border ${
-                                           displayStatus === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600' : 
-                                           displayStatus === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' : 
-                                           'bg-orange-50 text-orange-700 border-orange-200'
-                                       }`}>
-                                           {displayStatus}
-                                       </span>
-                                       <span className="text-[8px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 truncate max-w-[80px]">
-                                           {item.type}
-                                       </span>
-                                    </div>
-                                    
-                                    <h4 className="font-bold text-slate-800 text-[10px] truncate uppercase tracking-tight mb-2 leading-tight group-hover:text-blue-700 transition-colors">
-                                        {item.ten_hang_muc}
-                                    </h4>
-                                    
-                                    <div className="flex items-center justify-between">
-                                       <div className="text-[8px] font-bold text-slate-400 flex items-center gap-1.5">
-                                           <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5"/> {item.date}</span>
-                                           <span className="w-px h-2 bg-slate-300"></span>
-                                           <span className="flex items-center gap-1 uppercase truncate max-w-[80px]"><User className="w-2.5 h-2.5"/> {item.inspectorName}</span>
-                                       </div>
-                                       
-                                       <div className="flex items-center gap-1 text-[8px] font-black bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                            <span className="text-green-600">{passRate}%</span>
-                                            <span className="text-slate-300">/</span>
-                                            <span className="text-red-600">{failRate}%</span>
-                                       </div>
-                                    </div>
-                                  </div>
-                                  <div className="p-1 rounded-full text-slate-300 group-hover:text-blue-500 group-hover:bg-blue-50 transition-all">
-                                      <ChevronRight className="w-4 h-4" />
-                                  </div>
-                                </div>
-                              )})}
-                           </div>
-                        </div>
-                      )})}
-                    </div>
-                  )}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">
+        <div className="max-w-7xl mx-auto space-y-6">
+            {isLoading && inspections.length === 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[1,2,3,4,5,6].map(i => <SkeletonItem key={i} />)}
                 </div>
-              );
-            })}
-          </div>
-        )}
-        
-        <div className="text-center py-6 text-[9px] font-black text-slate-300 uppercase tracking-widest flex items-center justify-center gap-2">
-            {sortedProjectKeys.length > 0 && (
-                <>
-                    <div className="h-px w-8 bg-slate-200"></div>
-                    <span>
-                        {dateFilterMode === '7DAYS' ? 'Hiển thị dữ liệu 7 ngày gần nhất' : 'Đã tải toàn bộ dữ liệu'}
-                    </span>
-                    <div className="h-px w-8 bg-slate-200"></div>
-                </>
+            ) : Object.keys(groupedInspections).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-slate-300">
+                    <FolderOpen className="w-20 h-20 opacity-10 mb-4" />
+                    <p className="font-black uppercase tracking-[0.2em] text-[10px]">Không tìm thấy dữ liệu kiểm tra</p>
+                </div>
+            ) : (
+                Object.keys(groupedInspections).sort((a,b) => a === 'DÙNG CHUNG' ? 1 : b === 'DÙNG CHUNG' ? -1 : a.localeCompare(b)).map(groupKey => {
+                    const group = groupedInspections[groupKey];
+                    const isExpanded = expandedGroups.has(groupKey);
+                    const isSpecial = groupKey === 'DÙNG CHUNG';
+
+                    return (
+                        <div key={groupKey} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div 
+                                onClick={() => toggleGroup(groupKey)}
+                                className={`p-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50/40 border-b border-blue-100' : 'hover:bg-slate-50/50'}`}
+                            >
+                                <div className="flex items-center gap-4 flex-1 overflow-hidden">
+                                    <div className={`p-3 rounded-2xl shrink-0 shadow-sm ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        <Building2 className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <h3 className={`font-black text-xs uppercase tracking-tight truncate ${isSpecial ? 'text-blue-700' : 'text-slate-800'}`}>
+                                                {groupKey}
+                                            </h3>
+                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black border border-slate-200">
+                                                {group.inspections.length}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide truncate">
+                                            {group.projectName}
+                                        </p>
+                                    </div>
+                                </div>
+                                <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                            </div>
+
+                            {isExpanded && (
+                                <div className="divide-y divide-slate-50 bg-white animate-in slide-in-from-top-2 duration-200">
+                                    {group.inspections.map((item) => {
+                                        const config = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
+                                        const Icon = config.icon;
+                                        
+                                        return (
+                                            <div 
+                                                key={item.id}
+                                                onClick={() => onSelect(item.id)}
+                                                className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/80 transition-all group cursor-pointer relative border-l-4 border-transparent hover:border-blue-500"
+                                            >
+                                                <div className="flex items-start gap-4 flex-1">
+                                                    <div className={`p-3 rounded-2xl shadow-sm border transition-all ${config.bg} ${config.color} border-current/10 group-hover:scale-105`}>
+                                                        <Icon className="w-6 h-6" />
+                                                    </div>
+                                                    <div className="flex-1 overflow-hidden space-y-1.5">
+                                                        <div className="flex items-center flex-wrap gap-2">
+                                                            <p className="font-black text-slate-800 text-sm uppercase tracking-tight truncate max-w-[300px] md:max-w-xl group-hover:text-blue-700 transition-colors">
+                                                                {item.ten_hang_muc || `PO: ${item.po_number}`}
+                                                            </p>
+                                                            {item.status === InspectionStatus.FLAGGED && (
+                                                                <span className="flex items-center gap-1 bg-red-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm">
+                                                                    <AlertOctagon className="w-2.5 h-2.5" /> LỖI/KPH
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                                            <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase">
+                                                                <Clock className="w-3 h-3 text-blue-400" /> {item.date}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase">
+                                                                <UserCheck className="w-3 h-3 text-indigo-400" /> {item.inspectorName}
+                                                            </div>
+                                                            {item.workshop && (
+                                                                <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase">
+                                                                    <Factory className="w-3 h-3 text-emerald-400" /> {item.workshop}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
+                                                    <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-[0.1em] shadow-sm ${
+                                                        item.status === InspectionStatus.APPROVED ? 'bg-blue-600 text-white border-blue-600' :
+                                                        item.status === InspectionStatus.COMPLETED ? 'bg-green-600 text-white border-green-600' :
+                                                        item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-200' :
+                                                        'bg-white text-slate-500 border-slate-200'
+                                                    }`}>
+                                                        {item.status}
+                                                    </div>
+                                                    <div className="p-2.5 bg-white border border-slate-200 text-slate-300 rounded-2xl shadow-sm group-hover:text-blue-600 group-hover:border-blue-300 group-hover:bg-blue-50 transition-all group-hover:translate-x-1 active:scale-90">
+                                                        <ChevronRight className="w-5 h-5" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })
             )}
         </div>
+      </div>
+      
+      {/* Scroll Info for Mobile */}
+      <div className="md:hidden px-4 py-2 bg-slate-900/5 backdrop-blur-sm text-center border-t border-slate-200 sticky bottom-0">
+          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Hiển thị {inspections.length} bản ghi kiểm tra</p>
       </div>
     </div>
   );
