@@ -32,37 +32,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
   const [filterQa, setFilterQa] = useState('ALL');
   const [filterPc, setFilterPc] = useState('ALL');
 
-  // Tổng hợp danh sách dự án từ database projects VÀ plans
+  /**
+   * ISO-AUTHORITATIVE: Chỉ lấy danh sách dự án từ database projects làm gốc.
+   * Việc đồng bộ từ bảng plans đã được xử lý bởi logic syncProjectsWithPlans ở tầng Service.
+   */
   const displayProjects = useMemo(() => {
-    // 1. Lấy danh sách dự án từ database projects làm gốc
-    const combined = [...projects];
-    
-    // 2. Duyệt qua plans để tìm những mã công trình (ma_ct) chưa tồn tại trong danh sách projects
-    // Sử dụng Map để tối ưu hiệu năng và tránh trùng lặp
-    const projectCodes = new Set(combined.map(p => String(p.ma_ct).toUpperCase()));
-    
-    plans.forEach(plan => {
-      if (plan.ma_ct && !projectCodes.has(String(plan.ma_ct).toUpperCase())) {
-        combined.push({
-          id: `derived_${plan.ma_ct}`,
-          code: plan.ma_ct,
-          name: plan.ten_ct || plan.ma_ct,
-          ma_ct: plan.ma_ct,
-          ten_ct: plan.ten_ct || plan.ma_ct,
-          status: 'In Progress', // Mặc định là đang thực hiện nếu có trong plans
-          startDate: 'N/A',
-          endDate: 'N/A',
-          progress: 0,
-          pm: 'Chưa phân công',
-          qa: 'Chưa phân công',
-          pc: 'Chưa phân công'
-        } as Project);
-        projectCodes.add(String(plan.ma_ct).toUpperCase());
-      }
-    });
-    
-    return combined;
-  }, [projects, plans]);
+    return [...projects];
+  }, [projects]);
 
   // Lấy các giá trị duy nhất cho bộ lọc từ danh sách đã tổng hợp
   const filterOptions = useMemo(() => {
@@ -122,9 +98,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                 <Briefcase className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Danh sách dự án</h2>
+                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Quản lý Dự án</h2>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                   Hiển thị {filteredProjects.length} / {displayProjects.length} dự án
+                   ISO 9001:2024 • {filteredProjects.length} hồ sơ dự án
                 </p>
               </div>
             </div>
@@ -159,7 +135,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
             </div>
           </div>
 
-          {/* FILTER PANEL (Toggleable) */}
+          {/* FILTER PANEL */}
           {showFilters && (
             <div className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4 animate-in slide-in-from-top duration-300">
               <div className="space-y-1.5">
@@ -229,20 +205,15 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
       {/* PROJECT LIST */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">
         {displayProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-             <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
-             <p className="font-black uppercase tracking-widest text-xs">Đang tải dữ liệu từ database...</p>
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-[2rem] border border-dashed border-slate-200">
+             <Briefcase className="w-16 h-16 opacity-10 mb-4" />
+             <p className="font-black uppercase tracking-widest text-xs">Chưa có hồ sơ dự án nào trong database</p>
+             <p className="text-[10px] text-slate-400 mt-2 uppercase">Hồ sơ sẽ tự động được tạo từ kế hoạch sản xuất</p>
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-300">
             <AlertCircle className="w-16 h-16 opacity-10 mb-4" />
             <p className="font-black uppercase tracking-[0.2em] text-sm">Không tìm thấy dự án phù hợp</p>
-            <button 
-                onClick={() => { setSearchTerm(''); setFilterPm('ALL'); setFilterQa('ALL'); setFilterPc('ALL'); }} 
-                className="mt-4 text-xs font-bold text-blue-500 hover:underline"
-            >
-                Xóa tất cả bộ lọc
-            </button>
           </div>
         ) : (
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

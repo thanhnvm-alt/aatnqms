@@ -48,6 +48,23 @@ export const fetchUsers = async () => await db.getUsers();
 export const saveUser = async (user: User) => await db.saveUser(user);
 export const deleteUser = async (id: string) => await db.deleteUser(id);
 
+/**
+ * ISO-AUTHORITATIVE: Xác thực người dùng trực tiếp từ Database
+ */
+export const verifyUserCredentials = async (username: string, password: string): Promise<User | null> => {
+    try {
+        const user = await db.getUserByUsername(username);
+        // Kiểm tra mật khẩu (Hiện tại đang lưu trong data JSON của User record)
+        if (user && user.password === password) {
+            return user;
+        }
+        return null;
+    } catch (e) {
+        console.error("ISO-AUTH: Verification failed", e);
+        throw e;
+    }
+};
+
 export const fetchWorkshops = async () => await db.getWorkshops();
 export const saveWorkshop = async (ws: Workshop) => await db.saveWorkshop(ws);
 export const deleteWorkshop = async (id: string) => await db.deleteWorkshop(id);
@@ -58,6 +75,11 @@ export const saveTemplate = async (moduleId: string, items: CheckItem[]) => awai
 export const fetchProjects = async () => await db.getProjects();
 export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
 export const updateProject = async (proj: Project) => await db.updateProject(proj);
+
+/**
+ * ISO-SYNC: Đồng bộ danh sách dự án
+ */
+export const syncProjectsWithPlans = async () => await db.syncProjectsWithPlans();
 
 export const fetchNotifications = async (userId: string) => await db.getNotifications(userId);
 export const markNotificationAsRead = async (id: string) => await db.markNotificationRead(id);

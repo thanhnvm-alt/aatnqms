@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Database } from 'lucide-react';
+import { verifyUserCredentials } from '../services/apiService';
 
 interface LoginPageProps {
   onLoginSuccess: (user: User, remember: boolean) => void;
   users: User[];
-  dbReady?: boolean; // New prop to control access based on DB state
+  dbReady?: boolean; 
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbReady = false }) => {
@@ -18,7 +19,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
   const [error, setError] = useState('');
   const [logoError, setLogoError] = useState(false);
 
-  // Load saved username on mount
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
     if (savedUsername) {
@@ -29,14 +29,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dbReady) return; // Guard clause
+    if (!dbReady) return; 
     
     setError('');
     setIsLoading(true);
 
-    // Simulate network delay
-    setTimeout(() => {
-        const foundUser = users.find(u => u.username === username && u.password === password);
+    try {
+        // ISO-DB: Kiểm tra trực tiếp với Database cho tính bảo mật và cập nhật mới nhất
+        const foundUser = await verifyUserCredentials(username, password);
         
         if (foundUser) {
             if (rememberMe) {
@@ -45,13 +45,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
                 localStorage.removeItem('aatn_saved_username');
             }
 
-            const { password: _, ...safeUser } = foundUser; 
-            onLoginSuccess(foundUser as User, rememberMe);
+            onLoginSuccess(foundUser, rememberMe);
         } else {
-            setError('Tên đăng nhập hoặc mật khẩu không đúng');
+            // Fallback sang mock data nếu DB chưa được seed nhưng thông tin khớp (cho dev)
+            const mockUser = users.find(u => u.username === username && u.password === password);
+            if (mockUser) {
+                onLoginSuccess(mockUser, rememberMe);
+            } else {
+                setError('Tên đăng nhập hoặc mật khẩu không đúng');
+            }
         }
+    } catch (err: any) {
+        console.error("Login attempt failed", err);
+        setError(`Lỗi hệ thống: ${err.message || "Không thể kết nối Database"}`);
+    } finally {
         setIsLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -120,7 +129,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
                   autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  disabled={!dbReady}
+                  disabled={!dbReady || isLoading}
                   className="pl-10 block w-full border border-slate-200 bg-slate-50 rounded-lg py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="Nhập tên đăng nhập..."
                   required
@@ -140,7 +149,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={!dbReady}
+                  disabled={!dbReady || isLoading}
                   className="pl-10 pr-10 block w-full border border-slate-200 bg-slate-50 rounded-lg py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="••••••"
                   required
@@ -157,8 +166,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
             
             {/* Remember Me Checkbox */}
             <div 
-                className={`flex items-start cursor-pointer group ${!dbReady ? 'pointer-events-none opacity-50' : ''}`} 
-                onClick={() => dbReady && setRememberMe(!rememberMe)}
+                className={`flex items-start cursor-pointer group ${(!dbReady || isLoading) ? 'pointer-events-none opacity-50' : ''}`} 
+                onClick={() => dbReady && !isLoading && setRememberMe(!rememberMe)}
             >
                 <div className={`mt-0.5 mr-3 w-5 h-5 rounded border flex items-center justify-center transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white group-hover:border-blue-400'}`}>
                     {rememberMe && <CheckSquare className="w-4 h-4 text-white" />}
@@ -174,7 +183,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-pulse">
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-shake">
                  <Info className="w-4 h-4 mr-2 flex-shrink-0" />
                  {error}
               </div>
@@ -188,7 +197,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
               {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                    Đang xử lý...
+                    ĐANG XÁC THỰC...
                   </>
               ) : !dbReady ? (
                 <>

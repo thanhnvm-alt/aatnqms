@@ -69,7 +69,8 @@ import {
   fetchTemplates, 
   saveTemplate, 
   fetchProjects, 
-  createNotification
+  createNotification,
+  syncProjectsWithPlans
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText } from 'lucide-react';
@@ -151,7 +152,16 @@ const App = () => {
   const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers([...MOCK_USERS, ...data.filter((du:any) => !MOCK_USERS.some(u=>u.username === du.username))]); } catch (e) {} };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); } catch (e) {} };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
-  const loadProjects = async () => { try { const data = await fetchProjects(); setProjects(data || []); } catch(e) {} };
+  
+  const loadProjects = async () => { 
+    try { 
+        // ISO-SYNC: Đồng bộ mã công trình từ plans trước khi tải projects
+        await syncProjectsWithPlans();
+        const data = await fetchProjects(); 
+        setProjects(data || []); 
+    } catch(e) {} 
+  };
+
   const loadPlans = async () => { setIsLoadingPlans(true); try { const result = await fetchPlans('', 1, 1000); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
   const loadInspections = async () => { setIsLoadingInspections(true); try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
   
@@ -215,7 +225,6 @@ const App = () => {
 
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
   
-  // Show global loader only if user is logged in but database still syncing
   if (!isDbReady) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo...</p></div>;
 
   return (
@@ -237,7 +246,7 @@ const App = () => {
             {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { inspection: activeInspection, user, onBack: () => setView('LIST'), onEdit: handleEditInspection, onDelete: async id => { if(window.confirm("Xóa?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, onApprove: handleApproveInspection, onPostComment: handlePostComment }) : null)}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={()=>{}} onImportPlans={async()=>{}} totalItems={plans.length} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} />}
-            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} />}
+            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={loadProjects} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
