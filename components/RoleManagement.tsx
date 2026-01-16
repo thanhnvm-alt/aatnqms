@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { Role, ModuleId, PermissionAction, ModulePermission } from '../types';
 import { ALL_MODULES } from '../constants';
@@ -73,12 +74,12 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
   });
 
   const filteredRoles = useMemo(() => {
-      const term = searchTerm.toLowerCase().trim();
+      const term = (searchTerm || '').toLowerCase().trim();
       if (!term) return roles;
       return roles.filter(r => 
-        r.name.toLowerCase().includes(term) || 
-        r.description.toLowerCase().includes(term) ||
-        r.id.toLowerCase().includes(term)
+        (r.name || '').toLowerCase().includes(term) || 
+        (r.description || '').toLowerCase().includes(term) ||
+        (r.id || '').toLowerCase().includes(term)
       );
   }, [roles, searchTerm]);
 

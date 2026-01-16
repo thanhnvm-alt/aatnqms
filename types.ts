@@ -1,4 +1,5 @@
 
+
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -24,66 +25,47 @@ export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SET
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
 
-export type UserRole = 'ADMIN' | 'MANAGER' | 'QA' | 'QC';
-
-export type UserRoleName = UserRole | string;
-
-export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'EXPORT';
-
-export interface ModulePermission {
-  moduleId: ModuleId;
-  actions: PermissionAction[];
-}
-
-export interface Role {
+export interface QMSImage {
   id: string;
-  name: string;
-  description: string;
-  permissions: ModulePermission[];
-  allowedModules?: ModuleId[];
-  isSystem?: boolean;
+  parent_entity_id: string;
+  related_item_id?: string;
+  entity_type: 'INSPECTION' | 'NCR' | 'DEFECT' | 'USER';
+  image_role: 'EVIDENCE' | 'BEFORE' | 'AFTER' | 'PREVIEW';
+  url_hd: string;
+  url_thumbnail: string;
+  created_at: number;
 }
+
+export type UserRole = 'ADMIN' | 'MANAGER' | 'QC' | 'QA';
 
 export interface User {
   id: string;
   username: string;
   password?: string;
   name: string;
-  role: UserRoleName;
+  role: string | UserRole;
   avatar: string;
   allowedModules?: ModuleId[];
-  permissions?: ModulePermission[];
   msnv?: string;
+  status?: string;
+  // Added missing properties for UserManagement and Profile
   position?: string;
   workLocation?: string;
-  status?: string;
   joinDate?: string;
   education?: string;
   endDate?: string;
   notes?: string;
 }
 
-export interface Notification {
-  id: string;
-  userId: string;
-  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE' | 'SYSTEM';
-  title: string;
-  message: string;
-  link?: {
-    view: ViewState;
-    id: string;
-  };
-  isRead: boolean;
-  createdAt: number;
-}
-
 export interface NCRComment {
   id: string;
   userId: string;
   userName: string;
-  userAvatar?: string;
   content: string;
   createdAt: string;
+  image_refs?: string[];
+  // Added missing properties for NCR discussions
+  userAvatar?: string;
   attachments?: string[];
 }
 
@@ -95,86 +77,136 @@ export interface NCR {
   createdDate: string;
   issueDescription: string;
   rootCause: string;
-  solution: string;
+  solution: string; 
+  preventiveAction: string;
   responsiblePerson: string;
   deadline?: string;
   status: string;
   severity?: 'MINOR' | 'MAJOR' | 'CRITICAL';
-  imagesBefore: string[];
-  imagesAfter: string[];
+  image_refs_before: string[]; // Decoupled: UUIDs only
+  image_refs_after: string[];  // Decoupled: UUIDs only
+  // Added base64 support for form state
+  imagesBefore?: string[];
+  imagesAfter?: string[];
   comments?: NCRComment[];
   createdBy?: string;
-}
-
-export interface DefectLibraryItem {
-  id: string;
-  code: string;
-  name: string;
-  stage: string;
-  category: string;
-  description: string;
-  severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
-  suggestedAction?: string;
-  correctImage?: string;
-  incorrectImage?: string;
-  createdBy?: string;
-  createdAt?: number;
-}
-
-export interface Defect {
-  id: string;
-  inspectionId: string;
-  itemId: string;
-  defectCode: string;
-  category: string;
-  description: string;
-  status: string;
-  severity: string;
-  inspectorName: string;
-  date: string;
-  ma_ct: string;
-  ten_ct: string;
-  images: string[];
-  rootCause?: string;
-  solution?: string;
-  responsiblePerson?: string;
-  deadline?: string;
 }
 
 export interface CheckItem {
   id: string;
   stage?: string;
-  category: string; // Used as Material Group in IQC
+  category: string;
   label: string;
   method?: string;
   standard?: string;
-  frequency?: string; // Tần suất kiểm tra
-  defectIds?: string[]; // Link to Defect Library IDs
   status: CheckStatus;
   notes?: string;
+  image_refs?: string[]; // Decoupled: UUIDs only
+  // Added missing properties for Inspection forms
   images?: string[];
-  ncr?: NCR; 
-  ncrId?: string; 
+  ncrId?: string;
+  ncr?: NCR;
+  frequency?: string;
+  defectIds?: string[];
 }
 
 export interface MaterialIQC {
   id: string;
   name: string;
-  category?: string; // Chủng loại vật tư
-  scope: 'COMMON' | 'PROJECT'; 
-  projectCode?: string;         
-  projectName?: string;         
+  category: string;
+  scope: 'COMMON' | 'PROJECT';
+  projectCode?: string;
+  projectName?: string;
   orderQty: number;
   deliveryQty: number;
   unit: string;
-  criteria: string[]; 
-  items: CheckItem[]; 
+  criteria: any[];
+  items: CheckItem[];
   inspectQty: number;
   passQty: number;
   failQty: number;
   images: string[];
-  type: 'AQL' | '100%';
+  type: string;
   date: string;
+}
+
+export interface Inspection {
+  id: string;
+  type?: ModuleId;
+  ma_ct: string;
+  po_number?: string;
+  ten_ct: string;
+  ma_nha_may?: string;
+  ten_hang_muc?: string;
+  inspectorName: string;
+  date: string;
+  status: InspectionStatus;
+  score: number;
+  items: CheckItem[]; // JSON only contains metadata and refs
+  image_refs?: string[]; // Top level images
+  // Added missing properties for forms and details
+  images?: string[];
+  summary?: string;
+  workshop?: string;
+  inspectionStage?: string;
+  dvt?: string;
+  so_luong_ipo: number;
+  inspectedQuantity?: number;
+  passedQuantity?: number;
+  failedQuantity?: number;
+  signature_ref?: string; // Signature as image reference
+  signature?: string;
+  manager_signature_ref?: string;
+  managerSignature?: string;
+  managerName?: string;
+  productionSignature?: string;
+  productionName?: string;
+  productionConfirmedDate?: string;
+  productionComment?: string;
+  pmSignature?: string;
+  pmComment?: string;
+  pmName?: string;
+  confirmedDate?: string;
+  supplier?: string;
+  location?: string;
+  updatedAt?: string;
+  headcode?: string;
+  materials?: MaterialIQC[];
+  referenceDocs?: string[];
+  supplierAddress?: string;
+  reportImage?: string;
+  reportImages?: string[];
+  deliveryNoteImage?: string;
+  deliveryNoteImages?: string[];
+  comments?: NCRComment[];
+  priority?: Priority;
+}
+
+export interface PlanItem {
+  id?: number | string;
+  ma_nha_may: string;
+  headcode?: string;
+  ma_ct: string;
+  ten_ct: string;
+  ten_hang_muc: string;
+  dvt?: string;
+  so_luong_ipo: number;
+  plannedDate?: string;
+  // Added missing properties
+  assignee?: string;
+  status?: string;
+}
+
+export interface Workshop {
+  id: string;
+  code: string;
+  name: string;
+  location: string;
+  manager: string;
+  stages?: string[];
+  // Added missing properties
+  phone?: string;
+  image?: string;
 }
 
 export interface SmartGoal {
@@ -189,90 +221,83 @@ export interface SmartGoal {
   createdAt: number;
 }
 
-export interface Inspection {
-  id: string;
-  type?: ModuleId;
-  ma_ct: string;         // Mã công trình (Lấy từ thông tin vật tư)
-  po_number?: string;    // Mới: Mã PO (Riêng biệt, không dùng làm khóa chính dự án)
-  ten_ct: string;
-  ma_nha_may?: string;
-  ten_hang_muc?: string;
-  headcode?: string;
-  inspectorName: string;
-  date: string;
-  status: InspectionStatus;
-  priority?: Priority;
-  score: number;
-  items: CheckItem[];
-  materials?: MaterialIQC[];
-  images?: string[];
-  summary?: string;
-  aiSuggestions?: string;
-  workshop?: string;
-  inspectionStage?: string;
-  dvt?: string;
-  so_luong_ipo: number;
-  inspectedQuantity?: number;
-  passedQuantity?: number;
-  failedQuantity?: number;
-  signature?: string;
-  productionSignature?: string;
-  managerSignature?: string;
-  pmSignature?: string;
-  managerName?: string;
-  pmName?: string;
-  pmComment?: string;
-  productionName?: string;
-  productionComment?: string;
-  productionConfirmedDate?: string;
-  confirmedDate?: string;
-  comments?: NCRComment[];
-  updatedAt?: string;
-  supplier?: string;
-  supplierAddress?: string; // MỚI: Địa chỉ nhà cung cấp
-  location?: string; // GPS Coordinates of Supplier/Site
-  referenceDocs?: string[];
-  reportImage?: string;
-  reportImages?: string[]; // Multiple report images
-  deliveryNoteImage?: string;
-  deliveryNoteImages?: string[]; // Multiple delivery note images
-}
-
 export interface Project {
   id: string;
-  code: string; 
+  code: string;
   name: string;
   ma_ct: string;
   ten_ct: string;
   status: 'In Progress' | 'Completed' | 'On Hold' | 'Planning';
   startDate: string;
   endDate: string;
-  pm: string; 
-  pc?: string; 
-  qa?: string; 
-  thumbnail: string;
+  pm?: string;
+  pc?: string;
+  qa?: string;
   progress: number;
+  thumbnail?: string;
   description?: string;
   location?: string;
-  images?: string[]; 
+  images?: string[];
   smartGoals?: SmartGoal[];
 }
 
-export interface PlanItem {
-  id?: number | string;
-  stt?: number;
-  ma_nha_may: string;
-  headcode?: string;
+export interface Defect {
+  id: string;
+  inspectionId: string;
+  defectCode: string;
+  description: string;
+  severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
+  status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
+  date: string;
+  inspectorName: string;
   ma_ct: string;
-  ten_ct: string;
-  ten_hang_muc: string;
-  dvt?: string;
-  so_luong_ipo: number;
-  plannedDate?: string;
-  assignee?: string;
-  status?: string;
-  pthsp?: string;
-  created_at?: number;
+  images?: string[];
+  rootCause?: string;
+  solution?: string;
+  responsiblePerson?: string;
+  deadline?: string;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE';
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: number;
+  link?: { view: ViewState, id: string };
+}
+
+export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'EXPORT';
+
+export interface ModulePermission {
+  moduleId: ModuleId;
+  actions: PermissionAction[];
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: ModulePermission[];
+  allowedModules: ModuleId[];
+  isSystem?: boolean;
+}
+
+export interface DefectLibraryItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  stage: string;
+  category: string;
+  severity: string;
+  suggestedAction?: string;
+  correctImage?: string;
+  incorrectImage?: string;
+  createdAt?: number;
+  createdBy?: string;
 }
 
 export interface PlanEntity {
@@ -280,14 +305,10 @@ export interface PlanEntity {
   headcode: string;
   ma_ct: string;
   ten_ct: string;
-  ma_nha_may: string;
   ten_hang_muc: string;
   dvt: string;
   so_luong_ipo: number;
-  ngay_kh: string;
-  assignee: string;
-  status: string;
-  pthsp: string;
+  ma_nha_may: string;
   created_at: number;
 }
 
@@ -301,15 +322,4 @@ export interface PlanResponse {
   dvt: string;
   soLuongIpo: number;
   ngayTao: string;
-}
-
-export interface Workshop {
-  id: string;
-  code: string;
-  name: string;
-  location: string;
-  manager: string;
-  phone: string;
-  image?: string;
-  stages?: string[];
 }

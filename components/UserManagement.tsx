@@ -1,28 +1,32 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { User, UserRole, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
 import { Button } from './Button';
 import { 
-  Plus, 
   Edit2, 
   Trash2, 
-  Check, 
   X, 
   Shield, 
   User as UserIcon, 
   Save, 
-  Download, 
-  Upload,
-  Briefcase,
-  MapPin,
-  Calendar,
-  GraduationCap,
-  StickyNote,
-  Camera,
-  Image as ImageIcon,
-  Loader2,
-  MoreVertical,
-  CheckCircle2
+  Briefcase, 
+  MapPin, 
+  Calendar, 
+  GraduationCap, 
+  StickyNote, 
+  Camera, 
+  Loader2, 
+  Search, 
+  ShieldCheck, 
+  CheckSquare, 
+  Square, 
+  FileDown, 
+  FileUp, 
+  UserPlus, 
+  Mail, 
+  Info,
+  ChevronDown,
+  Hash
 } from 'lucide-react';
 // @ts-ignore
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
@@ -39,11 +43,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const [filterRole, setFilterRole] = useState<string>('ALL');
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const excelImportRef = useRef<HTMLInputElement>(null);
 
-  // Form State
   const [formData, setFormData] = useState<Partial<User>>({
     name: '',
     username: '',
@@ -57,757 +66,370 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
     status: 'Đang làm việc',
     joinDate: '',
     education: '',
-    endDate: '',
     notes: ''
   });
+
+  const getInitials = (name: string) => {
+    if (!name) return '??';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getAvatarBg = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return 'bg-sky-600 shadow-sky-100';
+      case 'MANAGER': return 'bg-indigo-600 shadow-indigo-100';
+      case 'QA': return 'bg-teal-500 shadow-teal-100';
+      case 'QC': return 'bg-emerald-500 shadow-emerald-100';
+      default: return 'bg-rose-500 shadow-rose-100';
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const name = (u.name || '').toLowerCase();
+      const username = (u.username || '').toLowerCase();
+      const msnv = (u.msnv || '').toLowerCase();
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = !term || name.includes(term) || username.includes(term) || msnv.includes(term);
+      const matchesRole = filterRole === 'ALL' || u.role === filterRole;
+      const matchesStatus = filterStatus === 'ALL' || u.status === filterStatus;
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, searchTerm, filterRole, filterStatus]);
 
   const handleOpenModal = (user?: User) => {
     if (user) {
       setEditingUser(user);
-      setFormData({ 
-        ...user,
-        msnv: user.msnv || '',
-        position: user.position || '',
-        workLocation: user.workLocation || '',
-        status: user.status || 'Đang làm việc',
-        joinDate: user.joinDate || '',
-        education: user.education || '',
-        endDate: user.endDate || '',
-        notes: user.notes || '',
-        avatar: user.avatar || ''
-      }); 
+      setFormData({ ...user }); 
     } else {
       setEditingUser(null);
       setFormData({
-        name: '',
-        username: '',
-        password: '',
-        role: 'QC',
-        allowedModules: ['SITE', 'PQC'],
-        avatar: '',
-        msnv: '',
-        position: '',
-        workLocation: '',
-        status: 'Đang làm việc',
-        joinDate: new Date().toISOString().split('T')[0],
-        education: '',
-        endDate: '',
-        notes: ''
+        name: '', username: '', password: '', role: 'QC', allowedModules: ['PQC'],
+        msnv: '', position: '', workLocation: '', status: 'Đang làm việc',
+        joinDate: new Date().toISOString().split('T')[0], education: '', notes: ''
       });
     }
     setIsModalOpen(true);
   };
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, avatar: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSave = async () => {
     if (!formData.username || !formData.name || !formData.role) {
-      alert("Vui lòng điền đầy đủ thông tin bắt buộc");
+      alert("Vui lòng điền đủ thông tin bắt buộc (*)");
       return;
     }
-
-    if (!editingUser && !formData.password) {
-       alert("Vui lòng nhập mật khẩu cho người dùng mới");
-       return;
-    }
-
-    // Nếu tình trạng khác đang làm việc thì bỏ hết quyền
-    const finalAllowedModules = formData.status !== 'Đang làm việc' ? [] : formData.allowedModules;
-
-    const userData: User = {
-      id: editingUser ? editingUser.id : Date.now().toString(),
-      username: formData.username!,
-      name: formData.name!,
-      role: formData.role as UserRole,
-      password: formData.password || (editingUser ? editingUser.password : '123456'), 
-      avatar: formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name!)}&background=random&color=fff`,
-      allowedModules: finalAllowedModules,
-      msnv: formData.msnv,
-      position: formData.position,
-      workLocation: formData.workLocation,
-      status: formData.status,
-      joinDate: formData.joinDate,
-      education: formData.education,
-      endDate: formData.endDate,
-      notes: formData.notes
-    };
-
-    if (editingUser) {
-      await onUpdateUser(userData);
-    } else {
-      await onAddUser(userData);
-    }
-    setIsModalOpen(false);
-  };
-
-  const toggleModule = (moduleId: ModuleId) => {
-    if (formData.status !== 'Đang làm việc') {
-        alert("Người dùng không ở trạng thái 'Đang làm việc' không được cấp quyền.");
-        return;
-    }
-
-    setFormData(prev => {
-      const current = prev.allowedModules || [];
-      if (current.includes(moduleId)) {
-        return { ...prev, allowedModules: current.filter(id => id !== moduleId) };
-      } else {
-        return { ...prev, allowedModules: [...current, moduleId] };
-      }
-    });
-  };
-
-  const handleSelectAll = () => {
-     if (formData.status !== 'Đang làm việc') {
-        alert("Người dùng không ở trạng thái 'Đang làm việc' không được cấp quyền.");
-        return;
-     }
-     setFormData(prev => ({ ...prev, allowedModules: ALL_MODULES.map(m => m.id) }));
-  };
-
-  const handleClearAll = () => {
-     setFormData(prev => ({ ...prev, allowedModules: [] }));
-  };
-
-  // Fix: changed parameter type to string to handle user.role which is UserRoleName (UserRole | string)
-  const getRoleBadge = (role: string) => {
-    switch (role as UserRole) {
-      case 'ADMIN': return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'MANAGER': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'QA': return 'bg-teal-100 text-teal-700 border-teal-200';
-      case 'QC': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-slate-100 text-slate-700';
-    }
-  };
-
-  const getStatusBadge = (status: string | undefined) => {
-    const s = status || 'Đang làm việc';
-    if (s === 'Đang làm việc') return 'bg-green-100 text-green-700';
-    if (s === 'Chuyển BP/Phòng/Ban') return 'bg-orange-100 text-orange-700';
-    return 'bg-slate-100 text-slate-600';
-  };
-
-  // ... (Export/Import logic remains same)
-  const handleExportExcel = () => {
+    setIsSaving(true);
     try {
-      const exportData = users.map(u => ({
-        'MSNV': u.msnv || '',
-        'HỌ VÀ TÊN': u.name,
-        'CHỨC VỤ': u.position || '',
-        'NƠI LÀM VIỆC': u.workLocation || '',
-        'TÌNH TRẠNG': u.status || '',
-        'NGÀY NHẬN VIỆC': u.joinDate || '',
-        'TRÌNH ĐỘ': u.education || '',
-        'NGÀY KẾT THÚC': u.endDate || '',
-        'GHI CHÚ': u.notes || '',
-        'Tên đăng nhập': u.username,
-        'Mật khẩu': u.password || '123',
-        'Vai trò hệ thống': u.role,
-        'Quyền hạn (Modules)': (u.allowedModules || []).join(', ')
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Danh sách nhân sự");
-      XLSX.writeFile(wb, `Danh_sach_nhan_su_AATN_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } catch (error) {
-      console.error("Export failed:", error);
-      alert("Lỗi khi xuất file Excel.");
+        const userData: User = {
+          id: editingUser ? editingUser.id : `user_${Date.now()}`,
+          username: formData.username!,
+          name: formData.name!,
+          role: formData.role as UserRole,
+          password: formData.password || (editingUser ? editingUser.password : '123456'),
+          avatar: formData.avatar || '',
+          allowedModules: formData.allowedModules || [],
+          msnv: formData.msnv,
+          position: formData.position,
+          workLocation: formData.workLocation,
+          status: formData.status,
+          joinDate: formData.joinDate,
+          education: formData.education,
+          notes: formData.notes
+        };
+        if (editingUser) await onUpdateUser(userData);
+        else await onAddUser(userData);
+        setIsModalOpen(false);
+    } catch (e) {
+        console.error("Save user failed:", e);
+        alert("Lỗi khi lưu người dùng.");
+    } finally {
+        setIsSaving(false);
     }
+  };
+
+  const handleExportExcel = () => {
+    const exportData = users.map(u => ({
+      'MÃ NV': u.msnv || '',
+      'HỌ VÀ TÊN': u.name,
+      'Tên Đăng Nhập': u.username,
+      'Vai Trò': u.role,
+      'Chức Vụ': u.position || '',
+      'Tình Trạng': u.status || 'Đang làm việc'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Users");
+    XLSX.writeFile(wb, `AATN_Users_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+      const file = e.target.files?.[0];
+      if (!file || !onImportUsers) return;
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
+      setIsImporting(true);
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+          try {
+              const bstr = evt.target?.result;
+              const wb = XLSX.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const data = XLSX.utils.sheet_to_json(ws);
 
-        if (data.length === 0) {
-          alert("File Excel không có dữ liệu.");
-          return;
-        }
+              const importedUsers: User[] = data.map((row: any) => ({
+                  id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
+                  msnv: String(row['MÃ NV'] || ''),
+                  name: String(row['HỌ VÀ TÊN'] || ''),
+                  username: String(row['Tên Đăng Nhập'] || row['username'] || '').toLowerCase().trim(),
+                  role: (row['Vai Trò'] || 'QC') as UserRole,
+                  position: String(row['Chức Vụ'] || ''),
+                  status: String(row['Tình Trạng'] || 'Đang làm việc'),
+                  password: '123', // Mặc định
+                  avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(row['HỌ VÀ TÊN'] || 'U')}&background=random&color=fff`,
+                  allowedModules: ['PQC']
+              })).filter(u => u.username && u.name);
 
-        if (window.confirm(`Bạn có chắc chắn muốn nhập ${data.length} nhân sự từ file Excel lên hệ thống?`)) {
-          setIsImporting(true);
-          setImportProgress(0);
-          
-          const validUsers: User[] = [];
-
-          for (let i = 0; i < data.length; i++) {
-            const row: any = data[i];
-            
-            // Mapping flexible headers
-            const name = row['HỌ VÀ TÊN'] || row['Họ và Tên'] || row['name'] || row['FullName'];
-            const msnv = String(row['MSNV'] || row['Mã số NV'] || row['EmployeeID'] || '');
-            const username = row['Tên đăng nhập'] || row['username'] || row['User'] || (msnv ? msnv.toLowerCase().replace(/\s+/g, '') : `u_${Date.now()}_${i}`);
-            const password = String(row['Mật khẩu'] || row['password'] || '123');
-            const position = row['CHỨC VỤ'] || row['Position'] || row['Chức vụ'] || '';
-            const workLocation = row['NƠI LÀM VIỆC'] || row['Work Location'] || row['Nơi làm việc'] || '';
-            const status = row['TÌNH TRẠNG'] || row['Status'] || row['Tình trạng'] || 'Đang làm việc';
-            
-            const parseExcelDate = (val: any) => {
-                if (!val) return '';
-                if (typeof val === 'number') {
-                    const date = new Date((val - 25569) * 86400 * 1000);
-                    return date.toISOString().split('T')[0];
-                }
-                return String(val);
-            };
-
-            const joinDate = parseExcelDate(row['NGÀY NHẬN VIỆC'] || row['Join Date'] || row['Ngày nhận việc']);
-            const education = row['TRÌNH ĐỘ'] || row['Education'] || row['Trình độ'] || '';
-            const endDate = parseExcelDate(row['NGÀY KẾT THÚC'] || row['End Date'] || row['Ngày kết thúc']);
-            const notes = row['GHI CHÚ'] || row['Notes'] || row['Ghi chú'] || '';
-            
-            const roleStr = (row['Vai trò hệ thống'] || row['Role'] || row['role'] || 'QC').toUpperCase();
-            const role = ['ADMIN', 'MANAGER', 'QC', 'QA'].includes(roleStr) ? roleStr : 'QC';
-            
-            const modulesStr = row['Quyền hạn (Modules)'] || row['Modules'] || '';
-            let allowedModules = modulesStr 
-              ? modulesStr.split(/[,;|]/).map((s: string) => s.trim() as ModuleId).filter((m: any) => ALL_MODULES.some(am => am.id === m))
-              : ['SITE', 'PQC'];
-
-            // Nếu tình trạng khác đang làm việc thì bỏ hết quyền
-            if (status !== 'Đang làm việc') {
-                allowedModules = [];
-            }
-
-            if (name) {
-              const newUser: User = {
-                id: msnv ? `usr_${msnv.replace(/[^a-zA-Z0-9]/g, '_')}` : `imp_${Date.now()}_${i}`,
-                name,
-                username,
-                password,
-                role: role as UserRole,
-                allowedModules,
-                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
-                msnv,
-                position,
-                workLocation,
-                status,
-                joinDate,
-                education,
-                endDate,
-                notes
-              };
-              
-              validUsers.push(newUser);
-            }
-          }
-
-          if (validUsers.length > 0) {
-              if (onImportUsers) {
-                  try {
-                      await onImportUsers(validUsers);
-                      alert(`Hoàn tất! Đã nhập thành công ${validUsers.length} nhân sự.`);
-                  } catch (e) {
-                      console.error(e);
-                      alert("Lỗi khi nhập dữ liệu.");
-                  }
+              if (importedUsers.length > 0) {
+                  await onImportUsers(importedUsers);
+                  alert(`Đã nhập thành công ${importedUsers.length} nhân sự.`);
               } else {
-                  // Fallback loop if batch import not provided
-                  let successCount = 0;
-                  for (let i = 0; i < validUsers.length; i++) {
-                      try {
-                          await onAddUser(validUsers[i]);
-                          successCount++;
-                      } catch (err) {
-                          console.error(`Lỗi khi nhập user:`, err);
-                      }
-                      setImportProgress(Math.round(((i + 1) / validUsers.length) * 100));
-                  }
-                  alert(`Hoàn tất! Đã nhập thành công ${successCount}/${validUsers.length} nhân sự.`);
+                  alert("Không tìm thấy dữ liệu hợp lệ trong file.");
               }
-          } else {
-              alert("Không tìm thấy dữ liệu hợp lệ trong file Excel.");
+          } catch (error) {
+              console.error("Excel import error:", error);
+              alert("Lỗi khi đọc file Excel. Vui lòng kiểm tra lại định dạng.");
+          } finally {
+              setIsImporting(false);
+              if (excelImportRef.current) excelImportRef.current.value = '';
           }
-          
-          setIsImporting(false);
-        }
-      } catch (err) {
-        setIsImporting(false);
-        console.error("Import failed:", err);
-        alert("Lỗi khi đọc file Excel. Vui lòng kiểm tra định dạng file.");
-      }
-    };
-    reader.readAsBinaryString(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      reader.readAsBinaryString(file);
   };
 
   return (
-    <div className="space-y-4">
-      {isImporting && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center space-y-4">
-                  <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto" />
-                  <h3 className="text-lg font-black uppercase tracking-tight text-slate-800">Đang đồng bộ dữ liệu...</h3>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-blue-600 h-full transition-all duration-300" style={{ width: `${importProgress}%` }}></div>
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20 md:pb-0">
+      {/* TOOLBAR */}
+      <div className="bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-4">
+        <div className="flex items-center gap-3 w-full lg:w-auto">
+            <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg">
+                <UserIcon className="w-6 h-6" />
+            </div>
+            <div>
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Nhân sự Hệ thống</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">ISO Competence Records</p>
+            </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <div className="relative flex-1 lg:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input type="text" placeholder="Tìm tên, mã, username..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" />
+            </div>
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={() => excelImportRef.current?.click()} 
+                    disabled={isImporting}
+                    className="p-2.5 bg-white text-slate-500 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center disabled:opacity-50"
+                    title="Nhập từ Excel"
+                >
+                    {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
+                </button>
+                <button 
+                    onClick={handleExportExcel} 
+                    className="p-2.5 bg-white text-slate-500 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
+                    title="Xuất ra Excel"
+                >
+                    <FileDown className="w-5 h-5" />
+                </button>
+            </div>
+            <Button onClick={() => handleOpenModal()} icon={<UserPlus className="w-4 h-4" />} className="bg-blue-600 shadow-lg shadow-blue-200 font-black px-6 text-xs flex-1 lg:flex-none">THÊM MỚI</Button>
+        </div>
+      </div>
+
+      <input type="file" ref={excelImportRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
+
+      {/* USER LIST - MATCHING IMAGE DESIGN */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden overflow-x-auto no-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+              <thead className="bg-slate-50/50 border-b border-slate-100">
+                  <tr>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Nhân sự</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Mã NV</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Chức vụ</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Vai trò</th>
+                      <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Trạng thái</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Thao tác</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                  {filteredUsers.map((u) => (
+                      <tr key={u.id} className="group hover:bg-slate-50/80 transition-all cursor-pointer">
+                          <td className="px-8 py-5">
+                              <div className="flex items-center gap-4">
+                                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg shrink-0 ${getAvatarBg(u.role as string)}`}>
+                                      {u.avatar ? <img src={u.avatar} className="w-full h-full object-cover rounded-full" alt=""/> : getInitials(u.name)}
+                                  </div>
+                                  <div className="overflow-hidden">
+                                      <p className="font-black text-slate-800 text-[13px] uppercase tracking-tight truncate">{u.name}</p>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">@{u.username}</p>
+                                  </div>
+                              </div>
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                              <span className="inline-block px-3 py-1 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 text-[10px] font-mono font-bold">
+                                  {u.msnv || '---'}
+                              </span>
+                          </td>
+                          <td className="px-6 py-5">
+                              <p className="text-[11px] font-black text-slate-600 uppercase tracking-tighter">
+                                  {u.position || 'Nhân viên'}
+                              </p>
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                              <span className={`inline-block px-4 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${
+                                  u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                  u.role === 'MANAGER' ? 'bg-blue-600 text-white border-blue-600' :
+                                  'bg-slate-100 text-slate-500 border-slate-200'
+                              }`}>
+                                  {u.role}
+                              </span>
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                              <span className="inline-block px-4 py-1 bg-green-50 text-green-600 rounded-full border border-green-200 text-[9px] font-black uppercase tracking-tighter">
+                                  {u.status || 'Đang làm việc'}
+                              </span>
+                          </td>
+                          <td className="px-8 py-5 text-right">
+                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => handleOpenModal(u)} className="p-2 text-blue-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-all"><Edit2 className="w-4 h-4"/></button>
+                                  <button onClick={() => onDeleteUser(u.id)} disabled={u.username === 'admin'} className="p-2 text-red-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-red-100 transition-all disabled:opacity-20"><Trash2 className="w-4 h-4"/></button>
+                              </div>
+                          </td>
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+          {filteredUsers.length === 0 && (
+              <div className="py-20 flex flex-col items-center justify-center text-slate-300">
+                  <UserIcon className="w-16 h-16 opacity-10 mb-4" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em]">Không tìm thấy dữ liệu</p>
+              </div>
+          )}
+      </div>
+
+      {/* DETAILED USER MODAL */}
+      {isModalOpen && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                      <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg">
+                              <UserPlus className="w-5 h-5" />
+                          </div>
+                          <h3 className="font-black text-slate-900 uppercase tracking-tighter text-lg">
+                              {editingUser ? 'Cập nhật hồ sơ nhân sự' : 'Đăng ký nhân sự mới'}
+                          </h3>
+                      </div>
+                      <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-red-500 transition-colors active:scale-90"><X className="w-7 h-7"/></button>
                   </div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{importProgress}% HOÀN TẤT</p>
+
+                  <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar bg-slate-50/30">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                          {/* Avatar & Basic */}
+                          <div className="space-y-6 flex flex-col items-center">
+                              <div className="w-32 h-32 rounded-[2rem] border-4 border-white shadow-2xl overflow-hidden relative group bg-slate-200">
+                                  <img src={formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'New')}&background=random&color=fff`} className="w-full h-full object-cover" alt="" />
+                                  <button onClick={() => avatarInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="w-8 h-8"/></button>
+                              </div>
+                              <div className="w-full space-y-4">
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mã nhân viên (MSNV)</label>
+                                      <input value={formData.msnv} onChange={e => setFormData({...formData, msnv: e.target.value.toUpperCase()})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100" placeholder="AA-XXXX" />
+                                  </div>
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Trạng thái</label>
+                                      <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100">
+                                          <option value="Đang làm việc">Đang làm việc</option>
+                                          <option value="Nghỉ phép">Nghỉ phép</option>
+                                          <option value="Đã nghỉ việc">Đã nghỉ việc</option>
+                                      </select>
+                                  </div>
+                              </div>
+                          </div>
+
+                          {/* Info Grid */}
+                          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><UserIcon className="w-3 h-3"/> Họ và tên *</label>
+                                  <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-sm uppercase outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: NGUYỄN VĂN A" />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Mail className="w-3 h-3"/> Tên đăng nhập *</label>
+                                  <input value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm disabled:bg-slate-50 disabled:text-slate-400" disabled={!!editingUser} placeholder="username" />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Shield className="w-3 h-3"/> Mật khẩu</label>
+                                  <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder={editingUser ? "Bỏ trống để giữ nguyên" : "Mặc định: 123456"} />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Briefcase className="w-3 h-3"/> Chức vụ</label>
+                                  <input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: QC Trưởng" />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><MapPin className="w-3 h-3"/> Nơi làm việc</label>
+                                  <input value={formData.workLocation} onChange={e => setFormData({...formData, workLocation: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="Nhà máy / Hiện trường" />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vai trò hệ thống</label>
+                                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-xs uppercase outline-none shadow-sm appearance-none cursor-pointer">
+                                      <option value="QC">QC Inspector</option>
+                                      <option value="QA">QA Staff</option>
+                                      <option value="MANAGER">Manager</option>
+                                      <option value="ADMIN">System Admin</option>
+                                  </select>
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Calendar className="w-3 h-3"/> Ngày nhận việc</label>
+                                  <input type="date" value={formData.joinDate} onChange={e => setFormData({...formData, joinDate: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" />
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Access Matrix */}
+                      <div className="space-y-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-blue-600"/> Phân quyền Module truy cập</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {ALL_MODULES.map(m => {
+                                  const isActive = formData.allowedModules?.includes(m.id);
+                                  return (
+                                    <button key={m.id} onClick={() => setFormData(prev => { const current = prev.allowedModules || []; return { ...prev, allowedModules: isActive ? current.filter(id => id !== m.id) : [...current, m.id] }; })} className={`px-4 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-tight transition-all flex items-center justify-between group ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-400'}`}>
+                                        <span className="truncate">{m.label}</span>
+                                        {isActive ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 opacity-30 group-hover:opacity-100" />}
+                                    </button>
+                                  );
+                              })}
+                          </div>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><StickyNote className="w-4 h-4 text-slate-300"/> Ghi chú nội bộ (Audit Logs)</label>
+                          <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-3xl font-medium text-xs outline-none h-28 focus:ring-4 ring-blue-100 shadow-inner" placeholder="Thông tin kỹ năng, đào tạo, đánh giá chuyên môn..." />
+                      </div>
+                  </div>
+
+                  <div className="p-6 md:p-8 border-t border-slate-100 bg-white flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] z-10">
+                      <button onClick={() => setIsModalOpen(false)} className="order-2 md:order-1 px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Hủy bỏ</button>
+                      <button onClick={handleSave} disabled={isSaving} className="order-1 md:order-2 px-16 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-500/30 active:scale-95 flex items-center justify-center gap-3 transition-all">
+                          {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                          Lưu hồ sơ nhân sự
+                      </button>
+                  </div>
               </div>
           </div>
       )}
-
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-        <h3 className="text-lg font-bold text-slate-800">Danh sách nhân sự</h3>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleImportExcel} 
-            accept=".xlsx, .xls, .csv" 
-            className="hidden" 
-          />
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            onClick={() => fileInputRef.current?.click()} 
-            disabled={isImporting}
-            icon={<Upload className="w-4 h-4" />}
-            className="flex-1 md:flex-none border-blue-200 text-blue-700 bg-blue-50/50"
-          >
-            Nhập Excel
-          </Button>
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            onClick={handleExportExcel} 
-            icon={<Download className="w-4 h-4" />}
-            className="flex-1 md:flex-none"
-          >
-            Xuất Excel
-          </Button>
-          <Button 
-            size="sm" 
-            onClick={() => handleOpenModal()} 
-            icon={<Plus className="w-4 h-4" />}
-            className="flex-1 md:flex-none"
-          >
-            Thêm nhân sự
-          </Button>
-        </div>
-      </div>
-
-      {/* Desktop Table View */}
-      <div className="hidden md:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead className="bg-slate-50 text-slate-500 font-black uppercase tracking-widest border-b border-slate-200 sticky top-0 z-10">
-              <tr>
-                <th className="px-4 py-3 text-left w-24 sticky left-0 bg-slate-50 shadow-[2px_0_5px_rgba(0,0,0,0.05)] z-20">Thao tác</th>
-                <th className="px-4 py-3 w-28 hidden md:table-cell">MSNV</th>
-                <th className="px-4 py-3">Họ và Tên</th>
-                <th className="px-4 py-3 hidden md:table-cell">Chức vụ</th>
-                <th className="px-4 py-3 hidden lg:table-cell">Nơi làm việc</th>
-                <th className="px-4 py-3 hidden sm:table-cell">Tình trạng</th>
-                <th className="px-4 py-3 hidden xl:table-cell">Ngày nhận việc</th>
-                <th className="px-4 py-3 hidden xl:table-cell">Trình độ</th>
-                <th className="px-4 py-3 hidden xl:table-cell">Ghi chú</th>
-                <th className="px-4 py-3">Vai trò HT</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {users.map(user => (
-                <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-4 py-3 sticky left-0 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_rgba(0,0,0,0.05)] z-10">
-                    <div className="flex items-center gap-1.5">
-                      <button 
-                        onClick={() => handleOpenModal(user)}
-                        className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                        title="Chỉnh sửa"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => { if(window.confirm('Xóa nhân sự này?')) onDeleteUser(user.id) }}
-                        className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-30"
-                        disabled={user.username === 'admin'} 
-                        title="Xóa"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-mono font-bold text-blue-600 hidden md:table-cell">
-                    {user.msnv || '---'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <img src={user.avatar} alt="" className="w-8 h-8 rounded-full border border-slate-200 object-cover bg-slate-100" />
-                      <div className="overflow-hidden">
-                        <div className="font-bold text-slate-800 truncate max-w-[150px]">{user.name}</div>
-                        <div className="text-[10px] text-slate-400">@{user.username}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-600 hidden md:table-cell">{user.position || '---'}</td>
-                  <td className="px-4 py-3 text-slate-600 hidden lg:table-cell">{user.workLocation || '---'}</td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${getStatusBadge(user.status)}`}>
-                      {user.status || 'Đang làm việc'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 font-mono hidden xl:table-cell">{user.joinDate || '---'}</td>
-                  <td className="px-4 py-3 text-slate-600 hidden xl:table-cell">{user.education || '---'}</td>
-                  <td className="px-4 py-3 max-w-[150px] truncate italic text-slate-400 hidden xl:table-cell">{user.notes || '---'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap ${getRoleBadge(user.role)}`}>
-                      {user.role}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                  <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-slate-400 italic">
-                          Chưa có dữ liệu nhân sự. Sử dụng nút Nhập Excel hoặc Thêm nhân sự để bắt đầu.
-                      </td>
-                  </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Mobile Card List View (No Horizontal Scroll) */}
-      <div className="md:hidden space-y-3">
-        {users.map(user => (
-            <div key={user.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                        <img src={user.avatar} alt="" className="w-10 h-10 rounded-full border border-slate-200 object-cover bg-slate-100" />
-                        <div>
-                            <div className="font-bold text-slate-800 text-sm">{user.name}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{user.msnv || '---'} | @{user.username}</div>
-                        </div>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${getRoleBadge(user.role)}`}>
-                      {user.role}
-                    </span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Chức vụ</span>
-                        <span className="font-medium text-slate-700">{user.position || '---'}</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Tình trạng</span>
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 ${getStatusBadge(user.status)}`}>
-                            {user.status || 'Đang làm việc'}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                    <button 
-                        onClick={() => handleOpenModal(user)}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-blue-50 text-blue-600 font-bold text-xs active:scale-95 transition-all"
-                    >
-                        <Edit2 className="w-3.5 h-3.5" /> Sửa
-                    </button>
-                    <button 
-                        onClick={() => { if(window.confirm('Xóa nhân sự này?')) onDeleteUser(user.id) }}
-                        disabled={user.username === 'admin'}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-red-50 text-red-600 font-bold text-xs active:scale-95 transition-all disabled:opacity-50"
-                    >
-                        <Trash2 className="w-3.5 h-3.5" /> Xóa
-                    </button>
-                </div>
-            </div>
-        ))}
-        {users.length === 0 && (
-            <div className="p-8 text-center text-slate-400 italic bg-white rounded-xl border border-dashed border-slate-200">
-                Chưa có dữ liệu.
-            </div>
-        )}
-      </div>
-
-      {/* Modal - Optimized for mobile */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center md:p-4 overflow-hidden">
-          <div className="bg-white md:rounded-2xl shadow-2xl w-full max-w-4xl h-full md:h-auto md:max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-300">
-             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase tracking-tight">
-                    <UserIcon className="w-5 h-5 text-blue-600"/> 
-                    {editingUser ? 'Chỉnh sửa nhân sự' : 'Thêm nhân sự mới'}
-                </h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform">
-                    <X className="w-6 h-6"/>
-                </button>
-             </div>
-
-             <div className="overflow-y-auto p-4 md:p-6 space-y-6 flex-1 no-scrollbar pb-24 md:pb-6">
-                <div className="space-y-4">
-                   <div className="flex flex-col md:flex-row gap-6">
-                      <div className="flex flex-col items-center gap-3 shrink-0">
-                         <div 
-                           onClick={() => avatarInputRef.current?.click()}
-                           className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-slate-100 bg-slate-50 shadow-inner flex items-center justify-center overflow-hidden cursor-pointer relative group transition-all hover:border-blue-200"
-                         >
-                            {formData.avatar ? (
-                               <img src={formData.avatar} alt="Avatar" className="w-full h-full object-cover" />
-                            ) : (
-                               <div className="flex flex-col items-center text-slate-300">
-                                  <ImageIcon className="w-8 h-8" />
-                                  <span className="text-[8px] font-black uppercase mt-1">Ảnh đại diện</span>
-                               </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                               <Camera className="w-6 h-6 text-white" />
-                            </div>
-                            <input 
-                              type="file" 
-                              ref={avatarInputRef} 
-                              className="hidden" 
-                              accept="image/*" 
-                              onChange={handleAvatarUpload} 
-                            />
-                         </div>
-                         <div className="flex flex-col items-center gap-1">
-                            <button 
-                              onClick={() => avatarInputRef.current?.click()}
-                              className="text-[10px] font-black text-blue-600 uppercase hover:underline p-1"
-                            >
-                               Thay đổi ảnh
-                            </button>
-                         </div>
-                      </div>
-
-                      <div className="flex-1 space-y-4">
-                         <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 border-b border-blue-50 pb-2">
-                            <Briefcase className="w-4 h-4"/> Thông tin công việc
-                         </h4>
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Mã nhân viên (MSNV)</label>
-                                <input 
-                                  type="text" 
-                                  value={formData.msnv}
-                                  onChange={e => setFormData({...formData, msnv: e.target.value})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm font-mono font-bold"
-                                  placeholder="MS-000"
-                                />
-                            </div>
-                            <div className="md:col-span-2 space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Họ và Tên *</label>
-                                <input 
-                                  type="text" 
-                                  value={formData.name}
-                                  onChange={e => setFormData({...formData, name: e.target.value})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm font-bold"
-                                  placeholder="Nhập họ và tên..."
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Chức vụ</label>
-                                <input 
-                                  type="text" 
-                                  value={formData.position}
-                                  onChange={e => setFormData({...formData, position: e.target.value})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
-                                  placeholder="QC Staff..."
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Nơi làm việc</label>
-                                <input 
-                                  type="text" 
-                                  value={formData.workLocation}
-                                  onChange={e => setFormData({...formData, workLocation: e.target.value})}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
-                                  placeholder="Nhà máy / Dự án..."
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Tình trạng</label>
-                                <select 
-                                  value={formData.status}
-                                  onChange={e => {
-                                      const newStatus = e.target.value;
-                                      setFormData(prev => ({
-                                          ...prev, 
-                                          status: newStatus,
-                                          allowedModules: newStatus !== 'Đang làm việc' ? [] : prev.allowedModules
-                                      }));
-                                  }}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm bg-white"
-                                >
-                                   <option value="Đang làm việc">Đang làm việc</option>
-                                   <option value="Đã nghỉ việc">Đã nghỉ việc</option>
-                                   <option value="Tạm nghỉ">Tạm nghỉ</option>
-                                   <option value="Chuyển BP/Phòng/Ban">Chuyển BP/Phòng/Ban</option>
-                                </select>
-                            </div>
-                            <div className="grid grid-cols-2 md:contents gap-3">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Ngày nhận việc</label>
-                                    <input 
-                                      type="date" 
-                                      value={formData.joinDate}
-                                      onChange={e => setFormData({...formData, joinDate: e.target.value})}
-                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm font-mono"
-                                    />
-                                </div>
-                                {formData.status !== 'Đang làm việc' && (
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Ngày kết thúc</label>
-                                        <input 
-                                          type="date" 
-                                          value={formData.endDate}
-                                          onChange={e => setFormData({...formData, endDate: e.target.value})}
-                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm text-red-600 font-mono"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                         </div>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 border-b border-blue-50 pb-2">
-                           <GraduationCap className="w-4 h-4"/> Học vấn & Tài khoản
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                            <div className="md:col-span-2 space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Trình độ chuyên môn</label>
-                                <input 
-                                    type="text" 
-                                    value={formData.education}
-                                    onChange={e => setFormData({...formData, education: e.target.value})}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
-                                    placeholder="Kỹ sư / Cử nhân..."
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Tên đăng nhập *</label>
-                                <input 
-                                    type="text" 
-                                    value={formData.username}
-                                    onChange={e => setFormData({...formData, username: e.target.value})}
-                                    disabled={!!editingUser}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm disabled:bg-slate-100 disabled:text-slate-500"
-                                    placeholder="Username"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Mật khẩu</label>
-                                <input 
-                                    type="password" 
-                                    value={formData.password}
-                                    onChange={e => setFormData({...formData, password: e.target.value})}
-                                    placeholder={editingUser ? "•••••• (Để trống nếu không đổi)" : "Nhập mật khẩu"}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
-                                />
-                            </div>
-                            <div className="md:col-span-2 space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Vai trò hệ thống</label>
-                                <select 
-                                    value={formData.role}
-                                    onChange={e => setFormData({...formData, role: e.target.value as UserRole})}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm bg-white font-bold"
-                                >
-                                    <option value="QC">QC Staff</option>
-                                    <option value="QA">QA Staff</option>
-                                    <option value="MANAGER">Quản lý (Manager)</option>
-                                    <option value="ADMIN">Quản trị viên (Admin)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 border-b border-blue-50 pb-2">
-                           <StickyNote className="w-4 h-4"/> Ghi chú nhân sự
-                        </h4>
-                        <textarea 
-                            value={formData.notes}
-                            onChange={e => setFormData({...formData, notes: e.target.value})}
-                            className="w-full h-32 md:h-[155px] px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm resize-none"
-                            placeholder="Nhập thông tin bổ sung về nhân sự..."
-                        />
-                    </div>
-                </div>
-
-                <div className="pt-2">
-                   <div className="flex justify-between items-end mb-3">
-                      <h4 className="text-xs font-black text-orange-600 uppercase tracking-widest flex items-center gap-2">
-                         <Shield className="w-4 h-4"/> Phân quyền Module
-                      </h4>
-                      <div className="flex gap-3 text-[10px] font-black uppercase tracking-tight mb-0.5">
-                         <button onClick={handleSelectAll} className="text-blue-600 hover:underline">Tất cả</button>
-                         <span className="text-slate-300">|</span>
-                         <button onClick={handleClearAll} className="text-slate-500 hover:text-slate-800 hover:underline">Bỏ hết</button>
-                      </div>
-                   </div>
-
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                      {ALL_MODULES.map(module => (
-                        <label key={module.id} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all active:scale-95 ${
-                            formData.allowedModules?.includes(module.id) 
-                            ? 'bg-blue-50 border-blue-200' 
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        } ${formData.status !== 'Đang làm việc' ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`}>
-                           <div className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
-                               formData.allowedModules?.includes(module.id)
-                               ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                               : 'border-slate-300 bg-white'
-                           }`}>
-                               {formData.allowedModules?.includes(module.id) && <Check className="w-3.5 h-3.5 stroke-[3px]" />}
-                           </div>
-                           <input 
-                             type="checkbox" 
-                             className="hidden" 
-                             checked={formData.allowedModules?.includes(module.id) || false}
-                             onChange={() => toggleModule(module.id)}
-                             disabled={formData.status !== 'Đang làm việc'}
-                           />
-                           <div className="overflow-hidden">
-                              <div className="text-[11px] font-bold text-slate-800 leading-tight truncate">{module.label}</div>
-                              <div className="text-[9px] text-slate-400 font-black uppercase tracking-tighter mt-0.5">{module.group}</div>
-                           </div>
-                        </label>
-                      ))}
-                   </div>
-                </div>
-             </div>
-
-             <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-end gap-3 sticky bottom-0 md:relative z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] md:shadow-none">
-                 <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="order-2 md:order-1 py-3 px-6 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 active:bg-slate-100 transition-colors"
-                 >
-                    Hủy bỏ
-                 </button>
-                 <button 
-                    onClick={handleSave}
-                    className="order-1 md:order-2 py-3 px-8 text-sm font-black text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2"
-                 >
-                    <Save className="w-4 h-4" /> LƯU NHÂN SỰ
-                 </button>
-             </div>
-          </div>
-        </div>
-      )}
+      
+      <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if(file){ const r = new FileReader(); r.onloadend = () => setFormData(prev => ({...prev, avatar: r.result as string})); r.readAsDataURL(file); } }} />
     </div>
   );
 };

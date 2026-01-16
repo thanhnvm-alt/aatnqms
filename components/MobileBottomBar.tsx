@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { ViewState, User } from '../types';
 import { 
@@ -13,10 +12,13 @@ import {
 interface MobileBottomBarProps {
   view: ViewState;
   onNavigate: (view: ViewState) => void;
-  user: User;
+  user: User | null;
 }
 
 export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNavigate, user }) => {
+  // Guard Clause
+  if (!user) return null;
+
   // Lọc và sắp xếp các tab quan trọng nhất cho mobile (tối đa 5 tab)
   const isQC = user.role === 'QC';
   

@@ -320,7 +320,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     
     // Process multiple files in parallel
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file) => {
+        Array.from(files).map(async (file: File) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {

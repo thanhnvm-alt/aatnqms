@@ -1,6 +1,5 @@
-
 import { NextResponse } from 'next/server';
-import { turso } from '@/services/tursoConfig';
+import { turso } from '../../../services/tursoConfig';
 
 export const dynamic = 'force-dynamic';
 

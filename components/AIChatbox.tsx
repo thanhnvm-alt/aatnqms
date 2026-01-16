@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Inspection, PlanItem, InspectionStatus } from '../types';
@@ -132,7 +133,7 @@ ${summaryLines.join('\n')}`;
     setIsLoading(true);
 
     try {
-      // Fixed: Always use direct process.env.API_KEY for GoogleGenAI initialization as per guidelines
+      // Fixed: Initializing GoogleGenAI as per guidelines
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       // LOGIC LỌC DỮ LIỆU AN TOÀN (Safe String Handling)
@@ -154,6 +155,7 @@ ${summaryLines.join('\n')}`;
               keywords.some(k => 
                   (i.ma_ct && String(i.ma_ct).toUpperCase().includes(k)) || 
                   (i.ma_nha_may && String(i.ma_nha_may).toUpperCase().includes(k)) ||
+                  // Fixed: Safely check headcode property from updated Inspection interface
                   (i.headcode && String(i.headcode).toUpperCase().includes(k)) ||
                   (i.ten_hang_muc && String(i.ten_hang_muc).toUpperCase().includes(k))
               )

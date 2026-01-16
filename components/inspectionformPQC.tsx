@@ -8,7 +8,7 @@ import {
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, BookOpen, Search,
   Loader2, Sparkles, CheckCircle2, ArrowLeft, History, Clock,
-  Calendar, UserCheck, Eye, MessageCircle
+  Calendar, UserCheck, Eye
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchPlans, fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
@@ -320,7 +320,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     passedQuantity: 0, 
     failedQuantity: 0, 
     type: 'PQC',
-    summary: '',
     ...initialData 
   });
   const [searchCode, setSearchCode] = useState(initialData?.ma_nha_may || ''); 
@@ -417,7 +416,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     try {
         const itemsToSave = (formData.items || []).filter(it => it.stage === formData.inspectionStage || !it.stage);
         await onSave({ ...formData, items: itemsToSave, status: InspectionStatus.PENDING, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
-    } catch (e) { alert("Lỗi khi lưu phiếu."); } finally { setIsSaving(false); }
+    } catch (e: any) { alert("Lỗi khi lưu phiếu: " + (e.message || e)); } finally { setIsSaving(false); }
   };
 
   const handleFileUpload = (req: React.ChangeEvent<HTMLInputElement>) => {
@@ -525,8 +524,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 shadow-sm transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
-                        <img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} />
-                        <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button>
+                        <img 
+                            src={img} 
+                            className="w-full h-full object-cover cursor-pointer" 
+                            onClick={() => handleEditImage('MAIN', formData.images || [], idx)}
+                        />
+                        <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
             </div>
@@ -589,7 +592,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     <div className="flex-1">
                                         <input value={item.label} onChange={e => handleItemChange(originalIndex, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase tracking-tight text-[11px]" placeholder="Nội dung..." />
                                         
-                                        {/* New Method & Standard Block */}
                                         <div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1">
                                             <div className="flex items-start gap-2">
                                                 <Microscope className="w-3 h-3 text-blue-500 shrink-0 mt-0.5" />
@@ -648,21 +650,21 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             )}
         </div>
 
-        {/* V. GHI CHÚ / TỔNG KẾT */}
+        {/* V. CHỮ KÝ XÁC NHẬN */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-3">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-3 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><MessageCircle className="w-3.5 h-3.5"/> V. GHI CHÚ / TỔNG KẾT</h3>
-            <textarea 
-                value={formData.summary || ''}
-                onChange={e => handleInputChange('summary', e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white focus:ring-1 ring-blue-500 transition-all resize-none min-h-[80px] text-[11px] leading-relaxed"
-                placeholder="Nhập nhận xét tổng quan..."
-            />
-        </section>
+            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-3 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><PenTool className="w-3.5 h-3.5"/> V. CHỮ KÝ XÁC NHẬN</h3>
+            
+            <div className="mb-4">
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Ghi chú QC</label>
+                <textarea
+                    value={formData.summary || ''} 
+                    onChange={e => handleInputChange('summary', e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-100 outline-none h-20 resize-none placeholder:text-slate-400"
+                    placeholder="Ghi chú thêm của QC trước khi ký..."
+                />
+            </div>
 
-        {/* VI. CHỮ KÝ XÁC NHẬN */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-3">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-3 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><PenTool className="w-3.5 h-3.5"/> VI. XÁC NHẬN & CHỮ KÝ ĐIỆN TỬ</h3>
-            <SignaturePad label={`Đại diện QA/QC (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
+            <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
         </section>
       </div>
 
@@ -730,11 +732,9 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       )}
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); handleInputChange('ma_nha_may', data); lookupPlanInfo(data); setShowScanner(false); }} />}
       
-      {/* Hidden inputs for file upload */}
       <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
 
-      {/* Editor Modal */}
       {editorState && (
           <ImageEditorModal 
               images={editorState.images} 

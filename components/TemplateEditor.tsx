@@ -1,9 +1,11 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { CheckItem, CheckStatus, Workshop, DefectLibraryItem } from '../types';
+import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
 import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
+// Fixed: Imported missing members
 import { fetchWorkshops, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 
 interface TemplateEditorProps {
@@ -103,6 +105,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
   // General Handlers
   const handleAddItem = (stageOrCategory?: string) => {
+    // Fixed: CheckItem type now correctly handles frequency and defectIds via updated types.ts
     const newItem: CheckItem = {
       id: Date.now().toString(),
       stage: isPQC ? (stageOrCategory || activeStage || 'CHUNG') : undefined,
@@ -360,6 +363,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tần suất</label>
                                                     <input
                                                         type="text"
+                                                        // Fixed frequency field access via updated types.ts
                                                         value={item.frequency || ''}
                                                         onChange={(e) => handleChange(item.id, 'frequency', e.target.value)}
                                                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400 transition-all"
@@ -384,6 +388,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                             <div className="space-y-1.5 relative">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between">
                                                     <span>Danh sách lỗi liên kết</span>
+                                                    {/* Fixed defectIds field access via updated types.ts */}
                                                     <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{item.defectIds?.length || 0} đã chọn</span>
                                                 </label>
                                                 <div 
@@ -401,7 +406,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                                     <ChevronDown className="w-4 h-4 text-slate-400"/>
                                                 </div>
                                                 
-                                                {/* Defect Selector Dropdown Logic... (Same as before) */}
                                                 {openDefectSelector === item.id && (
                                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
                                                         <div className="p-2 border-b border-slate-100 bg-slate-50 flex flex-col gap-2">

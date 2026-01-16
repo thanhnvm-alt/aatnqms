@@ -1,3 +1,5 @@
+
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { Button } from './Button';
@@ -11,6 +13,7 @@ import {
   Sparkles, BrainCircuit
 } from 'lucide-react';
 import { generateItemSuggestion, generateNCRSuggestions } from '../services/geminiService';
+// Fixed missing imports
 import { fetchPlans, fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
@@ -152,6 +155,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
 };
 
 const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionStage }: { isOpen: boolean; onClose: () => void; onSave: (ncr: NCR) => void; initialData?: NCR; itemName: string; inspectionStage?: string; }) => {
+    // Fixed: imagesBefore and imagesAfter used based on updated types.ts
     const [ncrData, setNcrData] = useState<Partial<NCR>>({ severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
     const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
     const [showLibrary, setShowLibrary] = useState(false);
@@ -165,6 +169,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
 
     useEffect(() => {
         if (isOpen) {
+            // Fixed type safety check
             setNcrData(initialData || { severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
             fetchDefectLibrary().then(setLibrary);
             if (initialData?.defect_code) {
@@ -197,8 +202,9 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                 if (typeof reader.result === 'string') {
                     const resized = await resizeImage(reader.result);
                     setNcrData(prev => {
+                        // Fixed: Correctly using imagesBefore/After properties
                         const field = uploadTarget === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-                        return { ...prev, [field]: [...(prev[field] || []), resized] };
+                        return { ...prev, [field]: [...(prev[field] as string[] || []), resized] };
                     });
                 }
             };
@@ -309,8 +315,9 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
 };
 
 export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, plans, workshops, user }) => {
+  // Fixed: Added headcode to Partial<Inspection> and handled images correctly
   const [formData, setFormData] = useState<Partial<Inspection>>({ id: `INS-${Date.now()}`, date: new Date().toISOString().split('T')[0], status: InspectionStatus.DRAFT, items: [], images: [], score: 0, signature: '', productionSignature: '', inspectedQuantity: 0, passedQuantity: 0, failedQuantity: 0, ...initialData });
-  const [searchCode, setSearchCode] = useState(initialData?.headcode || initialData?.ma_nha_may || '');
+  const [searchCode, setSearchCode] = useState(formData.headcode || formData.ma_nha_may || '');
   const [activeNcrItemIndex, setActiveNcrItemIndex] = useState<number | null>(null);
   const [isNcrModalOpen, setIsNcrModalOpen] = useState(false);
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
@@ -339,8 +346,8 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onS
       setIsLookupLoading(true);
       try {
           const searchTerm = value.toLowerCase().trim();
-          const apiRes = await fetchPlans(value, 1, 5);
-          const match = apiRes.items.find(p => (p.headcode || '').toLowerCase().trim() === searchTerm || (p.ma_nha_may || '').toLowerCase().trim() === searchTerm);
+          const apiRes = await fetchPlans(searchTerm, 1, 5);
+          const match = (apiRes.items || []).find(p => (p.headcode || '').toLowerCase().trim() === searchTerm || (p.ma_nha_may || '').toLowerCase().trim() === searchTerm);
           if (match) {
               setFormData(prev => ({ ...prev, ma_ct: match.ma_ct, ten_ct: match.ten_ct, ten_hang_muc: match.ten_hang_muc, dvt: match.dvt, so_luong_ipo: match.so_luong_ipo, headcode: match.headcode, ma_nha_may: match.ma_nha_may }));
               setSearchCode(match.ma_nha_may || match.headcode || value);
@@ -366,6 +373,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onS
         const newItems = [...(prev.items || [])];
         if (newItems[index]) {
             newItems[index] = { ...newItems[index], [field]: value };
+            // Fixed: CheckItem interface property access for ncr
             if (field === 'status' && value === CheckStatus.FAIL && !newItems[index].ncr) {
                 setActiveNcrItemIndex(index);
                 setIsNcrModalOpen(true);
@@ -380,6 +388,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onS
       setFormData(prev => {
           const newItems = [...(prev.items || [])];
           const currentItem = newItems[activeNcrItemIndex];
+          // Fixed: NCR property on CheckItem
           newItems[activeNcrItemIndex] = { ...currentItem, status: CheckStatus.FAIL, ncr: { ...ncrData, id: currentItem.ncr?.id || `NCR-${Date.now()}`, inspection_id: formData.id, itemId: currentItem.id, createdDate: new Date().toISOString() } };
           return { ...prev, items: newItems };
       });
@@ -394,6 +403,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onS
       reader.onloadend = async () => {
         if (typeof reader.result === 'string') {
           const processed = await resizeImage(reader.result);
+          // Fixed: Using images property on Inspection and CheckItem
           if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), processed] }));
           else setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === activeUploadId ? { ...i, images: [...(i.images || []), processed] } : i) }));
         }
@@ -528,7 +538,7 @@ export const InspectionForm: React.FC<InspectionFormProps> = ({ initialData, onS
                                     <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 ml-1 mb-1"><Ruler className="w-3 h-3"/> Tiêu chuẩn chấp nhận</label><input value={item.standard || ''} readOnly className="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-500 cursor-not-allowed shadow-inner" placeholder="Tự động tải..."/></div>
                                 </div>
                                 <div className="flex flex-wrap gap-3 items-center">
-                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1 border border-slate-200 shadow-inner">
+                                    <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1 border border-slate-200 shadow-inner w-fit">
                                         {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
                                             <button key={st} onClick={() => handleItemChange(originalIndex, 'status', st)} className={`px-4 py-2 rounded-xl text-[9pt] font-black uppercase tracking-tight transition-all active:scale-95 ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-lg shadow-green-200' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-lg shadow-red-200' : 'bg-orange-50 text-white shadow-lg shadow-orange-200') : 'text-slate-400 hover:bg-white hover:text-slate-700'}`} type="button">{st}</button>
                                         ))}

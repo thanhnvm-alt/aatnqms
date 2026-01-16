@@ -249,7 +249,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
     
     // Process multiple files
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file) => {
+        Array.from(files).map(async (file: File) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {

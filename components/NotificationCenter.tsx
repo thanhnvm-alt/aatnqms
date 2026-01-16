@@ -41,7 +41,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full bg-white shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-200 origin-top-right max-h-[600px]">
+        <div className="flex flex-col h-full bg-white shadow-2xl rounded-[2rem] overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-200 origin-top-right">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="relative">
@@ -73,14 +73,14 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-white scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            <div className="flex-1 overflow-y-auto max-h-[400px] p-2 bg-white">
                 {notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                         <Bell className="w-12 h-12 opacity-10 mb-4" />
                         <p className="font-black uppercase tracking-[0.2em] text-[10px]">Hệ thống chưa có thông báo</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-slate-50">
+                    <div className="space-y-1">
                         {notifications.map((n) => (
                             <div 
                                 key={n.id}
@@ -89,11 +89,11 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                     if (n.link) onNavigate(n.link.view, n.link.id);
                                     onClose();
                                 }}
-                                className={`p-4 flex gap-4 hover:bg-blue-50/50 transition-all cursor-pointer group relative border-l-4 ${
-                                    n.isRead ? 'border-transparent' : 'border-blue-500 bg-blue-50/30'
+                                className={`p-4 flex gap-4 rounded-xl hover:bg-blue-50/50 transition-all cursor-pointer group relative border-l-4 ${
+                                    n.isRead ? 'border-transparent bg-white' : 'border-blue-500 bg-blue-50/30'
                                 }`}
                             >
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
                                     n.isRead ? 'bg-slate-100 text-slate-400' : 'bg-white text-blue-600 border border-blue-100'
                                 }`}>
                                     {getIcon(n.type)}
@@ -107,11 +107,11 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                             {formatTime(n.createdAt)}
                                         </span>
                                     </div>
-                                    <p className={`text-[11px] leading-relaxed line-clamp-2 ${n.isRead ? 'text-slate-500' : 'text-slate-700 font-medium'}`}>
+                                    <p className={`text-[10px] leading-relaxed line-clamp-2 ${n.isRead ? 'text-slate-500' : 'text-slate-700 font-medium'}`}>
                                         {n.message}
                                     </p>
                                 </div>
-                                <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-1" />
+                                <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-1" />
                             </div>
                         ))}
                     </div>
@@ -120,10 +120,10 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
             <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0 text-center">
                 <button 
-                    onClick={onClose}
-                    className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] hover:text-slate-800 hover:underline"
+                    onClick={() => { onMarkAllRead(); onClose(); }}
+                    className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] hover:underline"
                 >
-                    Đóng danh sách
+                    Tải thêm thông báo cũ
                 </button>
             </div>
         </div>

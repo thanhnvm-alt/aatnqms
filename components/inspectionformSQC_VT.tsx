@@ -145,7 +145,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `Tọa độ GPS là: ${lat}, ${lng}. Hãy trả về địa chỉ văn bản chính xác nhất tại Việt Nam cho tọa độ này (bao gồm Tên đường/ Landmark, Phường, Quận/Huyện, Tỉnh/Thành phố). Chỉ trả về chuỗi văn bản địa chỉ, không thêm giải thích.`,
+            contents: `Tọa độ GPS là: ${lat}, ${lng}. Hãy trả về địa chỉ văn bản chính xác nhất tại Việt Nam cho tọa độ này. Chỉ trả về chuỗi văn bản địa chỉ, không thêm giải thích.`,
         });
         if (response.text) {
             handleInputChange('supplierAddress', response.text.trim());
@@ -245,7 +245,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     const { type, matIdx, itemIdx } = activeUploadContext;
     
     const processedImages = await Promise.all(
-        Array.from(files).map(async (file) => {
+        Array.from(files).map(async (file: File) => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => {

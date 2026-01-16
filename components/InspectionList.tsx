@@ -356,6 +356,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                       {Object.entries(project.factories).sort().map(([factoryCode, items]) => {
                         // Find workshop name for display if possible
                         const workshopName = workshops?.find(w => w.code === factoryCode)?.name || factoryCode;
+                        // Cast items to Inspection[] to fix property 'length' error
+                        const itemsList = items as Inspection[];
                         
                         return (
                         <div key={factoryCode} className="space-y-2">
@@ -364,13 +366,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                               <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex-1">
                                 {factoryCode} <span className="font-medium text-slate-400 ml-1">- {workshopName}</span>
                               </h4>
-                              <span className="text-[8px] font-bold bg-white text-slate-500 px-1.5 border border-slate-200 rounded">{items.length}</span>
+                              <span className="text-[8px] font-bold bg-white text-slate-500 px-1.5 py-0.5 border border-slate-200 rounded">{itemsList.length}</span>
                            </div>
                            <div className="grid grid-cols-1 gap-2">
-                              {(items as Inspection[]).map(item => {
+                              {itemsList.map(item => {
                                 const { passRate, failRate, displayStatus, hasNCR } = getInspectionDisplayInfo(item);
                                 return (
-                                <div key={item.id} onClick={() => onSelect(item.id)} className="bg-white p-3.5 rounded-2xl border border-slate-200 active:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between shadow-sm group cursor-pointer relative overflow-hidden">
+                                <div 
+                                    key={item.id} 
+                                    onClick={() => onSelect(item.id)}
+                                    className="bg-white p-3.5 rounded-2xl border border-slate-200 active:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between shadow-sm group cursor-pointer relative overflow-hidden"
+                                >
                                   {hasNCR && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-bl-lg z-10"></div>}
                                   
                                   <div className="flex-1 min-w-0 pr-3">

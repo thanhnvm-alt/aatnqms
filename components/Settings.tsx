@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { CheckItem, User, Workshop, Role } from '../types';
 import { TemplateEditor } from './TemplateEditor';
@@ -188,17 +187,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
         <div className="flex-1 overflow-y-auto p-3 md:p-6 no-scrollbar">
             <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
-                {isAdminOrManager && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm animate-in slide-in-from-top duration-500">
-                        <div className="flex items-center gap-3 mb-3 border-b border-slate-100 pb-2"><div className="p-2 bg-slate-100 rounded-lg"><Database className="w-4 h-4 text-slate-700" /></div><h3 className="font-bold text-slate-800 text-sm uppercase tracking-tight">Trạng thái hệ thống</h3></div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"><Cloud className={`w-5 h-5 ${connStatus === 'SUCCESS' ? 'text-green-500' : connStatus === 'ERROR' ? 'text-red-500' : 'text-slate-400'}`} /><div><p className="text-[10px] font-black text-slate-400 uppercase">Kết nối Database</p><p className={`text-xs font-bold ${connStatus === 'SUCCESS' ? 'text-green-600' : connStatus === 'ERROR' ? 'text-red-600' : 'text-slate-600'}`}>{isChecking ? 'Đang kiểm tra...' : connStatus === 'SUCCESS' ? 'Đã kết nối (Turso)' : connStatus === 'ERROR' ? 'Mất kết nối' : 'Chưa kiểm tra'}</p></div></div>
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"><HardDrive className="w-5 h-5 text-blue-500" /><div><p className="text-[10px] font-black text-slate-400 uppercase">Storage Mode</p><p className="text-xs font-bold text-slate-600">Hybrid (DB + Local)</p></div></div>
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100"><div className="truncate flex-1"><p className="text-[10px] font-black text-slate-400 uppercase">Endpoint</p><p className="text-[10px] font-mono text-slate-600 truncate">{process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.replace(/:\/\/.+@/, '://***@').substring(0, 30) + '...' : 'Not Configured'}</p></div></div>
-                        </div>
-                    </div>
-                )}
-
                 {activeTab === 'TEMPLATE' && isAdminOrManager && (
                     <div className="space-y-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'}`}>{m.label}</button>))}</div></div>
@@ -221,7 +209,7 @@ export const Settings: React.FC<SettingsProps> = ({
                             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
                                 <div className="bg-slate-900 p-6 md:p-8 flex flex-col items-center text-center relative group">
                                     <div className="absolute top-3 right-3 md:top-4 md:right-4 bg-white/10 px-2 py-1 md:px-3 rounded-full text-[9px] md:text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-1.5 border border-white/10"><ShieldCheck className="w-3 h-3 text-blue-400" /><span className="hidden md:inline">Hệ thống</span> {profileData.role}</div>
-                                    <div className="relative"><div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white/20 shadow-2xl overflow-hidden mb-3 md:mb-4 bg-slate-800"><img src={profileData.avatar} alt={profileData.name} className="w-full h-full object-cover" /></div>{isEditingProfile && (<button onClick={() => profileFileInputRef.current?.click()} className="absolute bottom-2 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-500 transition-all active:scale-95"><Camera className="w-4 h-4 md:w-5 md:h-5" /></button>)}<input type="file" ref={profileFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange}/></div>
+                                    <div className="relative"><div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white/20 shadow-2xl overflow-hidden mb-3 md:mb-4 bg-slate-800"><img src={profileData.avatar} alt={profileData.name} className="w-full h-full object-cover" /></div>{isEditingProfile && (<button onClick={() => profileFileInputRef.current?.click()} className="absolute bottom-2 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-50 transition-all active:scale-95"><Camera className="w-4 h-4 md:w-5 md:h-5" /></button>)}<input type="file" ref={profileFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange}/></div>
                                     {isEditingProfile ? (<div className="w-full max-w-sm space-y-2"><input value={profileData.name} onChange={e => setProfileData({...profileData, name: e.target.value})} className="w-full px-4 py-2 text-center text-lg md:text-xl font-black text-slate-900 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400" placeholder="Nhập họ và tên"/></div>) : (<h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{profileData.name}</h3>)}
                                     <p className="text-blue-400 font-bold text-sm mt-1">@{profileData.username}</p>
                                 </div>

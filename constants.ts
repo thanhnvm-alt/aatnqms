@@ -1,4 +1,5 @@
 
+
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
@@ -60,7 +61,6 @@ export const FSR_CHECKLIST_TEMPLATE = [
     { id: 'fsr_12', category: 'Đóng gói', label: 'Bảo vệ góc, xốp chèn (Protection)', status: CheckStatus.PENDING, notes: '' },
 ];
 
-// Added missing checklist templates to fix import errors in App.tsx
 export const STEP_CHECKLIST_TEMPLATE = [
   { id: 'step_1', category: 'Bước màu', label: 'Kiểm tra màu lót', status: CheckStatus.PENDING, notes: '' },
   { id: 'step_2', category: 'Bước màu', label: 'Kiểm tra màu tỉa', status: CheckStatus.PENDING, notes: '' },
@@ -105,6 +105,7 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff',
     allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'],
     msnv: 'MS-001',
+    // Added missing position property
     position: 'Giám đốc hệ thống',
     workLocation: 'Trụ sở chính',
     status: 'Đang làm việc',
@@ -120,6 +121,7 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://ui-avatars.com/api/?name=Manager&background=6366f1&color=fff',
     allowedModules: ['IQC', 'PQC', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
     msnv: 'MS-002',
+    // Added missing position property
     position: 'Quản lý QC',
     workLocation: 'Nhà máy 1',
     status: 'Đang làm việc',
@@ -135,6 +137,7 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://ui-avatars.com/api/?name=QC&background=10b981&color=fff',
     allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'FSR'],
     msnv: 'MS-003',
+    // Added missing position property
     position: 'Nhân viên QC',
     workLocation: 'Nhà máy 1',
     status: 'Đang làm việc',
@@ -150,6 +153,7 @@ export const MOCK_WORKSHOPS: Workshop[] = [
     name: 'Xưởng Mộc 1',
     location: 'Khu A - Nhà Máy 1',
     manager: 'Nguyễn Văn Quản',
+    // Added missing phone property
     phone: '0901234567',
     image: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=400',
     stages: ['Lựa phôi', 'Gia công chi tiết', 'Lắp ráp thô', 'Kiểm tra trắng']
@@ -160,6 +164,7 @@ export const MOCK_WORKSHOPS: Workshop[] = [
     name: 'Xưởng Sơn',
     location: 'Khu B - Nhà Máy 1',
     manager: 'Trần Thị Lý',
+    // Added missing phone property
     phone: '0909888777',
     image: 'https://images.unsplash.com/photo-1535953046522-7d1bb3543e49?auto=format&fit=crop&q=80&w=400',
     stages: ['Bả trét', 'Sơn lót', 'Chà nhám nước', 'Sơn phủ', 'Đóng gói']
@@ -173,6 +178,7 @@ export const MOCK_PLAN_DATA: PlanItem[] = [
     ten_ct: 'Tầng 5 - Trục A-B',
     ten_hang_muc: 'Nghiệm thu cốt thép cột',
     plannedDate: '2023-11-01',
+    // Added missing assignee property
     assignee: 'Nguyễn Văn A',
     status: 'PENDING',
     dvt: 'SET',
@@ -184,6 +190,7 @@ export const MOCK_PLAN_DATA: PlanItem[] = [
     ten_ct: 'Khu B - Móng M1',
     ten_hang_muc: 'Kiểm tra độ sụt bê tông',
     plannedDate: '2023-11-02',
+    // Added missing assignee property
     assignee: 'Trần Thị B',
     status: 'PENDING',
     dvt: 'M3',
@@ -200,6 +207,7 @@ export const MOCK_INSPECTIONS: Inspection[] = [
     inspectorName: 'Nguyễn Văn A',
     date: '2023-10-25',
     status: InspectionStatus.COMPLETED,
+    // Fixed: Added priority property
     priority: Priority.LOW,
     images: ['https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&q=80&w=300&h=200'],
     score: 95,

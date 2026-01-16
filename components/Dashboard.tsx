@@ -1,4 +1,5 @@
 
+
 import React, { useMemo } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState } from '../types';
 import { 
@@ -33,6 +34,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
     const completed = safeInspections.filter(i => i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED).length;
     const flagged = safeInspections.filter(i => i.status === InspectionStatus.FLAGGED).length;
     const drafts = safeInspections.filter(i => i.status === InspectionStatus.DRAFT).length;
+    // Fixed: Accessed priority safely through types.ts update
     const highPriority = safeInspections.filter(i => i.priority === Priority.HIGH).length;
     
     const finishedTotal = completed + flagged;
