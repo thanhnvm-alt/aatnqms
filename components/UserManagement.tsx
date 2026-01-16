@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useMemo } from 'react';
 import { User, UserRole, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
@@ -51,7 +52,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
 
-  // Access global XLSX from script tag
+  // Access global XLSX from script tag in index.html
   const XLSX = (window as any).XLSX;
 
   const [formData, setFormData] = useState<Partial<User>>({
@@ -167,7 +168,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (!file || !onImportUsers) return;
+      if (!file || !onImportUsers) {
+          if (!onImportUsers) console.warn("onImportUsers handler is missing in props");
+          return;
+      }
       if (!XLSX) return alert("Hệ thống đang tải thư viện Excel, vui lòng đợi giây lát.");
 
       setIsImporting(true);
@@ -182,14 +186,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
               const json = XLSX.utils.sheet_to_json(sheet);
 
               if (json.length === 0) {
-                  alert("File Excel không có dữ liệu.");
+                  alert("File Excel không có dữ liệu hoặc định dạng không đúng.");
                   setIsImporting(false);
                   return;
               }
 
               // Mapping logic with flexible key finding
               const importedUsers: User[] = json.map((row: any) => {
-                  // Tìm key gần đúng nhất (không phân biệt hoa thường, khoảng trắng)
                   const findVal = (possibleKeys: string[]) => {
                       const keys = Object.keys(row);
                       for (const pk of possibleKeys) {
@@ -199,22 +202,26 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                       return '';
                   };
 
-                  const name = String(findVal(['HỌ VÀ TÊN', 'Họ Tên', 'Name', 'FullName'])).trim();
-                  const username = String(findVal(['Tên Đăng Nhập', 'username', 'User', 'Tên'])).toLowerCase().trim();
+                  const name = String(findVal(['HỌ VÀ TÊN', 'Họ Tên', 'Name', 'FullName', 'Họ và tên'])).trim();
+                  const username = String(findVal(['Tên Đăng Nhập', 'username', 'User', 'Tên', 'Acc'])).toLowerCase().trim();
                   
                   if (!name || !username) return null;
+
+                  const role = String(findVal(['Vai Trò', 'Role', 'Quyền']) || 'QC').toUpperCase();
+                  const validRoles: UserRole[] = ['ADMIN', 'MANAGER', 'QC', 'QA'];
+                  const finalRole = validRoles.includes(role as any) ? role as UserRole : 'QC';
 
                   return {
                       id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
                       msnv: String(findVal(['MÃ NV', 'MSNV', 'Mã nhân viên', 'StaffCode']) || ''),
                       name: name,
                       username: username,
-                      role: (findVal(['Vai Trò', 'Role', 'Quyền']) || 'QC').toUpperCase() as UserRole,
-                      position: String(findVal(['Chức Vụ', 'Position', 'Chức danh']) || 'Nhân viên'),
+                      role: finalRole,
+                      position: String(findVal(['Chức Vụ', 'Position', 'Chức danh', 'Job']) || 'Nhân viên'),
                       status: String(findVal(['Tình Trạng', 'Trạng Thái', 'Status']) || 'Đang làm việc'),
-                      password: '123', // Mặc định ISO yêu cầu đổi mật khẩu sau khi login lần đầu
+                      password: '123', 
                       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
-                      allowedModules: ['PQC']
+                      allowedModules: ['PQC', 'IQC', 'SITE']
                   };
               }).filter((u): u is User => u !== null);
 
@@ -226,7 +233,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
               }
           } catch (error) {
               console.error("Excel import error:", error);
-              alert("Lỗi khi xử lý file Excel. Đảm bảo file đúng định dạng .xlsx và không bị khóa.");
+              alert("Lỗi khi xử lý file Excel. Hãy chắc chắn file không bị mật khẩu bảo vệ.");
           } finally {
               setIsImporting(false);
               if (excelImportRef.current) excelImportRef.current.value = '';

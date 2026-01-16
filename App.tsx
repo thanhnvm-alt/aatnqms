@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification } from './types';
 import { 
@@ -20,7 +19,6 @@ import {
 } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { InspectionList } from './components/InspectionList';
-// REMOVED: InspectionListPQC is deleted
 import { InspectionFormPQC } from './components/inspectionformPQC';
 import { InspectionFormIQC } from './components/inspectionformIQC';
 import { InspectionFormSQC_VT } from './components/inspectionformSQC_VT';
@@ -31,7 +29,6 @@ import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
 
-// FIXED IMPORTS: Đồng nhất casing theo yêu cầu (Renamed files)
 import { Inspectiondetail } from './components/Inspectiondetail'; 
 import { InspectionDetailPQC } from './components/inspectiondetailPQC'; 
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
@@ -59,7 +56,6 @@ import { DefectList } from './components/DefectList';
 import { DefectDetail } from './components/DefectDetail';
 import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
-// Fixed: Imported missing members
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -70,6 +66,7 @@ import {
   fetchUsers, 
   saveUser, 
   deleteUser, 
+  importUsers,
   fetchWorkshops, 
   saveWorkshop, 
   deleteWorkshop, 
@@ -215,7 +212,6 @@ const App = () => {
   const handleApproveInspection = async (id: string, signature: string, extraInfo?: any) => { 
     if (!activeInspection) return; 
     const isFullApproval = !!signature;
-    // Fixed: Updated Inspection properties in types.ts to support camelCase correctly
     const updated: Inspection = { 
         ...activeInspection, 
         status: isFullApproval ? InspectionStatus.APPROVED : activeInspection.status, 
@@ -250,7 +246,6 @@ const App = () => {
 
   const handlePostComment = async (id: string, comment: NCRComment) => { 
       if (!activeInspection) return; 
-      // Fixed: Inspection type now supports comments property
       const updatedComments = [...(activeInspection.comments || []), comment]; 
       const updated = { ...activeInspection, comments: updatedComments }; 
       await saveInspectionToSheet(updated); 
@@ -276,7 +271,6 @@ const App = () => {
   
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false); setIsDetailLoading(true);
-      // Fixed: Added headcode to Partial<Inspection>
       let baseData: Partial<Inspection> = initialFormState || { ma_nha_may: pendingScannedCode || '' };
       if (!initialFormState && pendingScannedCode) { 
           try { 
@@ -335,7 +329,6 @@ const App = () => {
   };
 
   const renderList = () => {
-      // MODIFIED: Merged list view, no longer using InspectionListPQC
       return <InspectionList inspections={inspections} onSelect={handleSelectInspection} userRole={user?.role || ''} currentUserName={user?.name || ''} selectedModule={currentModule} onRefresh={loadInspections} onModuleChange={setCurrentModule} isLoading={isLoadingInspections} workshops={workshops} />;
   };
 
@@ -360,14 +353,13 @@ const App = () => {
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={(d) => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => { setView('DEFECT_LIST'); setActiveDefect(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
-            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
+            {view === 'SETTINGS' && <Settings currentUser={user} allTemplates={templates} onSaveTemplate={async (m, t) => { await saveTemplate(m, t); loadTemplates(); }} users={users} onAddUser={async u => { await saveUser(u); loadUsers(); }} onUpdateUser={async u => { await saveUser(u); loadUsers(); if(u.id === user.id) setUser(u); }} onDeleteUser={async id => { await deleteUser(id); loadUsers(); }} onImportUsers={async (u) => { await importUsers(u); await loadUsers(); }} workshops={workshops} onAddWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async w => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async id => { await deleteWorkshop(id); loadWorkshops(); }} onClose={() => setView(user.role === 'QC' ? 'LIST' : 'DASHBOARD')} initialTab={settingsInitialTab} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={async (maCt) => { const found = projects.find(p => p.ma_ct === maCt); if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} />}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onUpdate={loadProjects} onBack={() => { setView('PROJECTS'); setActiveProject(null); }} onViewInspection={handleSelectInspection} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
-        {/* Fixed typo: changed setShowScanner to setShowQrScanner in onClose callback */}
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={handleQrScan} />}
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
