@@ -26,10 +26,9 @@ import {
   Mail, 
   Info,
   ChevronDown,
-  Hash
+  Hash,
+  AlertCircle
 } from 'lucide-react';
-// @ts-ignore
-import * as XLSX from 'xlsx';
 
 interface UserManagementProps {
   users: User[];
@@ -51,6 +50,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
+
+  // Access global XLSX from script tag
+  const XLSX = (window as any).XLSX;
 
   const [formData, setFormData] = useState<Partial<User>>({
     name: '',
@@ -148,6 +150,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   };
 
   const handleExportExcel = () => {
+    if (!XLSX) return alert("Thư viện Excel chưa sẵn sàng.");
     const exportData = users.map(u => ({
       'MÃ NV': u.msnv || '',
       'HỌ VÀ TÊN': u.name,
@@ -165,33 +168,51 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !onImportUsers) return;
+      if (!XLSX) return alert("Hệ thống đang tải thư viện Excel, vui lòng đợi giây lát.");
 
       setIsImporting(true);
       const reader = new FileReader();
       
       reader.onload = async (evt) => {
           try {
-              const data = evt.target?.result;
-              const workbook = XLSX.read(data, { type: 'binary' });
+              const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+              const workbook = XLSX.read(data, { type: 'array' });
               const sheetName = workbook.SheetNames[0];
               const sheet = workbook.Sheets[sheetName];
               const json = XLSX.utils.sheet_to_json(sheet);
 
+              if (json.length === 0) {
+                  alert("File Excel không có dữ liệu.");
+                  setIsImporting(false);
+                  return;
+              }
+
+              // Mapping logic with flexible key finding
               const importedUsers: User[] = json.map((row: any) => {
-                  const name = String(row['HỌ VÀ TÊN'] || row['name'] || '').trim();
-                  const username = String(row['Tên Đăng Nhập'] || row['username'] || '').toLowerCase().trim();
+                  // Tìm key gần đúng nhất (không phân biệt hoa thường, khoảng trắng)
+                  const findVal = (possibleKeys: string[]) => {
+                      const keys = Object.keys(row);
+                      for (const pk of possibleKeys) {
+                          const match = keys.find(k => k.trim().toLowerCase() === pk.toLowerCase());
+                          if (match) return row[match];
+                      }
+                      return '';
+                  };
+
+                  const name = String(findVal(['HỌ VÀ TÊN', 'Họ Tên', 'Name', 'FullName'])).trim();
+                  const username = String(findVal(['Tên Đăng Nhập', 'username', 'User', 'Tên'])).toLowerCase().trim();
                   
                   if (!name || !username) return null;
 
                   return {
                       id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
-                      msnv: String(row['MÃ NV'] || row['msnv'] || ''),
+                      msnv: String(findVal(['MÃ NV', 'MSNV', 'Mã nhân viên', 'StaffCode']) || ''),
                       name: name,
                       username: username,
-                      role: (row['Vai Trò'] || row['role'] || 'QC') as UserRole,
-                      position: String(row['Chức Vụ'] || row['position'] || ''),
-                      status: String(row['Tình Trạng'] || row['status'] || 'Đang làm việc'),
-                      password: '123', // Mật khẩu mặc định
+                      role: (findVal(['Vai Trò', 'Role', 'Quyền']) || 'QC').toUpperCase() as UserRole,
+                      position: String(findVal(['Chức Vụ', 'Position', 'Chức danh']) || 'Nhân viên'),
+                      status: String(findVal(['Tình Trạng', 'Trạng Thái', 'Status']) || 'Đang làm việc'),
+                      password: '123', // Mặc định ISO yêu cầu đổi mật khẩu sau khi login lần đầu
                       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
                       allowedModules: ['PQC']
                   };
@@ -201,11 +222,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                   await onImportUsers(importedUsers);
                   alert(`Đã nhập thành công ${importedUsers.length} nhân sự vào hệ thống.`);
               } else {
-                  alert("Không tìm thấy dữ liệu hợp lệ trong file Excel. Vui lòng kiểm tra tiêu đề cột.");
+                  alert("Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra tiêu đề các cột: HỌ VÀ TÊN, Tên Đăng Nhập.");
               }
           } catch (error) {
               console.error("Excel import error:", error);
-              alert("Lỗi khi xử lý file Excel. Đảm bảo file đúng định dạng .xlsx");
+              alert("Lỗi khi xử lý file Excel. Đảm bảo file đúng định dạng .xlsx và không bị khóa.");
           } finally {
               setIsImporting(false);
               if (excelImportRef.current) excelImportRef.current.value = '';
@@ -213,11 +234,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
       };
 
       reader.onerror = () => {
-          alert("Lỗi khi đọc file.");
+          alert("Lỗi khi đọc file từ thiết bị.");
           setIsImporting(false);
       };
 
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -243,7 +264,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                 <button 
                     onClick={() => excelImportRef.current?.click()} 
                     disabled={isImporting}
-                    className="p-2.5 bg-white text-slate-500 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center disabled:opacity-50"
+                    className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isImporting ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 active:scale-95'}`}
                     title="Nhập từ Excel"
                 >
                     {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
@@ -262,7 +283,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
 
       <input type="file" ref={excelImportRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
 
-      {/* USER LIST - MATCHING IMAGE DESIGN */}
+      {/* USER LIST */}
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden overflow-x-auto no-scrollbar">
           <table className="w-full text-left border-collapse min-w-[900px]">
               <thead className="bg-slate-50/50 border-b border-slate-100">
@@ -309,7 +330,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                               </span>
                           </td>
                           <td className="px-6 py-5 text-center">
-                              <span className="inline-block px-4 py-1 bg-green-50 text-green-600 rounded-full border border-green-200 text-[9px] font-black uppercase tracking-tighter">
+                              <span className={`inline-block px-4 py-1 rounded-full border text-[9px] font-black uppercase tracking-tighter ${
+                                  u.status === 'Đang làm việc' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'
+                              }`}>
                                   {u.status || 'Đang làm việc'}
                               </span>
                           </td>

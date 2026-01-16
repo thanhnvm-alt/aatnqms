@@ -15,6 +15,10 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Load SheetJS directly to avoid bundler resolution issues -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+
     <style>
       :root {
         --sat: env(safe-area-inset-top);
@@ -66,8 +70,7 @@
     "@libsql/client/": "https://esm.sh/@libsql/client@^0.15.15/",
     "next/": "https://esm.sh/next@^16.1.1/",
     "vitest": "https://esm.sh/vitest@^4.0.16",
-    "exceljs": "https://esm.sh/exceljs@^4.4.0/dist/exceljs.min.js",
-    "xlsx": "https://esm.sh/xlsx@0.18.5"
+    "exceljs": "https://esm.sh/exceljs@^4.4.0/dist/exceljs.min.js"
   }
 }
 </script>
