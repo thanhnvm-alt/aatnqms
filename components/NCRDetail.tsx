@@ -6,7 +6,7 @@ import {
     CheckCircle2, Clock, MessageSquare, Camera, Paperclip, 
     Send, Loader2, BrainCircuit, Maximize2, Plus, 
     X, FileText, Image as ImageIcon, Save, Sparkles, BookOpen,
-    ChevronDown, Filter, RefreshCw, ShieldCheck, PenTool
+    ChevronDown, Filter, RefreshCw, ShieldCheck, PenTool, AlertOctagon
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
@@ -165,7 +165,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       e.target.value = '';
   };
 
-  // Added removeImage to fix Error on line 246 and 250
   const removeImage = (index: number, type: 'BEFORE' | 'AFTER') => {
       setFormData(prev => {
           const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
@@ -195,12 +194,10 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       } catch (e) { alert("Lỗi khi gửi bình luận."); } finally { setIsSubmitting(false); }
   };
 
-  // Added handleEditCommentImage to fix Error on line 290
   const handleEditCommentImage = (idx: number) => {
       setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
   };
 
-  // Added updateCommentImage to fix Error on line 317
   const updateCommentImage = (idx: number, newImg: string) => {
       setCommentAttachments(prev => {
           const next = [...prev];
@@ -243,7 +240,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <div className="flex-1 space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="bg-slate-900 text-white px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest">NCR: {formData.id}</span>
-                            {isEditing ? (<select value={formData.severity} onChange={e => setFormData({...formData, severity: e.target.value as any})} className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-white outline-none"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select>) : (<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : formData.severity === 'MAJOR' ? 'bg-orange-500 text-white border-orange-600' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{formData.severity}</span>)}
+                            {isEditing ? (<select value={formData.severity} onChange={e => setFormData({...formData, severity: e.target.value as any})} className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-white outline-none"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select>) : (<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : formData.severity === 'MAJOR' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{formData.severity}</span>)}
                             {isEditing ? (<select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-white outline-none"><option value="OPEN">OPEN</option><option value="IN_PROGRESS">IN PROGRESS</option><option value="CLOSED">CLOSED</option></select>) : (<span className={`border px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${formData.status === 'CLOSED' ? 'bg-green-100 text-green-700' : formData.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-red-50 text-red-700'}`}>{formData.status}</span>)}
                         </div>
                         <div>{isEditing ? (<textarea value={formData.issueDescription} onChange={e => setFormData({...formData, issueDescription: e.target.value})} className="w-full text-base font-bold text-slate-800 bg-slate-50 border-b-2 border-blue-500 outline-none resize-none p-2 rounded-t-lg" rows={2} />) : (<h1 className="text-base font-bold text-slate-800 uppercase leading-tight tracking-tight">{formData.issueDescription}</h1>)}</div>
@@ -266,10 +263,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
             {/* Images Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                    {/* Fixed: Use specific refs to resolve missing cameraInputRef and fileInputRef */}
                     <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-red-50/30"><label className="text-[9px] font-bold text-red-500 uppercase flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> TRƯỚC XỬ LÝ (ISSUE)</label>{isEditing && <div className="flex gap-1"><button onClick={() => beforeCameraRef.current?.click()} className="p-1 bg-white text-slate-500 rounded border border-slate-200"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => beforeFileRef.current?.click()} className="p-1 bg-white text-slate-500 rounded border border-slate-200"><Plus className="w-3.5 h-3.5"/></button></div>}</div>
-                    <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesBefore?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover" onClick={() => openGallery(formData.imagesBefore!, idx)} />{isEditing && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
+                    <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesBefore?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => openGallery(formData.imagesBefore!, idx)} />{isEditing && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                    {/* Fixed: Use specific refs to resolve missing cameraInputRef and fileInputRef */}
                     <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-green-50/30"><label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> SAU XỬ LÝ (FIX)</label>{(!isLocked || isEditing) && <div className="flex gap-1"><button onClick={() => afterCameraRef.current?.click()} className="p-1 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => afterFileRef.current?.click()} className="p-1 bg-slate-50 text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div>}</div>
                     <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesAfter?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover" onClick={() => openGallery(formData.imagesAfter!, idx)} />{(!isLocked || isEditing) && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
                 </div>

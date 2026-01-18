@@ -335,22 +335,53 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     return inspections.filter(i => i.id !== formData.id && (i.ma_nha_may?.toLowerCase() === term || i.headcode?.toLowerCase() === term)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [inspections, searchCode, formData.id]);
 
+  /**
+   * ISO-PLAN-LOOKUP: Tra cứu thông tin từ bảng plans dựa trên mã định danh.
+   * Logic: 9 ký tự -> headcode, 13 ký tự -> ma_nha_may.
+   */
   const lookupPlanInfo = async (value: string) => {
-      const code = (value || '').trim();
+      const code = (value || '').trim().toUpperCase();
       if (!code) return;
       setIsLookupLoading(true);
       try {
           const apiRes = await fetchPlans(code, 1, 10);
+          const items = apiRes.items || [];
+          
           let match = null;
-          if (code.length === 9) match = (apiRes.items || []).find(p => String(p.headcode || '').toUpperCase() === code.toUpperCase());
-          else if (code.length === 13) match = (apiRes.items || []).find(p => String(p.ma_nha_may || '').toUpperCase() === code.toUpperCase());
-          else match = (apiRes.items || []).find(p => String(p.headcode || '').toUpperCase() === code.toUpperCase() || String(p.ma_nha_may || '').toUpperCase() === code.toUpperCase());
+          if (code.length === 9) {
+              // Tìm khớp chính xác theo headcode
+              match = items.find(p => String(p.headcode || '').toUpperCase() === code);
+          } else if (code.length === 13) {
+              // Tìm khớp chính xác theo ma_nha_may
+              match = items.find(p => String(p.ma_nha_may || '').toUpperCase() === code);
+          } else {
+              // Fallback tìm khớp gần nhất
+              match = items.find(p => 
+                String(p.headcode || '').toUpperCase() === code || 
+                String(p.ma_nha_may || '').toUpperCase() === code
+              ) || items[0];
+          }
 
           if (match) {
-              setFormData(prev => ({ ...prev, ma_ct: match.ma_ct, ten_ct: match.ten_ct, ten_hang_muc: match.ten_hang_muc, dvt: match.dvt, so_luong_ipo: match.so_luong_ipo, ma_nha_may: match.ma_nha_may, headcode: match.headcode, workshop: match.ma_nha_may }));
+              setFormData(prev => ({ 
+                ...prev, 
+                ma_ct: match.ma_ct, 
+                ten_ct: match.ten_ct, 
+                ten_hang_muc: match.ten_hang_muc, 
+                dvt: match.dvt, 
+                so_luong_ipo: match.so_luong_ipo, 
+                ma_nha_may: match.ma_nha_may, 
+                headcode: match.headcode, 
+                workshop: match.ma_nha_may 
+              }));
+              // Cập nhật mã định danh hiển thị thành mã nhà máy
               setSearchCode(match.ma_nha_may);
           }
-      } catch (e) {} finally { setIsLookupLoading(false); }
+      } catch (e) {
+          console.error("ISO-PLAN-LOOKUP Error:", e);
+      } finally { 
+          setIsLookupLoading(false); 
+      }
   };
 
   const handleInputChange = (field: keyof Inspection, value: any) => { 
@@ -394,17 +425,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     } catch (e: any) { alert("Lỗi khi lưu phiếu: " + (e.message || e)); } finally { setIsSaving(false); }
   };
 
-  /**
-   * FIX: Xử lý đa file đồng bộ bằng Promise.all để tránh race condition khi cập nhật state liên tục.
-   * Ngăn chặn việc nhân bản hình ảnh trong một lần upload.
-   */
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files; 
     if (!files || files.length === 0 || !activeUploadId) return;
     
     setIsLookupLoading(true);
     try {
-        // Chờ tất cả ảnh được resize xong trước khi cập nhật state một lần duy nhất
         const processedImages = await Promise.all(
             Array.from(files).map(async (file: File) => {
                 return new Promise<string>((resolve) => {
@@ -413,7 +439,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         const resized = await resizeImage(reader.result as string);
                         resolve(resized);
                     };
-                    /* Fixed: Added explicit type cast to resolve 'unknown' to 'Blob' parameter assignment error */
                     reader.readAsDataURL(file as File);
                 });
             })
@@ -438,7 +463,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         console.error("ISO-UPLOAD: Failed", err);
     } finally {
         setIsLookupLoading(false);
-        e.target.value = ''; // Reset input
+        e.target.value = '';
     }
   };
 
@@ -464,7 +489,14 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <div className="space-y-0.5">
                     <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã định danh (Mã NM)</label>
                     <div className="relative flex items-center">
-                        <input value={searchCode} onChange={e => setSearchCode(e.target.value)} onBlur={() => lookupPlanInfo(searchCode)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" placeholder="Quét/Nhập mã..."/>
+                        <input 
+                            value={searchCode} 
+                            onChange={e => setSearchCode(e.target.value)} 
+                            onBlur={() => lookupPlanInfo(searchCode)} 
+                            onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode)}
+                            className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" 
+                            placeholder="Quét/Nhập mã..."
+                        />
                         <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-3.5 h-3.5"/></button>
                         {isLookupLoading && <div className="absolute right-8"><Loader2 className="w-3 h-3 animate-spin text-blue-500" /></div>}
                     </div>

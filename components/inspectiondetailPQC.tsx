@@ -4,7 +4,7 @@ import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, 
 import { 
   ArrowLeft, User as UserIcon, Building2, Box, Edit3, Trash2, X, Maximize2, ShieldCheck,
   MessageSquare, Loader2, Eraser, Send, UserPlus, AlertOctagon, Check, Save,
-  Camera, Image as ImageIcon, Paperclip, PenTool
+  Camera, Image as ImageIcon, Paperclip, PenTool, LayoutList, History, FileText, ChevronRight
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -47,12 +47,15 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
         if (canvas && value) {
             const ctx = canvas.getContext('2d');
             const img = new Image();
-            img.onload = () => { ctx?.clearRect(0, 0, canvas.width, canvas.height); ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); };
+            img.onload = () => { 
+                ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); 
+            };
             img.src = value;
         }
     }, [value]);
     const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
-    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); };
+    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); } };
     const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
     const clear = () => { const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
     return (
@@ -174,8 +177,8 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
           <div className="flex items-center gap-2">
-              <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"><ArrowLeft className="w-4 h-4 text-slate-600" /></button>
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">CHI TIẾT HỒ SƠ PQC</h2>
+              <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600" /></button>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">CHI TIẾT HỒ SƠ PQC REVIEW</h2>
           </div>
           <div className="flex items-center gap-2">
               {!isApproved && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>}
@@ -183,9 +186,10 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
           </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar bg-slate-50">
         <div className="max-w-4xl mx-auto space-y-4 pb-32">
-            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="absolute right-0 top-0 p-8 opacity-5 pointer-events-none uppercase font-black text-6xl rotate-12">PQC</div>
                 <h1 className="text-xl font-bold text-slate-800 uppercase mb-3 leading-tight">{inspection.ten_hang_muc}</h1>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-50 pb-4">
                     <div><p className="text-slate-400 mb-0.5">Mã Dự án</p><p className="text-slate-800">{inspection.ma_ct}</p></div>
@@ -202,28 +206,74 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
             </div>
 
+            {/* General Evidence Gallery */}
+            {inspection.images && inspection.images.length > 0 && (
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <ImageIcon className="w-3.5 h-3.5 text-blue-600" /> Bằng chứng hiện trường ({inspection.images.length})
+                    </h3>
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                        {inspection.images.map((img, idx) => (
+                            <div key={idx} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-24 h-24 rounded-xl overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm transition-transform hover:scale-105">
+                                <img src={img} className="w-full h-full object-cover" alt="" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-2">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Chi tiết tiêu chí kiểm tra</h3>
                 {inspection.items.map((item, idx) => (
-                    <div key={idx} className={`bg-white p-4 rounded-xl border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50/5' : 'border-slate-200'}`}>
+                    <div key={idx} className={`bg-white p-4 rounded-xl border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50/5' : 'border-slate-200'}`}>
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex gap-2">
                                 <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase border ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{item.status}</span>
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.category}</span>
                             </div>
+                            {item.ncr && (
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-red-600 text-white rounded text-[8px] font-black uppercase tracking-tighter shadow-sm">
+                                    <AlertOctagon className="w-2.5 h-2.5" /> Có NCR
+                                </div>
+                            )}
                         </div>
                         <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{item.label}</p>
                         {item.notes && <p className="text-[10px] text-slate-500 mt-1 italic leading-relaxed">"{item.notes}"</p>}
+                        
+                        {/* Item Evidence Gallery - NEW IN DETAIL */}
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar py-1">
                                 {item.images.map((img, i) => (
-                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-14 h-14 rounded-lg overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm">
+                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-14 h-14 rounded-lg overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-300">
                                         <img src={img} className="w-full h-full object-cover" alt="" />
                                     </div>
                                 ))}
                             </div>
                         )}
-                        {item.ncr && <button onClick={() => setViewingNcr(item.ncr!)} className="mt-2 text-[9px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded flex items-center gap-1 uppercase border border-red-100 hover:bg-red-100"><AlertOctagon className="w-3 h-3"/> Xem hồ sơ NCR</button>}
+
+                        {item.ncr && (
+                            <div className="mt-3 p-3 bg-red-50/50 rounded-xl border border-red-100 space-y-2 group hover:bg-red-50 transition-colors">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] font-black text-red-600 uppercase flex items-center gap-1.5">
+                                        <FileText className="w-3 h-3"/> Hồ sơ NCR liên quan
+                                    </span>
+                                    <button onClick={() => setViewingNcr(item.ncr!)} className="text-[9px] font-black text-blue-600 uppercase hover:underline flex items-center gap-1">
+                                        Chi tiết <ChevronRight className="w-3 h-3"/>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-white p-2 rounded-lg border border-red-50">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5">Trạng thái</p>
+                                        <p className="text-[10px] font-bold text-red-600 uppercase">{item.ncr.status}</p>
+                                    </div>
+                                    <div className="bg-white p-2 rounded-lg border border-red-50">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5">Mức độ</p>
+                                        <p className="text-[10px] font-bold text-slate-700 uppercase">{item.ncr.severity}</p>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-slate-600 italic leading-relaxed line-clamp-2">"{item.ncr.issueDescription}"</p>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
@@ -233,7 +283,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="text-center space-y-2">
                         <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-widest">QC Inspector</p>
-                        <div className="bg-slate-50 h-28 rounded-xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
+                        <div className="bg-slate-50 h-28 rounded-xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
                             {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" alt="" /> : <span className="text-[9px] text-slate-300">N/A</span>}
                         </div>
                         <p className="text-[10px] font-bold text-slate-800 uppercase">{inspection.inspectorName}</p>
@@ -255,7 +305,8 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
             </section>
 
-            <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            {/* Comments and Discussions */}
+            <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
                 <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-blue-600" />
                     <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">Thảo luận nội bộ</h3>
@@ -311,7 +362,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
         </div>
       </div>
 
-      <div className="sticky bottom-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200 px-4 py-4 md:px-6 shadow-[0_-10px_25px_rgba(0,0,0,0.05)]">
+      <div className="sticky bottom-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200 px-4 py-4 md:px-6 shadow-[0_-10px_25px_rgba(0,0,0,0.05)] shrink-0">
           <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
               <button onClick={onBack} className="px-6 py-3.5 text-slate-500 font-bold uppercase text-[10px] tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 active:scale-95">QUAY LẠI</button>
               <div className="flex gap-3 flex-1 justify-end">

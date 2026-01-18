@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Inspection, InspectionStatus, PlanItem } from '../types';
 import { 
-  Search, ChevronDown, LayoutGrid, Users, User, Target, 
-  BarChart3, AlertCircle, SlidersHorizontal, X, Filter,
-  Briefcase, CheckCircle2, Clock, Loader2
+  Search, ChevronDown, Filter, Briefcase, 
+  Building2, SlidersHorizontal, Check, X, 
+  ArrowRight, Clock, AlertCircle, LayoutGrid, CheckCircle2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
@@ -13,298 +13,260 @@ interface ProjectListProps {
   inspections: Inspection[];
   plans: PlanItem[];
   onSelectProject: (maCt: string) => void;
+  onSearch?: (term: string) => void;
 }
 
 const COLORS = {
-  open: '#ef4444',
-  inProgress: '#3b82f6',
   resolved: '#10b981',
-  feedback: '#f59e0b',
-  closed: '#64748b',
-  rejected: '#000000',
+  open: '#ef4444',
   empty: '#e2e8f0'
 };
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections, plans, onSelectProject }) => {
+export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections, plans, onSelectProject, onSearch }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [filterPm, setFilterPm] = useState('ALL');
-  const [filterQa, setFilterQa] = useState('ALL');
-  const [filterPc, setFilterPc] = useState('ALL');
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  // ISO-UI: Mặc định tất cả các nhóm đóng để tiết kiệm diện tích (Empty Set)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  /**
-   * ISO-AUTHORITATIVE: Chỉ lấy danh sách dự án từ database projects làm gốc.
-   * Việc đồng bộ từ bảng plans đã được xử lý bởi logic syncProjectsWithPlans ở tầng Service.
-   */
-  const displayProjects = useMemo(() => {
-    return [...projects];
-  }, [projects]);
+  // Debounced Search Database - limit = 10
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+        if (onSearch) onSearch(searchTerm);
+    }, 500);
+    return () => clearTimeout(delayDebounce);
+  }, [searchTerm, onSearch]);
 
-  // Lấy các giá trị duy nhất cho bộ lọc từ danh sách đã tổng hợp
-  const filterOptions = useMemo(() => {
-    const pms = new Set<string>();
-    const qas = new Set<string>();
-    const pcs = new Set<string>();
-
-    displayProjects.forEach(p => {
-      if (p.pm && p.pm !== 'Chưa phân công') pms.add(p.pm);
-      if (p.qa && p.qa !== 'Chưa phân công') qas.add(p.qa);
-      if (p.pc && p.pc !== 'Chưa phân công') pcs.add(p.pc);
-    });
-
-    return {
-      pms: Array.from(pms).sort(),
-      qas: Array.from(qas).sort(),
-      pcs: Array.from(pcs).sort()
+  const groupedProjects = useMemo(() => {
+    const groups: Record<string, Project[]> = {
+        'OEM': [],
+        'Công trình nội địa': [],
+        'NHÀ XINH': [],
+        'Nội bộ': []
     };
-  }, [displayProjects]);
+    
+    // Filter by status if selected
+    const filtered = projects.filter(p => filterStatus === 'ALL' || p.status === filterStatus);
 
-  const filteredProjects = useMemo(() => {
-    return displayProjects.filter(p => {
-      const term = searchTerm.toLowerCase().trim();
-      const matchesSearch = !term || 
-        String(p.name).toLowerCase().includes(term) || 
-        String(p.ma_ct).toLowerCase().includes(term);
-      
-      const matchesPm = filterPm === 'ALL' || p.pm === filterPm;
-      const matchesQa = filterQa === 'ALL' || p.qa === filterQa;
-      const matchesPc = filterPc === 'ALL' || p.pc === filterPc;
-
-      return matchesSearch && matchesPm && matchesQa && matchesPc;
+    filtered.forEach(p => {
+        const maCt = (p.ma_ct || '').toUpperCase();
+        const name = (p.name || '').toUpperCase();
+        
+        if (maCt.startsWith('EM')) {
+            groups['OEM'].push(p);
+        } else if (maCt.startsWith('CT')) {
+            groups['Công trình nội địa'].push(p);
+        } else if (maCt.startsWith('AKA') || name.includes('NHÀ XINH') || name.includes('NHA XINH')) {
+            groups['NHÀ XINH'].push(p);
+        } else {
+            groups['Nội bộ'].push(p);
+        }
     });
-  }, [displayProjects, searchTerm, filterPm, filterQa, filterPc]);
+
+    return groups;
+  }, [projects, filterStatus]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+    });
+  };
 
   const getStats = (maCt: string) => {
     const pInsps = inspections.filter(i => String(i.ma_ct).toUpperCase() === String(maCt).toUpperCase());
-    const pPlans = plans.filter(p => String(p.ma_ct).toUpperCase() === String(maCt).toUpperCase());
     return {
-      tickets: pInsps.length,
-      plans: pPlans.length,
+      total: pInsps.length,
       open: pInsps.filter(i => i.status === InspectionStatus.FLAGGED || i.status === InspectionStatus.PENDING).length,
       closed: pInsps.filter(i => i.status === InspectionStatus.APPROVED || i.status === InspectionStatus.COMPLETED).length
     };
   };
 
-  const activeFilterCount = [filterPm, filterQa, filterPc].filter(f => f !== 'ALL').length;
-
   return (
-    <div className="h-full flex flex-col bg-[#f8fafc] no-scroll-x">
+    <div className="h-full flex flex-col bg-slate-50 no-scroll-x">
       {/* HEADER TOOLBAR */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
                 <Briefcase className="w-5 h-5" />
               </div>
               <div>
                 <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Quản lý Dự án</h2>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                   ISO 9001:2024 • {filteredProjects.length} hồ sơ dự án
-                </p>
+                <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ISO 9001:2024 SYSTEM</p>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
+              <div className="relative flex-1 md:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input 
                   type="text" 
-                  placeholder="Tìm tên hoặc mã dự án..." 
+                  placeholder="Tìm theo Mã hoặc Tên dự án..." 
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                 />
               </div>
-              <button 
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all active:scale-95 ${
-                  showFilters || activeFilterCount > 0 
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-                <span>Bộ lọc</span>
-                {activeFilterCount > 0 && (
-                  <span className="ml-1 w-4 h-4 bg-white text-blue-600 rounded-full flex items-center justify-center text-[8px]">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* FILTER PANEL */}
-          {showFilters && (
-            <div className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4 animate-in slide-in-from-top duration-300">
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                  <User className="w-3 h-3"/> PMCT (Project Manager)
-                </label>
-                <div className="relative">
-                  <select 
-                    value={filterPm} 
-                    onChange={e => setFilterPm(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 focus:bg-white outline-none appearance-none cursor-pointer pr-8"
+              <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button 
+                    onClick={() => setShowFilterModal(true)}
+                    className="flex items-center gap-2 px-4 py-1.5 bg-white rounded-lg shadow-sm font-black text-[10px] uppercase tracking-widest text-blue-600 hover:bg-blue-50 transition-colors"
                   >
-                    <option value="ALL">TẤT CẢ PM</option>
-                    <option value="Chưa phân công">CHƯA PHÂN CÔNG</option>
-                    {filterOptions.pms.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                  <Target className="w-3 h-3"/> QA-Project
-                </label>
-                <div className="relative">
-                  <select 
-                    value={filterQa} 
-                    onChange={e => setFilterQa(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 focus:bg-white outline-none appearance-none cursor-pointer pr-8"
-                  >
-                    <option value="ALL">TẤT CẢ QA</option>
-                    <option value="Chưa phân công">CHƯA PHÂN CÔNG</option>
-                    {filterOptions.qas.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                  <Users className="w-3 h-3"/> PC (Project Coordinator)
-                </label>
-                <div className="relative">
-                  <select 
-                    value={filterPc} 
-                    onChange={e => setFilterPc(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 focus:bg-white outline-none appearance-none cursor-pointer pr-8"
-                  >
-                    <option value="ALL">TẤT CẢ PC</option>
-                    <option value="Chưa phân công">CHƯA PHÂN CÔNG</option>
-                    {filterOptions.pcs.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-              <div className="sm:col-span-3 flex justify-end">
-                <button 
-                  onClick={() => { setFilterPm('ALL'); setFilterQa('ALL'); setFilterPc('ALL'); setSearchTerm(''); }}
-                  className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
-                >
-                  Xóa tất cả bộ lọc
-                </button>
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>Bộ lọc</span>
+                    {filterStatus !== 'ALL' && <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>}
+                  </button>
+                  <div className="px-3 py-1.5 flex items-center gap-1.5">
+                      <span className="text-[10px] font-black text-slate-400 uppercase">Hồ sơ:</span>
+                      <span className="text-sm font-black text-slate-800">{projects.length}</span>
+                  </div>
               </div>
             </div>
-          )}
         </div>
       </div>
 
-      {/* PROJECT LIST */}
+      {/* PROJECT GROUPS */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">
-        {displayProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-[2rem] border border-dashed border-slate-200">
-             <Briefcase className="w-16 h-16 opacity-10 mb-4" />
-             <p className="font-black uppercase tracking-widest text-xs">Chưa có hồ sơ dự án nào trong database</p>
-             <p className="text-[10px] text-slate-400 mt-2 uppercase">Hồ sơ sẽ tự động được tạo từ kế hoạch sản xuất</p>
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-            <AlertCircle className="w-16 h-16 opacity-10 mb-4" />
-            <p className="font-black uppercase tracking-[0.2em] text-sm">Không tìm thấy dự án phù hợp</p>
-          </div>
-        ) : (
-          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProjects.map((project) => {
-              const stats = getStats(project.ma_ct);
-              const chartData = [
-                { name: 'Resolved', value: stats.closed, color: COLORS.resolved },
-                { name: 'Open', value: stats.open, color: COLORS.open },
-                { name: 'Empty', value: stats.tickets === 0 ? 1 : 0, color: COLORS.empty }
-              ].filter(d => d.value > 0);
+        <div className="max-w-7xl mx-auto space-y-4">
+            {Object.entries(groupedProjects).map(([groupName, groupItems]: [string, Project[]]) => {
+                if (groupItems.length === 0 && !searchTerm) return null;
+                const isExpanded = expandedGroups.has(groupName);
 
-              return (
-                <div 
-                  key={project.id}
-                  onClick={() => onSelectProject(project.ma_ct)}
-                  className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all cursor-pointer group flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden"
-                >
-                  <div className="p-5 border-b border-slate-50 flex justify-between items-start bg-slate-50/50">
-                    <div className="flex-1 min-w-0 pr-3">
-                      <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
-                        {project.name}
-                      </h3>
-                      <p className="text-[10px] font-mono font-bold text-slate-400 mt-1 uppercase">#{project.ma_ct}</p>
-                    </div>
-                    <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase border shadow-sm ${
-                      project.status === 'Completed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}>
-                      {project.status}
-                    </div>
-                  </div>
-
-                  <div className="p-5 space-y-4 flex-1">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Project Manager</p>
-                        <p className="text-[11px] font-bold text-slate-700 truncate">{project.pm}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">QA Lead</p>
-                        <p className="text-[11px] font-bold text-slate-700 truncate">{project.qa}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                      <div className="flex-1 grid grid-cols-2 gap-2">
-                        <div className="bg-blue-50 p-2 rounded-2xl border border-blue-100 flex flex-col items-center">
-                          <span className="text-lg font-black text-blue-700 leading-none">{stats.plans}</span>
-                          <span className="text-[7px] font-black text-blue-400 uppercase tracking-tighter mt-1">HẠNG MỤC</span>
+                return (
+                    <div key={groupName} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all">
+                        {/* Group Header Card */}
+                        <div 
+                            onClick={() => toggleGroup(groupName)}
+                            className={`p-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50/50 border-b border-blue-100' : 'hover:bg-slate-50'}`}
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-2xl ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                    <LayoutGrid className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-sm uppercase tracking-wider text-slate-800">{groupName}</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ISO 9001 • {groupItems.length} công trình</p>
+                                </div>
+                            </div>
+                            <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
                         </div>
-                        <div className="bg-slate-50 p-2 rounded-2xl border border-slate-100 flex flex-col items-center">
-                          <span className="text-lg font-black text-slate-700 leading-none">{stats.tickets}</span>
-                          <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter mt-1">PHIẾU QC</span>
-                        </div>
-                      </div>
-                      
-                      <div className="w-16 h-16 relative ml-4 shrink-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={20}
-                              outerRadius={30}
-                              paddingAngle={2}
-                              dataKey="value"
-                              stroke="none"
-                            >
-                              {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="text-[9px] font-black text-slate-400">{project.progress}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="p-3 bg-slate-50/50 border-t border-slate-50 flex items-center justify-center gap-2">
-                     <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Xem chi tiết báo cáo</span>
-                     <ChevronDown className="-rotate-90 w-3 h-3 text-blue-400" />
-                  </div>
-                </div>
-              );
+                        {isExpanded && (
+                            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 bg-slate-50/30 animate-in fade-in slide-in-from-top-2 duration-300">
+                                {groupItems.map(p => {
+                                    const pStats = getStats(p.ma_ct);
+                                    const chartData = [
+                                        { name: 'OK', value: pStats.closed, color: COLORS.resolved },
+                                        { name: 'NG', value: pStats.open, color: COLORS.open },
+                                        { name: 'None', value: pStats.total === 0 ? 1 : 0, color: COLORS.empty }
+                                    ].filter(d => d.value > 0);
+
+                                    return (
+                                        <div 
+                                            key={p.id}
+                                            onClick={() => onSelectProject(p.ma_ct)}
+                                            className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer overflow-hidden flex flex-col group animate-in zoom-in duration-300"
+                                        >
+                                            <div className="aspect-[16/10] relative overflow-hidden bg-slate-100">
+                                                {p.thumbnail ? (
+                                                    <img src={p.thumbnail} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                        <Building2 className="w-12 h-12 opacity-20" />
+                                                    </div>
+                                                )}
+                                                {/* ISO-CLEAN: Đã xóa overlay text/thông tin trên ảnh */}
+                                            </div>
+
+                                            <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                                                <div>
+                                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
+                                                        {p.name}
+                                                    </h3>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <span className="text-[9px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">#{p.ma_ct}</span>
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{p.location || 'Hồ Chí Minh'}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Tiến độ QC</span>
+                                                        <div className="flex items-baseline gap-1">
+                                                            <span className="text-lg font-black text-slate-800">{pStats.total}</span>
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Phiếu</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-10 h-10 shrink-0">
+                                                        <ResponsiveContainer width="100%" height="100%">
+                                                            <PieChart>
+                                                                <Pie data={chartData} cx="50%" cy="50%" innerRadius={12} outerRadius={18} dataKey="value" stroke="none">
+                                                                    {chartData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                                                                </Pie>
+                                                            </PieChart>
+                                                        </ResponsiveContainer>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
             })}
-          </div>
-        )}
+        </div>
       </div>
+
+      {/* FILTER MODAL */}
+      {showFilterModal && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2">
+                          <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+                          Bộ lọc dự án
+                      </h3>
+                      <button onClick={() => setShowFilterModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400"/></button>
+                  </div>
+                  <div className="p-6 space-y-6">
+                      <div className="space-y-3">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Trạng thái vận hành</label>
+                          <div className="grid grid-cols-1 gap-2">
+                              {['ALL', 'Planning', 'In Progress', 'On Hold', 'Completed'].map(status => (
+                                  <button 
+                                    key={status}
+                                    onClick={() => setFilterStatus(status)}
+                                    className={`px-4 py-3 rounded-2xl border text-left flex items-center justify-between transition-all group ${filterStatus === status ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                                  >
+                                      <span className="text-xs font-bold uppercase">{status === 'ALL' ? 'Tất cả trạng thái' : status}</span>
+                                      {filterStatus === status ? <Check className="w-4 h-4" /> : <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100" />}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                      <div className="bg-blue-50 rounded-2xl p-4 flex gap-3">
+                          <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+                          <p className="text-[10px] text-blue-800 leading-relaxed font-medium uppercase tracking-tighter">Bộ lọc được áp dụng tức thì. Để làm mới danh sách từ máy chủ, hãy sử dụng thanh tìm kiếm.</p>
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50/50 border-t border-slate-100">
+                      <button 
+                        onClick={() => setShowFilterModal(false)}
+                        className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all"
+                      >
+                          XÁC NHẬN
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

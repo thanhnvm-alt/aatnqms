@@ -1,11 +1,6 @@
 
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus } from "../types";
-import { withRetry } from "../lib/retry";
-
-const cleanArgs = (args: any[]): any[] => {
-  return args.map(arg => (arg === undefined ? null : arg));
-};
 
 const safeJsonParse = <T>(jsonString: any, defaultValue: T): T => {
   if (!jsonString || jsonString === "undefined" || jsonString === "null") return defaultValue;
@@ -13,9 +8,20 @@ const safeJsonParse = <T>(jsonString: any, defaultValue: T): T => {
     if (typeof jsonString === 'object') return jsonString as T;
     return JSON.parse(jsonString) as T;
   } catch (e) {
-    console.error("ISO-INTERNAL: JSON Parse failed", e);
     return defaultValue;
   }
+};
+
+/**
+ * ISO-DB Helper: Đảm bảo các tham số truyền vào SQL là kiểu dữ liệu được hỗ trợ.
+ */
+const sanitizeArgs = (args: any[]): any[] => {
+    return args.map(arg => {
+        if (arg === undefined) return null;
+        if (typeof arg === 'object' && arg !== null) return JSON.stringify(arg);
+        if (typeof arg === 'number' && isNaN(arg)) return null;
+        return arg;
+    });
 };
 
 const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'fsr', 'step', 'fqc', 'spr', 'site'];
@@ -26,299 +32,139 @@ const getTableName = (type: string = 'PQC'): string => {
     return MODULE_TABLES.includes(t) ? `forms_${t}` : `forms_pqc`;
 };
 
-async function ensureColumnExists(tableName: string, columnName: string, columnDef: string) {
-    try {
-        const res = await turso.execute(`PRAGMA table_info(${tableName})`);
-        const columns = res.rows.map(r => String(r.name).toLowerCase());
-        if (!columns.includes(columnName.toLowerCase())) {
-            console.log(`[ISO-DB-AUTO-MIGRATION] Adding column '${columnName}' to '${tableName}'`);
-            await turso.execute(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
-            return true;
+/**
+ * ISO-MIGRATION-OPTIMIZED: Kiểm tra schema thông minh.
+ * Thay vì thử ALTER cho mọi cột (gây ra 130+ requests), chúng ta fetch schema 1 lần/bảng.
+ */
+async function ensureSchemaUpToDate() {
+    const tables = Array.from(new Set(MODULE_TABLES.map(m => (m === 'sqc_vt' || m === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${m}`)));
+    const requiredColumns = [
+        'po_number', 'supplier', 'materials_json', 'signature_qc',
+        'pm_signature', 'pm_name', 'pm_comment',
+        'production_signature', 'production_name', 'production_comment',
+        'images_json', 'delivery_images_json', 'report_images_json'
+    ];
+
+    // Chạy song song việc kiểm tra từng bảng
+    await Promise.all(tables.map(async (table) => {
+        try {
+            // Lấy danh sách cột hiện có của bảng (1 request)
+            const info = await turso.execute(`PRAGMA table_info(${table})`);
+            const existingCols = info.rows.map(r => String(r.name).toLowerCase());
+            
+            // Tìm các cột còn thiếu
+            const missingCols = requiredColumns.filter(c => !existingCols.includes(c.toLowerCase()));
+            
+            // Chỉ chạy ALTER nếu thực sự thiếu cột
+            for (const col of missingCols) {
+                await turso.execute(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
+                console.log(`[ISO-DB] Added missing column ${col} to ${table}`);
+            }
+        } catch (e) {
+            // Bảng có thể chưa tồn tại, sẽ được tạo bởi CREATE TABLE ở bước trước
         }
-    } catch (e: any) {
-        if (!e.message.includes("no such table")) {
-            console.warn(`[ISO-DB-WARNING] Sync for ${tableName}.${columnName} failed:`, e.message);
-        }
-    }
-    return false;
+    }));
 }
 
-/**
- * ISO-MAINTENANCE: Phục hồi dữ liệu phẳng từ JSON
- * Tự động điền ID và các trường thông tin dự án từ cột data
- */
 export async function repairProjectData() {
     try {
-        const res = await turso.execute("SELECT * FROM projects");
-        for (const row of res.rows) {
-            const maCt = String(row.ma_ct || '');
-            if (!maCt) continue;
-
-            const jsonData = safeJsonParse<any>(row.data, {});
-            
-            // Map dữ liệu từ JSON sang các cột phẳng nếu cột phẳng đang trống
-            const updates = {
-                id: row.id || jsonData.id || `PROJ-${maCt}`,
-                name: row.name || jsonData.name || jsonData.ten_ct || maCt,
-                status: row.status || jsonData.status || 'Planning',
-                pm: row.pm || jsonData.pm || 'Chưa phân công',
-                pc: row.pc || jsonData.pc || 'Chưa phân công',
-                qa: row.qa || jsonData.qa || 'Chưa phân công',
-                progress: row.progress !== null ? row.progress : (jsonData.progress || 0),
-                start_date: row.start_date || jsonData.startDate || '',
-                end_date: row.end_date || jsonData.endDate || '',
-                location: row.location || jsonData.location || '',
-                description: row.description || jsonData.description || '',
-                thumbnail: row.thumbnail || jsonData.thumbnail || ''
-            };
-
-            await turso.execute({
-                sql: `UPDATE projects SET 
-                        id = ?, name = ?, status = ?, pm = ?, pc = ?, qa = ?, 
-                        progress = ?, start_date = ?, end_date = ?, 
-                        location = ?, description = ?, thumbnail = ? 
-                      WHERE ma_ct = ?`,
-                args: [
-                    updates.id, updates.name, updates.status, updates.pm, updates.pc, updates.qa,
-                    updates.progress, updates.start_date, updates.end_date,
-                    updates.location, updates.description, updates.thumbnail,
-                    maCt
-                ]
-            });
-        }
-        console.log("✔ ISO-REPAIR: Project flat columns hydrated from JSON.");
+        await turso.batch([
+            { sql: "UPDATE projects SET id = 'PROJ-' || ma_ct WHERE (id IS NULL OR id = '' OR id = 'null') AND ma_ct IS NOT NULL", args: [] },
+            { sql: "UPDATE projects SET name = ma_ct WHERE (name IS NULL OR name = '' OR name = 'null') AND ma_ct IS NOT NULL", args: [] }
+        ]);
     } catch (e) {
-        console.error("[ISO-REPAIR] Project data recovery failed", e);
+        // Silently fail for repair
     }
 }
 
 export const initDatabase = async () => {
   if (!isTursoConfigured) return;
   try {
-    await withRetry(() => turso.execute("SELECT 1"), { maxRetries: 5, initialDelay: 1000 });
+    console.time("ISO-DB-INIT");
     
-    // 1. Khởi tạo/Cập nhật bảng PROJECTS với đầy đủ các cột phẳng theo yêu cầu
-    await turso.execute(`
-      CREATE TABLE IF NOT EXISTS projects (
-        ma_ct TEXT PRIMARY KEY,
-        id TEXT,
-        name TEXT,
-        status TEXT,
-        pm TEXT,
-        pc TEXT,
-        qa TEXT,
-        progress REAL DEFAULT 0,
-        start_date TEXT,
-        end_date TEXT,
-        location TEXT,
-        description TEXT,
-        thumbnail TEXT,
-        data TEXT,
-        updated_at INTEGER,
-        created_at INTEGER DEFAULT (unixepoch())
-      )
-    `);
-    
-    // Đảm bảo các cột mới tồn tại trong các DB cũ (Auto-Migration)
-    const projectColumns = [
-        { n: 'id', d: 'TEXT' }, { n: 'name', d: 'TEXT' }, { n: 'status', d: 'TEXT' },
-        { n: 'pm', d: 'TEXT' }, { n: 'pc', d: 'TEXT' }, { n: 'qa', d: 'TEXT' },
-        { n: 'progress', d: 'REAL' }, { n: 'start_date', d: 'TEXT' }, { n: 'end_date', d: 'TEXT' },
-        { n: 'location', d: 'TEXT' }, { n: 'description', d: 'TEXT' }, { n: 'thumbnail', d: 'TEXT' },
-        { n: 'data', d: 'TEXT' }, { n: 'updated_at', d: 'INTEGER' }
-    ];
-    for (const col of projectColumns) {
-        await ensureColumnExists('projects', col.n, col.d);
-    }
+    // 1. Tạo các bảng core (Batch duy nhất)
+    await turso.batch([
+      "CREATE TABLE IF NOT EXISTS projects (ma_ct TEXT PRIMARY KEY, id TEXT, name TEXT, status TEXT, pm TEXT, pc TEXT, qa TEXT, progress REAL DEFAULT 0, start_date TEXT, end_date TEXT, location TEXT, description TEXT, thumbnail TEXT, data TEXT, updated_at INTEGER, created_at INTEGER DEFAULT (unixepoch()))",
+      "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, role TEXT, avatar TEXT, data TEXT, updated_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, data TEXT, updated_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS inspections_master (id TEXT PRIMARY KEY, type TEXT NOT NULL, created_at TEXT, updated_at TEXT)",
+      "CREATE TABLE IF NOT EXISTS qms_images (id TEXT PRIMARY KEY, parent_entity_id TEXT NOT NULL, related_item_id TEXT, entity_type TEXT NOT NULL, image_role TEXT NOT NULL, url_hd TEXT, url_thumbnail TEXT, created_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), item_id TEXT NOT NULL DEFAULT ( 'unknown' ), comments_json TEXT DEFAULT ( '[]' ))",
+      "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo REAL, ma_nha_may TEXT, created_at INTEGER, assignee TEXT, status TEXT)",
+      "CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, user_id TEXT, is_read INTEGER DEFAULT 0, created_at INTEGER, data TEXT)",
+      "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, data TEXT)"
+    ]);
 
-    // Tự động phục hồi dữ liệu ngay sau khi cập nhật Schema
-    await repairProjectData();
+    // 2. Tạo các bảng module (Batch duy nhất)
+    const createModuleQueries = Array.from(new Set(MODULE_TABLES.map(m => {
+        const tableName = (m === 'sqc_vt' || m === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${m}`;
+        return `CREATE TABLE IF NOT EXISTS ${tableName} (id TEXT PRIMARY KEY, type TEXT, created_at TEXT, updated_at TEXT)`;
+    })));
+    await turso.batch(createModuleQueries);
 
-    // 2. Các bảng quản trị khác
-    await turso.execute(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, role TEXT, avatar TEXT, data TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT, data TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS inspections_master (id TEXT PRIMARY KEY, type TEXT NOT NULL, created_at TEXT, updated_at TEXT)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS qms_images (id TEXT PRIMARY KEY, parent_entity_id TEXT NOT NULL, related_item_id TEXT, entity_type TEXT NOT NULL, image_role TEXT NOT NULL, url_hd TEXT, url_thumbnail TEXT, created_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), item_id TEXT NOT NULL DEFAULT 'unknown', comments_json TEXT DEFAULT '[]')`);
-    
-    // Fix: Added missing core tables initialization
-    await turso.execute(`CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo REAL, ma_nha_may TEXT, created_at INTEGER, assignee TEXT, status TEXT)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, user_id TEXT, is_read INTEGER DEFAULT 0, created_at INTEGER, data TEXT)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER)`);
-    await turso.execute(`CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, data TEXT)`);
+    // 3. Migration thông minh (Tối ưu số lượng request)
+    await ensureSchemaUpToDate();
 
-    // 3. Khởi tạo các bảng form kiểm tra
-    for (const moduleCode of MODULE_TABLES) {
-        const tableName = (moduleCode === 'sqc_vt' || moduleCode === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${moduleCode}`;
-        await turso.execute(`CREATE TABLE IF NOT EXISTS ${tableName} (id TEXT PRIMARY KEY, created_at TEXT, updated_at TEXT)`);
-        const commonCols = [
-            { name: 'type', def: 'TEXT' }, { name: 'ma_ct', def: 'TEXT' }, { name: 'ten_ct', def: 'TEXT' },
-            { name: 'ten_hang_muc', def: 'TEXT' }, { name: 'inspector', def: 'TEXT' }, { name: 'status', def: 'TEXT' },
-            { name: 'date', def: 'TEXT' }, { name: 'score', def: 'INTEGER DEFAULT 0' }, { name: 'summary', def: 'TEXT' },
-            { name: 'items_json', def: 'TEXT' }, { name: 'signature_qc', def: 'TEXT' }
-        ];
-        for (const col of commonCols) await ensureColumnExists(tableName, col.name, col.def);
-    }
+    // 4. Sửa lỗi dữ liệu chạy ngầm, không đợi
+    repairProjectData();
 
-    console.log("✔ ISO-DB: Database architecture verified and synchronized.");
+    console.timeEnd("ISO-DB-INIT");
+    console.log("✔ ISO-DB: Database initialized rapidly.");
   } catch (e: any) {
-    console.error("❌ ISO-DB: Init failure:", e.message);
+    console.error("❌ ISO-DB: Startup failure:", e.message);
   }
 };
 
-/**
- * ISO-AUTHORITATIVE: Đồng bộ dự án
- * Nguyên tắc: Ưu tiên load bảng projects, sau đó mới bù đắp mã còn thiếu từ plans
- */
-export const syncProjectsWithPlans = async () => {
-    try {
-        // 1. Lấy tất cả ma_ct duy nhất từ bảng plans
-        const planRes = await turso.execute(`
-            SELECT DISTINCT ma_ct, ten_ct 
-            FROM plans 
-            WHERE ma_ct IS NOT NULL AND ma_ct != ''
-        `);
-        
-        if (planRes.rows.length === 0) return false;
+export const saveInspection = async (inspection: Inspection) => {
+  const now = new Date().toISOString();
+  const type = inspection.type || 'PQC';
+  const tableName = getTableName(type);
+  
+  const rawArgs = [
+    inspection.id, type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
+    inspection.po_number, inspection.supplier, inspection.inspectorName, 
+    inspection.status, inspection.date, inspection.score || 0, inspection.summary, 
+    JSON.stringify(inspection.items || []), JSON.stringify(inspection.materials || []),
+    inspection.signature, inspection.pmSignature, inspection.pmName, inspection.pmComment, 
+    inspection.productionSignature, inspection.productionName, inspection.productionComment,
+    JSON.stringify(inspection.images || []), JSON.stringify(inspection.deliveryNoteImages || []), JSON.stringify(inspection.reportImages || []),
+    now, inspection.createdAt || now
+  ];
 
-        // 2. Lấy các ma_ct đã có trong projects
-        const projRes = await turso.execute(`SELECT ma_ct FROM projects`);
-        const existingCodes = new Set(projRes.rows.map(r => String(r.ma_ct).toUpperCase()));
+  const sql = `
+    INSERT INTO ${tableName} (
+        id, type, ma_ct, ten_ct, ten_hang_muc, po_number, supplier, 
+        inspector, status, date, score, summary, items_json, materials_json, 
+        signature_qc, pm_signature, pm_name, pm_comment, 
+        production_signature, production_name, production_comment,
+        images_json, delivery_images_json, report_images_json,
+        updated_at, created_at
+    ) 
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) 
+    ON CONFLICT(id) DO UPDATE SET 
+        status=excluded.status, 
+        score=excluded.score, 
+        summary=excluded.summary, 
+        items_json=excluded.items_json, 
+        materials_json=excluded.materials_json,
+        pm_signature=excluded.pm_signature,
+        pm_name=excluded.pm_name,
+        pm_comment=excluded.pm_comment,
+        production_signature=excluded.production_signature,
+        production_name=excluded.production_name,
+        production_comment=excluded.production_comment,
+        images_json=excluded.images_json,
+        delivery_images_json=excluded.delivery_images_json,
+        report_images_json=excluded.report_images_json,
+        updated_at=excluded.updated_at
+  `;
 
-        // 3. Chỉ thêm những mã còn thiếu
-        for (const row of planRes.rows) {
-            const maCt = String(row.ma_ct);
-            if (!existingCodes.has(maCt.toUpperCase())) {
-                const id = `PROJ-${maCt}`;
-                const name = String(row.ten_ct || maCt);
-                const now = Math.floor(Date.now()/1000);
-                
-                const initialProject: Project = {
-                    id,
-                    code: maCt,
-                    ma_ct: maCt,
-                    name: name,
-                    ten_ct: name,
-                    status: 'Planning',
-                    startDate: new Date().toISOString().split('T')[0],
-                    endDate: '',
-                    progress: 0,
-                    pm: 'Chưa phân công',
-                    qa: 'Chưa phân công',
-                    pc: 'Chưa phân công',
-                    description: 'Tự động tạo từ Kế hoạch.'
-                };
-
-                await turso.execute({
-                    sql: `INSERT INTO projects (
-                            ma_ct, id, name, status, pm, pc, qa, progress, 
-                            start_date, data, updated_at
-                          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    args: [
-                        maCt, id, name, 'Planning', 'Chưa phân công', 'Chưa phân công', 'Chưa phân công', 0,
-                        initialProject.startDate, JSON.stringify(initialProject), now
-                    ]
-                });
-            }
-        }
-        return true;
-    } catch (e) {
-        console.error("ISO-SYNC: Project synchronization failed", e);
-        return false;
-    }
-};
-
-export const getProjects = async (): Promise<Project[]> => {
-    // Luôn ưu tiên dữ liệu từ bảng projects
-    const res = await turso.execute("SELECT * FROM projects ORDER BY ma_ct ASC");
-    return res.rows.map(r => {
-        // Ưu tiên các cột phẳng, nếu NULL thì fallback sang JSON data
-        const jsonData = safeJsonParse<any>(r.data, {});
-        return {
-            ma_ct: String(r.ma_ct),
-            id: String(r.id || jsonData.id || `PROJ-${r.ma_ct}`),
-            name: String(r.name || jsonData.name || r.ma_ct),
-            status: (r.status || jsonData.status || 'Planning') as any,
-            pm: String(r.pm || jsonData.pm || 'Chưa phân công'),
-            pc: String(r.pc || jsonData.pc || 'Chưa phân công'),
-            qa: String(r.qa || jsonData.qa || 'Chưa phân công'),
-            progress: Number(r.progress !== null ? r.progress : (jsonData.progress || 0)),
-            startDate: String(r.start_date || jsonData.startDate || ''),
-            endDate: String(r.end_date || jsonData.endDate || ''),
-            location: String(r.location || jsonData.location || ''),
-            description: String(r.description || jsonData.description || ''),
-            thumbnail: String(r.thumbnail || jsonData.thumbnail || '')
-        } as Project;
-    });
-};
-
-export const getProjectByCode = async (code: string): Promise<Project | null> => {
-    const res = await turso.execute({ sql: "SELECT * FROM projects WHERE ma_ct = ?", args: [code] });
-    if (res.rows.length === 0) return null;
-    const r = res.rows[0];
-    const jsonData = safeJsonParse<any>(r.data, {});
-    return {
-        ma_ct: String(r.ma_ct),
-        id: String(r.id || jsonData.id || `PROJ-${r.ma_ct}`),
-        name: String(r.name || jsonData.name || r.ma_ct),
-        status: (r.status || jsonData.status || 'Planning') as any,
-        pm: String(r.pm || jsonData.pm || 'Chưa phân công'),
-        pc: String(r.pc || jsonData.pc || 'Chưa phân công'),
-        qa: String(r.qa || jsonData.qa || 'Chưa phân công'),
-        progress: Number(r.progress !== null ? r.progress : (jsonData.progress || 0)),
-        startDate: String(r.start_date || jsonData.startDate || ''),
-        endDate: String(r.end_date || jsonData.endDate || ''),
-        location: String(r.location || jsonData.location || ''),
-        description: String(r.description || jsonData.description || ''),
-        thumbnail: String(r.thumbnail || jsonData.thumbnail || '')
-    } as Project;
-};
-
-/**
- * ISO-AUTHORITATIVE: Lưu thông tin dự án vào cả cột phẳng và JSON
- */
-export const updateProject = async (proj: Project) => {
-    const id = proj.id || `PROJ-${proj.ma_ct}`;
-    const now = Math.floor(Date.now()/1000);
-    await turso.execute({
-        sql: `INSERT INTO projects (
-                ma_ct, id, name, status, pm, pc, qa, progress, 
-                start_date, end_date, location, description, thumbnail, 
-                data, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-              ON CONFLICT(ma_ct) DO UPDATE SET 
-                id=excluded.id,
-                name=excluded.name, 
-                status=excluded.status,
-                pm=excluded.pm,
-                pc=excluded.pc,
-                qa=excluded.qa,
-                progress=excluded.progress,
-                start_date=excluded.start_date,
-                end_date=excluded.end_date,
-                location=excluded.location,
-                description=excluded.description,
-                thumbnail=excluded.thumbnail,
-                data=excluded.data, 
-                updated_at=excluded.updated_at`,
-        args: [
-            proj.ma_ct, id, proj.name, proj.status, proj.pm, proj.pc, proj.qa, proj.progress,
-            proj.startDate, proj.endDate, proj.location, proj.description, proj.thumbnail,
-            JSON.stringify(proj), now
-        ]
-    });
-};
-
-export const getInspectionsList = async (filters: any = {}) => {
-    const unionParts = MODULE_TABLES.map(t => {
-        const tableName = (t === 'sqc_vt' || t === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${t}`;
-        const titleExpr = t === 'iqc' || t === 'sqc_vt' || t === 'sqc_mat' ? "COALESCE(ten_hang_muc, 'PO: ' || COALESCE(po_number, 'N/A'))" : "ten_hang_muc";
-        return `SELECT id, type, ma_ct, ten_ct, ${titleExpr} AS ten_hang_muc, inspector, status, date, updated_at FROM ${tableName}`;
-    });
-    const sql = `SELECT DISTINCT * FROM (${unionParts.join(' UNION ALL ')}) ORDER BY updated_at DESC`;
-    const res = await turso.execute(sql);
-    return { items: res.rows.map(r => ({ id: String(r.id), type: String(r.type || 'PQC'), ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''), inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''), updatedAt: String(r.updated_at || '') })), total: res.rows.length };
+  await turso.batch([
+    { sql: `INSERT INTO inspections_master (id, type, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at`, args: sanitizeArgs([inspection.id, type, inspection.createdAt || now, now]) },
+    { sql, args: sanitizeArgs(rawArgs) }
+  ]);
 };
 
 export const getInspectionById = async (id: string): Promise<Inspection | null> => {
@@ -330,283 +176,248 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
     const res = await turso.execute({ sql: `SELECT * FROM ${tableName} WHERE id = ?`, args: [id] });
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
-    const imagesRes = await turso.execute({ sql: "SELECT id, related_item_id, image_role, url_hd FROM qms_images WHERE parent_entity_id = ?", args: [id] });
-    const allImages = imagesRes.rows;
-    const mainImages = allImages.filter(img => img.image_role === 'EVIDENCE' && !img.related_item_id).map(img => String(img.url_hd));
-    const items = safeJsonParse(r.items_json, []);
-    const itemsWithImages = items.map((item: any) => ({ ...item, images: allImages.filter(img => img.related_item_id === item.id).map(img => String(img.url_hd)) }));
-    const base: any = { id: String(r.id), type: String(r.type || type), ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''), inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''), score: Number((r as any).score || 0), summary: String(r.summary || ''), items: itemsWithImages, images: mainImages, signature: String(r.signature_qc || ''), createdAt: String(r.created_at || ''), updatedAt: String(r.updated_at || '') };
-    return base as Inspection;
-  } catch (e) { console.error("ISO-DB: Get Detail failed", e); return null; }
+    
+    return { 
+        id: String(r.id), 
+        type: String(r.type || type), 
+        ma_ct: String(r.ma_ct || ''), 
+        ten_ct: String(r.ten_ct || ''), 
+        ten_hang_muc: String(r.ten_hang_muc || ''), 
+        po_number: String(r.po_number || ''),
+        supplier: String(r.supplier || ''),
+        inspectorName: String(r.inspector || ''), 
+        status: r.status as any, 
+        date: String(r.date || ''), 
+        score: Number(r.score || 0), 
+        summary: String(r.summary || ''), 
+        items: safeJsonParse(r.items_json, []), 
+        materials: safeJsonParse(r.materials_json, []),
+        images: safeJsonParse(r.images_json, []), 
+        deliveryNoteImages: safeJsonParse(r.delivery_images_json, []),
+        reportImages: safeJsonParse(r.report_images_json, []),
+        signature: String(r.signature_qc || ''), 
+        pmSignature: String(r.pm_signature || ''),
+        pmName: String(r.pm_name || ''),
+        pmComment: String(r.pm_comment || ''),
+        productionSignature: String(r.production_signature || ''),
+        productionName: String(r.production_name || ''),
+        productionComment: String(r.production_comment || ''),
+        createdAt: String(r.created_at || ''), 
+        updatedAt: String(r.updated_at || '') 
+    } as any;
+  } catch (e) { 
+      return null; 
+  }
 };
 
-export const saveInspection = async (inspection: Inspection) => {
-  const now = new Date().toISOString();
-  const inspectionId = inspection.id;
-  const type = inspection.type || 'PQC';
-  const tableName = getTableName(type);
-  await turso.execute({ sql: `INSERT INTO inspections_master (id, type, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at`, args: [inspectionId, type, inspection.createdAt || now, now] });
-  await turso.execute({ sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [inspectionId] });
-  const sanitizedItems = (inspection.items || []).map(i => ({ ...i, images: [], ncr: undefined }));
-  await turso.execute({ sql: `INSERT INTO ${tableName} (id, type, ma_ct, ten_ct, ten_hang_muc, inspector, status, date, items_json, created_at, updated_at, signature_qc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at, items_json=excluded.items_json, inspector=excluded.inspector`, args: cleanArgs([inspectionId, type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, inspection.inspectorName, inspection.status, inspection.date, JSON.stringify(sanitizedItems), inspection.createdAt || now, now, inspection.signature]) });
+export const syncProjectsWithPlans = async () => {
+    try {
+        const syncSql = `
+            INSERT INTO projects (ma_ct, id, name, status, pm, pc, qa, progress, start_date, updated_at)
+            SELECT DISTINCT p.ma_ct, 'PROJ-' || p.ma_ct, p.ten_ct, 'Planning', 'Chưa phân công', 'Chưa phân công', 'Chưa phân công', 0, date('now'), unixepoch()
+            FROM plans p
+            WHERE p.ma_ct IS NOT NULL AND p.ma_ct != '' AND p.ma_ct NOT IN (SELECT ma_ct FROM projects)
+        `;
+        await turso.execute(syncSql);
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
+
+export const getProjectsPaginated = async (search: string = '', limit: number = 10): Promise<Project[]> => {
+    let sql = "SELECT * FROM projects";
+    const args: any[] = [];
+    if (search) {
+        sql += " WHERE (name LIKE ? OR ma_ct LIKE ?)";
+        args.push(`%${search}%`, `%${search}%`);
+    }
+    sql += " ORDER BY updated_at DESC LIMIT ?";
+    args.push(limit);
+    const res = await turso.execute({ sql, args: sanitizeArgs(args) });
+    return res.rows.map(r => {
+        const jsonData = safeJsonParse<any>(r.data, {});
+        return { ...jsonData, ma_ct: String(r.ma_ct), id: String(r.id || `PROJ-${r.ma_ct}`), name: String(r.name || r.ma_ct), status: (r.status || 'Planning') as any, pm: String(r.pm || 'Chưa phân công'), pc: String(r.pc || 'Chưa phân công'), qa: String(r.qa || 'Chưa phân công'), progress: Number(r.progress || 0), startDate: String(r.start_date || ''), endDate: String(r.end_date || ''), location: String(r.location || ''), description: String(r.description || ''), thumbnail: String(r.thumbnail || '') } as Project;
+    });
+};
+
+export const getProjectByCode = async (code: string): Promise<Project | null> => {
+    try {
+        const res = await turso.execute({ sql: "SELECT * FROM projects WHERE ma_ct = ?", args: sanitizeArgs([code]) });
+        if (res.rows.length === 0) return null;
+        const r = res.rows[0];
+        const jsonData = safeJsonParse<any>(r.data, {});
+        return { ...jsonData, ma_ct: String(r.ma_ct), id: String(r.id || `PROJ-${r.ma_ct}`), name: String(r.name || r.ma_ct), status: (r.status || 'Planning') as any, pm: String(r.pm || 'Chưa phân công'), pc: String(r.pc || 'Chưa phân công'), qa: String(r.qa || 'Chưa phân công'), progress: Number(r.progress || 0), startDate: String(r.start_date || ''), endDate: String(r.end_date || ''), location: String(r.location || ''), description: String(r.description || ''), thumbnail: String(r.thumbnail || '') } as Project;
+    } catch (e) { return null; }
+};
+
+export const updateProject = async (proj: Project) => {
+    const { ma_ct, id, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, ...rest } = proj;
+    await turso.execute({
+        sql: `UPDATE projects SET id=?, name=?, status=?, pm=?, pc=?, qa=?, progress=?, start_date=?, end_date=?, location=?, description=?, thumbnail=?, data=?, updated_at=unixepoch() WHERE ma_ct=?`,
+        args: sanitizeArgs([id, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, JSON.stringify(rest), ma_ct])
+    });
+};
+
+export const getInspectionsList = async (filters: any = {}) => {
+    const unionParts = MODULE_TABLES.map(t => {
+        const tableName = (t === 'sqc_vt' || t === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${t}`;
+        return `SELECT id, type, ma_ct, ten_ct, ten_hang_muc, inspector, status, date, updated_at FROM ${tableName}`;
+    });
+    const sql = `SELECT * FROM (${unionParts.join(' UNION ALL ')}) ORDER BY updated_at DESC LIMIT 200`;
+    const res = await turso.execute(sql);
+    return { items: res.rows.map(r => ({ id: String(r.id), type: String(r.type || 'PQC'), ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''), inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''), updatedAt: String(r.updated_at || '') })), total: res.rows.length };
 };
 
 export const deleteInspection = async (id: string) => {
-    await turso.execute({ sql: "DELETE FROM inspections_master WHERE id = ?", args: [id] });
-    for (const moduleCode of MODULE_TABLES) {
-        const tableName = (moduleCode === 'sqc_vt' || moduleCode === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${moduleCode}`;
-        await turso.execute({ sql: `DELETE FROM ${tableName} WHERE id = ?`, args: [id] });
+    // Fixed: Renamed sanitize_args to sanitizeArgs to resolve error on line 279
+    const res = await turso.execute({ sql: "SELECT type FROM inspections_master WHERE id = ?", args: sanitizeArgs([id]) });
+    if (res.rows.length > 0) {
+        const type = String(res.rows[0].type);
+        const tableName = getTableName(type);
+        await turso.batch([
+            { sql: `DELETE FROM ${tableName} WHERE id = ?`, args: sanitizeArgs([id]) },
+            { sql: "DELETE FROM inspections_master WHERE id = ?", args: sanitizeArgs([id]) },
+            { sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: sanitizeArgs([id]) }
+        ]);
     }
-    await turso.execute({ sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [id] });
-    await turso.execute({ sql: "DELETE FROM ncrs WHERE inspection_id = ?", args: [id] });
-};
-
-export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
-    const id = ncr.id || `NCR-${Date.now()}`;
-    const now = Math.floor(Date.now() / 1000);
-    await turso.execute({
-        sql: `INSERT INTO ncrs (id, inspection_id, defect_code, severity, status, description, root_cause, corrective_action, preventive_action, responsible_person, deadline, images_before_json, images_after_json, created_by, created_at, updated_at, item_id, comments_json)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET 
-                status=excluded.status, 
-                description=excluded.description, 
-                root_cause=excluded.root_cause, 
-                corrective_action=excluded.corrective_action, 
-                preventive_action=excluded.preventive_action, 
-                responsible_person=excluded.responsible_person, 
-                deadline=excluded.deadline, 
-                images_before_json=excluded.images_before_json, 
-                images_after_json=excluded.images_after_json, 
-                updated_at=excluded.updated_at,
-                comments_json=excluded.comments_json`,
-        args: cleanArgs([
-            id, inspection_id, ncr.defect_code, ncr.severity, ncr.status, ncr.issueDescription, ncr.rootCause, ncr.solution, ncr.preventiveAction, ncr.responsiblePerson, ncr.deadline, 
-            JSON.stringify(ncr.imagesBefore || []), 
-            JSON.stringify(ncr.imagesAfter || []), 
-            createdBy, now, now, ncr.itemId || 'unknown', 
-            JSON.stringify(ncr.comments || [])
-        ])
-    });
-    return id;
-};
-
-export const getNcrs = async (filters: any = {}) => {
-    let sql = `SELECT * FROM ncrs`;
-    const where: string[] = [];
-    const args: any[] = [];
-    if (filters.inspection_id) { where.push("inspection_id = ?"); args.push(filters.inspection_id); }
-    if (filters.status && filters.status !== 'ALL') { where.push("status = ?"); args.push(filters.status); }
-    if (where.length > 0) sql += ` WHERE ${where.join(" AND ")}`;
-    sql += ` ORDER BY updated_at DESC`;
-    const res = await turso.execute({ sql, args });
-    return {
-        items: res.rows.map(r => ({
-            id: String(r.id),
-            inspection_id: String(r.inspection_id),
-            defect_code: String(r.defect_code || ''),
-            severity: r.severity as any,
-            status: String(r.status),
-            issueDescription: String(r.description),
-            rootCause: String(r.root_cause || ''),
-            solution: String(r.corrective_action || ''),
-            preventiveAction: String(r.preventive_action || ''),
-            responsiblePerson: String(r.responsible_person || ''),
-            deadline: String(r.deadline || ''),
-            createdDate: new Date(Number(r.created_at) * 1000).toISOString(),
-            image_refs_before: [], 
-            image_refs_after: [],
-            imagesBefore: safeJsonParse(r.images_before_json, []),
-            imagesAfter: safeJsonParse(r.images_after_json, []),
-            createdBy: String(r.created_by),
-            itemId: String(r.item_id),
-            comments: safeJsonParse(r.comments_json, [])
-        } as NCR)),
-        total: res.rows.length
-    };
-};
-
-export const getNcrById = async (id: string): Promise<NCR | null> => {
-    const res = await turso.execute({ sql: "SELECT * FROM ncrs WHERE id = ?", args: [id] });
-    if (res.rows.length === 0) return null;
-    const r = res.rows[0];
-    return {
-        id: String(r.id),
-        inspection_id: String(r.inspection_id),
-        defect_code: String(r.defect_code || ''),
-        severity: r.severity as any,
-        status: String(r.status),
-        issueDescription: String(r.description),
-        rootCause: String(r.root_cause || ''),
-        solution: String(r.corrective_action || ''),
-        preventiveAction: String(r.preventive_action || ''),
-        responsiblePerson: String(r.responsible_person || ''),
-        deadline: String(r.deadline || ''),
-        createdDate: new Date(Number(r.created_at) * 1000).toISOString(),
-        image_refs_before: [], 
-        image_refs_after: [],
-        imagesBefore: safeJsonParse(r.images_before_json, []),
-        imagesAfter: safeJsonParse(r.images_after_json, []),
-        createdBy: String(r.created_by),
-        itemId: String(r.item_id),
-        comments: safeJsonParse(r.comments_json, [])
-    } as NCR;
+    return true;
 };
 
 export const getUsers = async (): Promise<User[]> => {
-    const res = await turso.execute("SELECT id, username, name, role, avatar, data FROM users");
-    return res.rows.map(r => {
-        const extra = safeJsonParse(r.data, {});
-        return { id: String(r.id), username: String(r.username), name: String(r.name), role: String(r.role), avatar: String(r.avatar), ...extra };
-    });
+    const res = await turso.execute("SELECT * FROM users");
+    return res.rows.map(r => ({ id: String(r.id), username: String(r.username), name: String(r.name), role: String(r.role), avatar: String(r.avatar), ...safeJsonParse(r.data, {}) }));
 };
 
 export const getUserByUsername = async (username: string): Promise<User | null> => {
-    const res = await turso.execute({ 
-        sql: "SELECT id, username, name, role, avatar, data FROM users WHERE username = ?", 
-        args: [username.toLowerCase().trim()] 
-    });
+    const res = await turso.execute({ sql: "SELECT * FROM users WHERE username = ?", args: sanitizeArgs([username.toLowerCase()]) });
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
-    const extra = safeJsonParse(r.data, {});
-    return { id: String(r.id), username: String(r.username), name: String(r.name), role: String(r.role), avatar: String(r.avatar), ...extra } as User;
+    return { id: String(r.id), username: String(r.username), name: String(r.name), role: String(r.role), avatar: String(r.avatar), ...safeJsonParse(r.data, {}) } as any;
 };
 
 export const saveUser = async (user: User) => {
     const { id, username, name, role, avatar, ...rest } = user;
-    await turso.execute({
-        sql: "INSERT INTO users (id, username, name, role, avatar, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, name=excluded.name, role=excluded.role, avatar=excluded.avatar, data=excluded.data, updated_at=excluded.updated_at",
-        args: [id, username, name, role, avatar, JSON.stringify(rest), Math.floor(Date.now() / 1000)]
-    });
+    await turso.execute({ sql: "INSERT INTO users (id, username, name, role, avatar, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, data=excluded.data", args: sanitizeArgs([id, username, name, role, avatar, JSON.stringify(rest), Math.floor(Date.now()/1000)]) });
 };
 
-/**
- * Fix: Added deleteUser
- */
-export const deleteUser = async (id: string) => {
-    await turso.execute({ sql: "DELETE FROM users WHERE id = ?", args: [id] });
-};
+export const deleteUser = async (id: string) => { await turso.execute({ sql: "DELETE FROM users WHERE id = ?", args: sanitizeArgs([id]) }); };
 
-/**
- * Fix: Added importUsers
- */
 export const importUsers = async (users: User[]) => {
-    for (const user of users) {
-        await saveUser(user);
-    }
+    for (const user of users) { await saveUser(user); }
 };
 
 export const getWorkshops = async (): Promise<Workshop[]> => {
-    const res = await turso.execute("SELECT data FROM workshops");
-    return res.rows.map(r => safeJsonParse(r.data, {} as any));
+    const res = await turso.execute("SELECT * FROM workshops");
+    return res.rows.map(r => {
+        const jsonData = safeJsonParse(r.data, {} as any);
+        return { id: String(r.id), code: String(r.code), name: String(r.name), ...jsonData };
+    });
 };
 
 export const saveWorkshop = async (ws: Workshop) => {
-    await turso.execute({
-        sql: "INSERT INTO workshops (id, code, name, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET code=excluded.code, name=excluded.name, data=excluded.data, updated_at=excluded.updated_at",
-        args: [ws.id, ws.code, ws.name, JSON.stringify(ws), Math.floor(Date.now() / 1000)]
-    });
+    await turso.execute({ sql: "INSERT INTO workshops (id, code, name, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, name=excluded.name, code=excluded.code", args: sanitizeArgs([ws.id, ws.code, ws.name, JSON.stringify(ws), Math.floor(Date.now()/1000)]) });
 };
 
-/**
- * Fix: Added deleteWorkshop
- */
-export const deleteWorkshop = async (id: string) => {
-    await turso.execute({ sql: "DELETE FROM workshops WHERE id = ?", args: [id] });
-};
+export const deleteWorkshop = async (id: string) => { await turso.execute({ sql: "DELETE FROM workshops WHERE id = ?", args: sanitizeArgs([id]) }); };
 
 export const getTemplates = async () => {
-    const res = await turso.execute("SELECT moduleId, data FROM templates");
-    const templates: Record<string, CheckItem[]> = {};
-    res.rows.forEach(r => { templates[String(r.moduleId)] = safeJsonParse(r.data, []); });
-    return templates;
+    const res = await turso.execute("SELECT * FROM templates");
+    const dict: Record<string, CheckItem[]> = {};
+    res.rows.forEach(r => { dict[String(r.moduleId)] = safeJsonParse(r.data, []); });
+    return dict;
 };
 
 export const saveTemplate = async (moduleId: string, items: CheckItem[]) => {
-    await turso.execute({
-        sql: "INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
-        args: [moduleId, JSON.stringify(items), Math.floor(Date.now() / 1000)]
-    });
+    await turso.execute({ sql: "INSERT INTO templates (moduleId, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(moduleId) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at", args: sanitizeArgs([moduleId, JSON.stringify(items), Math.floor(Date.now()/1000)]) });
 };
 
 export const getNotifications = async (userId: string) => {
-    const res = await turso.execute({ sql: "SELECT id, data, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50", args: [userId] });
-    return res.rows.map(r => ({ ...safeJsonParse(r.data, {} as any), id: String(r.id), isRead: Boolean(r.is_read), createdAt: Number(r.created_at) }));
+    const res = await turso.execute({ sql: "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50", args: sanitizeArgs([userId]) });
+    return res.rows.map(r => ({ id: String(r.id), userId: String(r.user_id), isRead: Boolean(r.is_read), createdAt: Number(r.created_at), ...safeJsonParse(r.data, {}) })) as Notification[];
 };
 
-/**
- * Fix: Added markNotificationRead
- */
-export const markNotificationRead = async (id: string) => {
-    await turso.execute({ sql: "UPDATE notifications SET is_read = 1 WHERE id = ?", args: [id] });
-};
-
-/**
- * Fix: Added markAllNotificationsRead
- */
-export const markAllNotificationsRead = async (userId: string) => {
-    await turso.execute({ sql: "UPDATE notifications SET is_read = 1 WHERE user_id = ?", args: [userId] });
-};
+export const markNotificationRead = async (id: string) => { await turso.execute({ sql: "UPDATE notifications SET is_read = 1 WHERE id = ?", args: sanitizeArgs([id]) }); };
+export const markAllNotificationsRead = async (userId: string) => { await turso.execute({ sql: "UPDATE notifications SET is_read = 1 WHERE user_id = ?", args: sanitizeArgs([userId]) }); };
 
 export const getRoles = async (): Promise<Role[]> => {
-    const res = await turso.execute("SELECT data FROM roles");
-    return res.rows.map(r => safeJsonParse(r.data, {} as any));
+    const res = await turso.execute("SELECT * FROM roles");
+    return res.rows.map(r => {
+        const jsonData = safeJsonParse(r.data, {} as any);
+        return { id: String(r.id), name: String(r.name), ...jsonData };
+    });
 };
 
 export const saveRole = async (role: Role) => {
-    await turso.execute({
-        sql: "INSERT INTO roles (id, name, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, data=excluded.data, updated_at=excluded.updated_at",
-        args: [role.id, role.name, JSON.stringify(role), Math.floor(Date.now() / 1000)]
-    });
+    await turso.execute({ sql: "INSERT INTO roles (id, name, data, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, name=excluded.name", args: sanitizeArgs([role.id, role.name, JSON.stringify(role), Math.floor(Date.now()/1000)]) });
 };
 
-/**
- * Fix: Added deleteRole
- */
-export const deleteRole = async (id: string) => {
-    await turso.execute({ sql: "DELETE FROM roles WHERE id = ?", args: [id] });
+export const deleteRole = async (id: string) => { await turso.execute({ sql: "DELETE FROM roles WHERE id = ?", args: sanitizeArgs([id]) }); };
+
+export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
+    const now = Math.floor(Date.now() / 1000);
+    const ncrId = ncr.id || `NCR-${Date.now()}`;
+    const { imagesBefore, imagesAfter, comments, ...rest } = ncr;
+    await turso.execute({
+        sql: `INSERT INTO ncrs (id, inspection_id, defect_code, severity, status, description, root_cause, corrective_action, preventive_action, responsible_person, deadline, images_before_json, images_after_json, comments_json, created_by, created_at, updated_at, item_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET severity=excluded.severity, status=excluded.status, description=excluded.description, root_cause=excluded.root_cause, corrective_action=excluded.corrective_action, preventive_action=excluded.preventive_action, responsible_person=excluded.responsible_person, deadline=excluded.deadline, images_before_json=excluded.images_before_json, images_after_json=excluded.images_after_json, comments_json=excluded.comments_json, updated_at=excluded.updated_at`,
+        args: sanitizeArgs([ncrId, inspection_id, ncr.defect_code || null, ncr.severity || 'MINOR', ncr.status || 'OPEN', ncr.issueDescription, ncr.rootCause || null, ncr.solution || null, ncr.preventiveAction || null, ncr.responsiblePerson || null, ncr.deadline || null, JSON.stringify(imagesBefore || []), JSON.stringify(imagesAfter || []), JSON.stringify(comments || []), createdBy, ncr.createdDate ? Math.floor(new Date(ncr.createdDate).getTime() / 1000) : now, now, ncr.itemId || 'unknown'])
+    });
+    return ncrId;
+};
+
+export const getNcrs = async (filters: any = {}) => {
+    let sql = "SELECT * FROM ncrs";
+    const args: any[] = [];
+    const where: string[] = [];
+    if (filters.inspection_id) { where.push("inspection_id = ?"); args.push(filters.inspection_id); }
+    if (filters.status && filters.status !== 'ALL') { where.push("status = ?"); args.push(filters.status); }
+    if (where.length > 0) sql += " WHERE " + where.join(" AND ");
+    sql += " ORDER BY updated_at DESC";
+    if (filters.page && filters.limit) { const offset = (filters.page - 1) * filters.limit; sql += ` LIMIT ${filters.limit} OFFSET ${offset}`; }
+    const res = await turso.execute({ sql, args: sanitizeArgs(args) });
+    const items = res.rows.map(r => ({ id: String(r.id), inspection_id: String(r.inspection_id), defect_code: String(r.defect_code || ''), severity: r.severity as any, status: String(r.status), issueDescription: String(r.description), rootCause: String(r.root_cause || ''), solution: String(r.corrective_action || ''), preventiveAction: String(r.preventive_action || ''), responsiblePerson: String(r.responsible_person || ''), deadline: String(r.deadline || ''), imagesBefore: safeJsonParse(r.images_before_json, []), imagesAfter: safeJsonParse(r.images_after_json, []), comments: safeJsonParse(r.comments_json, []), createdBy: String(r.created_by), createdDate: new Date(Number(r.created_at) * 1000).toISOString() }));
+    return { items, total: items.length };
+};
+
+export const getNcrById = async (id: string): Promise<NCR | null> => {
+    const res = await turso.execute({ sql: "SELECT * FROM ncrs WHERE id = ?", args: sanitizeArgs([id]) });
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return { id: String(r.id), inspection_id: String(r.inspection_id), defect_code: String(r.defect_code || ''), severity: r.severity as any, status: String(r.status), issueDescription: String(r.description), rootCause: String(r.root_cause || ''), solution: String(r.corrective_action || ''), preventiveAction: String(r.preventive_action || ''), responsiblePerson: String(r.responsible_person || ''), deadline: String(r.deadline || ''), imagesBefore: safeJsonParse(r.images_before_json, []), imagesAfter: safeJsonParse(r.images_after_json, []), comments: safeJsonParse(r.comments_json, []), createdBy: String(r.created_by), createdDate: new Date(Number(r.created_at) * 1000).toISOString() } as NCR;
 };
 
 export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
-    const res = await turso.execute("SELECT data FROM defect_library ORDER BY defect_code ASC");
-    return res.rows.map(r => safeJsonParse(r.data, {} as any));
-};
-
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
-    const now = Math.floor(Date.now() / 1000);
-    await turso.execute({
-        sql: `INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, created_by, created_at, updated_at, data) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET 
-                defect_code=excluded.defect_code, 
-                name=excluded.name, 
-                stage=excluded.stage, 
-                category=excluded.category, 
-                description=excluded.description, 
-                severity=excluded.severity, 
-                suggested_action=excluded.suggested_action, 
-                updated_at=excluded.updated_at, 
-                data=excluded.data`,
-        args: cleanArgs([item.id, item.code, item.name, item.stage, item.category, item.description, item.severity, item.suggestedAction, item.createdBy, item.createdAt || now, now, JSON.stringify(item)])
+    const res = await turso.execute("SELECT * FROM defect_library ORDER BY defect_code ASC");
+    return res.rows.map(r => {
+        const jsonData = safeJsonParse(r.data, {} as any);
+        return { id: String(r.id), code: String(r.defect_code || r.id), name: String(r.name || ''), stage: String(r.stage || 'Chung'), category: String(r.category || 'Ngoại quan'), description: String(r.description || ''), severity: String(r.severity || 'MINOR'), suggestedAction: String(r.suggested_action || ''), ...jsonData };
     });
 };
 
-/**
- * Fix: Added deleteDefectLibraryItem
- */
-export const deleteDefectLibraryItem = async (id: string) => {
-    await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: [id] });
+export const saveDefectLibraryItem = async (item: DefectLibraryItem) => {
+    await turso.execute({
+        sql: `INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, data, updated_at) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET defect_code=excluded.defect_code, name=excluded.name, data=excluded.data, updated_at=excluded.updated_at`,
+        args: sanitizeArgs([item.id, item.code, item.name, item.stage, item.category, item.description, item.severity, item.suggestedAction, JSON.stringify(item), Math.floor(Date.now()/1000)])
+    });
 };
 
-export const getPlansPaginated = async (search: string, page: number, limit: number) => {
+export const deleteDefectLibraryItem = async (id: string) => { await turso.execute({ sql: "DELETE FROM defect_library WHERE id = ?", args: sanitizeArgs([id]) }); };
+
+export const getPlansPaginated = async (search: string, page: number, limit: number = 10) => {
     const offset = (page - 1) * limit;
     let sql = `SELECT * FROM plans`;
     const args: any[] = [];
-    if (search) {
-        sql += ` WHERE ma_ct LIKE ? OR ten_ct LIKE ? OR ten_hang_muc LIKE ?`;
-        args.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    if (search) { 
+        // ISO-MAPPING: Mở rộng tìm kiếm sang cả ma_nha_may và headcode để lookup chính xác
+        sql += ` WHERE (ma_ct LIKE ? OR ten_ct LIKE ? OR ten_hang_muc LIKE ? OR ma_nha_may LIKE ? OR headcode LIKE ?)`; 
+        const term = `%${search}%`;
+        args.push(term, term, term, term, term); 
     }
     sql += ` ORDER BY id DESC LIMIT ? OFFSET ?`;
-    const res = await turso.execute({ sql, args: [...args, limit, offset] });
+    const res = await turso.execute({ sql, args: sanitizeArgs([...args, limit, offset]) });
     return { items: res.rows as any[], total: res.rows.length };
 };
 

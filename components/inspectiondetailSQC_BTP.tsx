@@ -5,7 +5,7 @@ import {
   ArrowLeft, Calendar, User as UserIcon, Building2, Box, FileText, 
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   LayoutList, MessageSquare, Loader2, Eraser, Send, 
-  UserPlus, AlertOctagon, ChevronRight
+  UserPlus, AlertOctagon, ChevronRight, Camera, Image as ImageIcon, PenTool
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -20,6 +20,25 @@ interface InspectionDetailProps {
   onPostComment?: (id: string, comment: NCRComment) => Promise<void>;
   workshops?: Workshop[];
 }
+
+const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
+      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
+      else resolve(base64Str);
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+};
 
 const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -103,12 +122,15 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
+  const commentFileRef = useRef<HTMLInputElement>(null);
+  const commentCameraRef = useRef<HTMLInputElement>(null);
   
   // Modals
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [viewingNcr, setViewingNcr] = useState<NCR | null>(null);
-  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; context?: string } | null>(null);
 
   // Signatures
   const [managerSig, setManagerSig] = useState('');
@@ -160,7 +182,8 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   };
 
   const handlePostComment = async () => {
-      if (!newComment.trim() || !onPostComment) return;
+      if (!newComment.trim() && commentAttachments.length === 0) return;
+      if (!onPostComment) return;
       setIsSubmittingComment(true);
       const comment: NCRComment = {
           id: Date.now().toString(),
@@ -168,10 +191,42 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
           userName: user.name,
           userAvatar: user.avatar,
           content: newComment,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          attachments: commentAttachments
       };
-      try { await onPostComment(inspection.id, comment); setNewComment(''); } 
+      try { 
+          await onPostComment(inspection.id, comment); 
+          setNewComment(''); 
+          setCommentAttachments([]);
+      } 
       catch (e) { alert("Lỗi khi gửi phản hồi."); } finally { setIsSubmittingComment(false); }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+          const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(f);
+          });
+          return resizeImage(base64);
+      }));
+      setCommentAttachments(prev => [...prev, ...processed]);
+      e.target.value = '';
+  };
+
+  const handleEditCommentImage = (idx: number) => {
+      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
+  };
+
+  const updateCommentImage = (idx: number, newImg: string) => {
+      setCommentAttachments(prev => {
+          const next = [...prev];
+          next[idx] = newImg;
+          return next;
+      });
   };
 
   const InfoRow = ({ icon: Icon, label, value, iconColor = "text-slate-400" }: any) => (
@@ -205,7 +260,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
               <div className="flex items-center gap-2">
                   <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Báo cáo: SQC - BTP</h2>
                   <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-500 text-white border-orange-500'}`}>{inspection.status}</span>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 text-orange-600 border-orange-500'}`}>{inspection.status}</span>
                       <span className="text-[10px] text-slate-400 font-mono font-medium uppercase">#{inspection.id.split('-').pop()}</span>
                   </div>
               </div>
@@ -275,21 +330,6 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                         {reportImages.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm hover:shadow-md transition-all" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
-                                <img src={img} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Generic Images */}
-            {inspection.images && inspection.images.length > 0 && (
-                <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ảnh Khác</label>
-                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                        {inspection.images.map((img, idx) => (
-                            <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm hover:shadow-md transition-all" onClick={() => setLightboxState({ images: inspection.images!, index: idx })}>
                                 <img src={img} className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
                             </div>
@@ -397,7 +437,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                 <MessageSquare className="w-4 h-4 text-blue-600" />
                 <h3 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">Trao đổi & Ghi chú</h3>
             </div>
-            <div className="p-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar">
+            <div className="p-4 space-y-4 max-h-[300px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-3">
                         <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}&background=random`} className="w-8 h-8 rounded-full border border-slate-200 shrink-0" alt="" />
@@ -407,20 +447,46 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                                 <span className="text-[9px] font-medium text-slate-400">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
                             </div>
                             <div className="bg-slate-50 p-2.5 rounded-xl rounded-tl-none border border-slate-100 text-[11px] text-slate-600">{comment.content}</div>
+                            {comment.attachments && comment.attachments.length > 0 && (
+                                <div className="flex gap-2 flex-wrap pt-1">
+                                    {comment.attachments.map((img, i) => (
+                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-transform hover:scale-105 shrink-0">
+                                            <img src={img} className="w-full h-full object-cover" alt=""/>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
             </div>
-            <div className="p-3 border-t border-slate-100 bg-slate-50/30">
-                <div className="flex gap-2">
-                    <textarea 
-                        value={newComment} onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Nhập phản hồi..."
-                        className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-[11px] focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-10 transition-all"
-                    />
+            <div className="p-3 border-t border-slate-100 bg-slate-50/30 space-y-3">
+                {commentAttachments.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                        {commentAttachments.map((img, idx) => (
+                            <div key={idx} className="relative w-16 h-16 shrink-0 group">
+                                <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
+                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
+                                <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><PenTool className="w-4 h-4 text-white drop-shadow-md"/></div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="flex gap-2 items-end">
+                    <div className="flex-1 relative">
+                        <textarea 
+                            value={newComment} onChange={(e) => setNewComment(e.target.value)}
+                            placeholder="Nhập nội dung phản hồi..."
+                            className="flex-1 w-full pl-3 pr-24 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-12 transition-all"
+                        />
+                        <div className="absolute right-2 bottom-2 flex items-center gap-1.5">
+                            <button onClick={() => commentCameraRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chụp ảnh"><Camera className="w-4 h-4"/></button>
+                            <button onClick={() => commentFileRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chọn ảnh"><ImageIcon className="w-4 h-4"/></button>
+                        </div>
+                    </div>
                     <button 
-                        onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()}
-                        className="w-10 h-10 bg-blue-600 text-white rounded-xl shadow-md flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all shrink-0"
+                        onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)}
+                        className="w-12 h-12 bg-blue-600 text-white rounded-xl shadow-md flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all shrink-0"
                         type="button"
                     >
                         {isSubmittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -500,7 +566,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                   <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                           <UserPlus className="w-5 h-5 text-indigo-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Đối Tác Gia Công</h3>
+                          <h3 className="font-bold text-slate-800 uppercase tracking-tight text-sm">Xác nhận Đối tác gia công</h3>
                       </div>
                       <button onClick={() => setShowProductionModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
@@ -537,7 +603,17 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
           </div>
       )}
 
-      {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
+      {lightboxState && (
+          <ImageEditorModal 
+              images={lightboxState.images} 
+              initialIndex={lightboxState.index} 
+              onClose={() => setLightboxState(null)} 
+              onSave={lightboxState.context === 'PENDING_COMMENT' ? (idx, updated) => updateCommentImage(idx, updated) : undefined}
+              readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
+          />
+      )}
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
     </div>
   );
 };

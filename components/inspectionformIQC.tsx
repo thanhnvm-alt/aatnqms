@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
 import { 
@@ -118,6 +119,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     deliveryNoteImages: initialData?.deliveryNoteImages || [],
     summary: initialData?.summary || '',
     images: initialData?.images || [],
+    score: initialData?.score || 0,
     ...initialData
   });
 
@@ -142,16 +144,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setFormData(prev => ({ ...prev, [field]: value })); 
   };
 
-  /**
-   * ISO-DB: Chức năng load tên công trình từ database plan khi nhập mã công trình xong
-   */
   const lookupMaterialProject = async (code: string, matIdx: number) => {
     const cleanCode = (code || '').trim().toUpperCase();
     if (!cleanCode || cleanCode.length < 3) return;
     
     setIsLookupLoading(true);
     try {
-      // Gọi API tra cứu từ bảng plans
       const response = await fetchPlans(cleanCode, 1, 10);
       const match = (response.items || []).find(p => 
           (p.ma_ct || '').toUpperCase() === cleanCode || 
@@ -166,7 +164,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 nextMats[matIdx].projectName = match.ten_ct;
                 nextMats[matIdx].projectCode = match.ma_ct;
             }
-            // Đồng bộ mã dự án vào header nếu chưa có
             const updatedHeaderMaCt = prev.ma_ct || match.ma_ct;
             return { ...prev, materials: nextMats, ma_ct: updatedHeaderMaCt };
         });
@@ -207,7 +204,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
         
-        let mat = { ...nextMaterials[idx], [field]: value };
+        let val = value;
+        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) {
+            val = parseFloat(String(value)) || 0;
+        }
+
+        let mat = { ...nextMaterials[idx], [field]: val };
 
         if (field === 'category') {
             const iqcTpl = templates['IQC'] || [];
@@ -334,7 +336,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     try {
         await onSave({ ...formData, status: InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection);
     } catch (e: any) {
-        alert(`Lỗi hệ thống: ${e.message || 'Unknown Error'}`);
+        alert("Lỗi lưu báo cáo IQC: " + (e.message || "Kiểm tra kết nối Database"));
     } finally { setIsSaving(false); }
   };
 
@@ -396,7 +398,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <label className="text-[8px] font-black text-blue-600 uppercase flex items-center justify-between">
                         Ảnh Hiện Trường
                         <div className="flex gap-1">
-                            <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3.5 h-3.5"/></button>
                             <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><ImageIcon className="w-3 h-3"/></button>
                         </div>
                     </label>
@@ -410,7 +412,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">
                         Phiếu Giao Hàng
                         <div className="flex gap-1">
-                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button>
                             <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3 h-3"/></button>
                         </div>
                     </label>
@@ -424,7 +426,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">
                         Báo cáo NCC
                         <div className="flex gap-1">
-                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button>
                             <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3 h-3"/></button>
                         </div>
                     </label>
@@ -470,34 +472,58 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                         </div>
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white border-t border-slate-50">
-                                {/* Scope Selection */}
-                                <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                    <div className="flex gap-2">
-                                        <button onClick={() => updateMaterial(matIdx, 'scope', 'COMMON')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 border ${mat.scope === 'COMMON' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
-                                            <Layers className="w-3.5 h-3.5" /> Dùng chung
-                                        </button>
-                                        <button onClick={() => updateMaterial(matIdx, 'scope', 'PROJECT')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 border ${mat.scope === 'PROJECT' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
-                                            <Briefcase className="w-3.5 h-3.5" /> Công trình
-                                        </button>
-                                    </div>
-                                    {mat.scope === 'PROJECT' && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                                            <div className="space-y-1">
-                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Mã dự án (Tự động tra cứu)</label>
-                                                <div className="relative flex items-center">
-                                                    <input value={mat.projectCode} onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} onBlur={() => lookupMaterialProject(mat.projectCode || '', matIdx)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[10px] h-8 outline-none focus:border-blue-500" placeholder="Nhập mã dự án..."/>
-                                                    <Hash className="absolute right-2 w-3 h-3 text-slate-300" />
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên công trình (Tự động)</label>
-                                                <div className="relative flex items-center">
-                                                  <input value={mat.projectName} readOnly className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-md font-bold text-[10px] h-8 text-slate-500 uppercase truncate" placeholder="Đang chờ mã..."/>
-                                                  {isLookupLoading && <Loader2 className="absolute right-2 w-3 h-3 animate-spin text-blue-500" />}
-                                                </div>
-                                            </div>
+                                {/* Row for Scope, Project Code, and Project Name */}
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-12 gap-3 shadow-inner">
+                                    {/* Select Scope */}
+                                    <div className="md:col-span-3 space-y-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                                            <Layers className="w-2.5 h-2.5" /> Phân loại
+                                        </label>
+                                        <div className="relative">
+                                            <select 
+                                                value={mat.scope} 
+                                                onChange={e => updateMaterial(matIdx, 'scope', e.target.value)}
+                                                className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg font-black text-[10px] h-8 uppercase outline-none focus:border-blue-500 shadow-sm appearance-none"
+                                            >
+                                                <option value="COMMON">Dùng chung</option>
+                                                <option value="PROJECT">Công trình</option>
+                                            </select>
+                                            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
                                         </div>
-                                    )}
+                                    </div>
+
+                                    {/* Project Code */}
+                                    <div className="md:col-span-3 space-y-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                                            <Hash className="w-2.5 h-2.5" /> Mã dự án
+                                        </label>
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                value={mat.projectCode} 
+                                                onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
+                                                onBlur={() => mat.scope === 'PROJECT' && lookupMaterialProject(mat.projectCode || '', matIdx)}
+                                                disabled={mat.scope === 'COMMON'}
+                                                className={`w-full px-2 py-1.5 border border-slate-300 rounded-lg font-bold text-[10px] h-8 outline-none shadow-sm ${mat.scope === 'COMMON' ? 'bg-slate-100 text-slate-400' : 'bg-white focus:border-blue-500'}`} 
+                                                placeholder="Nhập mã..."
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Project Name */}
+                                    <div className="md:col-span-6 space-y-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                                            <Briefcase className="w-2.5 h-2.5" /> Tên công trình
+                                        </label>
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                value={mat.projectName} 
+                                                readOnly 
+                                                className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg font-bold text-[10px] h-8 text-slate-500 uppercase truncate shadow-inner" 
+                                                placeholder="Tự động tra cứu..."
+                                            />
+                                            {isLookupLoading && mat.scope === 'PROJECT' && <Loader2 className="absolute right-2 w-3 h-3 animate-spin text-blue-500" />}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-12 gap-3">
@@ -517,19 +543,19 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">Giao(DN)</label>
-                                        <input type="number" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', Number(e.target.value))} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
+                                        <input type="number" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-blue-600 uppercase block text-center">Kiểm tra</label>
-                                        <input type="number" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', Number(e.target.value))} className="w-full px-1 py-1 border border-blue-300 rounded-md font-bold text-center text-blue-700 bg-white text-[11px] h-7"/>
+                                        <input type="number" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-1 py-1 border border-blue-300 rounded-md font-bold text-center text-blue-700 bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-green-600 uppercase block text-center">Đạt</label>
-                                        <input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', Number(e.target.value))} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/>
+                                        <input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-red-600 uppercase block text-center">Hỏng</label>
-                                        <input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', Number(e.target.value))} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/>
+                                        <input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/>
                                     </div>
                                 </div>
 

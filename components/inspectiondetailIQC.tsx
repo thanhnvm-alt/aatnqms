@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, MaterialIQC, NCRComment } from '../types';
 import { 
@@ -42,7 +43,6 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
 const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    
     useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas && value) {
@@ -55,57 +55,15 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
             img.src = value;
         }
     }, [value]);
-
-    const startDrawing = (e: any) => {
-        if (readOnly) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.beginPath();
-        ctx.moveTo(clientX - rect.left, clientY - rect.top);
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#000000';
-        setIsDrawing(true);
-    };
-
-    const draw = (e: any) => {
-        if (!isDrawing || readOnly) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.lineTo(clientX - rect.left, clientY - rect.top);
-        ctx.stroke();
-    };
-
-    const stopDrawing = () => {
-        if (readOnly) return;
-        setIsDrawing(false);
-        if (canvasRef.current) onChange(canvasRef.current.toDataURL());
-    };
-
-    const clear = () => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            ctx?.clearRect(0, 0, canvas.width, canvas.height);
-            onChange('');
-        }
-    };
-
+    const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
+    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); };
+    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
+    const clear = () => { const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
     return (
         <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center px-1">
                 <label className="block text-slate-700 font-bold text-[9px] uppercase tracking-widest">{label}</label>
-                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 uppercase flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa ký lại</button>}
+                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa ký lại</button>}
             </div>
             <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-32 shadow-inner">
                 <canvas ref={canvasRef} width={400} height={128} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
@@ -500,7 +458,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                         <textarea 
                             value={newComment} onChange={(e) => setNewComment(e.target.value)}
                             placeholder="Nhập phản hồi..."
-                            className="flex-1 w-full pl-3 pr-24 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-12 transition-all"
+                            className="flex-1 w-full pl-3 pr-24 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-12 transition-all"
                         />
                         <div className="absolute right-2 bottom-2 flex items-center gap-1.5">
                             <button onClick={() => commentCameraRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chụp ảnh"><Camera className="w-4 h-4"/></button>

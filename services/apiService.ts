@@ -48,13 +48,9 @@ export const fetchUsers = async () => await db.getUsers();
 export const saveUser = async (user: User) => await db.saveUser(user);
 export const deleteUser = async (id: string) => await db.deleteUser(id);
 
-/**
- * ISO-AUTHORITATIVE: Xác thực người dùng trực tiếp từ Database
- */
 export const verifyUserCredentials = async (username: string, password: string): Promise<User | null> => {
     try {
         const user = await db.getUserByUsername(username);
-        // Kiểm tra mật khẩu (Hiện tại đang lưu trong data JSON của User record)
         if (user && user.password === password) {
             return user;
         }
@@ -72,19 +68,15 @@ export const deleteWorkshop = async (id: string) => await db.deleteWorkshop(id);
 export const fetchTemplates = async () => await db.getTemplates();
 export const saveTemplate = async (moduleId: string, items: CheckItem[]) => await db.saveTemplate(moduleId, items);
 
-export const fetchProjects = async () => await db.getProjects();
+// Cập nhật Fetch Projects có search và limit 10
+export const fetchProjects = async (search: string = '') => await db.getProjectsPaginated(search, 10);
 export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
 export const updateProject = async (proj: Project) => await db.updateProject(proj);
 
-/**
- * ISO-SYNC: Đồng bộ danh sách dự án
- */
 export const syncProjectsWithPlans = async () => await db.syncProjectsWithPlans();
 
 export const fetchNotifications = async (userId: string) => await db.getNotifications(userId);
 export const markNotificationAsRead = async (id: string) => await db.markNotificationRead(id);
-
-// Added missing markAllNotificationsAsRead
 export const markAllNotificationsAsRead = async (userId: string) => await db.markAllNotificationsRead(userId);
 
 export const fetchRoles = async () => await db.getRoles();
@@ -93,11 +85,8 @@ export const deleteRole = async (id: string) => await db.deleteRole(id);
 
 export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
-
-// Added missing deleteDefectLibraryItem
 export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
 
-// Added missing exportDefectLibrary
 export const exportDefectLibrary = async () => {
     const response = await fetch('/api/defects/export');
     if (!response.ok) throw new Error('Export failed');
@@ -111,27 +100,17 @@ export const exportDefectLibrary = async () => {
     window.URL.revokeObjectURL(url);
 };
 
-// Added missing importDefectLibraryFile
 export const importDefectLibraryFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/defects/import', {
-        method: 'POST',
-        body: formData
-    });
+    const response = await fetch('/api/defects/import', { method: 'POST', body: formData });
     if (!response.ok) throw new Error('Import failed');
     return await response.json();
 };
 
 export const checkApiConnection = async () => ({ ok: await db.testConnection() });
 
-export const createNotification = async (params: { 
-    userId: string, 
-    type: Notification['type'], 
-    title: string, 
-    message: string, 
-    link?: { view: ViewState, id: string } 
-}) => {
+export const createNotification = async (params: { userId: string, type: Notification['type'], title: string, message: string, link?: { view: ViewState, id: string } }) => {
     const notif = { ...params, id: `ntf_${Date.now()}`, isRead: false, createdAt: Date.now() };
     return notif;
 };
