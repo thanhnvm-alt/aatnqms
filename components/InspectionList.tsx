@@ -7,7 +7,7 @@ import {
   Filter, Building2, SlidersHorizontal,
   PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
   Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid,
-  ClipboardList, AlertTriangle, Info, User as UserIcon
+  ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -55,7 +55,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   };
 
   /**
-   * ISO-NESTED-GROUPING: Dự án -> Mã sản phẩm
+   * ISO-NESTED-GROUPING: Nhóm Dự án -> Nhóm Sản phẩm
    */
   const groupedData = useMemo(() => {
     const projects: Record<string, { 
@@ -105,10 +105,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         projects[pKey].productGroups[prodKey].items.push(item);
         projects[pKey].totalCount++;
         
-        const isFail = item.status === InspectionStatus.FLAGGED || item.items?.some(i => i.status === CheckStatus.FAIL);
+        // Thống kê chất lượng cho dự án
+        const isFail = (item as any).hasNcr;
         if (isFail) {
             projects[pKey].failCount++;
-        } else if (item.status === InspectionStatus.APPROVED || item.status === InspectionStatus.COMPLETED) {
+        } else if ((item as any).isAllPass) {
             projects[pKey].passCount++;
         }
     });
@@ -190,8 +191,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         const cfg = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
                                                         const ModuleIcon = cfg.icon;
                                                         const wsName = workshops.find(w => w.code === item.workshop)?.name || item.workshop || 'Xưởng';
-                                                        const hasNcr = item.status === InspectionStatus.FLAGGED || item.items?.some(i => i.status === CheckStatus.FAIL);
-                                                        const isCond = item.items?.some(i => i.status === CheckStatus.CONDITIONAL);
+                                                        
+                                                        // ISO-FLAGS: Sử dụng dữ liệu đã quét từ service
+                                                        const { isAllPass, hasNcr, isCond } = item as any;
                                                         
                                                         return (
                                                             <div key={item.id} onClick={() => onSelect(item.id)} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-blue-50/30 transition-all cursor-pointer group border-l-4 border-transparent hover:border-blue-500">
@@ -215,8 +217,28 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                 </div>
                                                                 <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
                                                                     <div className="flex gap-1.5 items-center">
-                                                                        {hasNcr && <span className="bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1"><AlertTriangle className="w-2.5 h-2.5" /> NCR</span>}
-                                                                        {isCond && <span className="bg-amber-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1"><Info className="w-2.5 h-2.5" /> CĐK</span>}
+                                                                        {/* HIỂN THỊ NHÃN ĐẠT (XANH) - Chỉ khi tất cả item OK */}
+                                                                        {isAllPass && (
+                                                                            <span className="bg-green-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-md flex items-center gap-1">
+                                                                                <CheckCircle className="w-2.5 h-2.5" /> ĐẠT
+                                                                            </span>
+                                                                        )}
+                                                                        
+                                                                        {/* HIỂN THỊ NHÃN NCR (ĐỎ) - Khi có item hỏng */}
+                                                                        {hasNcr && (
+                                                                            <span className="bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg shadow-red-100 flex items-center gap-1 animate-pulse">
+                                                                                <AlertTriangle className="w-2.5 h-2.5" /> NCR
+                                                                            </span>
+                                                                        )}
+                                                                        
+                                                                        {/* HIỂN THỊ NHÃN CĐK (VÀNG) - Khi có item có điều kiện */}
+                                                                        {isCond && (
+                                                                            <span className="bg-amber-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg shadow-amber-100 flex items-center gap-1">
+                                                                                <Info className="w-2.5 h-2.5" /> CĐK
+                                                                            </span>
+                                                                        )}
+
+                                                                        {/* TRẠNG THÁI CHÍNH */}
                                                                         <div className={`px-3 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-widest shadow-sm ${
                                                                             item.status === InspectionStatus.APPROVED ? 'bg-blue-600 text-white border-blue-600' :
                                                                             item.status === InspectionStatus.COMPLETED ? 'bg-green-600 text-white border-green-600' :

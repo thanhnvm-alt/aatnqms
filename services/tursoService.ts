@@ -1,3 +1,4 @@
+
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId } from "../types";
 
@@ -397,23 +398,56 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
 export const getInspectionsList = async (filters: any = {}) => {
   const unionParts = MODULE_TABLES.map(t => {
       const tableName = (t === 'sqc_vt' || t === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${t}`;
-      const extraCols = t === 'pqc' ? 'ma_nha_may, headcode' : 'NULL as ma_nha_may, NULL as headcode';
+      
+      let extraCols = '';
+      if (t === 'pqc') {
+          extraCols = 'ma_nha_may, headcode, workshop, stage as inspectionStage, items_json';
+      } else {
+          extraCols = 'NULL as ma_nha_may, NULL as headcode, NULL as workshop, NULL as inspectionStage, items_json';
+      }
+      
       return `SELECT id, type, ma_ct, ten_ct, ten_hang_muc, inspector, status, date, updated_at, ${extraCols} FROM ${tableName}`;
   });
+
   const sql = `SELECT * FROM (${unionParts.join(' UNION ALL ')}) ORDER BY updated_at DESC LIMIT 200`;
   try {
     const res = await turso.execute(sql);
     return { 
-        items: res.rows.map(r => ({
-            id: String(r.id), ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''),
-            inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''),
-            type: (r.type || 'PQC') as ModuleId, updatedAt: String(r.updated_at || ''),
-            ma_nha_may: r.ma_nha_may ? String(r.ma_nha_may) : null,
-            headcode: r.headcode ? String(r.headcode) : null
-        })), 
+        items: res.rows.map(r => {
+            // ISO-LOGIC: Quét các nhãn trạng thái ngay tại đây thay vì gửi JSON lớn về Client
+            const items = safeJsonParse<CheckItem[]>(r.items_json, []);
+            
+            // ISO-FLAGS UPDATED: Không xét trạng thái FLAGGED của phiếu, chỉ xét từng item Hỏng
+            const hasFail = items.some(it => it.status === CheckStatus.FAIL);
+            const hasCond = items.some(it => it.status === CheckStatus.CONDITIONAL);
+            const isOk = items.length > 0 && items.every(it => it.status === CheckStatus.PASS);
+
+            return {
+                id: String(r.id), 
+                ma_ct: String(r.ma_ct || ''), 
+                ten_ct: String(r.ten_ct || ''), 
+                ten_hang_muc: String(r.ten_hang_muc || ''),
+                inspectorName: String(r.inspector || ''), 
+                status: r.status as any, 
+                date: String(r.date || ''),
+                type: (r.type || 'PQC') as ModuleId, 
+                updatedAt: String(r.updated_at || ''),
+                ma_nha_may: r.ma_nha_may ? String(r.ma_nha_may) : null,
+                headcode: r.headcode ? String(r.headcode) : null,
+                workshop: r.workshop ? String(r.workshop) : null,
+                inspectionStage: r.inspectionStage ? String(r.inspectionStage) : null,
+                // Trả về cờ hiệu trạng thái thay vì JSON thô
+                isAllPass: isOk,
+                hasNcr: hasFail,
+                isCond: hasCond
+            };
+        }), 
         total: res.rows.length 
     };
-  } catch (e) { return { items: [], total: 0 }; }
+  } catch (e) { 
+    console.error("ISO-LIST: Fetch failed", e);
+    return { items: [], total: 0 }; 
+  }
 };
 
 export const getUsers = async (): Promise<User[]> => {

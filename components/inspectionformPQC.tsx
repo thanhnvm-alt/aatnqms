@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { 
@@ -8,7 +7,7 @@ import {
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, BookOpen, Search,
   Loader2, Sparkles, CheckCircle2, ArrowLeft, History, Clock,
-  Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck
+  Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck, CheckCircle
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchPlans, fetchDefectLibrary, saveNcrMapped, fetchInspectionById } from '../services/apiService';
@@ -436,7 +435,22 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsSaving(true);
     try {
         const itemsToSave = (formData.items || []).filter(it => it.stage === formData.inspectionStage || !it.stage);
-        await onSave({ ...formData, items: itemsToSave, status: InspectionStatus.PENDING, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
+        
+        // ISO-STATUS-LOGIC: Tự động thiết lập trạng thái dựa trên kết quả hạng mục
+        const hasIssues = itemsToSave.some(it => 
+            it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL
+        );
+        
+        // Cập nhật: Trạng thái PENDING cho phiếu đạt (để chờ duyệt), FLAGGED cho phiếu có lỗi/điều kiện
+        const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
+
+        await onSave({ 
+            ...formData, 
+            items: itemsToSave, 
+            status: finalStatus, 
+            inspectorName: user.name, 
+            updatedAt: new Date().toISOString() 
+        } as Inspection);
     } catch (e: any) { alert("Lỗi khi lưu phiếu: " + (e.message || e)); } finally { setIsSaving(false); }
   };
 
