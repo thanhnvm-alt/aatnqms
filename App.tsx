@@ -201,6 +201,17 @@ const App = () => {
       setActiveInspection(null); setView('FORM');
   };
 
+  /**
+   * ISO-NAVIGATION: Điều hướng từ thông báo Center
+   */
+  const handleNavigateToRecord = (targetView: ViewState, id: string) => {
+      if (targetView === 'DETAIL') {
+          handleSelectInspection(id);
+      } else {
+          setView(targetView);
+      }
+  };
+
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
   
   if (!isDbReady && !user) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo...</p></div>;
@@ -219,6 +230,7 @@ const App = () => {
             onScanClick={() => setShowQrScanner(true)} 
             onOpenSettingsTab={(tab) => { setSettingsTab(tab); setView('SETTINGS'); }}
             activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined} 
+            onNavigateToRecord={handleNavigateToRecord}
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} />}
@@ -237,7 +249,6 @@ const App = () => {
               onDelete: async id => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, 
               onApprove: async (id: string, sig: string, extra: any) => { 
                 const updated = { ...activeInspection, ...extra };
-                // Nếu signature được truyền lẻ (legacy manager approve) hoặc có trong extra manager info
                 if (sig || extra.managerSignature) {
                   updated.status = InspectionStatus.APPROVED;
                   updated.managerSignature = sig || extra.managerSignature;
@@ -251,6 +262,34 @@ const App = () => {
                 const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
                 await saveInspectionToSheet(updated); 
                 setActiveInspection(updated); 
+                
+                // ISO-NOTIFY: Thông báo có thảo luận mới
+                const isInspectorComment = user.name === activeInspection.inspectorName;
+                if (isInspectorComment) {
+                    // Nếu inspector comment, thông báo cho quản lý
+                    const managers = users.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER');
+                    for (const m of managers) {
+                        await createNotification({
+                            userId: m.id,
+                            type: 'COMMENT',
+                            title: 'Thảo luận mới từ QC',
+                            message: `${user.name} đã để lại ý kiến trong phiếu #${activeInspection.id.split('-').pop()}`,
+                            link: { view: 'DETAIL', id: activeInspection.id }
+                        });
+                    }
+                } else {
+                    // Nếu người khác comment, thông báo cho inspector
+                    const inspectorUser = users.find(u => u.name === activeInspection.inspectorName);
+                    if (inspectorUser) {
+                        await createNotification({
+                            userId: inspectorUser.id,
+                            type: 'COMMENT',
+                            title: 'Hồ sơ có ý kiến mới',
+                            message: `${user.name} vừa phản hồi trong phiếu của bạn.`,
+                            link: { view: 'DETAIL', id: activeInspection.id }
+                        });
+                    }
+                }
                 loadInspections();
               } 
             }) : null)}
