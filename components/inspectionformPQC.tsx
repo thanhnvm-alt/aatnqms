@@ -8,10 +8,10 @@ import {
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, BookOpen, Search,
   Loader2, Sparkles, CheckCircle2, ArrowLeft, History, Clock,
-  Calendar, UserCheck, Eye, ChevronRight
+  Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { fetchPlans, fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
+import { fetchPlans, fetchDefectLibrary, saveNcrMapped, fetchInspectionById } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 
@@ -238,7 +238,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                         </div>
                         <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
-                            <div className="flex justify-between items-center border-b border-slate-50 pb-1.5 mb-1.5">
+                            <div className="flex justify-between items-center border-b border-green-50 pb-1.5 mb-1.5">
                                 <label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/> Ảnh SAU xử lý</label>
                                 <div className="flex gap-1">
                                     <button onClick={() => { setUploadTarget('AFTER'); cameraInputRef.current?.click(); }} className="p-1 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button>
@@ -308,6 +308,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  
+  // Quick Review State
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<Inspection | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
   const availableStages = useMemo(() => { 
@@ -374,6 +380,22 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           console.error("ISO-PLAN-LOOKUP Error:", e);
       } finally { 
           setIsLookupLoading(false); 
+      }
+  };
+
+  /**
+   * ISO-REHYDRATION: Lấy chi tiết lịch sử để xem nhanh
+   */
+  const handleOpenQuickReview = async (id: string) => {
+      setPreviewId(id);
+      setIsPreviewLoading(true);
+      try {
+          const data = await fetchInspectionById(id);
+          setPreviewData(data);
+      } catch (e) {
+          console.error("Fetch history detail failed", e);
+      } finally {
+          setIsPreviewLoading(false);
       }
   };
 
@@ -637,7 +659,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                           </div>
                       ) : (
                           historicalRecords.map(rec => (
-                              <div key={rec.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all group flex items-center justify-between gap-4 cursor-default">
+                              <div key={rec.id} onClick={() => handleOpenQuickReview(rec.id)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all group flex items-center justify-between gap-4 cursor-pointer active:scale-[0.98]">
                                   <div className="flex items-center gap-4">
                                       <div className={`p-2.5 rounded-xl shrink-0 ${rec.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                                           <CheckCircle2 className="w-5 h-5" />
@@ -651,12 +673,15 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                           <p className="text-[9px] text-slate-400 font-mono mt-0.5">#{rec.id.split('-').pop()}</p>
                                       </div>
                                   </div>
-                                  <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
-                                      rec.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-sm' :
-                                      rec.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' :
-                                      'bg-slate-50 text-slate-500 border-slate-200'
-                                  }`}>
-                                      {rec.status}
+                                  <div className="flex items-center gap-3">
+                                      <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
+                                          rec.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-sm' :
+                                          rec.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' :
+                                          'bg-slate-50 text-slate-500 border-slate-200'
+                                      }`}>
+                                          {rec.status}
+                                      </div>
+                                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                                   </div>
                               </div>
                           ))
@@ -666,6 +691,92 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                       <button onClick={() => setShowHistory(false)} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-[0.98] transition-all">Đóng lịch sử</button>
                   </div>
               </div>
+
+              {/* --- QUICK REVIEW MODAL (ISO DETAIL PEEK) --- */}
+              {previewId && (
+                  <div className="fixed inset-0 z-[250] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+                      <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-300">
+                          <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-900 text-white shrink-0">
+                              <div className="flex items-center gap-3">
+                                  <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
+                                      <FileText className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                      <h3 className="font-black text-xs uppercase tracking-widest">Chi tiết lịch sử kiểm tra</h3>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Reviewing: #{previewId.split('-').pop()}</p>
+                                  </div>
+                              </div>
+                              <button onClick={() => { setPreviewId(null); setPreviewData(null); }} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+                          </div>
+                          
+                          <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+                              {isPreviewLoading ? (
+                                  <div className="py-32 flex flex-col items-center justify-center gap-4">
+                                      <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang truy xuất chi tiết ISO...</p>
+                                  </div>
+                              ) : previewData ? (
+                                  <>
+                                      <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-100 flex justify-between items-center shadow-inner">
+                                          <div className="space-y-1">
+                                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Chỉ số chất lượng</p>
+                                              <p className="text-3xl font-black text-blue-700 tracking-tighter">{previewData.score}% <span className="text-xs text-slate-400 font-bold uppercase ml-1">Score</span></p>
+                                          </div>
+                                          <div className={`px-4 py-1.5 rounded-xl border font-black text-[9px] uppercase tracking-widest ${previewData.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-lg shadow-green-100' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
+                                              {previewData.status}
+                                          </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-4">
+                                          <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                              <div className="flex items-center gap-2 mb-2 text-slate-400"><UserCheck className="w-3.5 h-3.5"/> <span className="text-[9px] font-black uppercase tracking-widest">QC Thẩm định</span></div>
+                                              <p className="text-xs font-black text-slate-800 uppercase truncate">{previewData.inspectorName}</p>
+                                          </div>
+                                          <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                              <div className="flex items-center gap-2 mb-2 text-slate-400"><Calendar className="w-3.5 h-3.5"/> <span className="text-[9px] font-black uppercase tracking-widest">Ngày kiểm</span></div>
+                                              <p className="text-xs font-black text-slate-800 uppercase">{previewData.date}</p>
+                                          </div>
+                                      </div>
+
+                                      <div className="space-y-3">
+                                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                                              <Activity className="w-3.5 h-3.5" /> Kết quả tiêu chí ({previewData.items?.length || 0})
+                                          </h4>
+                                          <div className="space-y-2">
+                                              {previewData.items?.map((it, idx) => (
+                                                  <div key={idx} className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between gap-4">
+                                                      <div className="flex-1 overflow-hidden">
+                                                          <p className="text-[10px] font-black text-slate-800 uppercase truncate leading-tight">{it.label}</p>
+                                                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{it.category}</p>
+                                                      </div>
+                                                      <span className={`shrink-0 px-2 py-0.5 rounded text-[8px] font-black uppercase border ${it.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200'}`}>
+                                                          {it.status}
+                                                      </span>
+                                                  </div>
+                                              ))}
+                                          </div>
+                                      </div>
+
+                                      {previewData.signature && (
+                                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                                              <div className="flex items-center justify-center gap-2 mb-3 text-slate-400"><ShieldCheck className="w-4 h-4" /> <span className="text-[9px] font-black uppercase tracking-widest">Chữ ký điện tử QC</span></div>
+                                              <div className="bg-white h-24 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 mx-auto w-full">
+                                                  <img src={previewData.signature} className="h-full object-contain" alt="" />
+                                              </div>
+                                          </div>
+                                      )}
+                                  </>
+                              ) : (
+                                  <div className="py-20 text-center text-slate-400 font-bold text-xs">Không thể tải dữ liệu bản ghi này.</div>
+                              )}
+                          </div>
+
+                          <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
+                              <button onClick={() => { setPreviewId(null); setPreviewData(null); }} className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-95 transition-all">Đóng</button>
+                          </div>
+                      </div>
+                  </div>
+              )}
           </div>
       )}
 

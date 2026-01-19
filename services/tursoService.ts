@@ -397,7 +397,8 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
 export const getInspectionsList = async (filters: any = {}) => {
   const unionParts = MODULE_TABLES.map(t => {
       const tableName = (t === 'sqc_vt' || t === 'sqc_mat') ? 'forms_sqc_vt' : `forms_${t}`;
-      return `SELECT id, type, ma_ct, ten_ct, ten_hang_muc, inspector, status, date, updated_at FROM ${tableName}`;
+      const extraCols = t === 'pqc' ? 'ma_nha_may, headcode' : 'NULL as ma_nha_may, NULL as headcode';
+      return `SELECT id, type, ma_ct, ten_ct, ten_hang_muc, inspector, status, date, updated_at, ${extraCols} FROM ${tableName}`;
   });
   const sql = `SELECT * FROM (${unionParts.join(' UNION ALL ')}) ORDER BY updated_at DESC LIMIT 200`;
   try {
@@ -406,7 +407,9 @@ export const getInspectionsList = async (filters: any = {}) => {
         items: res.rows.map(r => ({
             id: String(r.id), ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''),
             inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''),
-            type: (r.type || 'PQC') as ModuleId, updatedAt: String(r.updated_at || '')
+            type: (r.type || 'PQC') as ModuleId, updatedAt: String(r.updated_at || ''),
+            ma_nha_may: r.ma_nha_may ? String(r.ma_nha_may) : null,
+            headcode: r.headcode ? String(r.headcode) : null
         })), 
         total: res.rows.length 
     };
