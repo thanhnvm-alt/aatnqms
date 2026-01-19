@@ -1,5 +1,5 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem } from '../types';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, NCRComment } from '../types';
 import * as db from './tursoService';
 
 export const uploadQMSImage = async (file: File | string, context: { entityId: string, type: any, role: any }): Promise<string> => {
@@ -38,6 +38,10 @@ export const fetchNcrs = async (filters: any = {}) => {
 export const fetchNcrById = async (id: string) => {
     return await db.getNcrById(id);
 };
+
+// --- COMMENT SERVICES ---
+export const saveComment = async (entityId: string, comment: NCRComment) => await db.saveComment(entityId, comment);
+export const fetchComments = async (entityId: string) => await db.getCommentsByEntityId(entityId);
 
 export const fetchDefects = async (filters: any = {}) => {
     const ncrs = await db.getNcrs(filters);

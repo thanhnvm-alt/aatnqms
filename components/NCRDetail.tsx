@@ -9,7 +9,7 @@ import {
     ChevronDown, Filter, RefreshCw, ShieldCheck, PenTool, AlertOctagon
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
-import { fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
+import { fetchDefectLibrary, saveNcrMapped, saveComment, fetchComments } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
 
 interface NCRDetailProps {
@@ -47,6 +47,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const [isAiLoading, setIsAiLoading] = useState(false);
   
   // Comment State
+  const [activeComments, setActiveComments] = useState<NCRComment[]>(initialNcr.comments || []);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
@@ -78,22 +79,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
   useEffect(() => {
       fetchDefectLibrary().then(setLibrary);
-  }, []);
-
-  const stages = useMemo(() => {
-      const unique = new Set(library.map(item => item.stage || 'Chung'));
-      return Array.from(unique).sort();
-  }, [library]);
-
-  const filteredDefects = useMemo(() => {
-      if (!selectedStage) return library;
-      return library.filter(item => item.stage === selectedStage);
-  }, [library, selectedStage]);
-
-  useEffect(() => {
-      setNcr(initialNcr);
-      setFormData(initialNcr);
-  }, [initialNcr]);
+      fetchComments(ncr.id).then(setActiveComments);
+  }, [ncr.id]);
 
   const handleApplyDefect = (defect: DefectLibraryItem) => {
       if (window.confirm("Áp dụng thông tin lỗi này? Mô tả và mức độ sẽ được cập nhật.")) {
@@ -177,25 +164,23 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const handlePostComment = async () => {
       if (!newComment.trim() && commentAttachments.length === 0) return;
       setIsSubmitting(true);
-      const newCommentObj: NCRComment = {
-          id: `cmt_${Date.now()}`,
-          userId: user.id,
-          userName: user.name,
-          userAvatar: user.avatar,
-          content: newComment,
-          createdAt: new Date().toISOString(),
-          attachments: commentAttachments
-      };
-      const updatedComments = [...(formData.comments || []), newCommentObj];
-      const updatedNcr = { ...formData, comments: updatedComments };
       try {
-          await saveNcrMapped(ncr.inspection_id || '', updatedNcr, ncr.createdBy || user.name);
-          setFormData(updatedNcr); setNcr(updatedNcr); setNewComment(''); setCommentAttachments([]);
+          const newCommentObj: NCRComment = {
+              id: `cmt_${Date.now()}`,
+              userId: user.id,
+              userName: user.name,
+              userAvatar: user.avatar,
+              content: newComment,
+              createdAt: new Date().toISOString(),
+              attachments: commentAttachments
+          };
+          await saveComment(ncr.id, newCommentObj);
+          
+          const refreshed = await fetchComments(ncr.id);
+          setActiveComments(refreshed);
+          setNewComment(''); 
+          setCommentAttachments([]);
       } catch (e) { alert("Lỗi khi gửi bình luận."); } finally { setIsSubmitting(false); }
-  };
-
-  const handleEditCommentImage = (idx: number) => {
-      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
   };
 
   const updateCommentImage = (idx: number, newImg: string) => {
@@ -263,22 +248,20 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
             {/* Images Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    {/* Fixed: Use specific refs to resolve missing cameraInputRef and fileInputRef */}
                     <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-red-50/30"><label className="text-[9px] font-bold text-red-500 uppercase flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> TRƯỚC XỬ LÝ (ISSUE)</label>{isEditing && <div className="flex gap-1"><button onClick={() => beforeCameraRef.current?.click()} className="p-1 bg-white text-slate-500 rounded border border-slate-200"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => beforeFileRef.current?.click()} className="p-1 bg-white text-slate-500 rounded border border-slate-200"><Plus className="w-3.5 h-3.5"/></button></div>}</div>
                     <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesBefore?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => openGallery(formData.imagesBefore!, idx)} />{isEditing && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    {/* Fixed: Use specific refs to resolve missing cameraInputRef and fileInputRef */}
                     <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-green-50/30"><label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> SAU XỬ LÝ (FIX)</label>{(!isLocked || isEditing) && <div className="flex gap-1"><button onClick={() => afterCameraRef.current?.click()} className="p-1 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => afterFileRef.current?.click()} className="p-1 bg-slate-50 text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div>}</div>
                     <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesAfter?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover" onClick={() => openGallery(formData.imagesAfter!, idx)} />{(!isLocked || isEditing) && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
                 </div>
             </div>
 
-            {/* Discussions */}
+            {/* Discussions - Independent Comment Flow */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                 <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2"><MessageSquare className="w-4 h-4 text-blue-600" /><h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">Thảo luận & Theo dõi xử lý</h3></div>
                 <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto no-scrollbar">
-                    {formData.comments?.map((comment) => (
+                    {activeComments.map((comment) => (
                         <div key={comment.id} className="flex gap-3">
                             <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-8 h-8 rounded-lg border shrink-0" alt="" />
                             <div className="flex-1 space-y-1">
@@ -292,7 +275,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             </div>
                         </div>
                     ))}
-                    {(!formData.comments || formData.comments.length === 0) && <p className="text-center text-[10px] text-slate-400 py-4 italic font-medium">Chưa có bình luận trao đổi cho phiếu này.</p>}
+                    {activeComments.length === 0 && <p className="text-center text-[10px] text-slate-400 py-4 italic font-medium">Chưa có bình luận trao đổi cho phiếu này.</p>}
                 </div>
 
                 <div className="p-3 border-t border-slate-100 bg-slate-50/30 space-y-3">
@@ -300,9 +283,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
                             {commentAttachments.map((img, idx) => (
                                 <div key={idx} className="relative w-16 h-16 shrink-0 group">
-                                    <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
+                                    <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => openGallery(commentAttachments, idx, 'PENDING_COMMENT')}/>
                                     <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
-                                    <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><PenTool className="w-4 h-4 text-white drop-shadow-md"/></div>
                                 </div>
                             ))}
                         </div>

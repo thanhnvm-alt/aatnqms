@@ -92,6 +92,52 @@ async function getEntityImages(entityId: string) {
 }
 
 /**
+ * ISO-COMMENT-SERVICE: Quản lý thảo luận độc lập với forms
+ */
+export const saveComment = async (entityId: string, comment: NCRComment) => {
+    const commentId = comment.id || `CMT-${entityId}-${Date.now()}`;
+    
+    // 1. Decouple images from comment
+    const imageRefs = await processAndStoreImages(commentId, 'COMMENT', comment.attachments, 'EVIDENCE');
+
+    // 2. Save comment metadata to dedicated table
+    await turso.execute({
+        sql: `INSERT INTO comments (id, entity_id, user_id, user_name, user_avatar, content, created_at, image_refs_json)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: sanitizeArgs([
+            commentId, entityId, comment.userId, comment.userName, comment.userAvatar, 
+            comment.content, comment.createdAt ? Math.floor(new Date(comment.createdAt).getTime() / 1000) : Math.floor(Date.now() / 1000),
+            JSON.stringify(imageRefs)
+        ])
+    });
+    return commentId;
+};
+
+export const getCommentsByEntityId = async (entityId: string): Promise<NCRComment[]> => {
+    const res = await turso.execute({
+        sql: "SELECT * FROM comments WHERE entity_id = ? ORDER BY created_at ASC",
+        args: [entityId]
+    });
+
+    const comments: NCRComment[] = [];
+    for (const r of res.rows) {
+        const commentId = String(r.id);
+        const { imagesMap } = await getEntityImages(commentId);
+        
+        comments.push({
+            id: commentId,
+            userId: String(r.user_id),
+            userName: String(r.user_name),
+            userAvatar: String(r.user_avatar || ''),
+            content: String(r.content),
+            createdAt: new Date(Number(r.created_at) * 1000).toISOString(),
+            attachments: imagesMap['EVIDENCE'] || []
+        });
+    }
+    return comments;
+};
+
+/**
  * ISO-NCR-SAVE: Lưu dữ liệu NCR riêng biệt
  */
 async function saveNCRData(inspectionId: string, ncr: NCR, inspectorName: string) {
@@ -105,22 +151,30 @@ async function saveNCRData(inspectionId: string, ncr: NCR, inspectorName: string
                 id, inspection_id, item_id, defect_code, severity, status, 
                 description, root_cause, corrective_action, responsible_person, 
                 deadline, created_by, created_at, updated_at, 
-                images_before_json, images_after_json, comments_json
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), ?, ?, ?)
+                images_before_json, images_after_json
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), ?, ?)
               ON CONFLICT(id) DO UPDATE SET 
                 severity=excluded.severity, status=excluded.status, description=excluded.description,
                 root_cause=excluded.root_cause, corrective_action=excluded.corrective_action,
                 responsible_person=excluded.responsible_person, deadline=excluded.deadline,
                 updated_at=unixepoch(), images_before_json=excluded.images_before_json,
-                images_after_json=excluded.images_after_json, comments_json=excluded.comments_json`,
+                images_after_json=excluded.images_after_json`,
         args: sanitizeArgs([
             ncrId, inspectionId, ncr.itemId || 'unknown', ncr.defect_code || null, 
             ncr.severity || 'MINOR', ncr.status || 'OPEN', ncr.issueDescription,
             ncr.rootCause || null, ncr.solution || null, ncr.responsiblePerson || null,
             ncr.deadline || null, inspectorName,
-            JSON.stringify(beforeRefs), JSON.stringify(afterRefs), JSON.stringify(ncr.comments || [])
+            JSON.stringify(beforeRefs), JSON.stringify(afterRefs)
         ])
     });
+
+    // Save comments if any (from legacy or new flow)
+    if (ncr.comments && ncr.comments.length > 0) {
+        for (const c of ncr.comments) {
+            await saveComment(ncrId, c);
+        }
+    }
+
     return ncrId;
 }
 
@@ -134,15 +188,16 @@ export const initDatabase = async () => {
         signature_qc TEXT, pm_signature TEXT, pm_name TEXT, pm_comment TEXT, 
         production_signature TEXT, production_name TEXT, production_comment TEXT,
         images_json TEXT, delivery_images_json TEXT, report_images_json TEXT,
-        comments_json TEXT DEFAULT '[]', so_luong_ipo REAL, inspected_qty REAL, 
+        so_luong_ipo REAL, inspected_qty REAL, 
         passed_qty REAL, failed_qty REAL, dvt TEXT, updated_at TEXT, created_at TEXT
     `;
 
     await turso.batch([
       "CREATE TABLE IF NOT EXISTS inspections_master (id TEXT PRIMARY KEY, type TEXT NOT NULL, created_at TEXT, updated_at TEXT)",
       "CREATE TABLE IF NOT EXISTS qms_images (id TEXT PRIMARY KEY, parent_entity_id TEXT NOT NULL, related_item_id TEXT, entity_type TEXT NOT NULL, image_role TEXT NOT NULL, url_hd TEXT, url_thumbnail TEXT, created_at INTEGER)",
-      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), comments_json TEXT DEFAULT ( '[]' ))",
-      `CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, ma_nha_may TEXT, workshop TEXT, stage TEXT, dvt TEXT, sl_ipo REAL DEFAULT 0, qty_total REAL DEFAULT 0, qty_pass REAL DEFAULT 0, qty_fail REAL DEFAULT 0, created_by TEXT, created_at TEXT, inspector TEXT, status TEXT, data TEXT, updated_at TEXT, items_json TEXT, images_json TEXT, headcode TEXT, date TEXT, qty_ipo REAL, score REAL, summary TEXT, signature_qc TEXT, signature_prod TEXT, signature_mgr TEXT, name_prod TEXT, name_mgr TEXT, item_images_json TEXT, comments_json TEXT DEFAULT '[]', type TEXT DEFAULT 'PQC', production_comment TEXT)`,
+      "CREATE TABLE IF NOT EXISTS comments (id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, user_id TEXT, user_name TEXT, user_avatar TEXT, content TEXT, created_at INTEGER, image_refs_json TEXT, data TEXT)",
+      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()))",
+      `CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, ma_nha_may TEXT, workshop TEXT, stage TEXT, dvt TEXT, sl_ipo REAL DEFAULT 0, qty_total REAL DEFAULT 0, qty_pass REAL DEFAULT 0, qty_fail REAL DEFAULT 0, created_by TEXT, created_at TEXT, inspector TEXT, status TEXT, data TEXT, updated_at TEXT, items_json TEXT, images_json TEXT, headcode TEXT, date TEXT, qty_ipo REAL, score REAL, summary TEXT, signature_qc TEXT, signature_prod TEXT, signature_mgr TEXT, name_prod TEXT, name_mgr TEXT, item_images_json TEXT, type TEXT DEFAULT 'PQC', production_comment TEXT)`,
       `CREATE TABLE IF NOT EXISTS forms_iqc (${baseColumns})`,
       `CREATE TABLE IF NOT EXISTS forms_sqc_vt (${baseColumns})`,
       `CREATE TABLE IF NOT EXISTS forms_sqc_btp (${baseColumns})`,
@@ -180,9 +235,15 @@ export const saveInspection = async (inspection: Inspection) => {
       return { ...rest, images: itemImgRefs }; 
   }));
 
-  // 3. Mapping dữ liệu vào bảng tương ứng
+  // 3. Xử lý Comments (Lưu vào bảng độc lập)
+  if (inspection.comments && inspection.comments.length > 0) {
+      for (const comment of inspection.comments) {
+          await saveComment(inspection.id, comment);
+      }
+  }
+
+  // 4. Mapping dữ liệu vào bảng tương ứng (Loại bỏ cột comments_json khỏi INSERT/UPDATE)
   if (type === 'PQC') {
-      // Logic PQC hiện tại
       const pqcArgs = sanitizeArgs([
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
           inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
@@ -192,17 +253,15 @@ export const saveInspection = async (inspection: Inspection) => {
           '{}', now, JSON.stringify(cleanedItems), JSON.stringify(fieldImgRefs),
           inspection.headcode, inspection.date, inspection.so_luong_ipo || 0, inspection.score || 0, inspection.summary,
           sigQcRef, sigProdRef, sigMgrRef,
-          inspection.productionName, inspection.managerName, '[]',
-          JSON.stringify(inspection.comments || []), 'PQC',
+          inspection.productionName, inspection.managerName, '[]', 'PQC',
           inspection.productionComment
       ]);
       await turso.execute({
-          sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, created_by, created_at, inspector, status, data, updated_at, items_json, images_json, headcode, date, qty_ipo, score, summary, signature_qc, signature_prod, signature_mgr, name_prod, name_mgr, item_images_json, comments_json, type, production_comment) 
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, score=excluded.score, items_json=excluded.items_json, updated_at=excluded.updated_at`,
+          sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, created_by, created_at, inspector, status, data, updated_at, items_json, images_json, headcode, date, qty_ipo, score, summary, signature_qc, signature_prod, signature_mgr, name_prod, name_mgr, item_images_json, type, production_comment) 
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, score=excluded.score, items_json=excluded.items_json, updated_at=excluded.updated_at`,
           args: pqcArgs
       });
   } else {
-      // Logic chung cho IQC, SQC_VT, SQC_BTP
       const matArgs = sanitizeArgs([
           inspection.id, type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
           inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection.date,
@@ -210,7 +269,7 @@ export const saveInspection = async (inspection: Inspection) => {
           sigQcRef, sigMgrRef, inspection.managerName || inspection.pmName, inspection.pmComment,
           sigProdRef, inspection.productionName, inspection.productionComment,
           JSON.stringify(fieldImgRefs), JSON.stringify(deliveryImgRefs), JSON.stringify(reportImgRefs),
-          JSON.stringify(inspection.comments || []), inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0,
+          inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0,
           inspection.passedQuantity || 0, inspection.failedQuantity || 0, inspection.dvt || 'PCS', now, inspection.createdAt || now
       ]);
 
@@ -219,8 +278,8 @@ export const saveInspection = async (inspection: Inspection) => {
               id, type, ma_ct, ten_ct, ten_hang_muc, po_number, supplier, inspector, status, date, 
               score, summary, items_json, materials_json, signature_qc, pm_signature, pm_name, pm_comment, 
               production_signature, production_name, production_comment, images_json, delivery_images_json, report_images_json,
-              comments_json, so_luong_ipo, inspected_qty, passed_qty, failed_qty, dvt, updated_at, created_at
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              so_luong_ipo, inspected_qty, passed_qty, failed_qty, dvt, updated_at, created_at
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(id) DO UPDATE SET status=excluded.status, score=excluded.score, items_json=excluded.items_json, materials_json=excluded.materials_json, updated_at=excluded.updated_at
       `;
       await turso.execute({ sql, args: matArgs });
@@ -243,12 +302,15 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
     const r = res.rows[0];
     
     const { imagesMap, itemImagesMap, signatureMap } = await getEntityImages(id);
+    const comments = await getCommentsByEntityId(id);
 
     const ncrRes = await turso.execute({ sql: "SELECT * FROM ncrs WHERE inspection_id = ?", args: [id] });
     const ncrByItemId: Record<string, NCR> = {};
     for (const row of ncrRes.rows) {
         const ncrId = String(row.id);
         const { imagesMap: ncrImages } = await getEntityImages(ncrId);
+        const ncrComments = await getCommentsByEntityId(ncrId);
+        
         ncrByItemId[String(row.item_id)] = {
             id: ncrId, inspection_id: id, itemId: String(row.item_id),
             defect_code: String(row.defect_code || ''), severity: row.severity as any,
@@ -256,7 +318,7 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             rootCause: String(row.root_cause || ''), solution: String(row.corrective_action || ''),
             responsiblePerson: String(row.responsible_person || ''), deadline: String(row.deadline || ''),
             imagesBefore: ncrImages['BEFORE'] || [], imagesAfter: ncrImages['AFTER'] || [],
-            comments: safeJsonParse(row.comments_json, []),
+            comments: ncrComments,
             createdBy: String(row.created_by), createdDate: String(row.created_at)
         } as NCR;
     }
@@ -273,7 +335,7 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             id: String(r.id), type: 'PQC', ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''), 
             ma_nha_may: String(r.ma_nha_may || ''), workshop: String(r.workshop || ''), inspectionStage: String(r.stage || ''),
             inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''), score: Number(r.score || 0), summary: String(r.summary || ''), 
-            items: rehydratedItems, images: imagesMap['field'] || [], comments: safeJsonParse(r.comments_json, []),
+            items: rehydratedItems, images: imagesMap['field'] || [], comments,
             signature: signatureMap['QC_SIGNATURE'] || '', productionSignature: signatureMap['PROD_SIGNATURE'] || '',
             productionName: String(r.name_prod || ''), productionComment: String(r.production_comment || ''),
             managerSignature: signatureMap['MGR_SIGNATURE'] || '', managerName: String(r.name_mgr || ''),
@@ -291,7 +353,7 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             pmName: String(r.pm_name || ''), pmComment: String(r.pm_comment || ''),
             productionSignature: signatureMap['PROD_SIGNATURE'] || '', productionName: String(r.production_name || ''), productionComment: String(r.production_comment || ''),
             images: imagesMap['field'] || [], deliveryNoteImages: imagesMap['delivery'] || [], reportImages: imagesMap['report'] || [],
-            comments: safeJsonParse(r.comments_json, []), so_luong_ipo: Number(r.so_luong_ipo || 0),
+            comments, so_luong_ipo: Number(r.so_luong_ipo || 0),
             inspectedQuantity: Number(r.inspected_qty || 0), passedQuantity: Number(r.passed_qty || 0), failedQuantity: Number(r.failed_qty || 0),
             dvt: String(r.dvt || ''), createdAt: String(r.created_at || ''), updatedAt: String(r.updated_at || '')
         } as any;
@@ -418,6 +480,7 @@ export const getNcrById = async (id: string): Promise<NCR | null> => {
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     const { imagesMap } = await getEntityImages(id);
+    const ncrComments = await getCommentsByEntityId(id);
     return { 
         id: String(r.id), inspection_id: String(r.inspection_id), itemId: String(r.item_id),
         defect_code: String(r.defect_code || ''), severity: r.severity as any, status: String(r.status), 
@@ -425,7 +488,7 @@ export const getNcrById = async (id: string): Promise<NCR | null> => {
         solution: String(r.corrective_action || ''), preventiveAction: String(r.preventive_action || ''), 
         responsiblePerson: String(r.responsible_person || ''), deadline: String(r.deadline || ''), 
         imagesBefore: imagesMap['BEFORE'] || [], imagesAfter: imagesMap['AFTER'] || [], 
-        comments: safeJsonParse(r.comments_json, []), createdBy: String(r.created_by), 
+        comments: ncrComments, createdBy: String(r.created_by), 
         createdDate: new Date(Number(r.created_at) * 1000).toISOString() 
     } as NCR;
 };
@@ -434,7 +497,7 @@ export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
     const res = await turso.execute("SELECT * FROM defect_library ORDER BY defect_code ASC");
     return res.rows.map(r => {
         const jsonData = safeJsonParse(r.data, {} as any);
-        return { id: String(r.id), code: String(r.defect_code || r.id), name: String(r.name || ''), stage: String(r.stage || 'Chung'), category: String(r.category || 'Ngoại quan'), description: String(r.description || ''), severity: String(r.severity || 'MINOR'), suggested_action: String(r.suggested_action || ''), ...jsonData };
+        return { id: String(r.id), code: String(r.defect_code || r.id), name: String(r.name || ''), stage: String(r.stage || 'Chung'), category: String(r.category || 'Ngoại quan'), description: String(r.description || ''), severity: String(r.severity || 'MINOR'), suggested_action: String(r.suggest_action || ''), ...jsonData };
     });
 };
 
@@ -511,7 +574,8 @@ export const deleteInspection = async (id: string) => {
             { sql: `DELETE FROM ${tableName} WHERE id = ?`, args: [id] },
             { sql: "DELETE FROM inspections_master WHERE id = ?", args: [id] },
             { sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [id] },
-            { sql: "DELETE FROM ncrs WHERE inspection_id = ?", args: [id] }
+            { sql: "DELETE FROM ncrs WHERE inspection_id = ?", args: [id] },
+            { sql: "DELETE FROM comments WHERE entity_id = ?", args: [id] }
         ]);
     }
     return true;

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
+import { saveComment, fetchComments } from '../services/apiService';
 
 interface InspectionDetailProps {
   inspection: Inspection;
@@ -85,6 +86,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [prodName, setProdName] = useState(inspection.productionName || '');
   const [prodComment, setProdComment] = useState(inspection.productionComment || '');
 
+  const [activeComments, setActiveComments] = useState<NCRComment[]>(inspection.comments || []);
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
@@ -94,6 +96,11 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const isApproved = inspection.status === InspectionStatus.APPROVED || inspection.status === InspectionStatus.COMPLETED;
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isProdSigned = !!inspection.productionSignature;
+
+  // Sync comments on load
+  useEffect(() => {
+      fetchComments(inspection.id).then(setActiveComments);
+  }, [inspection.id]);
 
   // --- STATISTICS CALCULATIONS ---
   const stats = useMemo(() => {
@@ -145,10 +152,9 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
 
   const handlePostComment = async () => {
     if (!newComment.trim() && commentAttachments.length === 0) return;
-    if (!onPostComment) return;
     setIsSubmittingComment(true);
     try {
-        await onPostComment(inspection.id, { 
+        const commentToSave: NCRComment = { 
             id: `cmt_${Date.now()}`, 
             userId: user.id, 
             userName: user.name, 
@@ -156,7 +162,13 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
             content: newComment, 
             createdAt: new Date().toISOString(),
             attachments: commentAttachments
-        } as any);
+        };
+        await saveComment(inspection.id, commentToSave);
+        
+        // Refresh local UI state
+        const refreshed = await fetchComments(inspection.id);
+        setActiveComments(refreshed);
+        
         setNewComment('');
         setCommentAttachments([]);
     } catch (e: any) { alert("Lỗi gửi bình luận: " + e.message); } finally { setIsSubmittingComment(false); }
@@ -207,82 +219,30 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar bg-slate-50">
         <div className="max-w-4xl mx-auto space-y-4 pb-32">
             
-            {/* --- HEADER INFO SECTION (MATCHING SCREENSHOT) --- */}
+            {/* --- HEADER INFO SECTION --- */}
             <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative overflow-hidden">
                 <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-7xl rotate-12 select-none">PQC</div>
-                
                 <h1 className="text-2xl font-black text-slate-900 uppercase mb-6 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
-                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-8">
-                    <div>
-                        <p className="mb-1 flex items-center gap-1.5"><Box className="w-3 h-3"/> Mã dự án</p>
-                        <p className="text-sm text-slate-800 tracking-tight">{inspection.ma_ct || '---'}</p>
-                    </div>
-                    <div>
-                        <p className="mb-1 flex items-center gap-1.5"><Factory className="w-3 h-3"/> Xưởng/Công đoạn</p>
-                        <p className="text-sm text-slate-800 tracking-tight">{inspection.workshop || '-'} / {inspection.inspectionStage || '-'}</p>
-                    </div>
-                    <div>
-                        <p className="mb-1 flex items-center gap-1.5"><UserIcon className="w-3 h-3"/> QC Thẩm định</p>
-                        <p className="text-sm text-slate-800 tracking-tight">{inspection.inspectorName || '---'}</p>
-                    </div>
-                    <div>
-                        <p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> Ngày thực hiện</p>
-                        <p className="text-sm text-slate-800 tracking-tight font-mono">{inspection.date}</p>
-                    </div>
+                    <div><p className="mb-1 flex items-center gap-1.5"><Box className="w-3 h-3"/> Mã dự án</p><p className="text-sm text-slate-800 tracking-tight">{inspection.ma_ct || '---'}</p></div>
+                    <div><p className="mb-1 flex items-center gap-1.5"><Factory className="w-3 h-3"/> Xưởng/Công đoạn</p><p className="text-sm text-slate-800 tracking-tight">{inspection.workshop || '-'} / {inspection.inspectionStage || '-'}</p></div>
+                    <div><p className="mb-1 flex items-center gap-1.5"><UserIcon className="w-3 h-3"/> QC Thẩm định</p><p className="text-sm text-slate-800 tracking-tight">{inspection.inspectorName || '---'}</p></div>
+                    <div><p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> Ngày thực hiện</p><p className="text-sm text-slate-800 tracking-tight font-mono">{inspection.date}</p></div>
                 </div>
-
-                {/* --- QUANTITY STATS GRID (MATCHING SCREENSHOT + REQUESTED RATES) --- */}
                 <div className="bg-slate-50/80 p-5 rounded-[1.5rem] border border-slate-100 shadow-inner">
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-                        <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Số IPO</p>
-                            <p className="text-lg font-black text-slate-700">{stats.ipo}</p>
-                        </div>
-                        <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kiểm tra</p>
-                            <p className="text-lg font-black text-blue-600">{stats.ins}</p>
-                        </div>
-                        <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-green-600 uppercase tracking-widest">Đạt</p>
-                            <p className="text-lg font-black text-green-600">{stats.pas}</p>
-                        </div>
-                        <div className="text-center md:border-r border-slate-200 space-y-1 bg-green-50/50 rounded-xl py-1">
-                            <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">Tỷ lệ đạt</p>
-                            <p className="text-lg font-black text-green-700">{stats.passRate}%</p>
-                        </div>
-                        <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Hỏng</p>
-                            <p className="text-lg font-black text-red-600">{stats.fai}</p>
-                        </div>
-                        <div className="text-center space-y-1 bg-red-50/50 rounded-xl py-1">
-                            <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">Tỷ lệ hỏng</p>
-                            <p className="text-lg font-black text-red-700">{stats.failRate}%</p>
-                        </div>
+                        <div className="text-center md:border-r border-slate-200 space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Số IPO</p><p className="text-lg font-black text-slate-700">{stats.ipo}</p></div>
+                        <div className="text-center md:border-r border-slate-200 space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kiểm tra</p><p className="text-lg font-black text-blue-600">{stats.ins}</p></div>
+                        <div className="text-center md:border-r border-slate-200 space-y-1"><p className="text-[9px] font-black text-green-600 uppercase tracking-widest">Đạt</p><p className="text-lg font-black text-green-600">{stats.pas}</p></div>
+                        <div className="text-center md:border-r border-slate-200 space-y-1 bg-green-50/50 rounded-xl py-1"><p className="text-[9px] font-black text-green-700 uppercase tracking-widest">Tỷ lệ đạt</p><p className="text-lg font-black text-green-700">{stats.passRate}%</p></div>
+                        <div className="text-center md:border-r border-slate-200 space-y-1"><p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Hỏng</p><p className="text-lg font-black text-red-600">{stats.fai}</p></div>
+                        <div className="text-center space-y-1 bg-red-50/50 rounded-xl py-1"><p className="text-[9px] font-black text-red-700 uppercase tracking-widest">Tỷ lệ hỏng</p><p className="text-lg font-black text-red-700">{stats.failRate}%</p></div>
                     </div>
                 </div>
             </div>
 
-            {/* General Evidence Gallery */}
-            {inspection.images && inspection.images.length > 0 && (
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <ImageIcon className="w-4 h-4 text-blue-600" /> Bằng chứng hiện trường ({inspection.images.length})
-                    </h3>
-                    <div className="flex gap-4 overflow-x-auto no-scrollbar py-1">
-                        {inspection.images.map((img, idx) => (
-                            <div key={idx} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-28 h-28 rounded-2xl overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm transition-all hover:scale-105 hover:shadow-md">
-                                <img src={img} className="w-full h-full object-cover" alt="" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             <div className="space-y-3">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-4 flex items-center gap-2">
-                    <Activity className="w-4 h-4" /> Chi tiết tiêu chí kiểm tra
-                </h3>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-4 flex items-center gap-2"><Activity className="w-4 h-4" /> Chi tiết tiêu chí kiểm tra</h3>
                 {inspection.items.map((item, idx) => (
                     <div key={idx} className={`bg-white p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50/10' : 'border-slate-200'}`}>
                         <div className="flex justify-between items-start mb-3">
@@ -290,44 +250,21 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{item.status}</span>
                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">{item.category}</span>
                             </div>
-                            {item.ncr && (
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-red-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg shadow-red-200">
-                                    <AlertOctagon className="w-3 h-3" /> NCR Ghi nhận
-                                </div>
-                            )}
                         </div>
                         <p className="text-sm font-black text-slate-800 uppercase tracking-tight leading-tight">{item.label}</p>
                         {item.notes && <p className="text-[11px] text-slate-500 mt-2 italic leading-relaxed border-l-2 border-slate-100 pl-3">"{item.notes}"</p>}
-                        
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 mt-4 overflow-x-auto no-scrollbar py-1">
                                 {item.images.map((img, i) => (
-                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-300 transition-all">
-                                        <img src={img} className="w-full h-full object-cover" alt="" />
-                                    </div>
+                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-300 transition-all"><img src={img} className="w-full h-full object-cover" alt="" /></div>
                                 ))}
                             </div>
                         )}
-
                         {item.ncr && (
-                            <div className="mt-4 p-4 bg-red-50/50 rounded-2xl border border-red-100 space-y-3 group hover:bg-red-50 transition-colors">
+                            <div className="mt-4 p-4 bg-red-50/50 rounded-2xl border border-red-100 space-y-3 hover:bg-red-50 transition-colors">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[9px] font-black text-red-600 uppercase flex items-center gap-1.5">
-                                        <FileText className="w-4 h-4"/> Hồ sơ không phù hợp (NCR)
-                                    </span>
-                                    <button onClick={() => setViewingNcr(item.ncr!)} className="px-3 py-1 bg-white border border-red-200 text-[9px] font-black text-red-600 uppercase rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm flex items-center gap-1">
-                                        Xem chi tiết <ChevronRight className="w-3 h-3"/>
-                                    </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-white p-2.5 rounded-xl border border-red-50">
-                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5">Trạng thái</p>
-                                        <p className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{item.ncr.status}</p>
-                                    </div>
-                                    <div className="bg-white p-2.5 rounded-xl border border-red-50">
-                                        <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5">Mức độ</p>
-                                        <p className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">{item.ncr.severity}</p>
-                                    </div>
+                                    <span className="text-[9px] font-black text-red-600 uppercase flex items-center gap-1.5"><FileText className="w-4 h-4"/> Hồ sơ không phù hợp (NCR)</span>
+                                    <button onClick={() => setViewingNcr(item.ncr!)} className="px-3 py-1 bg-white border border-red-200 text-[9px] font-black text-red-600 uppercase rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm flex items-center gap-1">Xem chi tiết <ChevronRight className="w-3 h-3"/></button>
                                 </div>
                                 <p className="text-[11px] font-bold text-slate-600 italic leading-relaxed line-clamp-2">"{item.ncr.issueDescription}"</p>
                             </div>
@@ -336,72 +273,46 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 ))}
             </div>
 
+            {/* Electronic Approval */}
             <section className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-8">
                 <h3 className="text-blue-700 border-b border-blue-50 pb-4 font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-500"/> XÁC NHẬN PHÊ DUYỆT ĐIỆN TỬ (ISO 9001)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="text-center space-y-3">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QC Inspector</p>
-                        <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
-                            {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" alt="" /> : <span className="text-[10px] text-slate-300 font-bold uppercase italic">Chưa ký</span>}
-                        </div>
-                        <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.inspectorName}</p>
-                    </div>
-                    <div className="text-center space-y-3">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Production / Workshop</p>
-                        <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                            {inspection.productionSignature ? <img src={inspection.productionSignature} className="h-full object-contain" alt="" /> : <div className="text-[10px] text-slate-300 font-bold uppercase italic">N/A</div>}
-                        </div>
-                        <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || '---'}</p>
-                    </div>
-                    <div className="text-center space-y-3">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QA Manager Approval</p>
-                        <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                            {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" alt="" /> : <span className="text-orange-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Đang chờ duyệt</span>}
-                        </div>
-                        <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.managerName || '---'}</p>
-                    </div>
+                    <div className="text-center space-y-3"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QC Inspector</p><div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">{inspection.signature ? <img src={inspection.signature} className="h-full object-contain" alt="" /> : <span className="text-[10px] text-slate-300 font-bold uppercase italic">Chưa ký</span>}</div><p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.inspectorName}</p></div>
+                    <div className="text-center space-y-3"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Production / Workshop</p><div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">{inspection.productionSignature ? <img src={inspection.productionSignature} className="h-full object-contain" alt="" /> : <div className="text-[10px] text-slate-300 font-bold uppercase italic">N/A</div>}</div><p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || '---'}</p></div>
+                    <div className="text-center space-y-3"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QA Manager Approval</p><div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">{inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" alt="" /> : <span className="text-orange-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Đang chờ duyệt</span>}</div><p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.managerName || '---'}</p></div>
                 </div>
             </section>
 
-            {/* Internal Feedback Section */}
+            {/* Internal Feedback Section - ISO Independent Comment Table Flow */}
             <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-blue-600" />
-                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ</h3>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ (Independent Audit Log)</h3>
                 </div>
                 <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
-                    {inspection.comments?.map((comment) => (
+                    {activeComments.map((comment) => (
                         <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
                             <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" />
                             <div className="flex-1 space-y-2">
-                                <div className="flex justify-between items-center px-1">
-                                    <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
-                                </div>
+                                <div className="flex justify-between items-center px-1"><span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span></div>
                                 <div className="bg-slate-50 p-4 rounded-[1.5rem] rounded-tl-none border border-slate-100 text-[12px] text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">{comment.content}</div>
                                 {comment.attachments && comment.attachments.length > 0 && (
                                     <div className="flex gap-3 flex-wrap pt-2">
                                         {comment.attachments.map((img, i) => (
-                                            <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 hover:shadow-md shrink-0">
-                                                <img src={img} className="w-full h-full object-cover" alt=""/>
-                                            </div>
+                                            <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0"><img src={img} className="w-full h-full object-cover" alt=""/></div>
                                         ))}
                                     </div>
                                 )}
                             </div>
                         </div>
                     ))}
-                    {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-[10px] text-slate-300 py-10 font-black uppercase tracking-[0.3em]">Hệ thống chưa ghi nhận ý kiến</p>}
+                    {activeComments.length === 0 && <p className="text-center text-[10px] text-slate-300 py-10 font-black uppercase tracking-[0.3em]">Hệ thống chưa ghi nhận ý kiến</p>}
                 </div>
                 <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-4">
                     {commentAttachments.length > 0 && (
                         <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                             {commentAttachments.map((img, idx) => (
-                                <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                    <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
-                                    <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
-                                    <div className="absolute inset-0 bg-black/10 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"><PenTool className="w-5 h-5 text-white drop-shadow-md"/></div>
-                                </div>
+                                <div key={idx} className="relative w-20 h-20 shrink-0 group"><img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)}/><button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button></div>
                             ))}
                         </div>
                     )}
@@ -430,17 +341,12 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
           </div>
       </div>
 
+      {/* Lightbox / Modals */}
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col">
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
-                      <div className="flex items-center gap-3"><div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl shadow-inner"><ShieldCheck className="w-6 h-6" /></div><h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">QA Manager Approval</h3></div>
-                      <button onClick={() => setShowManagerModal(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><X className="w-7 h-7"/></button>
-                  </div>
-                  <div className="p-8 space-y-6 bg-slate-50/30">
-                      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 text-center shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Authorized System User</p><p className="text-base font-black text-slate-800 uppercase tracking-tight">{user.name}</p></div>
-                      <SignaturePad label="Chữ ký điện tử phê duyệt *" value={managerSig} onChange={setManagerSig} />
-                  </div>
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white"><div className="flex items-center gap-3"><div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl shadow-inner"><ShieldCheck className="w-6 h-6" /></div><h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">QA Manager Approval</h3></div><button onClick={() => setShowManagerModal(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><X className="w-7 h-7"/></button></div>
+                  <div className="p-8 space-y-6 bg-slate-50/30"><div className="bg-white p-5 rounded-[2rem] border border-slate-100 text-center shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Authorized System User</p><p className="text-base font-black text-slate-800 uppercase tracking-tight">{user.name}</p></div><SignaturePad label="Chữ ký điện tử phê duyệt *" value={managerSig} onChange={setManagerSig} /></div>
                   <div className="p-6 border-t border-slate-100 bg-white flex gap-4"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] tracking-widest hover:bg-slate-50 rounded-2xl transition-all">Hủy</button><button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-emerald-500/30 disabled:opacity-50 active:scale-95 transition-all">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : 'XÁC NHẬN PHÊ DUYỆT'}</button></div>
               </div>
           </div>
