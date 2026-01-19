@@ -5,7 +5,7 @@ import {
   ArrowLeft, User as UserIcon, Building2, Box, Edit3, Trash2, X, Maximize2, ShieldCheck,
   MessageSquare, Loader2, Eraser, Send, UserPlus, AlertOctagon, Check, Save,
   Camera, Image as ImageIcon, Paperclip, PenTool, LayoutList, History, FileText, ChevronRight,
-  Factory, Calendar, Activity
+  Factory, Calendar, Activity, Hash, MapPin
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -211,49 +211,62 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
         <div className="max-w-4xl mx-auto space-y-4 pb-32">
             <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative overflow-hidden">
                 <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-7xl rotate-12 select-none">PQC</div>
-                <h1 className="text-2xl font-black text-slate-900 uppercase mb-6 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-8">
+                
+                {/* ISO Header Update */}
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.1em] mb-1">{inspection.ten_ct}</p>
+                <h1 className="text-[11px] font-black text-slate-900 uppercase mb-8 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">
                     <div>
-                        <p className="mb-1 flex items-center gap-1.5"><Box className="w-3 h-3"/> Mã dự án</p>
-                        <p className="text-sm text-slate-800 tracking-tight">{inspection.ma_ct || '---'}</p>
+                        <p className="mb-1 flex items-center gap-1.5"><Box className="w-3 h-3"/> MÃ DỰ ÁN</p>
+                        <p className="text-[11px] font-bold text-slate-800 tracking-tight uppercase">
+                            {inspection.ma_ct || '---'} {inspection.ma_nha_may && `• ${inspection.ma_nha_may}`}
+                        </p>
                     </div>
                     <div>
-                        <p className="mb-1 flex items-center gap-1.5"><Factory className="w-3 h-3"/> Xưởng/Công đoạn</p>
-                        <p className="text-sm text-slate-800 tracking-tight">{inspection.workshop || '-'} / {inspection.inspectionStage || '-'}</p>
+                        <p className="mb-1 flex items-center gap-1.5"><Factory className="w-3 h-3"/> XƯỞNG/CÔNG ĐOẠN</p>
+                        <p className="text-[11px] font-bold text-slate-800 tracking-tight">
+                            {inspection.workshop || '-'} / {inspection.inspectionStage || '-'}
+                        </p>
                     </div>
                     <div>
-                        <p className="mb-1 flex items-center gap-1.5"><UserIcon className="w-3 h-3"/> QC Thẩm định</p>
-                        <p className="text-sm text-slate-800 tracking-tight">{inspection.inspectorName || '---'}</p>
+                        <p className="mb-1 flex items-center gap-1.5"><UserIcon className="w-3 h-3"/> QC THẨM ĐỊNH</p>
+                        <p className="text-[11px] font-bold text-slate-800 tracking-tight">
+                            {inspection.inspectorName || '---'}
+                        </p>
                     </div>
                     <div>
-                        <p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> Ngày thực hiện</p>
-                        <p className="text-sm text-slate-800 tracking-tight font-mono">{inspection.date}</p>
+                        <p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> NGÀY THỰC HIỆN</p>
+                        <p className="text-[11px] font-bold text-slate-800 tracking-tight font-mono">
+                            {inspection.date}
+                        </p>
                     </div>
                 </div>
+
                 <div className="bg-slate-50/80 p-5 rounded-[1.5rem] border border-slate-100 shadow-inner">
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                         <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Số IPO</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">SỐ IPO</p>
                             <p className="text-lg font-black text-slate-700">{stats.ipo}</p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kiểm tra</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">KIỂM TRA</p>
                             <p className="text-lg font-black text-blue-600">{stats.ins}</p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-green-600 uppercase tracking-widest">Đạt</p>
+                            <p className="text-[9px] font-black text-green-600 uppercase tracking-widest">ĐẠT</p>
                             <p className="text-lg font-black text-green-600">{stats.pas}</p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 space-y-1 bg-green-50/50 rounded-xl py-1">
-                            <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">Tỷ lệ đạt</p>
+                            <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">TỶ LỆ ĐẠT</p>
                             <p className="text-lg font-black text-green-700">{stats.passRate}%</p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 space-y-1">
-                            <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Hỏng</p>
+                            <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">HỎNG</p>
                             <p className="text-lg font-black text-red-600">{stats.fai}</p>
                         </div>
                         <div className="text-center space-y-1 bg-red-50/50 rounded-xl py-1">
-                            <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">Tỷ lệ hỏng</p>
+                            <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">TỶ LỆ HỎNG</p>
                             <p className="text-lg font-black text-red-700">{stats.failRate}%</p>
                         </div>
                     </div>
@@ -283,7 +296,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div key={idx} className={`bg-white p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50/10' : 'border-slate-200'}`}>
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex flex-wrap gap-2">
-                                <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{item.status}</span>
+                                <span className={`px-3 py-0.5 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>{item.status}</span>
                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">{item.category}</span>
                             </div>
                             {item.ncr && (
@@ -373,7 +386,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <div key={idx} className="relative w-14 h-14 shrink-0 group">
                                     <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
                                     <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-0.5 rounded-full shadow-lg active:scale-90 transition-all z-10"><X className="w-3 h-3"/></button>
-                                    <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"><PenTool className="w-4 h-4 text-white drop-shadow-sm"/></div>
+                                    <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"><PenTool className="w-4 h-4 text-white drop-shadow-md"/></div>
                                 </div>
                             ))}
                         </div>
