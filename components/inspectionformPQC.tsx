@@ -8,7 +8,7 @@ import {
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, BookOpen, Search,
   Loader2, Sparkles, CheckCircle2, ArrowLeft, History, Clock,
-  Calendar, UserCheck, Eye
+  Calendar, UserCheck, Eye, ChevronRight
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchPlans, fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
@@ -519,7 +519,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
 
         <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
-            <h3 className="text-blue-700 font-bold uppercase tracking-widest flex items-center gap-2 border-b border-blue-50 pb-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ẢNH HIỆN TRƯỜNG</h3>
+            <h3 className="text-blue-700 font-bold uppercase tracking-widest flex items-center gap-2 border-b border-blue-50 pb-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ÁNH HIỆN TRƯỜNG</h3>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                 <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
@@ -612,6 +612,62 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
         </section>
       </div>
+
+      {/* --- HISTORY MODAL --- */}
+      {showHistory && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg">
+                              <History className="w-5 h-5" />
+                          </div>
+                          <div>
+                              <h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">Lịch sử kiểm tra sản phẩm</h3>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ISO Audit Trail • Mã NM: {searchCode}</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white no-scrollbar">
+                      {historicalRecords.length === 0 ? (
+                          <div className="py-20 flex flex-col items-center justify-center text-slate-300">
+                              <Clock className="w-12 h-12 opacity-10 mb-4" />
+                              <p className="font-black uppercase tracking-[0.2em] text-[10px]">Chưa ghi nhận lịch sử cho mã này</p>
+                          </div>
+                      ) : (
+                          historicalRecords.map(rec => (
+                              <div key={rec.id} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all group flex items-center justify-between gap-4 cursor-default">
+                                  <div className="flex items-center gap-4">
+                                      <div className={`p-2.5 rounded-xl shrink-0 ${rec.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                                          <CheckCircle2 className="w-5 h-5" />
+                                      </div>
+                                      <div>
+                                          <div className="flex items-center gap-2 mb-1">
+                                              <span className="font-black text-[11px] text-slate-800 uppercase tracking-tight">{rec.date}</span>
+                                              <span className="text-[8px] font-black bg-white border px-1.5 py-0.5 rounded text-slate-400 uppercase tracking-widest">Score: {rec.score}%</span>
+                                          </div>
+                                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Inspector: {rec.inspectorName}</p>
+                                          <p className="text-[9px] text-slate-400 font-mono mt-0.5">#{rec.id.split('-').pop()}</p>
+                                      </div>
+                                  </div>
+                                  <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
+                                      rec.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-sm' :
+                                      rec.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' :
+                                      'bg-slate-50 text-slate-500 border-slate-200'
+                                  }`}>
+                                      {rec.status}
+                                  </div>
+                              </div>
+                          ))
+                      )}
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
+                      <button onClick={() => setShowHistory(false)} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-[0.98] transition-all">Đóng lịch sử</button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
         <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 flex items-center justify-center text-[10px]" type="button">HỦY BỎ</button>
