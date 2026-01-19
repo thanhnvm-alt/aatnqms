@@ -556,7 +556,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
               <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
                   <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                    {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : "Đang xử lý hình ảnh ISO..."}
+                    {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : "Đang nén hình ảnh ISO..."}
                   </p>
               </div>
           </div>
@@ -594,7 +594,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px] h-8 h-auto"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
             </div>
         </section>
@@ -632,7 +632,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                  </div>
             </div>
             
-            {/* QUANTITY CONTROLS WITH VALIDATION MESSAGES */}
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
@@ -669,11 +668,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         />
                     </div>
                 </div>
-                {/* Validation Total Alert */}
                 {((formData.passedQuantity || 0) + (formData.failedQuantity || 0)) > (formData.inspectedQuantity || 0) && (
                     <div className="flex items-center gap-1.5 bg-red-50 p-1.5 rounded-lg border border-red-100">
                         <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
-                        <p className="text-[8px] text-red-700 font-bold uppercase leading-none">Lỗi: (Đạt + Lỗi) > Số lượng kiểm tra</p>
+                        <p className="text-[8px] text-red-700 font-bold uppercase leading-none">Lỗi: (Đạt + Lỗi) &gt; Số lượng kiểm tra</p>
                     </div>
                 )}
             </div>
@@ -735,7 +733,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
       </div>
 
-      {/* --- HISTORY MODAL --- */}
       {showHistory && (
           <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in duration-200">
@@ -792,7 +789,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                   </div>
               </div>
 
-              {/* --- QUICK REVIEW MODAL (ISO DETAIL PEEK) --- */}
               {previewId && (
                   <div className="fixed inset-0 z-[250] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
                       <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-300">
