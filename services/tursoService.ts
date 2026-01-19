@@ -92,17 +92,15 @@ async function getEntityImages(entityId: string) {
 }
 
 /**
- * ISO-COMMENT-SERVICE: Quản lý thảo luận độc lập với forms
+ * ISO-COMMENT-SERVICE: SỬA LỖI UNIQUE CONSTRAINT
  */
 export const saveComment = async (entityId: string, comment: NCRComment) => {
     const commentId = comment.id || `CMT-${entityId}-${Date.now()}`;
-    
-    // 1. Decouple images from comment
     const imageRefs = await processAndStoreImages(commentId, 'COMMENT', comment.attachments, 'EVIDENCE');
 
-    // 2. Save comment metadata to dedicated table
+    // Sử dụng INSERT OR REPLACE để tránh lỗi Unique ID khi lưu lại phiếu
     await turso.execute({
-        sql: `INSERT INTO comments (id, entity_id, user_id, user_name, user_avatar, content, created_at, image_refs_json)
+        sql: `INSERT OR REPLACE INTO comments (id, entity_id, user_id, user_name, user_avatar, content, created_at, image_refs_json)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         args: sanitizeArgs([
             commentId, entityId, comment.userId, comment.userName, comment.userAvatar, 
@@ -137,9 +135,6 @@ export const getCommentsByEntityId = async (entityId: string): Promise<NCRCommen
     return comments;
 };
 
-/**
- * ISO-NCR-SAVE: Lưu dữ liệu NCR riêng biệt
- */
 async function saveNCRData(inspectionId: string, ncr: NCR, inspectorName: string) {
     const ncrId = ncr.id && !ncr.id.startsWith('NCR-temp') ? ncr.id : `NCR-${inspectionId}-${ncr.itemId || Date.now()}`;
     await turso.execute({ sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [ncrId] });
@@ -168,7 +163,6 @@ async function saveNCRData(inspectionId: string, ncr: NCR, inspectorName: string
         ])
     });
 
-    // Save comments if any (from legacy or new flow)
     if (ncr.comments && ncr.comments.length > 0) {
         for (const c of ncr.comments) {
             await saveComment(ncrId, c);
@@ -204,7 +198,6 @@ export const initDatabase = async () => {
       "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, role TEXT, avatar TEXT, data TEXT, updated_at INTEGER)",
       "CREATE TABLE IF NOT EXISTS projects (ma_ct TEXT PRIMARY KEY, name TEXT, status TEXT, pm TEXT, pc TEXT, qa TEXT, progress REAL DEFAULT 0, start_date TEXT, end_date TEXT, location TEXT, description TEXT, thumbnail TEXT, data TEXT, updated_at INTEGER, created_at INTEGER DEFAULT (unixepoch()))"
     ]);
-    console.log("✅ ISO-Digital QMS Database Ready.");
   } catch (e: any) {
     console.error("❌ ISO-DB Initialization Error:", e.message);
   }
@@ -235,14 +228,14 @@ export const saveInspection = async (inspection: Inspection) => {
       return { ...rest, images: itemImgRefs }; 
   }));
 
-  // 3. Xử lý Comments (Lưu vào bảng độc lập)
+  // 3. Xử lý Comments
   if (inspection.comments && inspection.comments.length > 0) {
       for (const comment of inspection.comments) {
           await saveComment(inspection.id, comment);
       }
   }
 
-  // 4. Mapping dữ liệu vào bảng tương ứng (Loại bỏ cột comments_json khỏi INSERT/UPDATE)
+  // 4. Mapping dữ liệu vào bảng tương ứng
   if (type === 'PQC') {
       const pqcArgs = sanitizeArgs([
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
@@ -258,7 +251,18 @@ export const saveInspection = async (inspection: Inspection) => {
       ]);
       await turso.execute({
           sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, created_by, created_at, inspector, status, data, updated_at, items_json, images_json, headcode, date, qty_ipo, score, summary, signature_qc, signature_prod, signature_mgr, name_prod, name_mgr, item_images_json, type, production_comment) 
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status, score=excluded.score, items_json=excluded.items_json, updated_at=excluded.updated_at`,
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) 
+                ON CONFLICT(id) DO UPDATE SET 
+                  status=excluded.status, 
+                  score=excluded.score, 
+                  items_json=excluded.items_json, 
+                  updated_at=excluded.updated_at,
+                  signature_qc=excluded.signature_qc,
+                  signature_prod=excluded.signature_prod,
+                  signature_mgr=excluded.signature_mgr,
+                  name_prod=excluded.name_prod,
+                  name_mgr=excluded.name_mgr,
+                  production_comment=excluded.production_comment`,
           args: pqcArgs
       });
   } else {
@@ -280,7 +284,17 @@ export const saveInspection = async (inspection: Inspection) => {
               production_signature, production_name, production_comment, images_json, delivery_images_json, report_images_json,
               so_luong_ipo, inspected_qty, passed_qty, failed_qty, dvt, updated_at, created_at
           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(id) DO UPDATE SET status=excluded.status, score=excluded.score, items_json=excluded.items_json, materials_json=excluded.materials_json, updated_at=excluded.updated_at
+          ON CONFLICT(id) DO UPDATE SET 
+            status=excluded.status, 
+            score=excluded.score, 
+            items_json=excluded.items_json, 
+            materials_json=excluded.materials_json, 
+            updated_at=excluded.updated_at,
+            signature_qc=excluded.signature_qc,
+            pm_signature=excluded.pm_signature,
+            production_signature=excluded.production_signature,
+            pm_comment=excluded.pm_comment,
+            production_comment=excluded.production_comment
       `;
       await turso.execute({ sql, args: matArgs });
   }
@@ -552,7 +566,7 @@ export const getProjectByCode = async (code: string): Promise<Project | null> =>
 
 export const updateProject = async (proj: Project) => {
     const { ma_ct, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, ...rest } = proj;
-    await turso.execute({ sql: `INSERT INTO projects (ma_ct, name, status, pm, pc, qa, progress, start_date, end_date, location, description, thumbnail, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(ma_ct) DO UPDATE SET name=excluded.name, status=excluded.status, pm=excluded.pm, pc=excluded.pc, qa=excluded.qa, progress=excluded.progress, start_date=excluded.start_date, end_date=excluded.end_date, location=excluded.location, description=excluded.description, thumbnail=excluded.thumbnail, data=excluded.data, updated_at=excluded.updated_at`, args: sanitizeArgs([ma_ct, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, JSON.stringify(rest)]) });
+    await turso.execute({ sql: `INSERT INTO projects (ma_ct, name, status, pm, pc, qa, progress, start_date, end_date, location, description, thumbnail, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(ma_ct) DO UPDATE SET name=excluded.name, status=excluded.status, pm=excluded.pm, pc=excluded.pc, qa=excluded.qa, progress=excluded.progress, start_date=excluded.start_date, end_date=excluded.end_date, location=excluded.location, description=excluded.description, thumbnail=excluded.thumbnail, data=excluded.data, updated_at=excluded.updated_at`, args: sanitizeArgs([ma_ct, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, JSON.stringify(rest)]) });
 };
 
 export const syncProjectsWithPlans = async () => {

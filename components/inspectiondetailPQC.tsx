@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
-import { saveComment, fetchComments } from '../services/apiService';
+import { saveComment, fetchComments, fetchInspectionById } from '../services/apiService';
 
 interface InspectionDetailProps {
   inspection: Inspection;
@@ -74,7 +74,8 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
     );
 };
 
-export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
+export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspection: initialInspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
+  const [inspection, setInspection] = useState<Inspection>(initialInspection);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [showProductionModal, setShowProductionModal] = useState(false);
@@ -97,12 +98,23 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isProdSigned = !!inspection.productionSignature;
 
-  // Sync comments on load
   useEffect(() => {
-      fetchComments(inspection.id).then(setActiveComments);
+      refreshData();
   }, [inspection.id]);
 
-  // --- STATISTICS CALCULATIONS ---
+  const refreshData = async () => {
+      try {
+          const [fullData, commentsData] = await Promise.all([
+              fetchInspectionById(inspection.id),
+              fetchComments(inspection.id)
+          ]);
+          if (fullData) setInspection(fullData);
+          if (commentsData) setActiveComments(commentsData);
+      } catch (e) {
+          console.error("Refresh failed", e);
+      }
+  };
+
   const stats = useMemo(() => {
     const ins = Number(inspection.inspectedQuantity || 0);
     const pas = Number(inspection.passedQuantity || 0);
@@ -110,10 +122,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
     const ipo = Number(inspection.so_luong_ipo || 0);
     
     return {
-      ipo,
-      ins,
-      pas,
-      fai,
+      ipo, ins, pas, fai,
       passRate: ins > 0 ? ((pas / ins) * 100).toFixed(1) : "0.0",
       failRate: ins > 0 ? ((fai / ins) * 100).toFixed(1) : "0.0"
     };
@@ -126,7 +135,8 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       try { 
           await onApprove(inspection.id, managerSig, { managerName: user.name }); 
           setShowManagerModal(false); 
-          onBack(); 
+          // Hiển thị kết quả ngay lập tức bằng cách re-fetch
+          await refreshData();
       } 
       catch (e: any) { 
           alert("Lỗi phê duyệt: " + (e.message || "Unknown Error")); 
@@ -138,12 +148,15 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       if (!onApprove) return;
       setIsProcessing(true);
       try { 
+          // ISO-FIX: Align keys with DB Column mapping in tursoService
           await onApprove(inspection.id, "", { 
-              signature: prodSig, 
-              name: prodName.toUpperCase(),
-              comment: prodComment
+              productionSignature: prodSig, 
+              productionName: prodName.toUpperCase(),
+              productionComment: prodComment
           }); 
           setShowProductionModal(false); 
+          // Hiển thị kết quả ngay lập tức
+          await refreshData();
       } 
       catch (e: any) { 
           alert("Lỗi xác nhận: " + (e.message || "Unknown Error")); 
@@ -164,11 +177,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
             attachments: commentAttachments
         };
         await saveComment(inspection.id, commentToSave);
-        
-        // Refresh local UI state
-        const refreshed = await fetchComments(inspection.id);
-        setActiveComments(refreshed);
-        
+        await refreshData();
         setNewComment('');
         setCommentAttachments([]);
     } catch (e: any) { alert("Lỗi gửi bình luận: " + e.message); } finally { setIsSubmittingComment(false); }
@@ -189,10 +198,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       e.target.value = '';
   };
 
-  const handleEditCommentImage = (idx: number) => {
-      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
-  };
-
+  // Add missing updateCommentImage function to handle image edits in the comment section
   const updateCommentImage = (idx: number, newImg: string) => {
       setCommentAttachments(prev => {
           const next = [...prev];
@@ -241,6 +247,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
             </div>
 
+            {/* tiêu chí kiểm tra */}
             <div className="space-y-3">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-4 flex items-center gap-2"><Activity className="w-4 h-4" /> Chi tiết tiêu chí kiểm tra</h3>
                 {inspection.items.map((item, idx) => (
@@ -278,16 +285,23 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <h3 className="text-blue-700 border-b border-blue-50 pb-4 font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-500"/> XÁC NHẬN PHÊ DUYỆT ĐIỆN TỬ (ISO 9001)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="text-center space-y-3"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QC Inspector</p><div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">{inspection.signature ? <img src={inspection.signature} className="h-full object-contain" alt="" /> : <span className="text-[10px] text-slate-300 font-bold uppercase italic">Chưa ký</span>}</div><p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.inspectorName}</p></div>
-                    <div className="text-center space-y-3"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Production / Workshop</p><div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">{inspection.productionSignature ? <img src={inspection.productionSignature} className="h-full object-contain" alt="" /> : <div className="text-[10px] text-slate-300 font-bold uppercase italic">N/A</div>}</div><p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || '---'}</p></div>
+                    <div className="text-center space-y-3">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Production / Workshop</p>
+                        <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
+                            {inspection.productionSignature ? <img src={inspection.productionSignature} className="h-full object-contain" alt="" /> : <div className="text-[10px] text-slate-300 font-bold uppercase italic">Chờ xác nhận</div>}
+                        </div>
+                        <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || '---'}</p>
+                        {inspection.productionComment && <p className="text-[9px] text-slate-400 italic mt-1 line-clamp-2 px-2">"{inspection.productionComment}"</p>}
+                    </div>
                     <div className="text-center space-y-3"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QA Manager Approval</p><div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">{inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" alt="" /> : <span className="text-orange-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Đang chờ duyệt</span>}</div><p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.managerName || '---'}</p></div>
                 </div>
             </section>
 
-            {/* Internal Feedback Section - ISO Independent Comment Table Flow */}
+            {/* Internal Feedback Section */}
             <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-blue-600" />
-                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ (Independent Audit Log)</h3>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ</h3>
                 </div>
                 <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                     {activeComments.map((comment) => (
@@ -312,7 +326,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     {commentAttachments.length > 0 && (
                         <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                             {commentAttachments.map((img, idx) => (
-                                <div key={idx} className="relative w-20 h-20 shrink-0 group"><img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)}/><button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button></div>
+                                <div key={idx} className="relative w-20 h-20 shrink-0 group"><img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' })}/><button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button></div>
                             ))}
                         </div>
                     )}
