@@ -1,4 +1,3 @@
-
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId } from "../types";
 
@@ -30,15 +29,38 @@ const getTableName = (type: string = 'PQC'): string => {
 };
 
 /**
+ * ISO-NOTIFICATION-ENGINE: Tạo thông báo hệ thống
+ */
+export async function addNotification(userId: string, type: Notification['type'], title: string, message: string, link?: any) {
+    const id = `NTF-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const data = JSON.stringify({ title, message, type, link });
+    try {
+        await turso.execute({
+            sql: "INSERT INTO notifications (id, user_id, is_read, created_at, data) VALUES (?, ?, 0, unixepoch(), ?)",
+            args: [id, userId, data]
+        });
+    } catch (e) {
+        console.error("Failed to create notification", e);
+    }
+}
+
+/**
  * ISO-IMAGE-DECOUPLING: Tách hình ảnh/chữ ký ra khỏi JSON và lưu vào bảng qms_images
  */
-async function processAndStoreImages(entityId: string, entityType: QMSImage['entity_type'], images: string[] | string | undefined, role: QMSImage['image_role'], relatedItemId?: string) {
-    if (!images) return role.includes('SIGNATURE') ? null : [];
+async function processAndStoreImages(
+  entityId: string, 
+  entityType: QMSImage['entity_type'], 
+  images: string[] | string | undefined, 
+  role: QMSImage['image_role'], 
+  relatedItemId?: string,
+  forceArray: boolean = false
+) {
+    if (!images) return forceArray ? [] : (role.includes('SIGNATURE') ? null : []);
     
     const isSingleImage = typeof images === 'string';
     const imageList = isSingleImage ? [images] : (images as string[]);
     
-    if (imageList.length === 0) return isSingleImage ? null : [];
+    if (imageList.length === 0) return forceArray ? [] : (isSingleImage ? null : []);
     
     const imageRefs: string[] = [];
     for (let i = 0; i < imageList.length; i++) {
@@ -56,7 +78,7 @@ async function processAndStoreImages(entityId: string, entityType: QMSImage['ent
         });
         imageRefs.push(imageId);
     }
-    return isSingleImage ? imageRefs[0] : imageRefs;
+    return (isSingleImage && !forceArray) ? imageRefs[0] : imageRefs;
 }
 
 /**
@@ -92,83 +114,37 @@ async function getEntityImages(entityId: string) {
 }
 
 /**
- * ISO-COMMENT-SERVICE: SỬA LỖI UNIQUE CONSTRAINT
+ * ISO-NCR-SAVE: Lưu dữ liệu NCR riêng biệt
  */
-export const saveComment = async (entityId: string, comment: NCRComment) => {
-    const commentId = comment.id || `CMT-${entityId}-${Date.now()}`;
-    const imageRefs = await processAndStoreImages(commentId, 'COMMENT', comment.attachments, 'EVIDENCE');
-
-    // Sử dụng INSERT OR REPLACE để tránh lỗi Unique ID khi lưu lại phiếu
-    await turso.execute({
-        sql: `INSERT OR REPLACE INTO comments (id, entity_id, user_id, user_name, user_avatar, content, created_at, image_refs_json)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: sanitizeArgs([
-            commentId, entityId, comment.userId, comment.userName, comment.userAvatar, 
-            comment.content, comment.createdAt ? Math.floor(new Date(comment.createdAt).getTime() / 1000) : Math.floor(Date.now() / 1000),
-            JSON.stringify(imageRefs)
-        ])
-    });
-    return commentId;
-};
-
-export const getCommentsByEntityId = async (entityId: string): Promise<NCRComment[]> => {
-    const res = await turso.execute({
-        sql: "SELECT * FROM comments WHERE entity_id = ? ORDER BY created_at ASC",
-        args: [entityId]
-    });
-
-    const comments: NCRComment[] = [];
-    for (const r of res.rows) {
-        const commentId = String(r.id);
-        const { imagesMap } = await getEntityImages(commentId);
-        
-        comments.push({
-            id: commentId,
-            userId: String(r.user_id),
-            userName: String(r.user_name),
-            userAvatar: String(r.user_avatar || ''),
-            content: String(r.content),
-            createdAt: new Date(Number(r.created_at) * 1000).toISOString(),
-            attachments: imagesMap['EVIDENCE'] || []
-        });
-    }
-    return comments;
-};
-
 async function saveNCRData(inspectionId: string, ncr: NCR, inspectorName: string) {
     const ncrId = ncr.id && !ncr.id.startsWith('NCR-temp') ? ncr.id : `NCR-${inspectionId}-${ncr.itemId || Date.now()}`;
     await turso.execute({ sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [ncrId] });
-    const beforeRefs = await processAndStoreImages(ncrId, 'NCR', ncr.imagesBefore, 'BEFORE');
-    const afterRefs = await processAndStoreImages(ncrId, 'NCR', ncr.imagesAfter, 'AFTER');
+    const beforeRefs = await processAndStoreImages(ncrId, 'NCR', ncr.imagesBefore, 'BEFORE', undefined, true);
+    const afterRefs = await processAndStoreImages(ncrId, 'NCR', ncr.imagesAfter, 'AFTER', undefined, true);
 
     await turso.execute({
         sql: `INSERT INTO ncrs (
                 id, inspection_id, item_id, defect_code, severity, status, 
-                description, root_cause, corrective_action, responsible_person, 
-                deadline, created_by, created_at, updated_at, 
-                images_before_json, images_after_json
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), ?, ?)
+                description, root_cause, corrective_action, preventive_action, 
+                responsible_person, deadline, images_before_json, images_after_json, 
+                created_by, created_at, updated_at, comments_json
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), ?)
               ON CONFLICT(id) DO UPDATE SET 
                 severity=excluded.severity, status=excluded.status, description=excluded.description,
                 root_cause=excluded.root_cause, corrective_action=excluded.corrective_action,
+                preventive_action=excluded.preventive_action,
                 responsible_person=excluded.responsible_person, deadline=excluded.deadline,
                 updated_at=unixepoch(), images_before_json=excluded.images_before_json,
-                images_after_json=excluded.images_after_json`,
+                images_after_json=excluded.images_after_json, comments_json=excluded.comments_json`,
         args: sanitizeArgs([
             ncrId, inspectionId, ncr.itemId || 'unknown', ncr.defect_code || null, 
             ncr.severity || 'MINOR', ncr.status || 'OPEN', ncr.issueDescription,
-            ncr.rootCause || null, ncr.solution || null, ncr.responsiblePerson || null,
-            ncr.deadline || null, inspectorName,
-            JSON.stringify(beforeRefs), JSON.stringify(afterRefs)
+            ncr.rootCause || null, ncr.solution || null, ncr.preventiveAction || null,
+            ncr.responsiblePerson || null, ncr.deadline || null,
+            JSON.stringify(beforeRefs), JSON.stringify(afterRefs), inspectorName,
+            JSON.stringify(ncr.comments || [])
         ])
     });
-
-    if (ncr.comments && ncr.comments.length > 0) {
-        for (const c of ncr.comments) {
-            await saveComment(ncrId, c);
-        }
-    }
-
     return ncrId;
 }
 
@@ -182,22 +158,34 @@ export const initDatabase = async () => {
         signature_qc TEXT, pm_signature TEXT, pm_name TEXT, pm_comment TEXT, 
         production_signature TEXT, production_name TEXT, production_comment TEXT,
         images_json TEXT, delivery_images_json TEXT, report_images_json TEXT,
-        so_luong_ipo REAL, inspected_qty REAL, 
+        comments_json TEXT DEFAULT '[]', so_luong_ipo REAL, inspected_qty REAL, 
         passed_qty REAL, failed_qty REAL, dvt TEXT, updated_at TEXT, created_at TEXT
     `;
 
     await turso.batch([
       "CREATE TABLE IF NOT EXISTS inspections_master (id TEXT PRIMARY KEY, type TEXT NOT NULL, created_at TEXT, updated_at TEXT)",
       "CREATE TABLE IF NOT EXISTS qms_images (id TEXT PRIMARY KEY, parent_entity_id TEXT NOT NULL, related_item_id TEXT, entity_type TEXT NOT NULL, image_role TEXT NOT NULL, url_hd TEXT, url_thumbnail TEXT, created_at INTEGER)",
-      "CREATE TABLE IF NOT EXISTS comments (id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, user_id TEXT, user_name TEXT, user_avatar TEXT, content TEXT, created_at INTEGER, image_refs_json TEXT, data TEXT)",
-      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()))",
-      `CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, ma_nha_may TEXT, workshop TEXT, stage TEXT, dvt TEXT, sl_ipo REAL DEFAULT 0, qty_total REAL DEFAULT 0, qty_pass REAL DEFAULT 0, qty_fail REAL DEFAULT 0, created_by TEXT, created_at TEXT, inspector TEXT, status TEXT, data TEXT, updated_at TEXT, items_json TEXT, images_json TEXT, headcode TEXT, date TEXT, qty_ipo REAL, score REAL, summary TEXT, signature_qc TEXT, signature_prod TEXT, signature_mgr TEXT, name_prod TEXT, name_mgr TEXT, item_images_json TEXT, type TEXT DEFAULT 'PQC', production_comment TEXT)`,
+      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), comments_json TEXT DEFAULT ( '[]' ))",
+      `CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, ma_nha_may TEXT, workshop TEXT, stage TEXT, dvt TEXT, sl_ipo REAL DEFAULT 0, qty_total REAL DEFAULT 0, qty_pass REAL DEFAULT 0, qty_fail REAL DEFAULT 0, created_by TEXT, created_at TEXT, inspector TEXT, status TEXT, data TEXT, updated_at TEXT, items_json TEXT, images_json TEXT, headcode TEXT, date TEXT, qty_ipo REAL, score REAL, summary TEXT, signature_qc TEXT, signature_prod TEXT, signature_mgr TEXT, name_prod TEXT, name_mgr TEXT, item_images_json TEXT, comments_json TEXT DEFAULT '[]', type TEXT DEFAULT 'PQC', production_comment TEXT)`,
       `CREATE TABLE IF NOT EXISTS forms_iqc (${baseColumns})`,
       `CREATE TABLE IF NOT EXISTS forms_sqc_vt (${baseColumns})`,
       `CREATE TABLE IF NOT EXISTS forms_sqc_btp (${baseColumns})`,
       "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, role TEXT, avatar TEXT, data TEXT, updated_at INTEGER)",
-      "CREATE TABLE IF NOT EXISTS projects (ma_ct TEXT PRIMARY KEY, name TEXT, status TEXT, pm TEXT, pc TEXT, qa TEXT, progress REAL DEFAULT 0, start_date TEXT, end_date TEXT, location TEXT, description TEXT, thumbnail TEXT, data TEXT, updated_at INTEGER, created_at INTEGER DEFAULT (unixepoch()))"
+      "CREATE TABLE IF NOT EXISTS projects (ma_ct TEXT PRIMARY KEY, name TEXT, status TEXT, pm TEXT, pc TEXT, qa TEXT, progress REAL DEFAULT 0, start_date TEXT, end_date TEXT, location TEXT, description TEXT, thumbnail TEXT, data TEXT, updated_at INTEGER, created_at INTEGER DEFAULT (unixepoch()))",
+      "CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, is_read INTEGER DEFAULT 0, created_at INTEGER, data TEXT)",
+      "CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, data TEXT)",
+      "CREATE TABLE IF NOT EXISTS templates (moduleId TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo REAL, ma_nha_may TEXT, created_at INTEGER, assignee TEXT, status TEXT)",
+      "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER)",
+      "CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT, name TEXT, data TEXT, updated_at INTEGER)"
     ]);
+    
+    // ISO-FIX: Migrations an toàn cho bảng notifications để khắc phục lỗi thiếu cột
+    try { await turso.execute("ALTER TABLE notifications ADD COLUMN user_id TEXT"); } catch (e) {}
+    try { await turso.execute("ALTER TABLE notifications ADD COLUMN is_read INTEGER DEFAULT 0"); } catch (e) {}
+    try { await turso.execute("ALTER TABLE notifications ADD COLUMN created_at INTEGER"); } catch (e) {}
+
+    console.log("✅ ISO-Digital QMS Database Ready.");
   } catch (e: any) {
     console.error("❌ ISO-DB Initialization Error:", e.message);
   }
@@ -208,19 +196,23 @@ export const saveInspection = async (inspection: Inspection) => {
   const type = inspection.type || 'PQC';
   const tableName = getTableName(type);
   
-  // 1. Dọn dẹp & Tách ảnh
+  // Lấy trạng thái cũ để so sánh gửi thông báo
+  const oldRes = await turso.execute({ sql: `SELECT status FROM ${tableName} WHERE id = ?`, args: [inspection.id] });
+  const oldStatus = oldRes.rows.length > 0 ? String(oldRes.rows[0].status) : null;
+
+  // 1. Dọn dẹp & Tách ảnh (Sử dụng forceArray=true cho Evidence)
   await turso.execute({ sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [inspection.id] });
   const sigQcRef = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.signature, 'QC_SIGNATURE' as any);
   const sigProdRef = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.productionSignature, 'PROD_SIGNATURE' as any);
   const sigMgrRef = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.managerSignature || inspection.pmSignature, 'MGR_SIGNATURE' as any);
   
-  const deliveryImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.deliveryNoteImages, 'EVIDENCE', 'delivery');
-  const reportImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.reportImages, 'EVIDENCE', 'report');
-  const fieldImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.images, 'EVIDENCE', 'field');
+  const deliveryImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.deliveryNoteImages, 'EVIDENCE', 'delivery', true);
+  const reportImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.reportImages, 'EVIDENCE', 'report', true);
+  const fieldImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', inspection.images, 'EVIDENCE', 'field', true);
 
   // 2. Xử lý Items & NCRs
   const cleanedItems = await Promise.all((inspection.items || []).map(async (item) => {
-      const itemImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', item.images, 'EVIDENCE', item.id);
+      const itemImgRefs = await processAndStoreImages(inspection.id, 'INSPECTION', item.images, 'EVIDENCE', item.id, true);
       if (item.status === CheckStatus.FAIL && item.ncr) {
           await saveNCRData(inspection.id, { ...item.ncr, itemId: item.id }, inspection.inspectorName);
       }
@@ -228,14 +220,7 @@ export const saveInspection = async (inspection: Inspection) => {
       return { ...rest, images: itemImgRefs }; 
   }));
 
-  // 3. Xử lý Comments
-  if (inspection.comments && inspection.comments.length > 0) {
-      for (const comment of inspection.comments) {
-          await saveComment(inspection.id, comment);
-      }
-  }
-
-  // 4. Mapping dữ liệu vào bảng tương ứng
+  // 3. Mapping dữ liệu vào bảng tương ứng
   if (type === 'PQC') {
       const pqcArgs = sanitizeArgs([
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
@@ -246,23 +231,30 @@ export const saveInspection = async (inspection: Inspection) => {
           '{}', now, JSON.stringify(cleanedItems), JSON.stringify(fieldImgRefs),
           inspection.headcode, inspection.date, inspection.so_luong_ipo || 0, inspection.score || 0, inspection.summary,
           sigQcRef, sigProdRef, sigMgrRef,
-          inspection.productionName, inspection.managerName, '[]', 'PQC',
+          inspection.productionName, inspection.managerName, '[]',
+          JSON.stringify(inspection.comments || []), 'PQC',
           inspection.productionComment
       ]);
       await turso.execute({
-          sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, created_by, created_at, inspector, status, data, updated_at, items_json, images_json, headcode, date, qty_ipo, score, summary, signature_qc, signature_prod, signature_mgr, name_prod, name_mgr, item_images_json, type, production_comment) 
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) 
+          sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, created_by, created_at, inspector, status, data, updated_at, items_json, images_json, headcode, date, qty_ipo, score, summary, signature_qc, signature_prod, signature_mgr, name_prod, name_mgr, item_images_json, comments_json, type, production_comment) 
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) 
                 ON CONFLICT(id) DO UPDATE SET 
                   status=excluded.status, 
                   score=excluded.score, 
                   items_json=excluded.items_json, 
-                  updated_at=excluded.updated_at,
-                  signature_qc=excluded.signature_qc,
-                  signature_prod=excluded.signature_prod,
-                  signature_mgr=excluded.signature_mgr,
-                  name_prod=excluded.name_prod,
-                  name_mgr=excluded.name_mgr,
-                  production_comment=excluded.production_comment`,
+                  images_json=excluded.images_json,
+                  qty_total=excluded.qty_total,
+                  qty_pass=excluded.qty_pass,
+                  qty_fail=excluded.qty_fail,
+                  summary=excluded.summary,
+                  signature_qc=COALESCE(excluded.signature_qc, signature_qc),
+                  signature_prod=COALESCE(excluded.signature_prod, signature_prod),
+                  signature_mgr=COALESCE(excluded.signature_mgr, signature_mgr),
+                  name_prod=COALESCE(excluded.name_prod, name_prod),
+                  name_mgr=COALESCE(excluded.name_mgr, name_mgr),
+                  production_comment=excluded.production_comment,
+                  comments_json=excluded.comments_json,
+                  updated_at=excluded.updated_at`,
           args: pqcArgs
       });
   } else {
@@ -273,7 +265,7 @@ export const saveInspection = async (inspection: Inspection) => {
           sigQcRef, sigMgrRef, inspection.managerName || inspection.pmName, inspection.pmComment,
           sigProdRef, inspection.productionName, inspection.productionComment,
           JSON.stringify(fieldImgRefs), JSON.stringify(deliveryImgRefs), JSON.stringify(reportImgRefs),
-          inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0,
+          JSON.stringify(inspection.comments || []), inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0,
           inspection.passedQuantity || 0, inspection.failedQuantity || 0, inspection.dvt || 'PCS', now, inspection.createdAt || now
       ]);
 
@@ -282,21 +274,51 @@ export const saveInspection = async (inspection: Inspection) => {
               id, type, ma_ct, ten_ct, ten_hang_muc, po_number, supplier, inspector, status, date, 
               score, summary, items_json, materials_json, signature_qc, pm_signature, pm_name, pm_comment, 
               production_signature, production_name, production_comment, images_json, delivery_images_json, report_images_json,
-              so_luong_ipo, inspected_qty, passed_qty, failed_qty, dvt, updated_at, created_at
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              comments_json, so_luong_ipo, inspected_qty, passed_qty, failed_qty, dvt, updated_at, created_at
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(id) DO UPDATE SET 
             status=excluded.status, 
             score=excluded.score, 
             items_json=excluded.items_json, 
             materials_json=excluded.materials_json, 
-            updated_at=excluded.updated_at,
-            signature_qc=excluded.signature_qc,
-            pm_signature=excluded.pm_signature,
-            production_signature=excluded.production_signature,
+            images_json=excluded.images_json,
+            delivery_images_json=excluded.delivery_images_json,
+            report_images_json=excluded.report_images_json,
+            inspected_qty=excluded.inspected_qty,
+            passed_qty=excluded.passed_qty,
+            failed_qty=excluded.failed_qty,
+            signature_qc=COALESCE(excluded.signature_qc, signature_qc),
+            pm_signature=COALESCE(excluded.pm_signature, pm_signature),
+            production_signature=COALESCE(excluded.production_signature, production_signature),
+            pm_name=COALESCE(excluded.pm_name, pm_name),
+            production_name=COALESCE(excluded.production_name, production_name),
             pm_comment=excluded.pm_comment,
-            production_comment=excluded.production_comment
+            production_comment=excluded.production_comment,
+            comments_json=excluded.comments_json,
+            updated_at=excluded.updated_at
       `;
       await turso.execute({ sql, args: matArgs });
+  }
+
+  // 4. ISO-NOTIFY: Xử lý tạo thông báo
+  if (inspection.status === InspectionStatus.PENDING && oldStatus !== InspectionStatus.PENDING) {
+      const managersRes = await turso.execute("SELECT id FROM users WHERE role IN ('ADMIN', 'MANAGER')");
+      for (const m of managersRes.rows) {
+          await addNotification(String(m.id), 'INSPECTION', `Phiếu ${type} mới cần duyệt`, `Phiếu #${inspection.id.split('-').pop()} cho ${inspection.ten_hang_muc} đã sẵn sàng.`, { view: 'DETAIL', id: inspection.id });
+      }
+  } else if (inspection.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
+      // Thông báo cho Inspector
+      const inspectorRes = await turso.execute({ sql: "SELECT id FROM users WHERE name = ?", args: [inspection.inspectorName] });
+      if (inspectorRes.rows.length > 0) {
+          await addNotification(String(inspectorRes.rows[0].id), 'INSPECTION', `Phiếu ${type} đã được duyệt`, `Hồ sơ #${inspection.id.split('-').pop()} đã được phê duyệt.`, { view: 'DETAIL', id: inspection.id });
+      }
+      // Thông báo cho Xưởng/Sản xuất (nếu có user khớp tên)
+      if (inspection.productionName) {
+          const prodRes = await turso.execute({ sql: "SELECT id FROM users WHERE name = ?", args: [inspection.productionName] });
+          if (prodRes.rows.length > 0) {
+              await addNotification(String(prodRes.rows[0].id), 'INSPECTION', 'Hồ sơ đã được phê duyệt', `Phiếu #${inspection.id.split('-').pop()} đã hoàn tất phê duyệt bởi quản lý.`, { view: 'DETAIL', id: inspection.id });
+          }
+      }
   }
 
   await turso.execute({
@@ -316,15 +338,12 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
     const r = res.rows[0];
     
     const { imagesMap, itemImagesMap, signatureMap } = await getEntityImages(id);
-    const comments = await getCommentsByEntityId(id);
 
     const ncrRes = await turso.execute({ sql: "SELECT * FROM ncrs WHERE inspection_id = ?", args: [id] });
     const ncrByItemId: Record<string, NCR> = {};
     for (const row of ncrRes.rows) {
         const ncrId = String(row.id);
         const { imagesMap: ncrImages } = await getEntityImages(ncrId);
-        const ncrComments = await getCommentsByEntityId(ncrId);
-        
         ncrByItemId[String(row.item_id)] = {
             id: ncrId, inspection_id: id, itemId: String(row.item_id),
             defect_code: String(row.defect_code || ''), severity: row.severity as any,
@@ -332,7 +351,7 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             rootCause: String(row.root_cause || ''), solution: String(row.corrective_action || ''),
             responsiblePerson: String(row.responsible_person || ''), deadline: String(row.deadline || ''),
             imagesBefore: ncrImages['BEFORE'] || [], imagesAfter: ncrImages['AFTER'] || [],
-            comments: ncrComments,
+            comments: safeJsonParse(row.comments_json, []),
             createdBy: String(row.created_by), createdDate: String(row.created_at)
         } as NCR;
     }
@@ -349,7 +368,7 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             id: String(r.id), type: 'PQC', ma_ct: String(r.ma_ct || ''), ten_ct: String(r.ten_ct || ''), ten_hang_muc: String(r.ten_hang_muc || ''), 
             ma_nha_may: String(r.ma_nha_may || ''), workshop: String(r.workshop || ''), inspectionStage: String(r.stage || ''),
             inspectorName: String(r.inspector || ''), status: r.status as any, date: String(r.date || ''), score: Number(r.score || 0), summary: String(r.summary || ''), 
-            items: rehydratedItems, images: imagesMap['field'] || [], comments,
+            items: rehydratedItems, images: itemImagesMap['field'] || [], comments: safeJsonParse(r.comments_json, []),
             signature: signatureMap['QC_SIGNATURE'] || '', productionSignature: signatureMap['PROD_SIGNATURE'] || '',
             productionName: String(r.name_prod || ''), productionComment: String(r.production_comment || ''),
             managerSignature: signatureMap['MGR_SIGNATURE'] || '', managerName: String(r.name_mgr || ''),
@@ -366,8 +385,8 @@ export const getInspectionById = async (id: string): Promise<Inspection | null> 
             signature: signatureMap['QC_SIGNATURE'] || '', pmSignature: signatureMap['MGR_SIGNATURE'] || '',
             pmName: String(r.pm_name || ''), pmComment: String(r.pm_comment || ''),
             productionSignature: signatureMap['PROD_SIGNATURE'] || '', productionName: String(r.production_name || ''), productionComment: String(r.production_comment || ''),
-            images: imagesMap['field'] || [], deliveryNoteImages: imagesMap['delivery'] || [], reportImages: imagesMap['report'] || [],
-            comments, so_luong_ipo: Number(r.so_luong_ipo || 0),
+            images: itemImagesMap['field'] || [], deliveryNoteImages: itemImagesMap['delivery'] || [], reportImages: itemImagesMap['report'] || [],
+            comments: safeJsonParse(r.comments_json, []), so_luong_ipo: Number(r.so_luong_ipo || 0),
             inspectedQuantity: Number(r.inspected_qty || 0), passedQuantity: Number(r.passed_qty || 0), failedQuantity: Number(r.failed_qty || 0),
             dvt: String(r.dvt || ''), createdAt: String(r.created_at || ''), updatedAt: String(r.updated_at || '')
         } as any;
@@ -494,7 +513,6 @@ export const getNcrById = async (id: string): Promise<NCR | null> => {
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     const { imagesMap } = await getEntityImages(id);
-    const ncrComments = await getCommentsByEntityId(id);
     return { 
         id: String(r.id), inspection_id: String(r.inspection_id), itemId: String(r.item_id),
         defect_code: String(r.defect_code || ''), severity: r.severity as any, status: String(r.status), 
@@ -502,7 +520,7 @@ export const getNcrById = async (id: string): Promise<NCR | null> => {
         solution: String(r.corrective_action || ''), preventiveAction: String(r.preventive_action || ''), 
         responsiblePerson: String(r.responsible_person || ''), deadline: String(r.deadline || ''), 
         imagesBefore: imagesMap['BEFORE'] || [], imagesAfter: imagesMap['AFTER'] || [], 
-        comments: ncrComments, createdBy: String(r.created_by), 
+        comments: safeJsonParse(r.comments_json, []), createdBy: String(r.created_by), 
         createdDate: new Date(Number(r.created_at) * 1000).toISOString() 
     } as NCR;
 };
@@ -511,7 +529,7 @@ export const getDefectLibrary = async (): Promise<DefectLibraryItem[]> => {
     const res = await turso.execute("SELECT * FROM defect_library ORDER BY defect_code ASC");
     return res.rows.map(r => {
         const jsonData = safeJsonParse(r.data, {} as any);
-        return { id: String(r.id), code: String(r.defect_code || r.id), name: String(r.name || ''), stage: String(r.stage || 'Chung'), category: String(r.category || 'Ngoại quan'), description: String(r.description || ''), severity: String(r.severity || 'MINOR'), suggested_action: String(r.suggest_action || ''), ...jsonData };
+        return { id: String(r.id), code: String(r.defect_code || r.id), name: String(r.name || ''), stage: String(r.stage || 'Chung'), category: String(r.category || 'Ngoại quan'), description: String(r.description || ''), severity: String(r.severity || 'MINOR'), suggested_action: String(r.suggested_action || ''), ...jsonData };
     });
 };
 
@@ -566,7 +584,7 @@ export const getProjectByCode = async (code: string): Promise<Project | null> =>
 
 export const updateProject = async (proj: Project) => {
     const { ma_ct, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, ...rest } = proj;
-    await turso.execute({ sql: `INSERT INTO projects (ma_ct, name, status, pm, pc, qa, progress, start_date, end_date, location, description, thumbnail, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(ma_ct) DO UPDATE SET name=excluded.name, status=excluded.status, pm=excluded.pm, pc=excluded.pc, qa=excluded.qa, progress=excluded.progress, start_date=excluded.start_date, end_date=excluded.end_date, location=excluded.location, description=excluded.description, thumbnail=excluded.thumbnail, data=excluded.data, updated_at=excluded.updated_at`, args: sanitizeArgs([ma_ct, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, JSON.stringify(rest)]) });
+    await turso.execute({ sql: `INSERT INTO projects (ma_ct, name, status, pm, pc, qa, progress, start_date, end_date, location, description, thumbnail, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch()) ON CONFLICT(ma_ct) DO UPDATE SET name=excluded.name, status=excluded.status, pm=excluded.pm, pc=excluded.pc, qa=excluded.qa, progress=excluded.progress, start_date=excluded.start_date, end_date=excluded.end_date, location=excluded.location, description=excluded.description, thumbnail=excluded.thumbnail, data=excluded.data, updated_at=excluded.updated_at`, args: sanitizeArgs([ma_ct, name, status, pm, pc, qa, progress, startDate, endDate, location, description, thumbnail, JSON.stringify(rest)]) });
 };
 
 export const syncProjectsWithPlans = async () => {
@@ -588,8 +606,7 @@ export const deleteInspection = async (id: string) => {
             { sql: `DELETE FROM ${tableName} WHERE id = ?`, args: [id] },
             { sql: "DELETE FROM inspections_master WHERE id = ?", args: [id] },
             { sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [id] },
-            { sql: "DELETE FROM ncrs WHERE inspection_id = ?", args: [id] },
-            { sql: "DELETE FROM comments WHERE entity_id = ?", args: [id] }
+            { sql: "DELETE FROM ncrs WHERE inspection_id = ?", args: [id] }
         ]);
     }
     return true;

@@ -1,11 +1,9 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
-import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil } from 'lucide-react';
+import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil, LayoutGrid } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
-// Fixed: Imported missing members
 import { fetchWorkshops, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 
 interface TemplateEditorProps {
@@ -19,10 +17,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   const [items, setItems] = useState<CheckItem[]>(JSON.parse(JSON.stringify(currentTemplate)));
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
-  const [openDefectSelector, setOpenDefectSelector] = useState<string | null>(null); // itemId
-  const [defectSearchTerm, setDefectSearchTerm] = useState(''); // Search term for defects
+  const [openDefectSelector, setOpenDefectSelector] = useState<string | null>(null); 
+  const [defectSearchTerm, setDefectSearchTerm] = useState(''); 
   
-  // State for Quick Add Defect Modal
   const [isAddDefectModalOpen, setIsAddDefectModalOpen] = useState(false);
   const [newDefect, setNewDefect] = useState<Partial<DefectLibraryItem>>({
       code: '',
@@ -33,12 +30,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   });
   const [isSavingDefect, setIsSavingDefect] = useState(false);
 
-  // State for Active Group (IQC)
   const [activeGroup, setActiveGroup] = useState<string>('');
-  // State for Active Stage (PQC / SQC_BTP)
   const [activeStage, setActiveStage] = useState<string>('');
 
-  // Module Logic flags
   const isStandardPQC = moduleId === 'PQC';
   const isCustomStagePQC = moduleId === 'SQC_BTP';
   const isPQC = isStandardPQC || isCustomStagePQC;
@@ -53,25 +47,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
     }
   }, [isIQC]);
 
-  // Derive available stages based on mode
   const stageOptions = useMemo(() => {
     if (isStandardPQC) {
-        // PQC: Stages from Workshops
         const stages = new Set<string>();
         workshops.forEach(w => w.stages?.forEach(s => stages.add(s)));
         return Array.from(stages).sort();
     } else if (isCustomStagePQC) {
-        // SQC_BTP: Custom stages from existing items
         const stages = new Set<string>();
         items.forEach(i => { if (i.stage) stages.add(i.stage); });
-        // Include activeStage if it's new and has no items yet (though we usually add item immediately)
         if (activeStage) stages.add(activeStage);
         return Array.from(stages).sort();
     }
     return [];
   }, [workshops, items, isStandardPQC, isCustomStagePQC, activeStage]);
 
-  // Group items for IQC (still needed)
   const iqcGroups = useMemo(() => {
     const groups: Record<string, CheckItem[]> = {};
     if (isIQC) {
@@ -84,13 +73,11 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
     return groups;
   }, [items, isIQC]);
 
-  // Filter items for current active stage (PQC)
   const activeStageItems = useMemo(() => {
       if (!isPQC || !activeStage) return [];
       return items.filter(i => i.stage === activeStage);
   }, [items, isPQC, activeStage]);
 
-  // Initial Selection Effects
   useEffect(() => {
       if (isIQC && !activeGroup && Object.keys(iqcGroups).length > 0) {
           setActiveGroup(Object.keys(iqcGroups)[0]);
@@ -103,9 +90,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       }
   }, [isPQC, stageOptions, activeStage]);
 
-  // General Handlers
   const handleAddItem = (stageOrCategory?: string) => {
-    // Fixed: CheckItem type now correctly handles frequency and defectIds via updated types.ts
     const newItem: CheckItem = {
       id: Date.now().toString(),
       stage: isPQC ? (stageOrCategory || activeStage || 'CHUNG') : undefined,
@@ -132,9 +117,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
     setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
-  // IQC Specific Handlers
   const handleAddIQCGroup = () => {
-      const newGroupName = `Nhóm vật tư ${Object.keys(iqcGroups).length + 1}`;
+      const newGroupName = `Nhóm mới ${Object.keys(iqcGroups).length + 1}`;
       handleAddItem(newGroupName);
   };
 
@@ -154,9 +138,8 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       }
   };
 
-  // SQC_BTP Custom Stage Handlers
   const handleAddCustomStage = () => {
-      const name = prompt("Nhập tên công đoạn mới (VD: Khoan, Dán cạnh...):");
+      const name = prompt("Nhập tên công đoạn mới:");
       if (name && name.trim()) {
           const cleanName = name.trim();
           if (stageOptions.includes(cleanName)) {
@@ -165,7 +148,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
               return;
           }
           setActiveStage(cleanName);
-          // Add a dummy item to persist the stage immediately
           handleAddItem(cleanName);
       }
   };
@@ -181,7 +163,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
   const handleDeleteCustomStage = () => {
       if (!activeStage) return;
-      if (window.confirm(`Bạn có chắc muốn xóa công đoạn "${activeStage}" và toàn bộ tiêu chí bên trong?`)) {
+      if (window.confirm(`Bạn có chắc muốn xóa công đoạn "${activeStage}"?`)) {
           setItems(items.filter(i => i.stage !== activeStage));
           const remaining = stageOptions.filter(s => s !== activeStage);
           setActiveStage(remaining[0] || '');
@@ -201,10 +183,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   };
 
   const handleSaveNewDefect = async () => {
-      if (!newDefect.name) {
-          alert("Vui lòng nhập tên lỗi.");
-          return;
-      }
+      if (!newDefect.name) { alert("Vui lòng nhập tên lỗi."); return; }
       setIsSavingDefect(true);
       try {
           const code = newDefect.code || `DEF_${Date.now()}`;
@@ -219,38 +198,22 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
               createdAt: Math.floor(Date.now() / 1000),
               createdBy: 'Template Editor'
           } as DefectLibraryItem;
-
           await saveDefectLibraryItem(itemToSave);
-          
           setDefectLibrary(prev => [...prev, itemToSave]);
-          
-          if (openDefectSelector) {
-              toggleDefect(openDefectSelector, itemToSave.code);
-          }
-
+          if (openDefectSelector) toggleDefect(openDefectSelector, itemToSave.code);
           setIsAddDefectModalOpen(false);
           setNewDefect({ code: '', name: '', description: '', severity: 'MINOR', category: 'Ngoại quan' });
-      } catch (e) {
-          console.error(e);
-          alert("Lỗi khi lưu lỗi mới.");
-      } finally {
-          setIsSavingDefect(false);
-      }
+      } catch (e) { alert("Lỗi khi lưu lỗi mới."); } finally { setIsSavingDefect(false); }
   };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col animate-fade-in pb-20 md:pb-0 relative">
       <div className="p-3 md:p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-20">
          <div className="flex items-center gap-2">
-            <div className="p-2 bg-slate-200 rounded-lg hidden md:block">
-                <Settings className="w-5 h-5 text-slate-700" />
-            </div>
+            <div className="p-2 bg-slate-200 rounded-lg hidden md:block"><Settings className="w-5 h-5 text-slate-700" /></div>
             <div>
                 <h2 className="text-base md:text-lg font-bold text-slate-800 leading-none uppercase tracking-tight">Cấu hình mẫu phiếu</h2>
-                <div className="flex items-center gap-1 mt-1">
-                    <Layers className="w-3 h-3 text-blue-500" />
-                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest truncate max-w-[150px]">{moduleLabel}</span>
-                </div>
+                <div className="flex items-center gap-1 mt-1"><Layers className="w-3 h-3 text-blue-500" /><span className="text-[10px] font-black text-blue-600 uppercase tracking-widest truncate max-w-[150px]">{moduleLabel}</span></div>
             </div>
          </div>
          <div className="flex gap-2">
@@ -268,224 +231,100 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                     <Package className="w-5 h-5 text-blue-500 mt-1" />
                     <div className="text-xs text-blue-900">
                         <p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_MAT' ? 'SQC - Vật Tư' : 'IQC - Vật liệu đầu vào'}</p>
-                        <p>Thiết lập theo cấu trúc: <strong>Nhóm Vật Tư</strong> {'>'} <strong>Hạng mục kiểm tra</strong>. Liên kết lỗi từ thư viện để QC chọn nhanh.</p>
+                        <p>Thiết lập theo cấu trúc: <strong>Nhóm Hạng Mục</strong> {'>'} <strong>Tiêu chí kiểm tra</strong>. Liên kết lỗi từ thư viện để QC chọn nhanh.</p>
                     </div>
                 </div>
 
-                {/* Group Tabs (Horizontal Scroll) */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-                    {Object.keys(iqcGroups).map(groupName => (
-                        <button
-                            key={groupName}
-                            onClick={() => setActiveGroup(groupName)}
-                            className={`
-                                flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold whitespace-nowrap transition-all
-                                ${activeGroup === groupName 
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
-                                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'
-                                }
-                            `}
+                {/* --- NEW DROPDOWN UI FOR IQC GROUPS --- */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1 space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                            <LayoutGrid className="w-3 h-3 text-blue-500" /> Chọn nhóm hạng mục cần chỉnh sửa
+                        </label>
+                        <div className="relative">
+                            <select 
+                                value={activeGroup} 
+                                onChange={e => setActiveGroup(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 text-sm uppercase outline-none focus:ring-4 focus:ring-blue-100 appearance-none transition-all cursor-pointer shadow-sm"
+                            >
+                                <option value="" disabled>-- Chọn nhóm --</option>
+                                {Object.keys(iqcGroups).map(groupName => (
+                                    <option key={groupName} value={groupName}>
+                                        {groupName} ({iqcGroups[groupName].length} tiêu chí)
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleAddIQCGroup}
+                            className="flex-1 md:flex-none h-[50px] px-6 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
                         >
-                            <Grid className="w-3.5 h-3.5" />
-                            {groupName}
-                            <span className={`ml-1 text-[9px] px-1.5 py-0.5 rounded-full ${activeGroup === groupName ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                {iqcGroups[groupName].length}
-                            </span>
+                            <Plus className="w-4 h-4" /> Thêm Nhóm Mới
                         </button>
-                    ))}
-                    <button 
-                        onClick={handleAddIQCGroup}
-                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-dashed border-blue-300 text-blue-600 bg-blue-50/50 hover:bg-blue-50 font-bold text-xs whitespace-nowrap transition-all"
-                    >
-                        <Plus className="w-3.5 h-3.5" /> Thêm Nhóm
-                    </button>
+                    </div>
                 </div>
 
                 {/* Active Group Editor */}
                 {activeGroup && iqcGroups[activeGroup] ? (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        {/* Group Header Editable */}
                         <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
                             <div className="flex items-center gap-3 flex-1">
-                                <div className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500">
-                                    <Package className="w-5 h-5" />
-                                </div>
+                                <div className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500"><Package className="w-5 h-5" /></div>
                                 <div className="flex-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Tên nhóm vật tư</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Chỉnh sửa tên nhóm hiện tại</label>
                                     <div className="flex items-center gap-2">
                                         <input 
                                             className="font-bold text-base bg-transparent border-b border-transparent focus:border-blue-500 outline-none text-slate-800 uppercase w-full transition-all hover:border-slate-300 focus:bg-white"
                                             value={activeGroup}
                                             onChange={(e) => handleRenameGroup(activeGroup, e.target.value)}
-                                            placeholder="Nhập tên nhóm..."
+                                            placeholder="Tên nhóm..."
                                         />
                                         <Edit3 className="w-4 h-4 text-slate-300" />
                                     </div>
                                 </div>
                             </div>
-                            <button 
-                                onClick={() => handleDeleteGroup(activeGroup)} 
-                                className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold text-xs transition-colors"
-                            >
-                                <Trash2 className="w-4 h-4" /> Xóa nhóm này
-                            </button>
+                            <button onClick={() => handleDeleteGroup(activeGroup)} className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold text-xs transition-colors"><Trash2 className="w-4 h-4" /> Xóa nhóm</button>
                         </div>
 
-                        {/* Items List */}
                         <div className="p-4 space-y-4 bg-slate-50/30">
                             {iqcGroups[activeGroup].map((item) => (
                                 <div key={item.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group relative">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        {/* Left Column */}
                                         <div className="space-y-4">
                                             <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hạng mục kiểm tra</label>
-                                                <input
-                                                    type="text"
-                                                    value={item.label}
-                                                    onChange={(e) => handleChange(item.id, 'label', e.target.value)}
-                                                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                                                    placeholder="Nhập tên hạng mục..."
-                                                />
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nội dung kiểm tra *</label>
+                                                <input type="text" value={item.label} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                                             </div>
                                             <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phương pháp</label>
-                                                    <input
-                                                        type="text"
-                                                        value={item.method || ''}
-                                                        onChange={(e) => handleChange(item.id, 'method', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400 transition-all"
-                                                        placeholder="VD: Đo thước..."
-                                                    />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tần suất</label>
-                                                    <input
-                                                        type="text"
-                                                        // Fixed frequency field access via updated types.ts
-                                                        value={item.frequency || ''}
-                                                        onChange={(e) => handleChange(item.id, 'frequency', e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400 transition-all"
-                                                        placeholder="VD: 100%..."
-                                                    />
-                                                </div>
+                                                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phương pháp</label><input type="text" value={item.method || ''} onChange={(e) => handleChange(item.id, 'method', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400" /></div>
+                                                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tần suất</label><input type="text" value={item.frequency || ''} onChange={(e) => handleChange(item.id, 'frequency', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400" /></div>
                                             </div>
                                         </div>
-
-                                        {/* Right Column */}
                                         <div className="space-y-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tiêu chuẩn chấp nhận</label>
-                                                <textarea
-                                                    rows={1}
-                                                    value={item.standard || ''}
-                                                    onChange={(e) => handleChange(item.id, 'standard', e.target.value)}
-                                                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none resize-none focus:border-blue-400 transition-all"
-                                                    placeholder="VD: Không trầy xước, đúng kích thước..."
-                                                />
-                                            </div>
+                                            <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tiêu chuẩn ISO / Dung sai</label><textarea rows={1} value={item.standard || ''} onChange={(e) => handleChange(item.id, 'standard', e.target.value)} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none resize-none focus:border-blue-400" /></div>
                                             <div className="space-y-1.5 relative">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between">
-                                                    <span>Danh sách lỗi liên kết</span>
-                                                    {/* Fixed defectIds field access via updated types.ts */}
-                                                    <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{item.defectIds?.length || 0} đã chọn</span>
-                                                </label>
-                                                <div 
-                                                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-600 cursor-pointer flex justify-between items-center hover:border-blue-400 transition-all"
-                                                    onClick={() => {
-                                                        setOpenDefectSelector(openDefectSelector === item.id ? null : item.id);
-                                                        setDefectSearchTerm('');
-                                                    }}
-                                                >
-                                                    <span className="truncate font-medium">
-                                                        {item.defectIds && item.defectIds.length > 0 
-                                                            ? defectLibrary.filter(d => item.defectIds?.includes(d.code)).map(d => d.name).join(', ')
-                                                            : 'Chọn lỗi từ thư viện...'}
-                                                    </span>
-                                                    <ChevronDown className="w-4 h-4 text-slate-400"/>
-                                                </div>
-                                                
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between"><span>Lỗi liên kết (Thư viện)</span><span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{item.defectIds?.length || 0} đã chọn</span></label>
+                                                <div className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-600 cursor-pointer flex justify-between items-center hover:border-blue-400 transition-all" onClick={() => { setOpenDefectSelector(openDefectSelector === item.id ? null : item.id); setDefectSearchTerm(''); }}><span className="truncate font-medium">{item.defectIds && item.defectIds.length > 0 ? defectLibrary.filter(d => item.defectIds?.includes(d.code)).map(d => d.name).join(', ') : 'Gán lỗi chuẩn...'}</span><ChevronDown className="w-4 h-4 text-slate-400"/></div>
                                                 {openDefectSelector === item.id && (
                                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
-                                                        <div className="p-2 border-b border-slate-100 bg-slate-50 flex flex-col gap-2">
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thư viện lỗi</span>
-                                                                <button onClick={() => setOpenDefectSelector(null)}><X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600"/></button>
-                                                            </div>
-                                                            <div className="relative">
-                                                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                                                                <input 
-                                                                    className="w-full pl-8 pr-16 py-1.5 border border-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 ring-blue-100 font-medium"
-                                                                    placeholder="Tìm kiếm lỗi..."
-                                                                    value={defectSearchTerm}
-                                                                    onChange={(e) => setDefectSearchTerm(e.target.value)}
-                                                                    autoFocus
-                                                                />
-                                                                <button 
-                                                                    onClick={() => setIsAddDefectModalOpen(true)}
-                                                                    className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-blue-600 text-white px-2 py-0.5 rounded-md text-[9px] font-bold uppercase hover:bg-blue-700 transition-colors"
-                                                                >
-                                                                    <Plus className="w-3 h-3" /> Mới
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="max-h-56 overflow-y-auto p-2 space-y-1">
-                                                            {defectLibrary
-                                                                .filter(def => 
-                                                                    !defectSearchTerm || 
-                                                                    def.name.toLowerCase().includes(defectSearchTerm.toLowerCase()) || 
-                                                                    def.code.toLowerCase().includes(defectSearchTerm.toLowerCase())
-                                                                )
-                                                                .map(def => (
-                                                                <div 
-                                                                    key={def.code} 
-                                                                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${item.defectIds?.includes(def.code) ? 'bg-blue-50 border border-blue-100' : 'hover:bg-slate-50 border border-transparent'}`}
-                                                                    onClick={() => toggleDefect(item.id, def.code)}
-                                                                >
-                                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${item.defectIds?.includes(def.code) ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white'}`}>
-                                                                        {item.defectIds?.includes(def.code) && <CheckSquare className="w-3 h-3 text-white" />}
-                                                                    </div>
-                                                                    <div className="flex-1 overflow-hidden">
-                                                                        <p className="text-[11px] font-bold text-slate-700 truncate">{def.name}</p>
-                                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                                            <span className="text-[9px] text-slate-400 font-mono bg-slate-100 px-1 rounded">{def.code}</span>
-                                                                            <span className={`text-[8px] font-bold uppercase ${def.severity === 'CRITICAL' ? 'text-red-500' : 'text-slate-400'}`}>{def.severity}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                            {defectLibrary.length === 0 && <div className="text-center text-[10px] text-slate-400 py-4">Thư viện trống.</div>}
-                                                        </div>
+                                                        <div className="p-2 border-b border-slate-100 bg-slate-50 flex flex-col gap-2"><div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thư viện lỗi</span><button onClick={() => setOpenDefectSelector(null)}><X className="w-3.5 h-3.5 text-slate-400"/></button></div><div className="relative"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" /><input className="w-full pl-8 pr-16 py-1.5 border border-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 ring-blue-100 font-medium" placeholder="Tìm..." value={defectSearchTerm} onChange={(e) => setDefectSearchTerm(e.target.value)} autoFocus /><button onClick={() => setIsAddDefectModalOpen(true)} className="absolute right-1 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-2 py-0.5 rounded-md text-[9px] font-bold uppercase">Mới</button></div></div>
+                                                        <div className="max-h-56 overflow-y-auto p-2 space-y-1">{defectLibrary.filter(def => !defectSearchTerm || def.name.toLowerCase().includes(defectSearchTerm.toLowerCase()) || def.code.toLowerCase().includes(defectSearchTerm.toLowerCase())).map(def => (<div key={def.code} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${item.defectIds?.includes(def.code) ? 'bg-blue-50 border border-blue-100' : 'hover:bg-slate-50 border border-transparent'}`} onClick={() => toggleDefect(item.id, def.code)}><div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${item.defectIds?.includes(def.code) ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>{item.defectIds?.includes(def.code) && <CheckSquare className="w-3 h-3 text-white" />}</div><div className="flex-1 overflow-hidden"><p className="text-[11px] font-bold text-slate-700 truncate">{def.name}</p><div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] text-slate-400 font-mono bg-slate-100 px-1 rounded">{def.code}</span><span className={`text-[8px] font-bold uppercase ${def.severity === 'CRITICAL' ? 'text-red-500' : 'text-slate-400'}`}>{def.severity}</span></div></div></div>))}</div>
                                                     </div>
                                                 )}
-                                                {openDefectSelector === item.id && <div className="fixed inset-0 z-40" onClick={() => setOpenDefectSelector(null)}></div>}
                                             </div>
                                         </div>
                                     </div>
-                                    <button 
-                                        onClick={() => handleRemoveItem(item.id)} 
-                                        className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 p-1.5 rounded-full shadow-sm border border-slate-200 opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
-                                    >
-                                        <Trash2 className="w-4 h-4"/>
-                                    </button>
+                                    <button onClick={() => handleRemoveItem(item.id)} className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 p-1.5 rounded-full shadow-sm border border-slate-200 opacity-0 group-hover:opacity-100 transition-all hover:scale-110"><Trash2 className="w-4 h-4"/></button>
                                 </div>
                             ))}
-                            
-                            <button onClick={() => handleAddItem(activeGroup)} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 group">
-                                <div className="p-1 bg-slate-200 rounded-full group-hover:bg-blue-200 transition-colors"><Plus className="w-4 h-4 text-slate-500 group-hover:text-blue-600" /></div>
-                                Thêm hạng mục vào nhóm này
-                            </button>
+                            <button onClick={() => handleAddItem(activeGroup)} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"><div className="p-1 bg-slate-200 rounded-full group-hover:bg-blue-200 transition-colors"><Plus className="w-4 h-4 text-slate-500 group-hover:text-blue-600" /></div> Thêm tiêu chí vào {activeGroup}</button>
                         </div>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-4">
-                        <Package className="w-16 h-16 opacity-20" />
-                        <p className="font-bold uppercase tracking-widest text-xs">Chưa có nhóm vật tư nào được chọn</p>
-                        <button onClick={handleAddIQCGroup} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase shadow-lg hover:bg-blue-700 transition-all active:scale-95">
-                            Tạo nhóm đầu tiên
-                        </button>
-                    </div>
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-4"><Package className="w-16 h-16 opacity-20" /><p className="font-bold uppercase tracking-widest text-xs">Vui lòng chọn nhóm hạng mục phía trên</p></div>
                 )}
             </div>
         )}
@@ -493,219 +332,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
         {/* PQC / SQC_BTP CONFIGURATION UI */}
         {isPQC && (
           <div className="space-y-4">
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex gap-3 items-start">
-                <Factory className="w-5 h-5 text-indigo-500 mt-1" />
-                <div className="text-xs text-indigo-900">
-                    <p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_BTP' ? 'SQC - Bán Thành Phẩm' : 'PQC 2 Lớp (ISO Compliance)'}</p>
-                    <p>
-                        {isCustomStagePQC 
-                            ? "Tự do quản lý danh sách công đoạn và các tiêu chí kiểm tra cho Bán thành phẩm." 
-                            : "Hạng mục được gán trực tiếp vào Công đoạn sản xuất. Dữ liệu công đoạn được đồng bộ từ module Quản lý xưởng."}
-                    </p>
-                </div>
-            </div>
-
-            {/* Stage Selector */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
-                    <div className="flex-1 w-full">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Chọn Công Đoạn Cần Cấu Hình</label>
-                        <div className="relative">
-                            <select 
-                                value={activeStage} 
-                                onChange={e => setActiveStage(e.target.value)}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm focus:ring-2 focus:ring-blue-100 outline-none appearance-none cursor-pointer"
-                            >
-                                <option value="" disabled>-- Chọn công đoạn --</option>
-                                {stageOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-                    {isCustomStagePQC && (
-                        <div className="flex gap-2 w-full md:w-auto">
-                            <button 
-                                onClick={handleAddCustomStage} 
-                                className="flex-1 md:flex-none h-[46px] px-4 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
-                            >
-                                <Plus className="w-4 h-4" /> Thêm mới
-                            </button>
-                            {activeStage && (
-                                <>
-                                    <button onClick={handleRenameCustomStage} className="h-[46px] w-[46px] bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 hover:bg-blue-50 transition-all"><Pencil className="w-4 h-4"/></button>
-                                    <button onClick={handleDeleteCustomStage} className="h-[46px] w-[46px] bg-white border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4"/></button>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Items List for Active Stage */}
-            {activeStage ? (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between px-2">
-                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-indigo-500" />
-                            Tiêu chí: {activeStage}
-                            <span className="text-[10px] font-bold text-slate-400 px-2 py-0.5 bg-slate-100 rounded-full">{activeStageItems.length}</span>
-                        </h3>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3">
-                        {activeStageItems.map((item) => (
-                            <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 group transition-all hover:border-indigo-300">
-                                <div className="flex justify-between items-start gap-4">
-                                    <div className="flex-1 space-y-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra *</label>
-                                            <input
-                                                type="text"
-                                                value={item.label}
-                                                onChange={(e) => handleChange(item.id, 'label', e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:bg-white outline-none transition-all"
-                                                placeholder="Nhập tên hạng mục..."
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><Layers className="w-3 h-3 text-slate-300" /> Phương pháp kiểm tra</label>
-                                                <input
-                                                    type="text"
-                                                    value={item.method || ''}
-                                                    onChange={(e) => handleChange(item.id, 'method', e.target.value)}
-                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none focus:bg-white"
-                                                    placeholder="VD: Kiểm tra bằng mắt..."
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><FileText className="w-3 h-3 text-slate-300" /> Tiêu chuẩn / Dung sai</label>
-                                                <input
-                                                    type="text"
-                                                    value={item.standard || ''}
-                                                    onChange={(e) => handleChange(item.id, 'standard', e.target.value)}
-                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none focus:bg-white"
-                                                    placeholder="VD: +/- 0.5mm..."
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 active:scale-90 transition-all rounded-lg hover:bg-red-50"><Trash2 className="w-4.5 h-4.5" /></button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    
-                    <button 
-                        onClick={() => handleAddItem(activeStage)} 
-                        className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 group"
-                    >
-                        <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> Thêm tiêu chí vào {activeStage}
-                    </button>
-                </div>
-            ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-4 border-2 border-dashed border-slate-200 rounded-2xl">
-                    <Factory className="w-12 h-12 opacity-20" />
-                    <p className="font-bold uppercase tracking-widest text-xs">Vui lòng chọn công đoạn để bắt đầu</p>
-                </div>
-            )}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex gap-3 items-start"><Factory className="w-5 h-5 text-indigo-500 mt-1" /><div className="text-xs text-indigo-900"><p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_BTP' ? 'SQC - Bán Thành Phẩm' : 'PQC 2 Lớp (ISO Compliance)'}</p><p>{isCustomStagePQC ? "Tự do quản lý danh sách công đoạn và các tiêu chí kiểm tra cho Bán thành phẩm." : "Hạng mục được gán trực tiếp vào Công đoạn sản xuất. Dữ liệu công đoạn được đồng bộ từ module Quản lý xưởng."}</p></div></div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4"><div className="flex flex-col md:flex-row gap-4 items-start md:items-end"><div className="flex-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Chọn Công Đoạn Cần Cấu Hình</label><div className="relative"><select value={activeStage} onChange={e => setActiveStage(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm focus:ring-2 focus:ring-blue-100 outline-none appearance-none cursor-pointer"><option value="" disabled>-- Chọn công đoạn --</option>{stageOptions.map(s => <option key={s} value={s}>{s}</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" /></div></div>{isCustomStagePQC && (<div className="flex gap-2 w-full md:w-auto"><button onClick={handleAddCustomStage} className="flex-1 md:flex-none h-[46px] px-4 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> Thêm mới</button>{activeStage && (<><button onClick={handleRenameCustomStage} className="h-[46px] w-[46px] bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 hover:bg-blue-50 transition-all"><Pencil className="w-4 h-4"/></button><button onClick={handleDeleteCustomStage} className="h-[46px] w-[46px] bg-white border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 transition-all"><Trash2 className="w-4 h-4"/></button></>)}</div>)}</div></div>
+            {activeStage ? (<div className="space-y-3"><div className="flex items-center justify-between px-2"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> Tiêu chí: {activeStage}<span className="text-[10px] font-bold text-slate-400 px-2 py-0.5 bg-slate-100 rounded-full">{activeStageItems.length}</span></h3></div><div className="grid grid-cols-1 gap-3">{activeStageItems.map((item) => (<div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 group transition-all hover:border-indigo-300"><div className="flex justify-between items-start gap-4"><div className="flex-1 space-y-3"><div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra *</label><input type="text" value={item.label} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:bg-white outline-none transition-all" /></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><Layers className="w-3 h-3 text-slate-300" /> Phương pháp</label><input type="text" value={item.method || ''} onChange={(e) => handleChange(item.id, 'method', e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none" /></div><div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><FileText className="w-3 h-3 text-slate-300" /> Tiêu chuẩn</label><input type="text" value={item.standard || ''} onChange={(e) => handleChange(item.id, 'standard', e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium text-slate-600 outline-none" /></div></div></div><button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50"><Trash2 className="w-4.5 h-4.5" /></button></div></div>))}</div><button onClick={() => handleAddItem(activeStage)} className="w-full py-4 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 group"><Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> Thêm tiêu chí vào {activeStage}</button></div>) : (<div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-4 border-2 border-dashed border-slate-200 rounded-2xl"><Factory className="w-12 h-12 opacity-20" /><p className="font-bold uppercase tracking-widest text-xs">Chọn công đoạn sản xuất để cấu hình</p></div>)}
           </div>
         )}
 
-        {/* DEFAULT/OTHER MODULES UI (Simple List) */}
         {!isPQC && !isIQC && (
-          <div className="space-y-3">
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 mb-4 flex items-center gap-2">
-                <Info className="w-4 h-4" /> Mẫu này được áp dụng cho các phiếu kiểm tra {moduleLabel} mới.
-            </div>
-            {items.map((item) => (
-                <div key={item.id} className="flex gap-2 items-start bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <input
-                            type="text"
-                            value={item.category}
-                            onChange={(e) => handleChange(item.id, 'category', e.target.value)}
-                            className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-blue-600 outline-none bg-slate-50"
-                            placeholder="Danh mục"
-                        />
-                        <input
-                            type="text"
-                            value={item.label}
-                            onChange={(e) => handleChange(item.id, 'label', e.target.value)}
-                            className="md:col-span-2 px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 outline-none"
-                            placeholder="Hạng mục kiểm tra"
-                        />
-                    </div>
-                    <button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                </div>
-            ))}
-            <button onClick={() => handleAddItem()} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center font-bold text-xs uppercase tracking-widest"><Plus className="w-4 h-4 mr-2" /> Thêm hạng mục</button>
-          </div>
+          <div className="space-y-3"><div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 mb-4 flex items-center gap-2"><Info className="w-4 h-4" /> Mẫu này được áp dụng cho {moduleLabel} mới.</div>{items.map((item) => (<div key={item.id} className="flex gap-2 items-start bg-white p-3 rounded-xl border border-slate-200 shadow-sm"><div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2"><input type="text" value={item.category} onChange={(e) => handleChange(item.id, 'category', e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-blue-600 outline-none bg-slate-50"/><input type="text" value={item.label} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="md:col-span-2 px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 outline-none"/></div><button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></div>))}<button onClick={() => handleAddItem()} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center font-bold text-xs uppercase tracking-widest"><Plus className="w-4 h-4 mr-2" /> Thêm hạng mục</button></div>
         )}
       </div>
 
-      {/* QUICK ADD DEFECT MODAL */}
       {isAddDefectModalOpen && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col">
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                      <h3 className="font-bold text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">
-                          <Plus className="w-4 h-4 text-blue-600" /> Thêm Lỗi Mới
-                      </h3>
-                      <button onClick={() => setIsAddDefectModalOpen(false)}><X className="w-5 h-5 text-slate-400"/></button>
-                  </div>
-                  <div className="p-4 space-y-3">
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Mã lỗi</label>
-                          <input 
-                              value={newDefect.code} 
-                              onChange={e => setNewDefect({...newDefect, code: e.target.value.toUpperCase()})}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase placeholder:font-medium"
-                              placeholder="Tự động nếu để trống"
-                          />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Tên lỗi *</label>
-                          <input 
-                              value={newDefect.name} 
-                              onChange={e => setNewDefect({...newDefect, name: e.target.value})}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 ring-blue-500"
-                              placeholder="Nhập tên lỗi..."
-                          />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Nhóm lỗi</label>
-                          <select 
-                              value={newDefect.category} 
-                              onChange={e => setNewDefect({...newDefect, category: e.target.value})}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium bg-white"
-                          >
-                              <option value="Ngoại quan">Ngoại quan</option>
-                              <option value="Kích thước">Kích thước</option>
-                              <option value="Kết cấu">Kết cấu</option>
-                              <option value="Khác">Khác</option>
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Mức độ</label>
-                          <select 
-                              value={newDefect.severity} 
-                              onChange={e => setNewDefect({...newDefect, severity: e.target.value as any})}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium bg-white"
-                          >
-                              <option value="MINOR">MINOR</option>
-                              <option value="MAJOR">MAJOR</option>
-                              <option value="CRITICAL">CRITICAL</option>
-                          </select>
-                      </div>
-                  </div>
-                  <div className="p-4 border-t border-slate-100 flex gap-2">
-                      <Button variant="secondary" size="sm" onClick={() => setIsAddDefectModalOpen(false)} className="flex-1">Hủy</Button>
-                      <Button size="sm" onClick={handleSaveNewDefect} disabled={isSavingDefect} className="flex-1">
-                          {isSavingDefect ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Lưu'}
-                      </Button>
-                  </div>
-              </div>
+              <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col"><div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50"><h3 className="font-bold text-slate-800 uppercase text-xs flex items-center gap-2"><Plus className="w-4 h-4 text-blue-600" /> Thêm Lỗi Mới</h3><button onClick={() => setIsAddDefectModalOpen(false)}><X className="w-5 h-5 text-slate-400"/></button></div><div className="p-4 space-y-3"><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Mã lỗi</label><input value={newDefect.code} onChange={e => setNewDefect({...newDefect, code: e.target.value.toUpperCase()})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase" /></div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Tên lỗi *</label><input value={newDefect.name} onChange={e => setNewDefect({...newDefect, name: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 ring-blue-500" /></div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Mức độ</label><select value={newDefect.severity} onChange={e => setNewDefect({...newDefect, severity: e.target.value as any})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium bg-white"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div></div><div className="p-4 border-t border-slate-100 flex gap-2"><Button variant="secondary" size="sm" onClick={() => setIsAddDefectModalOpen(false)} className="flex-1">Hủy</Button><Button size="sm" onClick={handleSaveNewDefect} disabled={isSavingDefect} className="flex-1">{isSavingDefect ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Lưu'}</Button></div></div>
           </div>
       )}
     </div>

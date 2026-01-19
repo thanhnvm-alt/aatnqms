@@ -336,15 +336,32 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
         </section>
       </div>
 
-      {!isApproved && isManager && (
-          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-3 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex justify-end z-40">
-              <button onClick={() => setShowManagerModal(true)} className="py-3 px-8 bg-emerald-600 text-white font-bold uppercase text-[9px] tracking-wide rounded-xl shadow-lg active:scale-95">DUYỆT LÔ HÀNG</button>
+      {/* --- MOBILE-OPTIMIZED BOTTOM ACTION BAR --- */}
+      <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-2 py-3 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
+          <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2 h-12">
+              <button 
+                onClick={onBack} 
+                className="flex-1 h-full bg-slate-100 text-slate-500 font-black uppercase text-[8px] tracking-tight rounded-xl border border-slate-200 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2"
+              >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span className="whitespace-nowrap">QUAY LẠI</span>
+              </button>
+
+              {!isApproved && isManager && (
+                  <button 
+                    onClick={() => setShowManagerModal(true)} 
+                    className="flex-[1.5] h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 border border-emerald-500"
+                  >
+                      <Check className="w-4 h-4" />
+                      <span className="whitespace-nowrap">DUYỆT LÔ HÀNG</span>
+                  </button>
+              )}
           </div>
-      )}
+      </div>
 
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in duration-200">
                   <h3 className="font-bold text-slate-800 uppercase text-sm">Manager Phê Duyệt</h3>
                   <SignaturePad label="Chữ ký Manager" value={managerSig} onChange={setManagerSig} />
                   <div className="flex gap-3 pt-2"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px] rounded-xl border">Hủy</button><button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}</button></div>

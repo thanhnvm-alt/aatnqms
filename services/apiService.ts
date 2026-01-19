@@ -1,5 +1,5 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, NCRComment } from '../types';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem } from '../types';
 import * as db from './tursoService';
 
 export const uploadQMSImage = async (file: File | string, context: { entityId: string, type: any, role: any }): Promise<string> => {
@@ -39,10 +39,6 @@ export const fetchNcrById = async (id: string) => {
     return await db.getNcrById(id);
 };
 
-// --- COMMENT SERVICES ---
-export const saveComment = async (entityId: string, comment: NCRComment) => await db.saveComment(entityId, comment);
-export const fetchComments = async (entityId: string) => await db.getCommentsByEntityId(entityId);
-
 export const fetchDefects = async (filters: any = {}) => {
     const ncrs = await db.getNcrs(filters);
     return { items: ncrs.items as any[], total: ncrs.total };
@@ -72,7 +68,6 @@ export const deleteWorkshop = async (id: string) => await db.deleteWorkshop(id);
 export const fetchTemplates = async () => await db.getTemplates();
 export const saveTemplate = async (moduleId: string, items: CheckItem[]) => await db.saveTemplate(moduleId, items);
 
-// Cập nhật Fetch Projects có search và limit 10
 export const fetchProjects = async (search: string = '') => await db.getProjectsPaginated(search, 10);
 export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
 export const updateProject = async (proj: Project) => await db.updateProject(proj);
@@ -91,30 +86,37 @@ export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
 export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
 
+// Add exportDefectLibrary to call the export API endpoint
 export const exportDefectLibrary = async () => {
-    const response = await fetch('/api/defects/export');
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
+  const response = await fetch('/api/defects/export');
+  if (!response.ok) throw new Error('Failed to export defect library');
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  // Use a predictable name if content-disposition fails to be parsed by browser automatically
+  a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 };
 
+// Add importDefectLibraryFile to call the import API endpoint
 export const importDefectLibraryFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/defects/import', { method: 'POST', body: formData });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch('/api/defects/import', {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) throw new Error('Failed to import defect library');
+  return await response.json();
 };
 
 export const checkApiConnection = async () => ({ ok: await db.testConnection() });
 
 export const createNotification = async (params: { userId: string, type: Notification['type'], title: string, message: string, link?: { view: ViewState, id: string } }) => {
-    const notif = { ...params, id: `ntf_${Date.now()}`, isRead: false, createdAt: Date.now() };
-    return notif;
+    await db.addNotification(params.userId, params.type, params.title, params.message, params.link);
+    return { success: true };
 };

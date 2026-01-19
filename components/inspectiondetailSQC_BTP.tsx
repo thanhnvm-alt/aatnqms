@@ -6,7 +6,7 @@ import {
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   LayoutList, MessageSquare, Loader2, Eraser, Send, 
   UserPlus, AlertOctagon, ChevronRight, Camera, Image as ImageIcon, PenTool,
-  ClipboardList, ChevronUp, ChevronDown, Factory, Activity, Save
+  ClipboardList, ChevronUp, ChevronDown, Factory, Activity, Save, Check
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -395,11 +395,28 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
         </section>
       </div>
 
-      {!isApproved && isManager && (
-          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex justify-end z-40 shadow-[0_-10px_25px_rgba(0,0,0,0.05)]">
-              <button onClick={() => setShowManagerModal(true)} className="px-12 py-4 bg-emerald-600 text-white font-black uppercase text-[11px] tracking-[0.2em] rounded-2xl shadow-2xl shadow-emerald-500/30 hover:bg-emerald-700 active:scale-95 transition-all">DUYỆT SQC BTP</button>
+      {/* --- MOBILE-OPTIMIZED BOTTOM ACTION BAR --- */}
+      <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-2 py-3 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
+          <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2 h-12">
+              <button 
+                onClick={onBack} 
+                className="flex-1 h-full bg-slate-100 text-slate-500 font-black uppercase text-[8px] tracking-tight rounded-xl border border-slate-200 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2"
+              >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span className="whitespace-nowrap">QUAY LẠI</span>
+              </button>
+
+              {!isApproved && isManager && (
+                  <button 
+                    onClick={() => setShowManagerModal(true)} 
+                    className="flex-[2] h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 border border-emerald-500"
+                  >
+                      <Check className="w-4 h-4" />
+                      <span className="whitespace-nowrap">PHÊ DUYỆT BTP</span>
+                  </button>
+              )}
           </div>
-      )}
+      </div>
 
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

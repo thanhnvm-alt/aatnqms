@@ -123,7 +123,6 @@ const App = () => {
 
   // ISO-OPTIMIZED STARTUP (REFINED)
   useEffect(() => {
-    // Luồng 1: Phục hồi auth ngay lập tức để người dùng thấy giao diện Home/List nhanh nhất
     const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (localData) { 
         try { 
@@ -135,18 +134,11 @@ const App = () => {
         } catch (e) { console.error("Auth hydrate failed", e); } 
     }
 
-    // Luồng 2: Khởi tạo DB ngầm
     const startup = async () => {
         try {
             await initDatabase(); 
             setIsDbReady(true);
-            
-            // Tải dữ liệu metadata song song
-            Promise.all([
-                loadUsers(),
-                loadWorkshops(),
-                loadTemplates()
-            ]);
+            Promise.all([loadUsers(), loadWorkshops(), loadTemplates()]);
         } catch (error) { 
           setIsDbReady(true); 
         }
@@ -166,21 +158,8 @@ const App = () => {
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
-  const loadProjects = async (search: string = '') => { 
-    try { 
-        const projs = await fetchProjects(search);
-        setProjects(projs);
-    } catch(e) {} 
-  };
-
-  const loadPlans = async (search: string = '') => { 
-    setIsLoadingPlans(true); 
-    try { 
-        const result = await fetchPlans(search, 1, 10); 
-        setPlans(result.items || []); 
-    } catch (e) {} finally { setIsLoadingPlans(false); } 
-  };
-
+  const loadProjects = async (search: string = '') => { try { const projs = await fetchProjects(search); setProjects(projs); } catch(e) {} };
+  const loadPlans = async (search: string = '') => { setIsLoadingPlans(true); try { const result = await fetchPlans(search, 1, 10); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
   const loadInspections = async () => { setIsLoadingInspections(true); try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
   
   const handleLogin = (loggedInUser: User, remember: boolean) => { 
@@ -250,13 +229,31 @@ const App = () => {
                 activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
                 <InspectionFormPQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} inspections={inspections} user={user} templates={templates} />
             )}
-            {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { inspection: activeInspection, user, onBack: () => setView('LIST'), onEdit: handleEditInspection, onDelete: async id => { if(window.confirm("Xóa?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, onApprove: async (id:string, sig:string, extra:any) => { 
-                const updated = { ...activeInspection, status: sig ? InspectionStatus.APPROVED : activeInspection.status, managerSignature: sig || activeInspection.managerSignature, managerName: sig ? user?.name : activeInspection.managerName, ...extra };
-                await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
-            }, onPostComment: async (id:string, cmt:any) => {
+            {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
+              inspection: activeInspection, 
+              user, 
+              onBack: () => setView('LIST'), 
+              onEdit: handleEditInspection, 
+              onDelete: async id => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, 
+              onApprove: async (id: string, sig: string, extra: any) => { 
+                const updated = { ...activeInspection, ...extra };
+                // Nếu signature được truyền lẻ (legacy manager approve) hoặc có trong extra manager info
+                if (sig || extra.managerSignature) {
+                  updated.status = InspectionStatus.APPROVED;
+                  updated.managerSignature = sig || extra.managerSignature;
+                  updated.managerName = extra.managerName || user.name;
+                }
+                await saveInspectionToSheet(updated); 
+                setActiveInspection(updated); 
+                loadInspections();
+              }, 
+              onPostComment: async (id: string, cmt: any) => {
                 const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
-                await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
-            } }) : null)}
+                await saveInspectionToSheet(updated); 
+                setActiveInspection(updated); 
+                loadInspections();
+              } 
+            }) : null)}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={loadPlans} onImportPlans={async()=>{}} totalItems={plans.length} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} onSearch={loadProjects} />}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} />}

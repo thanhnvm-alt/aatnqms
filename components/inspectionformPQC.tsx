@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { 
@@ -264,7 +265,6 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     );
 };
 
-/* Added missing InspectionFormProps interface to resolve build error */
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
   onSave: (inspection: Inspection) => Promise<void>;
@@ -282,7 +282,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     date: new Date().toISOString().split('T')[0], 
     status: InspectionStatus.DRAFT, 
     items: initialData?.items || [], 
-    images: [], 
+    images: initialData?.images || [], 
     score: 0, 
     signature: '', 
     productionSignature: '', 
@@ -304,6 +304,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -335,10 +336,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     return inspections.filter(i => i.id !== formData.id && (i.ma_nha_may?.toLowerCase() === term || i.headcode?.toLowerCase() === term)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [inspections, searchCode, formData.id]);
 
-  /**
-   * ISO-PLAN-LOOKUP: Tra cứu thông tin từ bảng plans dựa trên mã định danh.
-   * Logic: 9 ký tự -> headcode, 13 ký tự -> ma_nha_may.
-   */
   const lookupPlanInfo = async (value: string) => {
       const code = (value || '').trim().toUpperCase();
       if (!code) return;
@@ -425,7 +422,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     const files = e.target.files; 
     if (!files || files.length === 0 || !activeUploadId) return;
     
-    setIsLookupLoading(true);
+    setIsProcessingImages(true);
     try {
         const processedImages = await Promise.all(
             Array.from(files).map(async (file: File) => {
@@ -458,7 +455,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     } catch (err) {
         console.error("ISO-UPLOAD: Failed", err);
     } finally {
-        setIsLookupLoading(false);
+        setIsProcessingImages(false);
         e.target.value = '';
     }
   };
@@ -473,6 +470,17 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {(isProcessingImages || isLookupLoading) && (
+          <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                    {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : "Đang xử lý hình ảnh ISO..."}
+                  </p>
+              </div>
+          </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 pb-28">
         
         <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-3">
@@ -503,7 +511,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {/* ISO-FIX: Cho phép nhập số thập phân cho IPO */}
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo || ''} onChange={e => handleInputChange('so_luong_ipo', parseFloat(e.target.value))} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
@@ -543,7 +550,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     </select>
                  </div>
             </div>
-            {/* ISO-FIX: Thêm step="any" để hỗ trợ số thập phân cho các ô số lượng */}
             <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
                  <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input type="number" step="any" value={formData.inspectedQuantity || ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1 border border-slate-200 rounded-md font-bold text-[11px] text-center" /></div>
                  <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div><input type="number" step="any" value={formData.passedQuantity || ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1 border border-green-200 rounded-md font-bold text-[11px] text-center" /></div>
