@@ -106,7 +106,6 @@ const App = () => {
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   
-  // Settings Data State
   const [users, setUsers] = useState<User[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [templates, setTemplates] = useState<Record<string, CheckItem[]>>({
@@ -121,7 +120,6 @@ const App = () => {
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES'>('TEMPLATE');
 
-  // ISO-OPTIMIZED STARTUP (REFINED)
   useEffect(() => {
     const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (localData) { 
@@ -133,15 +131,12 @@ const App = () => {
             }
         } catch (e) { console.error("Auth hydrate failed", e); } 
     }
-
     const startup = async () => {
         try {
             await initDatabase(); 
             setIsDbReady(true);
             Promise.all([loadUsers(), loadWorkshops(), loadTemplates()]);
-        } catch (error) { 
-          setIsDbReady(true); 
-        }
+        } catch (error) { setIsDbReady(true); }
     };
     startup();
   }, []);
@@ -170,7 +165,7 @@ const App = () => {
     setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
   };
   
-  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
+  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); localStorage.removeItem('aatn_saved_username'); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
 
   const handleSelectInspection = async (id: string) => { 
     setIsDetailLoading(true); 
@@ -185,7 +180,19 @@ const App = () => {
     setIsDetailLoading(true); 
     try { 
       const fullInspection = await fetchInspectionById(id); 
-      if (fullInspection) { setActiveInspection(fullInspection); setInitialFormState(fullInspection); setView('FORM'); } 
+      if (fullInspection) {
+        // ISO Guard: Check permission before opening form
+        const isManagerOrAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+        const isOwner = fullInspection.inspectorName === user?.name;
+        const isApproved = fullInspection.status === InspectionStatus.APPROVED;
+        
+        if (!isManagerOrAdmin && (!isOwner || isApproved)) {
+            alert("Bạn không có quyền sửa hồ sơ này (Đã khóa hoặc không phải chủ sở hữu).");
+            setIsDetailLoading(false);
+            return;
+        }
+        setActiveInspection(fullInspection); setInitialFormState(fullInspection); setView('FORM'); 
+      } 
     } catch (e) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); }
   };
 
@@ -201,21 +208,12 @@ const App = () => {
       setActiveInspection(null); setView('FORM');
   };
 
-  /**
-   * ISO-NAVIGATION: Điều hướng từ thông báo Center
-   */
   const handleNavigateToRecord = (targetView: ViewState, id: string) => {
-      if (targetView === 'DETAIL') {
-          handleSelectInspection(id);
-      } else {
-          setView(targetView);
-      }
+      if (targetView === 'DETAIL') { handleSelectInspection(id); } else { setView(targetView); }
   };
 
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
   
-  if (!isDbReady && !user) return <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" /><p className="text-sm font-black text-slate-600 uppercase tracking-widest">Đang khởi tạo...</p></div>;
-
   return (
     <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
       <div className="hidden lg:block h-full shrink-0">
@@ -246,7 +244,21 @@ const App = () => {
               user, 
               onBack: () => setView('LIST'), 
               onEdit: handleEditInspection, 
-              onDelete: async id => { if(window.confirm("Xóa phiếu này?")){ await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); } }, 
+              onDelete: async id => { 
+                // ISO Guard: Deletion logic
+                const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
+                const isOwner = activeInspection.inspectorName === user.name;
+                const isApproved = activeInspection.status === InspectionStatus.APPROVED;
+
+                if (!isManagerOrAdmin && (!isOwner || isApproved)) {
+                    alert("Bạn không có quyền xóa hồ sơ này.");
+                    return;
+                }
+
+                if(window.confirm("Xóa phiếu này? Dữ liệu sẽ bị xóa vĩnh viễn khỏi audit log.")){ 
+                    await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); 
+                } 
+              }, 
               onApprove: async (id: string, sig: string, extra: any) => { 
                 const updated = { ...activeInspection, ...extra };
                 if (sig || extra.managerSignature) {
@@ -254,43 +266,11 @@ const App = () => {
                   updated.managerSignature = sig || extra.managerSignature;
                   updated.managerName = extra.managerName || user.name;
                 }
-                await saveInspectionToSheet(updated); 
-                setActiveInspection(updated); 
-                loadInspections();
+                await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
               }, 
               onPostComment: async (id: string, cmt: any) => {
                 const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
-                await saveInspectionToSheet(updated); 
-                setActiveInspection(updated); 
-                
-                // ISO-NOTIFY: Thông báo có thảo luận mới
-                const isInspectorComment = user.name === activeInspection.inspectorName;
-                if (isInspectorComment) {
-                    // Nếu inspector comment, thông báo cho quản lý
-                    const managers = users.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER');
-                    for (const m of managers) {
-                        await createNotification({
-                            userId: m.id,
-                            type: 'COMMENT',
-                            title: 'Thảo luận mới từ QC',
-                            message: `${user.name} đã để lại ý kiến trong phiếu #${activeInspection.id.split('-').pop()}`,
-                            link: { view: 'DETAIL', id: activeInspection.id }
-                        });
-                    }
-                } else {
-                    // Nếu người khác comment, thông báo cho inspector
-                    const inspectorUser = users.find(u => u.name === activeInspection.inspectorName);
-                    if (inspectorUser) {
-                        await createNotification({
-                            userId: inspectorUser.id,
-                            type: 'COMMENT',
-                            title: 'Hồ sơ có ý kiến mới',
-                            message: `${user.name} vừa phản hồi trong phiếu của bạn.`,
-                            link: { view: 'DETAIL', id: activeInspection.id }
-                        });
-                    }
-                }
-                loadInspections();
+                await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
               } 
             }) : null)}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={loadPlans} onImportPlans={async()=>{}} totalItems={plans.length} />}

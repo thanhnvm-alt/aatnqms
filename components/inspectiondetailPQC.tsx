@@ -5,7 +5,7 @@ import {
   ArrowLeft, User as UserIcon, Building2, Box, Edit3, Trash2, X, Maximize2, ShieldCheck,
   MessageSquare, Loader2, Eraser, Send, UserPlus, AlertOctagon, Check, Save,
   Camera, Image as ImageIcon, Paperclip, PenTool, LayoutList, History, FileText, ChevronRight,
-  Factory, Calendar, Activity, Hash, MapPin
+  Factory, Calendar, Activity, Hash, MapPin, Lock
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -91,9 +91,16 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
 
-  const isApproved = inspection.status === InspectionStatus.APPROVED || inspection.status === InspectionStatus.COMPLETED;
-  const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
-  const isProdSigned = !!inspection.productionSignature;
+  // --- ISO RBAC LOGIC (CRITICAL) ---
+  const isApproved = inspection.status === InspectionStatus.APPROVED;
+  const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const isOwner = inspection.inspectorName === user.name;
+  
+  // Logic kiểm soát quyền Sửa/Xóa:
+  // 1. Admin/Manager luôn có quyền (để xử lý lỗi hệ thống).
+  // 2. QC/QA chỉ có quyền nếu là chủ sở hữu VÀ phiếu chưa được Approved.
+  const canModify = isManagerOrAdmin || (isOwner && !isApproved);
+  const isLockedForUser = isApproved && !isManagerOrAdmin;
 
   const stats = useMemo(() => {
     const ins = Number(inspection.inspectedQuantity || 0);
@@ -102,10 +109,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
     const ipo = Number(inspection.so_luong_ipo || 0);
     
     return {
-      ipo,
-      ins,
-      pas,
-      fai,
+      ipo, ins, pas, fai,
       passRate: ins > 0 ? ((pas / ins) * 100).toFixed(1) : "0.0",
       failRate: ins > 0 ? ((fai / ins) * 100).toFixed(1) : "0.0"
     };
@@ -180,16 +184,17 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       e.target.value = '';
   };
 
-  const handleEditCommentImage = (idx: number) => {
-      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
-  };
-
   const updateCommentImage = (idx: number, newImg: string) => {
       setCommentAttachments(prev => {
           const next = [...prev];
           next[idx] = newImg;
           return next;
       });
+  };
+
+  // Added handleEditCommentImage to fix "Cannot find name 'handleEditCommentImage'" error
+  const handleEditCommentImage = (idx: number) => {
+      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
   };
 
   if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => setViewingNcr(null)} />;
@@ -202,8 +207,18 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Chi tiết hồ sơ PQC</h2>
           </div>
           <div className="flex items-center gap-2">
-              {!isApproved && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>}
-              <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all" type="button"><Trash2 className="w-4 h-4" /></button>
+              {isLockedForUser && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-400 rounded-xl border border-slate-200">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span className="text-[9px] font-black uppercase tracking-widest">Hồ sơ đã khóa</span>
+                  </div>
+              )}
+              {canModify && (
+                  <>
+                    <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>
+                    <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-all" type="button"><Trash2 className="w-4 h-4" /></button>
+                  </>
+              )}
           </div>
       </div>
 
@@ -212,7 +227,6 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
             <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative overflow-hidden">
                 <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-7xl rotate-12 select-none">PQC</div>
                 
-                {/* ISO Header Update */}
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.1em] mb-1">{inspection.ten_ct}</p>
                 <h1 className="text-[11px] font-black text-slate-900 uppercase mb-8 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
                 
@@ -406,7 +420,6 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
         </div>
       </div>
 
-      {/* --- REFACTORED MOBILE-OPTIMIZED BOTTOM ACTION BAR --- */}
       <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-2 py-3 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
           <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2 h-12">
               <button 
@@ -417,7 +430,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                   <span className="whitespace-nowrap">QUAY LẠI</span>
               </button>
               
-              {!isProdSigned && !isApproved && (
+              {!isApproved && (
                   <button 
                     onClick={() => setShowProductionModal(true)} 
                     className="flex-1 h-full bg-indigo-50 text-indigo-600 font-black uppercase text-[8px] tracking-tight rounded-xl border border-indigo-200 hover:bg-indigo-100 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 shadow-sm"
@@ -427,7 +440,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                   </button>
               )}
 
-              {!isApproved && isManager && (
+              {isManagerOrAdmin && !isApproved && (
                   <button 
                     onClick={() => setShowManagerModal(true)} 
                     className="flex-1 h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 border border-emerald-500"

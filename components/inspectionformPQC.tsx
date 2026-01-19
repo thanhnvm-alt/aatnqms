@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { 
@@ -246,7 +247,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesAfter?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')}/><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')}/><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
                                 ))}
                             </div>
                         </div>
@@ -285,9 +286,9 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     score: 0, 
     signature: '', 
     productionSignature: '', 
-    inspectedQuantity: 0, 
-    passedQuantity: 0, 
-    failedQuantity: 0, 
+    inspectedQuantity: initialData?.inspectedQuantity || 0, 
+    passedQuantity: initialData?.passedQuantity || 0, 
+    failedQuantity: initialData?.failedQuantity || 0, 
     type: 'PQC',
     ma_nha_may: initialData?.ma_nha_may || '',
     headcode: initialData?.headcode || '',
@@ -371,7 +372,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 so_luong_ipo: match.so_luong_ipo, 
                 ma_nha_may: match.ma_nha_may, 
                 headcode: match.headcode, 
-                workshop: match.ma_nha_may 
+                workshop: match.ma_nha_may,
+                // Reset counts when matching a new plan to prevent invalid data
+                inspectedQuantity: 0,
+                passedQuantity: 0,
+                failedQuantity: 0
               }));
               setSearchCode(match.ma_nha_may);
           }
@@ -382,9 +387,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       }
   };
 
-  /**
-   * ISO-REHYDRATION: Lấy chi tiết lịch sử để xem nhanh
-   */
   const handleOpenQuickReview = async (id: string) => {
       setPreviewId(id);
       setIsPreviewLoading(true);
@@ -400,21 +402,60 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleInputChange = (field: keyof Inspection, value: any) => { 
       setFormData(prev => {
-          const next = { ...prev, [field]: value };
+          const next = { ...prev };
+          
+          // ISO VALIDATION LOGIC FOR QUANTITIES
+          if (field === 'inspectedQuantity') {
+              let val = parseFloat(String(value)) || 0;
+              const ipo = parseFloat(String(next.so_luong_ipo || 0));
+              
+              // Rule 1: SL kiểm tra <= SL IPO
+              if (val > ipo) val = ipo;
+              next.inspectedQuantity = val;
+
+              // Validate children quantities after parent change
+              if ((next.passedQuantity || 0) + (next.failedQuantity || 0) > val) {
+                  // Adjusting failed qty first, then passed if needed
+                  next.failedQuantity = Math.max(0, val - (next.passedQuantity || 0));
+                  if ((next.passedQuantity || 0) > val) next.passedQuantity = val;
+              }
+          }
+          else if (field === 'passedQuantity') {
+              let val = parseFloat(String(value)) || 0;
+              const ins = parseFloat(String(next.inspectedQuantity || 0));
+              
+              // Rule 2 & 3: SL Đạt <= SL Kiểm tra và (Đạt + Lỗi) <= Kiểm tra
+              if (val > ins) val = ins;
+              const maxAllowed = Math.max(0, ins - (next.failedQuantity || 0));
+              if (val > maxAllowed) val = maxAllowed;
+              
+              next.passedQuantity = val;
+          }
+          else if (field === 'failedQuantity') {
+              let val = parseFloat(String(value)) || 0;
+              const ins = parseFloat(String(next.inspectedQuantity || 0));
+              
+              // Rule 2 & 3: SL Lỗi <= SL Kiểm tra và (Đạt + Lỗi) <= Kiểm tra
+              if (val > ins) val = ins;
+              const maxAllowed = Math.max(0, ins - (next.passedQuantity || 0));
+              if (val > maxAllowed) val = maxAllowed;
+              
+              next.failedQuantity = val;
+          }
+          else {
+              (next as any)[field] = value;
+          }
+
+          // Logic reset stage and items when workshop changes
           if (field === 'workshop') { next.inspectionStage = ''; next.items = []; }
+          
+          // Template auto-loading logic
           if (field === 'inspectionStage') {
               const pqcTemplate = templates['PQC'] || [];
               const stageItems = pqcTemplate.filter(item => item.stage === value).map(item => ({ ...item, id: `pqc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, status: CheckStatus.PENDING, notes: '', images: [] }));
               next.items = stageItems;
           }
-          if (field === 'inspectedQuantity' || field === 'passedQuantity' || field === 'failedQuantity') {
-              const ins = parseFloat(String(next.inspectedQuantity || 0));
-              const pas = parseFloat(String(next.passedQuantity || 0));
-              const fai = parseFloat(String(next.failedQuantity || 0));
-              if (field === 'inspectedQuantity') next.passedQuantity = Math.max(0, parseFloat(String(value)) - fai);
-              else if (field === 'passedQuantity') next.failedQuantity = Math.max(0, ins - parseFloat(String(value)));
-              else if (field === 'failedQuantity') next.passedQuantity = Math.max(0, ins - parseFloat(String(value)));
-          }
+          
           return next;
       }); 
   };
@@ -432,16 +473,20 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleSubmit = async () => {
     if (!formData.ma_ct || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin và chọn công đoạn."); return; }
+    
+    // Final Audit of numbers before submission
+    const ins = formData.inspectedQuantity || 0;
+    const pas = formData.passedQuantity || 0;
+    const fai = formData.failedQuantity || 0;
+    const ipo = formData.so_luong_ipo || 0;
+
+    if (ins > ipo) return alert("Lỗi: Số lượng kiểm tra không được lớn hơn số lượng IPO.");
+    if (pas + fai > ins) return alert("Lỗi: Tổng số lượng Đạt và Lỗi không được vượt quá số lượng kiểm tra.");
+
     setIsSaving(true);
     try {
         const itemsToSave = (formData.items || []).filter(it => it.stage === formData.inspectionStage || !it.stage);
-        
-        // ISO-STATUS-LOGIC: Tự động thiết lập trạng thái dựa trên kết quả hạng mục
-        const hasIssues = itemsToSave.some(it => 
-            it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL
-        );
-        
-        // Cập nhật: Trạng thái PENDING cho phiếu đạt (để chờ duyệt), FLAGGED cho phiếu có lỗi/điều kiện
+        const hasIssues = itemsToSave.some(it => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
         const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
 
         await onSave({ 
@@ -547,7 +592,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo || ''} onChange={e => handleInputChange('so_luong_ipo', parseFloat(e.target.value))} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
@@ -586,10 +631,51 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     </select>
                  </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                 <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input type="number" step="any" value={formData.inspectedQuantity || ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1 border border-slate-200 rounded-md font-bold text-[11px] text-center" /></div>
-                 <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div><input type="number" step="any" value={formData.passedQuantity || ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1 border border-green-200 rounded-md font-bold text-[11px] text-center" /></div>
-                 <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span></div><input type="number" step="any" value={formData.failedQuantity || ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1 border border-red-200 rounded-md font-bold text-[11px] text-center" /></div>
+            
+            {/* QUANTITY CONTROLS WITH VALIDATION MESSAGES */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block leading-none">SL Kiểm tra</label>
+                        <input 
+                            type="number" 
+                            step="any" 
+                            value={formData.inspectedQuantity || ''} 
+                            onChange={e => handleInputChange('inspectedQuantity', e.target.value)} 
+                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'}`} 
+                        />
+                        {parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) && (
+                            <p className="text-[7px] text-red-500 font-bold uppercase text-center mt-0.5">Vượt SL IPO</p>
+                        )}
+                    </div>
+                    <div className="space-y-1">
+                        <div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div>
+                        <input 
+                            type="number" 
+                            step="any" 
+                            value={formData.passedQuantity || ''} 
+                            onChange={e => handleInputChange('passedQuantity', e.target.value)} 
+                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm ${parseFloat(String(formData.passedQuantity)) > parseFloat(String(formData.inspectedQuantity)) ? 'border-red-500 bg-red-50' : 'border-green-200 bg-white'}`} 
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span></div>
+                        <input 
+                            type="number" 
+                            step="any" 
+                            value={formData.failedQuantity || ''} 
+                            onChange={e => handleInputChange('failedQuantity', e.target.value)} 
+                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm ${parseFloat(String(formData.failedQuantity)) > parseFloat(String(formData.inspectedQuantity)) ? 'border-red-500 bg-red-50' : 'border-red-200 bg-white'}`} 
+                        />
+                    </div>
+                </div>
+                {/* Validation Total Alert */}
+                {((formData.passedQuantity || 0) + (formData.failedQuantity || 0)) > (formData.inspectedQuantity || 0) && (
+                    <div className="flex items-center gap-1.5 bg-red-50 p-1.5 rounded-lg border border-red-100">
+                        <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                        <p className="text-[8px] text-red-700 font-bold uppercase leading-none">Lỗi: (Đạt + Lỗi) > Số lượng kiểm tra</p>
+                    </div>
+                )}
             </div>
         </section>
 
