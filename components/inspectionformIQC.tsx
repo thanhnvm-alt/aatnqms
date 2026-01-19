@@ -472,9 +472,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                         </div>
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white border-t border-slate-50">
-                                {/* Row for Scope, Project Code, and Project Name */}
                                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-12 gap-3 shadow-inner">
-                                    {/* Select Scope */}
                                     <div className="md:col-span-3 space-y-1">
                                         <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
                                             <Layers className="w-2.5 h-2.5" /> Phân loại
@@ -491,8 +489,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
                                         </div>
                                     </div>
-
-                                    {/* Project Code */}
                                     <div className="md:col-span-3 space-y-1">
                                         <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
                                             <Hash className="w-2.5 h-2.5" /> Mã dự án
@@ -508,8 +504,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                             />
                                         </div>
                                     </div>
-
-                                    {/* Project Name */}
                                     <div className="md:col-span-6 space-y-1">
                                         <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
                                             <Briefcase className="w-2.5 h-2.5" /> Tên công trình
@@ -543,19 +537,19 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">Giao(DN)</label>
-                                        <input type="number" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
+                                        <input type="number" step="any" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-blue-600 uppercase block text-center">Kiểm tra</label>
-                                        <input type="number" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-1 py-1 border border-blue-300 rounded-md font-bold text-center text-blue-700 bg-white text-[11px] h-7"/>
+                                        <input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-1 py-1 border border-blue-300 rounded-md font-bold text-center text-blue-700 bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-green-600 uppercase block text-center">Đạt</label>
-                                        <input type="number" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/>
+                                        <input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-red-600 uppercase block text-center">Hỏng</label>
-                                        <input type="number" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/>
+                                        <input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/>
                                     </div>
                                 </div>
 

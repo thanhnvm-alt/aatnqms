@@ -158,7 +158,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                  <div className="flex items-center gap-2 mb-6 border-b border-slate-50 pb-3 w-full"><PieChartIcon className="w-5 h-5 text-emerald-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">CHỈ SỐ CHẤT LƯỢNG</h3></div>
                  <div className="flex flex-col items-center w-full">
                      <div className="w-40 h-40 relative">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                           <PieChart>
                             <Pie data={pieData} innerRadius={45} outerRadius={65} paddingAngle={5} dataKey="value" stroke="none">
                               {pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
@@ -194,7 +194,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
              </div>
          </div>
       </div>
-
+      {/* ... rest of editing modal code ... */}
       {isEditing && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-200">
@@ -207,7 +207,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar bg-slate-50/30">
-                      {/* Nhóm 1: Trạng thái & Tiến độ */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                           <div className="space-y-1.5">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Trạng thái vận hành</label>
@@ -227,7 +226,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                           </div>
                       </div>
 
-                      {/* Nhóm 2: Nhân sự & Vị trí */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                           <div className="space-y-1.5">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Project Manager (PM)</label>
@@ -251,7 +249,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                           </div>
                       </div>
 
-                      {/* Nhóm 3: Thời gian & Mô tả */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="space-y-1.5">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ngày bắt đầu</label>
@@ -268,7 +265,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project: initialPr
                           <textarea value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full px-5 py-4 border border-slate-200 rounded-[2rem] font-medium text-xs h-32 resize-none focus:ring-4 focus:ring-blue-100 outline-none" placeholder="Thông tin tổng quan về quy mô dự án..." />
                       </div>
 
-                      {/* Nhóm 4: Gallery */}
                       <div className="space-y-3">
                           <div className="flex justify-between items-center px-1">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bộ sưu tập ảnh ({editForm.images?.length || 0})</label>

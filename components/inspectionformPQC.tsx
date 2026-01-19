@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { 
@@ -14,17 +13,6 @@ import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchPlans, fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
-
-interface InspectionFormProps {
-  initialData?: Partial<Inspection>;
-  onSave: (inspection: Inspection) => Promise<void>;
-  onCancel: () => void;
-  plans: PlanItem[];
-  workshops: Workshop[];
-  inspections: Inspection[];
-  user: User;
-  templates: Record<string, CheckItem[]>;
-}
 
 const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   return new Promise((resolve) => {
@@ -250,7 +238,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         </div>
                         <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
                             <div className="flex justify-between items-center border-b border-slate-50 pb-1.5 mb-1.5">
-                                <label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Ảnh SAU xử lý</label>
+                                <label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/> Ảnh SAU xử lý</label>
                                 <div className="flex gap-1">
                                     <button onClick={() => { setUploadTarget('AFTER'); cameraInputRef.current?.click(); }} className="p-1 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button>
                                     <button onClick={() => { setUploadTarget('AFTER'); fileInputRef.current?.click(); }} className="p-1 bg-slate-50 text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button>
@@ -275,6 +263,18 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
         </div>
     );
 };
+
+/* Added missing InspectionFormProps interface to resolve build error */
+interface InspectionFormProps {
+  initialData?: Partial<Inspection>;
+  onSave: (inspection: Inspection) => Promise<void>;
+  onCancel: () => void;
+  plans: PlanItem[];
+  workshops: Workshop[];
+  inspections: Inspection[];
+  user: User;
+  templates: Record<string, CheckItem[]>;
+}
 
 export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, plans, workshops, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
@@ -349,13 +349,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           
           let match = null;
           if (code.length === 9) {
-              // Tìm khớp chính xác theo headcode
               match = items.find(p => String(p.headcode || '').toUpperCase() === code);
           } else if (code.length === 13) {
-              // Tìm khớp chính xác theo ma_nha_may
               match = items.find(p => String(p.ma_nha_may || '').toUpperCase() === code);
           } else {
-              // Fallback tìm khớp gần nhất
               match = items.find(p => 
                 String(p.headcode || '').toUpperCase() === code || 
                 String(p.ma_nha_may || '').toUpperCase() === code
@@ -374,7 +371,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 headcode: match.headcode, 
                 workshop: match.ma_nha_may 
               }));
-              // Cập nhật mã định danh hiển thị thành mã nhà máy
               setSearchCode(match.ma_nha_may);
           }
       } catch (e) {
@@ -501,13 +497,14 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         {isLookupLoading && <div className="absolute right-8"><Loader2 className="w-3 h-3 animate-spin text-blue-500" /></div>}
                     </div>
                 </div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input value={formData.so_luong_ipo || 0} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                {/* ISO-FIX: Cho phép nhập số thập phân cho IPO */}
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo || ''} onChange={e => handleInputChange('so_luong_ipo', parseFloat(e.target.value))} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
@@ -546,10 +543,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     </select>
                  </div>
             </div>
+            {/* ISO-FIX: Thêm step="any" để hỗ trợ số thập phân cho các ô số lượng */}
             <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                 <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input type="number" step="0.01" value={formData.inspectedQuantity || ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1 border border-slate-200 rounded-md font-bold text-[11px] text-center" /></div>
-                 <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div><input type="number" step="0.01" value={formData.passedQuantity || ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1 border border-green-200 rounded-md font-bold text-[11px] text-center" /></div>
-                 <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span></div><input type="number" step="0.01" value={formData.failedQuantity || ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1 border border-red-200 rounded-md font-bold text-[11px] text-center" /></div>
+                 <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input type="number" step="any" value={formData.inspectedQuantity || ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1 border border-slate-200 rounded-md font-bold text-[11px] text-center" /></div>
+                 <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div><input type="number" step="any" value={formData.passedQuantity || ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1 border border-green-200 rounded-md font-bold text-[11px] text-center" /></div>
+                 <div className="space-y-0.5"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span></div><input type="number" step="any" value={formData.failedQuantity || ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1 border border-red-200 rounded-md font-bold text-[11px] text-center" /></div>
             </div>
         </section>
 

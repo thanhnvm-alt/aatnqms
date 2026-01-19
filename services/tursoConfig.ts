@@ -3,7 +3,8 @@ import { createClient, Client } from "@libsql/client/web";
 
 /**
  * TURSO DATABASE CONFIGURATION - WEB OPTIMIZED
- * Khắc phục lỗi "Failed to fetch" bằng cách chuẩn hóa URL cho môi trường Browser
+ * Khắc phục lỗi "Failed to fetch" bằng cách chuẩn hóa URL cho môi trường Browser.
+ * Turso Web SDK yêu cầu URL phải bắt đầu bằng https:// hoặc wss://.
  */
 
 const FALLBACK_URL = 'https://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io';
@@ -28,13 +29,13 @@ if (finalUrl.startsWith("libsql://")) {
     finalUrl = "https://" + finalUrl;
 }
 
-// Loại bỏ dấu gạch chéo cuối cùng
+// Loại bỏ dấu gạch chéo cuối cùng để tránh lỗi ghép URL
 finalUrl = finalUrl.replace(/\/$/, "");
 
 export const isTursoConfigured = finalUrl.length > 0 && !finalUrl.includes("placeholder");
 
 if (isTursoConfigured) {
-    console.log("📡 ISO-DB: Turso Client Connection String ready.");
+    console.log("📡 ISO-DB: Turso Connection String standardized for Fetch API.");
 }
 
 export const turso: Client = createClient({

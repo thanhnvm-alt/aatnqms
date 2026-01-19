@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId } from '../types';
 import { 
@@ -45,41 +46,83 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showFilterModal, setShowFilterModal] = useState(false);
+
+  // States cho bộ lọc chuyên sâu
+  const [filterQC, setFilterQC] = useState('ALL');
+  const [filterWorkshop, setFilterWorkshop] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  // Trích xuất danh sách nhân sự và xưởng từ dữ liệu
+  const filterOptions = useMemo(() => {
+    return {
+        inspectors: Array.from(new Set(inspections.map(i => i.inspectorName).filter(Boolean))).sort(),
+        workshops: Array.from(new Set(inspections.map(i => i.workshop).filter(Boolean))).sort()
+    };
+  }, [inspections]);
+
+  const isFilterActive = filterQC !== 'ALL' || filterWorkshop !== 'ALL' || filterStatus !== 'ALL' || fromDate !== '' || toDate !== '';
+
+  const resetFilters = () => {
+    setFilterQC('ALL');
+    setFilterWorkshop('ALL');
+    setFilterStatus('ALL');
+    setFromDate('');
+    setToDate('');
+  };
 
   // ISO-GROUPING LOGIC
   const groupedInspections = useMemo(() => {
     const groups: Record<string, { inspections: Inspection[], projectName: string }> = {};
     
     const filtered = (inspections || []).filter(item => {
+        // Lọc theo search term
         const term = searchTerm.toLowerCase();
-        return !term || 
+        const matchesSearch = !term || 
                item.ma_ct?.toLowerCase().includes(term) ||
                item.ten_ct?.toLowerCase().includes(term) ||
                item.ten_hang_muc?.toLowerCase().includes(term) ||
                item.po_number?.toLowerCase().includes(term);
+
+        if (!matchesSearch) return false;
+
+        // Lọc theo QC
+        if (filterQC !== 'ALL' && item.inspectorName !== filterQC) return false;
+
+        // Lọc theo Xưởng
+        if (filterWorkshop !== 'ALL' && item.workshop !== filterWorkshop) return false;
+
+        // Lọc theo Trạng thái
+        if (filterStatus !== 'ALL' && item.status !== filterStatus) return false;
+
+        // Lọc theo Ngày (item.date format YYYY-MM-DD)
+        if (fromDate && item.date < fromDate) return false;
+        if (toDate && item.date > toDate) return false;
+
+        return true;
     });
 
     filtered.forEach(item => {
-        // Grouping key: If no ma_ct or ma_ct is 'DÙNG CHUNG' -> Group in 'COMMON'
         const isCommon = !item.ma_ct || item.ma_ct === 'DÙNG CHUNG';
         const key = isCommon ? 'DÙNG CHUNG' : (item.ma_ct || 'DỰ ÁN KHÁC');
         
         if (!groups[key]) {
             groups[key] = {
                 inspections: [],
-                projectName: isCommon ? 'Vật tư / Thành phần dùng chung' : (item.ten_ct || 'Dự án chưa định danh')
+                projectName: isCommon ? 'VẬT TƯ / THÀNH PHẦN DÙNG CHUNG' : (item.ten_ct || 'Dự án chưa định danh')
             };
         }
         groups[key].inspections.push(item);
     });
 
-    // Auto-expand first few groups if searching
-    if (searchTerm && Object.keys(groups).length > 0) {
+    if ((searchTerm || isFilterActive) && Object.keys(groups).length > 0) {
         setExpandedGroups(new Set(Object.keys(groups)));
     }
 
     return groups;
-  }, [inspections, searchTerm]);
+  }, [inspections, searchTerm, filterQC, filterWorkshop, filterStatus, fromDate, toDate, isFilterActive]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
@@ -107,13 +150,23 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-600"><X className="w-4 h-4" /></button>
                   )}
               </div>
-              <button 
-                onClick={onRefresh} 
-                className="px-6 py-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                <span className="text-[10px] uppercase tracking-widest">Làm mới</span>
-              </button>
+              <div className="flex gap-2">
+                  <button 
+                    onClick={() => setShowFilterModal(true)}
+                    className={`px-6 py-3 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all shadow-sm border relative ${isFilterActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    <Filter className="w-4 h-4" />
+                    <span className="text-[10px] uppercase tracking-widest">Bộ lọc</span>
+                    {isFilterActive && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse shadow-sm"></div>}
+                  </button>
+                  <button 
+                    onClick={onRefresh} 
+                    className="px-6 py-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    <span className="text-[10px] uppercase tracking-widest">Làm mới</span>
+                  </button>
+              </div>
           </div>
       </div>
 
@@ -127,6 +180,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                     <FolderOpen className="w-20 h-20 opacity-10 mb-4" />
                     <p className="font-black uppercase tracking-[0.2em] text-[10px]">Không tìm thấy dữ liệu kiểm tra</p>
+                    {isFilterActive && (
+                        <button onClick={resetFilters} className="mt-4 text-blue-600 font-bold text-xs hover:underline flex items-center gap-1">
+                            <RotateCcw className="w-3 h-3" /> Reset bộ lọc
+                        </button>
+                    )}
                 </div>
             ) : (
                 Object.keys(groupedInspections).sort((a,b) => a === 'DÙNG CHUNG' ? 1 : b === 'DÙNG CHUNG' ? -1 : a.localeCompare(b)).map(groupKey => {
@@ -228,9 +286,123 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         </div>
       </div>
       
-      {/* Scroll Info for Mobile */}
-      <div className="md:hidden px-4 py-2 bg-slate-900/5 backdrop-blur-sm text-center border-t border-slate-200 sticky bottom-0">
-          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Hiển thị {inspections.length} bản ghi kiểm tra</p>
+      {/* FILTER MODAL */}
+      {showFilterModal && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                      <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                              <SlidersHorizontal className="w-5 h-5" />
+                          </div>
+                          <div>
+                              <h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">Bộ lọc danh sách phiếu</h3>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">ISO Digital Quality Logs</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowFilterModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400"/></button>
+                  </div>
+
+                  <div className="p-6 space-y-5 overflow-y-auto no-scrollbar">
+                      {/* QC Filter */}
+                      <div className="space-y-1.5">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                              <UserCheck className="w-3 h-3 text-indigo-500" /> Nhân viên QC / Inspector
+                          </label>
+                          <select 
+                            value={filterQC}
+                            onChange={e => setFilterQC(e.target.value)}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
+                          >
+                              <option value="ALL">TẤT CẢ NHÂN VIÊN</option>
+                              {filterOptions.inspectors.map(name => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                      </div>
+
+                      {/* Workshop Filter */}
+                      <div className="space-y-1.5">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                              <Factory className="w-3 h-3 text-teal-500" /> Xưởng sản xuất / Hiện trường
+                          </label>
+                          <select 
+                            value={filterWorkshop}
+                            onChange={e => setFilterWorkshop(e.target.value)}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
+                          >
+                              <option value="ALL">TẤT CẢ ĐỊA ĐIỂM</option>
+                              {filterOptions.workshops.map(name => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                      </div>
+
+                      {/* Status Filter */}
+                      <div className="space-y-1.5">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                              <ShieldCheck className="w-3 h-3 text-blue-500" /> Trạng thái phiếu
+                          </label>
+                          <select 
+                            value={filterStatus}
+                            onChange={e => setFilterStatus(e.target.value)}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer"
+                          >
+                              <option value="ALL">TẤT CẢ TRẠNG THÁI</option>
+                              <option value={InspectionStatus.DRAFT}>DRAFT (BẢN NHÁP)</option>
+                              <option value={InspectionStatus.PENDING}>PENDING (CHỜ DUYỆT)</option>
+                              <option value={InspectionStatus.COMPLETED}>COMPLETED (HOÀN TẤT)</option>
+                              <option value={InspectionStatus.APPROVED}>APPROVED (ĐÃ PHÊ DUYỆT)</option>
+                              <option value={InspectionStatus.FLAGGED}>FLAGGED (GHI NHẬN LỖI)</option>
+                          </select>
+                      </div>
+
+                      {/* Date Range */}
+                      <div className="space-y-1.5">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                              <Calendar className="w-3 h-3 text-rose-500" /> Khoảng thời gian kiểm tra
+                          </label>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase ml-1">Từ ngày</span>
+                                  <input 
+                                    type="date" 
+                                    value={fromDate} 
+                                    onChange={e => setFromDate(e.target.value)}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-[10px] outline-none focus:ring-2 ring-blue-100"
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <span className="text-[8px] font-bold text-slate-400 uppercase ml-1">Đến ngày</span>
+                                  <input 
+                                    type="date" 
+                                    value={toDate} 
+                                    onChange={e => setToDate(e.target.value)}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-[10px] outline-none focus:ring-2 ring-blue-100"
+                                  />
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex gap-3 shrink-0">
+                      <button 
+                        onClick={resetFilters}
+                        className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                      >
+                          <RotateCcw className="w-4 h-4" /> Reset
+                      </button>
+                      <button 
+                        onClick={() => setShowFilterModal(false)}
+                        className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all"
+                      >
+                          XÁC NHẬN
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Mobile Info Bar */}
+      <div className="md:hidden px-4 py-2 bg-slate-900/5 backdrop-blur-sm text-center border-t border-slate-200 sticky bottom-0 z-20">
+          {/* Fix: Added explicit type to reduce parameters to avoid unknown type error */}
+          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Hiển thị {Object.values(groupedInspections).reduce((acc: number, curr: any) => acc + curr.inspections.length, 0)} bản ghi đã lọc</p>
       </div>
     </div>
   );

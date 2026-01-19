@@ -1,10 +1,10 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, MaterialIQC, NCRComment } from '../types';
 import { 
   ArrowLeft, Calendar, User as UserIcon, Building2, Box, FileText, 
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
-  CheckCircle, LayoutList, PenTool, ChevronDown, ChevronUp, Calculator,
+  LayoutList, PenTool, ChevronDown, ChevronUp, Calculator,
   TrendingUp, Layers, MessageSquare, Loader2, Eraser, Info,
   ClipboardList, Send, ShieldAlert, Save, Check, UserCheck, 
   Signature, MessageCircle, UserPlus, Tag, FileCheck, Camera, Image as ImageIcon, MapPin
@@ -56,7 +56,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
         }
     }, [value]);
     const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
-    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); };
+    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); }; };
     const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
     const clear = () => { const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
     return (
@@ -80,18 +80,15 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
 
-  // Modal states
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [showPmModal, setShowPmModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Form states
   const [managerSig, setManagerSig] = useState('');
   const [pmSig, setPmSig] = useState(inspection.pmSignature || '');
   const [pmName, setPmName] = useState(inspection.pmName || '');
   const [pmComment, setPmComment] = useState(inspection.pmComment || '');
 
-  // Refs for upload
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
 
@@ -99,7 +96,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isApproved = inspection.status === InspectionStatus.APPROVED || inspection.status === InspectionStatus.COMPLETED;
 
-  // --- ISO PERMISSION LOGIC ---
   const isOwner = inspection.inspectorName === user.name;
   const canModify = isAdmin || (!isApproved && (isManager || isOwner));
 
@@ -115,21 +111,28 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   };
 
   const handlePmConfirm = async () => {
-    if (!pmSig || !pmName.trim() || !pmComment.trim()) {
-        alert("Vui lòng điền đầy đủ họ tên, nhận xét và ký xác nhận.");
-        return;
-    }
+    if (!pmSig || !pmName.trim() || !pmComment.trim()) { alert("Vui lòng điền đủ họ tên, nhận xét và ký."); return; }
     if (!onApprove) return;
     setIsProcessing(true);
     try {
-        await onApprove(inspection.id, "", { 
-            pmSignature: pmSig, 
-            pmName: pmName.toUpperCase(), 
-            pmComment 
-        });
+        await onApprove(inspection.id, "", { pmSignature: pmSig, pmName: pmName.toUpperCase(), pmComment });
         setShowPmModal(false);
-        alert("Đã ghi nhận xác nhận của PM thành công.");
-    } catch (e) { alert("Lỗi khi lưu xác nhận PM."); } finally { setIsProcessing(false); }
+    } catch (e) { alert("Lỗi khi lưu PM confirm."); } finally { setIsProcessing(false); }
+  };
+
+  const handlePostComment = async () => {
+      if (!newComment.trim() && commentAttachments.length === 0) return;
+      if (!onPostComment) return;
+      setIsSubmittingComment(true);
+      try {
+          await onPostComment(inspection.id, { 
+              id: Date.now().toString(), userId: user.id, userName: user.name, 
+              userAvatar: user.avatar, content: newComment, createdAt: new Date().toISOString(),
+              attachments: commentAttachments
+          } as any);
+          setNewComment('');
+          setCommentAttachments([]);
+      } catch (e) { alert("Lỗi gửi bình luận."); } finally { setIsSubmittingComment(false); }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -147,29 +150,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
       e.target.value = '';
   };
 
-  const handlePostComment = async () => {
-      if (!newComment.trim() && commentAttachments.length === 0) return;
-      if (!onPostComment) return;
-      setIsSubmittingComment(true);
-      try {
-          await onPostComment(inspection.id, { 
-              id: Date.now().toString(), 
-              userId: user.id, 
-              userName: user.name, 
-              userAvatar: user.avatar, 
-              content: newComment, 
-              createdAt: new Date().toISOString(),
-              attachments: commentAttachments
-          } as any);
-          setNewComment('');
-          setCommentAttachments([]);
-      } catch (e) { alert("Lỗi gửi phản hồi."); } finally { setIsSubmittingComment(false); }
-  };
-
-  const handleEditCommentImage = (idx: number) => {
-      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
-  };
-
   const updateCommentImage = (idx: number, newImg: string) => {
       setCommentAttachments(prev => {
           const next = [...prev];
@@ -184,12 +164,11 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-      {/* HEADER */}
       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-30 shadow-sm flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
               <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-100 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600" /></button>
               <div>
-                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight leading-none">IQC QUALITY REPORT</h2>
+                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight leading-none">IQC REVIEW REPORT</h2>
                   <div className="flex items-center gap-2 mt-0.5">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>{inspection.status}</span>
                       <span className="text-[10px] text-slate-400 font-mono font-bold tracking-tight uppercase">#{inspection.id.split('-').pop()}</span>
@@ -202,9 +181,8 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
           </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar bg-slate-50/50 pb-40 md:pb-32">
-        {/* Header Block */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5 relative overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar bg-slate-50 pb-40 md:pb-32">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mb-1.5">Purchase Order</p>
@@ -214,156 +192,67 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                             <Building2 className="w-3.5 h-3.5 text-blue-500" />
                             <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">{inspection.supplier}</span>
                         </div>
-                        {inspection.supplierAddress && (
-                            <div className="flex items-start gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100">
-                                <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
-                                <span className="text-[10px] font-medium text-slate-600 leading-relaxed uppercase">{inspection.supplierAddress}</span>
-                            </div>
-                        )}
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ngày kiểm lô</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ngày kiểm</p>
                         <p className="text-[11px] font-bold text-slate-800">{inspection.date}</p>
                     </div>
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">QC Thực hiện</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">QC/QA</p>
                         <p className="text-[11px] font-bold text-slate-800 uppercase">{inspection.inspectorName}</p>
                     </div>
                 </div>
             </div>
-            
-            {/* Supporting Docs */}
-            {inspection.referenceDocs && inspection.referenceDocs.length > 0 && (
-                <div className="border-t border-slate-100 pt-3">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><FileCheck className="w-3 h-3"/> Tài liệu hỗ trợ</p>
-                    <div className="flex flex-wrap gap-2">
-                        {inspection.referenceDocs.map((doc, idx) => (
-                            <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-[9px] font-bold uppercase border border-blue-100">{doc}</span>
-                        ))}
-                    </div>
-                </div>
-            )}
 
-            {/* Images Gallery */}
             <div className="flex flex-col gap-6 border-t border-slate-100 pt-4">
                 {mainImages.length > 0 && (
                     <div className="space-y-2">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                            <ImageIcon className="w-3 h-3" /> Bằng chứng hiện trường ({mainImages.length})
-                        </p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon className="w-3 h-3" /> Bằng chứng hiện trường ({mainImages.length})</p>
                         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                             {mainImages.map((img, idx) => (
-                                <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: mainImages, index: idx })}>
-                                    <img src={img} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm" />
-                                </div>
+                                <img key={idx} src={img} onClick={() => setLightboxState({ images: mainImages, index: idx })} className="w-20 h-20 rounded-lg object-cover border border-slate-200 shadow-sm cursor-zoom-in" />
                             ))}
                         </div>
                     </div>
                 )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {deliveryNoteImages.length > 0 && (
-                        <div className="space-y-2">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Phiếu Giao Hàng</p>
-                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                                {deliveryNoteImages.map((img, idx) => (
-                                    <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })}>
-                                        <img src={img} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    {reportImages.length > 0 && (
-                        <div className="space-y-2">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ảnh Báo Cáo NCC</p>
-                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                                {reportImages.map((img, idx) => (
-                                    <div key={idx} className="relative group cursor-zoom-in flex-shrink-0" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
-                                        <img src={img} className="w-20 h-20 rounded-lg object-cover border border-slate-200" />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
             </div>
         </div>
 
-        {/* Materials List */}
         <div className="space-y-3">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-blue-500" /> Chi tiết vật tư thẩm định
-            </h3>
+            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-blue-500" /> Danh mục vật tư</h3>
             {(inspection.materials || []).map((mat, idx) => {
                 const isExp = expandedMaterial === mat.id;
-                const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                 return (
                     <div key={mat.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                         <div onClick={() => setExpandedMaterial(isExp ? null : mat.id)} className={`p-4 flex items-center justify-between cursor-pointer ${isExp ? 'bg-blue-50/30' : ''}`}>
                             <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xs shadow-sm transition-all ${isExp ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm uppercase tracking-tight leading-none">{mat.name}</h4>
-                                    <div className="flex items-center gap-3 mt-1">
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">DN: {mat.deliveryQty} {mat.unit}</span>
-                                        <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[9px] font-bold uppercase border border-green-100">{passRate}% ĐẠT</span>
-                                    </div>
-                                </div>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${isExp ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div>
+                                <div><h4 className="font-bold text-slate-800 text-sm uppercase tracking-tight">{mat.name}</h4><p className="text-[9px] font-bold text-slate-400 uppercase">Quy cách: {mat.deliveryQty} {mat.unit}</p></div>
                             </div>
                             {isExp ? <ChevronUp className="w-5 h-5 text-blue-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
                         </div>
                         {isExp && (
-                            <div className="p-5 space-y-5 animate-in slide-in-from-top-4 duration-300 border-t border-slate-50">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Chủng loại</p>
-                                        <p className="text-[11px] font-bold uppercase">{mat.category || '---'}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Phạm vi</p>
-                                        <p className="text-[11px] font-bold uppercase">{mat.scope}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Mã Dự Án</p>
-                                        <p className="text-[11px] font-bold uppercase font-mono">{mat.projectCode || '---'}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Tên Dự Án</p>
-                                        <p className="text-[11px] font-bold truncate uppercase">{mat.projectName || '---'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3 shadow-inner">
-                                    <div className="grid grid-cols-4 gap-2 text-center">
-                                        <div><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">SL ĐH</p><p className="text-lg font-bold text-slate-700">{mat.orderQty || 0}</p></div>
-                                        <div><p className="text-[8px] font-bold text-blue-400 uppercase tracking-widest">Kiểm</p><p className="text-lg font-bold text-blue-700">{mat.inspectQty}</p></div>
-                                        <div><p className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Đạt</p><p className="text-lg font-bold text-green-700">{mat.passQty}</p></div>
-                                        <div><p className="text-[8px] font-bold text-red-400 uppercase tracking-widest">Lỗi</p><p className="text-lg font-bold text-red-700">{mat.failQty}</p></div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        {mat.items?.map(item => (
-                                            <div key={item.id} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm flex flex-col gap-2">
-                                                <div className="flex items-start gap-3">
-                                                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${item.status === CheckStatus.PASS ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                                    <div className="flex-1 overflow-hidden"><p className="text-[10px] font-bold text-slate-800 uppercase leading-tight line-clamp-1">{item.label}</p><p className="text-[9px] text-slate-500 mt-0.5 italic leading-relaxed">{item.notes || '---'}</p></div>
-                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${item.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-100'} border`}>{item.status}</span>
-                                                </div>
-                                                {item.images && item.images.length > 0 && (
-                                                    <div className="flex gap-2 overflow-x-auto no-scrollbar">
-                                                        {item.images.map((img, i) => (
-                                                            <img key={i} src={img} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })} />
-                                                        ))}
-                                                    </div>
-                                                )}
+                            <div className="p-5 space-y-4 border-t border-slate-50">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {mat.items?.map(item => (
+                                        <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
+                                            <div className="flex justify-between items-start">
+                                                <p className="text-[10px] font-bold text-slate-800 uppercase">{item.label}</p>
+                                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${item.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200'} border`}>{item.status}</span>
                                             </div>
-                                        ))}
-                                    </div>
+                                            {item.notes && <p className="text-[9px] text-slate-500 italic mt-1">"{item.notes}"</p>}
+                                            
+                                            {item.images && item.images.length > 0 && (
+                                                <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar">
+                                                    {item.images.map((img, i) => (
+                                                        <img key={i} src={img} className="w-12 h-12 rounded border border-white shadow-sm object-cover cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })} />
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -372,65 +261,46 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
             })}
         </div>
 
-        {/* LOGGED SIGNATURES */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-3 font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-green-500"/> NHẬT KÝ PHÊ DUYỆT (ISO)</h3>
+            <h3 className="text-blue-700 border-b border-blue-50 pb-3 font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-green-500"/> PHÊ DUYỆT ISO</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-3">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-blue-500 pl-2">QC Thực Hiện</p>
-                    <div className="bg-slate-50 p-3 rounded-xl h-28 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
-                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <div className="text-[9px] text-slate-300 font-bold uppercase">N/A</div>}
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">QC Inspector</p>
+                    <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
+                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <div className="text-[9px] text-slate-300">N/A</div>}
                     </div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.inspectorName}</div>
                 </div>
-
                 <div className="space-y-3">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-emerald-500 pl-2">QA Manager</p>
-                    <div className="bg-slate-50 p-3 rounded-xl h-28 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
-                        {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" /> : <div className="text-[9px] text-orange-400 font-bold uppercase tracking-widest animate-pulse">ĐANG CHỜ DUYỆT</div>}
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Manager</p>
+                    <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center border border-slate-100 shadow-inner">
+                        {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" /> : <div className="text-[9px] text-orange-400 animate-pulse font-black">CHỜ DUYỆT</div>}
                     </div>
-                    <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || 'Manager Approval'}</div>
-                </div>
-
-                <div className="space-y-3">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l-2 border-indigo-500 pl-2">Project Manager</p>
-                    <div className="bg-slate-50 p-3 rounded-xl h-28 flex flex-col items-center justify-center overflow-hidden border border-slate-100 shadow-inner relative group">
-                        {inspection.pmSignature ? (
-                            <img src={inspection.pmSignature} className="h-full object-contain" />
-                        ) : (
-                            <div className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">CHƯA XÁC NHẬN</div>
-                        )}
-                    </div>
-                    <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.pmName || '---'}</div>
-                    {inspection.pmComment && (
-                        <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 mt-1">
-                             <p className="text-[10px] font-bold text-indigo-700 italic leading-relaxed">"{inspection.pmComment}"</p>
-                        </div>
-                    )}
+                    <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || '---'}</div>
                 </div>
             </div>
         </section>
 
-        {/* Discussions */}
-        <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
-            <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-blue-600" />
-                <h3 className="text-[11px] font-bold text-slate-800 uppercase tracking-wide">Trao đổi & Ghi chú</h3>
+        {/* --- DISCUSSION SECTION --- */}
+        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-blue-600" />
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ</h3>
             </div>
-            <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto no-scrollbar">
+            <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-full border border-slate-200 shrink-0 shadow-sm" alt="" />
-                        <div className="flex-1 space-y-1.5">
+                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" />
+                        <div className="flex-1 space-y-2">
                             <div className="flex justify-between items-center px-1">
-                                <span className="font-bold text-slate-800 text-[10px] uppercase">{comment.userName}</span>
-                                <span className="text-[9px] font-bold text-slate-400 font-mono">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
+                                <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
                             </div>
-                            <div className="bg-slate-50 p-3 rounded-xl rounded-tl-none border border-slate-100 text-xs text-slate-700">{comment.content}</div>
+                            <div className="bg-slate-50 p-4 rounded-[1.5rem] rounded-tl-none border border-slate-100 text-[12px] text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">{comment.content}</div>
                             {comment.attachments && comment.attachments.length > 0 && (
-                                <div className="flex gap-2 flex-wrap pt-1">
+                                <div className="flex gap-3 flex-wrap pt-2">
                                     {comment.attachments.map((img, i) => (
-                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-transform hover:scale-105 shrink-0">
+                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
                                             <img src={img} className="w-full h-full object-cover" alt=""/>
                                         </div>
                                     ))}
@@ -439,117 +309,49 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                         </div>
                     </div>
                 ))}
-                {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-[10px] text-slate-400 py-6 italic uppercase tracking-widest">Chưa có ý kiến thảo luận</p>}
+                {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-[10px] text-slate-300 py-10 font-black uppercase tracking-[0.3em]">Hệ thống chưa ghi nhận ý kiến</p>}
             </div>
-            <div className="p-3 border-t border-slate-100 bg-slate-50/30 space-y-3">
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-4">
                 {commentAttachments.length > 0 && (
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                         {commentAttachments.map((img, idx) => (
-                            <div key={idx} className="relative w-16 h-16 shrink-0 group">
-                                <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
-                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
-                                <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><PenTool className="w-4 h-4 text-white drop-shadow-md"/></div>
+                            <div key={idx} className="relative w-20 h-20 shrink-0 group">
+                                <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' })}/>
+                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                             </div>
                         ))}
                     </div>
                 )}
-                <div className="flex gap-2 items-end">
+                <div className="flex gap-3 items-end">
                     <div className="flex-1 relative">
-                        <textarea 
-                            value={newComment} onChange={(e) => setNewComment(e.target.value)}
-                            placeholder="Nhập phản hồi..."
-                            className="flex-1 w-full pl-3 pr-24 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm h-12 transition-all"
-                        />
-                        <div className="absolute right-2 bottom-2 flex items-center gap-1.5">
-                            <button onClick={() => commentCameraRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chụp ảnh"><Camera className="w-4 h-4"/></button>
-                            <button onClick={() => commentFileRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl active:scale-90 transition-all border border-slate-100" title="Chọn ảnh"><ImageIcon className="w-4 h-4"/></button>
+                        <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" />
+                        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                            <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
                         </div>
                     </div>
-                    <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-12 h-12 bg-blue-600 text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0"><Send className="w-4 h-4" /></button>
+                    <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
                 </div>
             </div>
         </section>
       </div>
 
-      {/* BOTTOM ACTIONS - FIXED FOR MOBILE */}
-      {!isApproved && (
-          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-3 md:p-4 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex items-center justify-between gap-2 z-40 shadow-lg">
-              <button onClick={onBack} className="px-3 py-3 text-slate-500 font-bold uppercase text-[9px] tracking-widest hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all shrink-0">
-                  Quay lại
-              </button>
-              
-              <div className="flex gap-2 flex-1 justify-end">
-                  <button 
-                    onClick={() => setShowPmModal(true)} 
-                    className="flex-1 py-3 bg-indigo-50 text-indigo-700 font-bold uppercase text-[9px] tracking-wide border border-indigo-200 rounded-xl hover:bg-indigo-100 active:scale-95 flex items-center justify-center gap-1.5"
-                  >
-                      <UserPlus className="w-3.5 h-3.5"/> PM Ký
-                  </button>
-                  
-                  {isManager && (
-                      <button 
-                        onClick={() => setShowManagerModal(true)} 
-                        className="flex-1 py-3 bg-emerald-600 text-white font-bold uppercase text-[9px] tracking-wide rounded-xl shadow-lg hover:bg-emerald-700 active:scale-95 flex items-center justify-center gap-1.5"
-                      >
-                          <ShieldCheck className="w-3.5 h-3.5"/> Duyệt
-                      </button>
-                  )}
-              </div>
+      {!isApproved && isManager && (
+          <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 p-3 border-t border-slate-200 bg-white/95 backdrop-blur-xl flex justify-end z-40">
+              <button onClick={() => setShowManagerModal(true)} className="py-3 px-8 bg-emerald-600 text-white font-bold uppercase text-[9px] tracking-wide rounded-xl shadow-lg active:scale-95">DUYỆT LÔ HÀNG</button>
           </div>
       )}
 
-      {/* MODALS */}
       {showManagerModal && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                  <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                          <h3 className="font-bold text-slate-800 uppercase tracking-tighter text-sm">QA/QC Manager Phê Duyệt</h3>
-                      </div>
-                      <button onClick={() => setShowManagerModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
-                  </div>
-                  <div className="p-6 space-y-5">
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                          <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Người phê duyệt</p>
-                          <p className="text-sm font-bold text-slate-800 uppercase">{user.name}</p>
-                      </div>
-                      <SignaturePad label="Chữ ký điện tử Manager" value={managerSig} onChange={setManagerSig} />
-                  </div>
-                  <div className="p-5 border-t bg-slate-50 flex gap-3">
-                      <button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy</button>
-                      <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg disabled:opacity-50">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'PHÊ DUYỆT'}</button>
-                  </div>
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+                  <h3 className="font-bold text-slate-800 uppercase text-sm">Manager Phê Duyệt</h3>
+                  <SignaturePad label="Chữ ký Manager" value={managerSig} onChange={setManagerSig} />
+                  <div className="flex gap-3 pt-2"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px] rounded-xl border">Hủy</button><button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}</button></div>
               </div>
           </div>
       )}
-
-      {showPmModal && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                  <div className="p-5 border-b border-slate-100 flex justify-between items-center">
-                      <h3 className="font-bold text-slate-800 uppercase text-sm">PM Dự Án Xác Nhận</h3>
-                      <button onClick={() => setShowPmModal(false)}><X className="w-5 h-5 text-slate-400"/></button>
-                  </div>
-                  <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh] no-scrollbar">
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Họ tên PM *</label>
-                          <input value={pmName} onChange={e => setPmName(e.target.value.toUpperCase())} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-[11px] uppercase h-10" placeholder="HỌ TÊN PM..." />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Nhận xét PM *</label>
-                          <textarea value={pmComment} onChange={e => setPmComment(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold h-24" placeholder="Ý kiến PM..." />
-                      </div>
-                      <SignaturePad label="Chữ ký PM" value={pmSig} onChange={setPmSig} />
-                  </div>
-                  <div className="p-5 border-t bg-slate-50 flex gap-3">
-                      <button onClick={() => setShowPmModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px]">Hủy</button>
-                      <button onClick={handlePmConfirm} disabled={isProcessing || !pmSig || !pmName.trim() || !pmComment.trim()} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg disabled:opacity-50">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN PM'}</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
+      
       {lightboxState && (
           <ImageEditorModal 
               images={lightboxState.images} 
@@ -559,7 +361,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
               readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
           />
       )}
-
       <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
       <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
     </div>

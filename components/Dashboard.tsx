@@ -1,5 +1,4 @@
 
-
 import React, { useMemo } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState } from '../types';
 import { 
@@ -34,7 +33,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
     const completed = safeInspections.filter(i => i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED).length;
     const flagged = safeInspections.filter(i => i.status === InspectionStatus.FLAGGED).length;
     const drafts = safeInspections.filter(i => i.status === InspectionStatus.DRAFT).length;
-    // Fixed: Accessed priority safely through types.ts update
     const highPriority = safeInspections.filter(i => i.priority === Priority.HIGH).length;
     
     const finishedTotal = completed + flagged;
@@ -93,7 +91,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
   return (
     <div className="h-full overflow-y-auto no-scrollbar bg-slate-50 flex flex-col no-scroll-x">
       <div className="p-4 space-y-5 max-w-7xl mx-auto w-full pb-28">
-        {/* Top Stat Grid - Optimized for 2 cols on mobile */}
+        {/* Top Stat Grid */}
         <div className="grid grid-cols-2 gap-3">
             <StatCard title="TỔNG PHIẾU" value={stats.total} icon={ClipboardCheck} colorHex="#3b82f6" subtitle={`${stats.drafts} bản nháp`} />
             <StatCard title="TỶ LỆ ĐẠT" value={`${stats.passRate}%`} icon={CheckCircle2} colorHex="#10b981" subtitle="KPI: >90%" />
@@ -101,13 +99,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
             <StatCard title="CẤP BÁCH" value={stats.highPriority} icon={Flag} colorHex="#f59e0b" subtitle="Ưu tiên cao" />
         </div>
 
-        {/* Charts Row - Stacked on mobile */}
+        {/* Charts Row */}
         <div className="grid grid-cols-1 gap-4">
             {/* Status Pie */}
             <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col items-center">
                <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TRẠNG THÁI</h3>
                <div className="w-full h-40 relative">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={statusData}
@@ -144,7 +142,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
             <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
                <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
                <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 10 }}>
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis 
