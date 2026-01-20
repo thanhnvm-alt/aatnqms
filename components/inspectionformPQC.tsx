@@ -293,6 +293,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     ma_nha_may: initialData?.ma_nha_may || '',
     headcode: initialData?.headcode || '',
     workshop: initialData?.workshop || initialData?.ma_nha_may || '',
+    so_luong_ipo: initialData?.so_luong_ipo || 0,
     ...initialData 
   });
   
@@ -373,7 +374,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 ma_nha_may: match.ma_nha_may, 
                 headcode: match.headcode, 
                 workshop: match.ma_nha_may,
-                // Reset counts when matching a new plan to prevent invalid data
                 inspectedQuantity: 0,
                 passedQuantity: 0,
                 failedQuantity: 0
@@ -404,52 +404,49 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       setFormData(prev => {
           const next = { ...prev };
           
-          // ISO VALIDATION LOGIC FOR QUANTITIES
+          // ISO VALIDATION & AUTO-CALCULATION LOGIC
           if (field === 'inspectedQuantity') {
               let val = parseFloat(String(value)) || 0;
               const ipo = parseFloat(String(next.so_luong_ipo || 0));
               
-              // Rule 1: SL kiểm tra <= SL IPO
+              // Rule 1: 0 < SL kiểm tra <= SL IPO
               if (val > ipo) val = ipo;
+              if (val < 0) val = 0;
+              
               next.inspectedQuantity = val;
-
-              // Validate children quantities after parent change
-              if ((next.passedQuantity || 0) + (next.failedQuantity || 0) > val) {
-                  // Adjusting failed qty first, then passed if needed
-                  next.failedQuantity = Math.max(0, val - (next.passedQuantity || 0));
-                  if ((next.passedQuantity || 0) > val) next.passedQuantity = val;
-              }
+              // Reset children to maintain total sum logic
+              next.passedQuantity = val;
+              next.failedQuantity = 0;
           }
           else if (field === 'passedQuantity') {
               let val = parseFloat(String(value)) || 0;
               const ins = parseFloat(String(next.inspectedQuantity || 0));
               
-              // Rule 2 & 3: SL Đạt <= SL Kiểm tra và (Đạt + Lỗi) <= Kiểm tra
+              // Rule 2: 0 <= SL Đạt <= SL Kiểm tra
               if (val > ins) val = ins;
-              const maxAllowed = Math.max(0, ins - (next.failedQuantity || 0));
-              if (val > maxAllowed) val = maxAllowed;
+              if (val < 0) val = 0;
               
               next.passedQuantity = val;
+              // Rule 3: sl lỗi = sl kiểm tra - sl đạt
+              next.failedQuantity = Number((ins - val).toFixed(2));
           }
           else if (field === 'failedQuantity') {
               let val = parseFloat(String(value)) || 0;
               const ins = parseFloat(String(next.inspectedQuantity || 0));
               
-              // Rule 2 & 3: SL Lỗi <= SL Kiểm tra và (Đạt + Lỗi) <= Kiểm tra
+              // Rule 2: 0 <= SL Lỗi <= SL Kiểm tra
               if (val > ins) val = ins;
-              const maxAllowed = Math.max(0, ins - (next.passedQuantity || 0));
-              if (val > maxAllowed) val = maxAllowed;
+              if (val < 0) val = 0;
               
               next.failedQuantity = val;
+              // Rule 3: sl đạt = sl kiểm tra - sl lỗi
+              next.passedQuantity = Number((ins - val).toFixed(2));
           }
           else {
               (next as any)[field] = value;
           }
 
-          // Logic reset stage and items when workshop changes
           if (field === 'workshop') { next.inspectionStage = ''; next.items = []; }
-          
-          // Template auto-loading logic
           if (field === 'inspectionStage') {
               const pqcTemplate = templates['PQC'] || [];
               const stageItems = pqcTemplate.filter(item => item.stage === value).map(item => ({ ...item, id: `pqc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, status: CheckStatus.PENDING, notes: '', images: [] }));
@@ -472,16 +469,14 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleSubmit = async () => {
-    if (!formData.ma_ct || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin và chọn công đoạn."); return; }
-    
-    // Final Audit of numbers before submission
     const ins = formData.inspectedQuantity || 0;
-    const pas = formData.passedQuantity || 0;
-    const fai = formData.failedQuantity || 0;
     const ipo = formData.so_luong_ipo || 0;
 
-    if (ins > ipo) return alert("Lỗi: Số lượng kiểm tra không được lớn hơn số lượng IPO.");
-    if (pas + fai > ins) return alert("Lỗi: Tổng số lượng Đạt và Lỗi không được vượt quá số lượng kiểm tra.");
+    if (!formData.ma_ct || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin và chọn công đoạn."); return; }
+    
+    // Final Enforcement of Rule 1
+    if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
+    if (ins > ipo) { alert("Số lượng kiểm tra không được vượt quá số lượng IPO."); return; }
 
     setIsSaving(true);
     try {
@@ -519,10 +514,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         );
 
         if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ 
-                ...prev, 
-                images: [...(prev.images || []), ...processedImages] 
-            }));
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processedImages] }));
         } else {
             setFormData(prev => ({ 
                 ...prev, 
@@ -646,6 +638,9 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         {parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) && (
                             <p className="text-[7px] text-red-500 font-bold uppercase text-center mt-0.5">Vượt SL IPO</p>
                         )}
+                        {parseFloat(String(formData.inspectedQuantity)) <= 0 && (
+                            <p className="text-[7px] text-orange-500 font-bold uppercase text-center mt-0.5">Phải &gt; 0</p>
+                        )}
                     </div>
                     <div className="space-y-1">
                         <div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div>
@@ -654,7 +649,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             step="any" 
                             value={formData.passedQuantity || ''} 
                             onChange={e => handleInputChange('passedQuantity', e.target.value)} 
-                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm ${parseFloat(String(formData.passedQuantity)) > parseFloat(String(formData.inspectedQuantity)) ? 'border-red-500 bg-red-50' : 'border-green-200 bg-white'}`} 
+                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm border-green-200 bg-white`} 
                         />
                     </div>
                     <div className="space-y-1">
@@ -664,7 +659,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             step="any" 
                             value={formData.failedQuantity || ''} 
                             onChange={e => handleInputChange('failedQuantity', e.target.value)} 
-                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm ${parseFloat(String(formData.failedQuantity)) > parseFloat(String(formData.inspectedQuantity)) ? 'border-red-500 bg-red-50' : 'border-red-200 bg-white'}`} 
+                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm border-red-200 bg-white`} 
                         />
                     </div>
                 </div>
