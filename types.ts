@@ -22,7 +22,6 @@ export enum Priority {
 
 export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST';
 
-// Added 'SQC_VT' to ModuleId union to match database implementation and form usage
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
 
 export interface QMSImage {
@@ -62,8 +61,8 @@ export interface NCRComment {
   userName: string;
   content: string;
   createdAt: string;
-  image_refs?: string[]; // IDs for database
-  attachments?: string[]; // Base64 for UI state
+  image_refs?: string[];
+  attachments?: string[];
   userAvatar?: string;
 }
 
@@ -110,6 +109,7 @@ export interface MaterialIQC {
   id: string;
   name: string;
   category: string;
+  inspectType: '100%' | 'AQL';
   scope: 'COMMON' | 'PROJECT';
   projectCode?: string;
   projectName?: string;
@@ -124,6 +124,13 @@ export interface MaterialIQC {
   images: string[];
   type: string;
   date: string;
+}
+
+export interface SupportingDoc {
+    id: string;
+    name: string;
+    verified: boolean;
+    notes?: string;
 }
 
 export interface Inspection {
@@ -168,6 +175,7 @@ export interface Inspection {
   createdAt?: string;
   headcode?: string;
   materials?: MaterialIQC[];
+  supportingDocs?: SupportingDoc[];
   referenceDocs?: string[];
   supplierAddress?: string;
   reportImage?: string;

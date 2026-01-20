@@ -209,7 +209,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 )}
             </button>
             {isNotifOpen && (
-                <div className="absolute right-0 mt-3 w-80 md:w-96 max-h-[600px] z-[120]">
+                <div className="fixed md:absolute top-16 md:top-auto right-4 md:right-0 mt-3 w-[calc(100vw-32px)] md:w-96 z-[120]">
                     <NotificationCenter 
                         notifications={notifications}
                         onMarkRead={handleMarkRead}

@@ -208,8 +208,8 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName} className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 italic text-[11px] font-medium" /></div>
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tên lỗi chuẩn</label><input readOnly value={defectName || 'Chưa chọn'} className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-blue-700 font-bold text-[11px]" /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 italic text-[11px] font-medium" /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tên lỗi chuẩn</label><input readOnly value={defectName || 'Chưa chọn'} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-blue-700 font-bold text-[11px]" /></div>
                     </div>
                     <div className="space-y-0.5">
                         <div className="flex justify-between items-center"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mô tả lỗi chi tiết *</label><button onClick={handleAiAnalysis} disabled={isAiLoading || !ncrData.issueDescription} className="text-[9px] font-bold text-purple-600 uppercase flex items-center gap-1 hover:underline disabled:opacity-30">{isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>} AI Phân tích</button></div>
@@ -317,6 +317,8 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+
   const availableStages = useMemo(() => { 
       const wsCode = formData.workshop || formData.ma_nha_may;
       if (!wsCode) return []; 
@@ -334,7 +336,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     const pas = parseFloat(String(formData.passedQuantity || 0));
     const fai = parseFloat(String(formData.failedQuantity || 0));
     if (ins <= 0) return { passRate: '0.0', defectRate: '0.0' };
-    return { passRate: ((pas / ins) * 100).toFixed(1), defectRate: ((fai / ins) * 100).toFixed(1) };
+    
+    // ISO-LOGIC FIXED: Fixed calculation syntax and logic to avoid SyntaxError
+    return { 
+        passRate: ((pas / ins) * 100).toFixed(1), 
+        defectRate: ((fai / ins) * 100).toFixed(1) 
+    };
   }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
 
   const historicalRecords = useMemo(() => {
@@ -409,12 +416,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
               let val = parseFloat(String(value)) || 0;
               const ipo = parseFloat(String(next.so_luong_ipo || 0));
               
-              // Rule 1: 0 < SL kiểm tra <= SL IPO
               if (val > ipo) val = ipo;
               if (val < 0) val = 0;
               
               next.inspectedQuantity = val;
-              // Reset children to maintain total sum logic
               next.passedQuantity = val;
               next.failedQuantity = 0;
           }
@@ -422,24 +427,20 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
               let val = parseFloat(String(value)) || 0;
               const ins = parseFloat(String(next.inspectedQuantity || 0));
               
-              // Rule 2: 0 <= SL Đạt <= SL Kiểm tra
               if (val > ins) val = ins;
               if (val < 0) val = 0;
               
               next.passedQuantity = val;
-              // Rule 3: sl lỗi = sl kiểm tra - sl đạt
               next.failedQuantity = Number((ins - val).toFixed(2));
           }
           else if (field === 'failedQuantity') {
               let val = parseFloat(String(value)) || 0;
               const ins = parseFloat(String(next.inspectedQuantity || 0));
               
-              // Rule 2: 0 <= SL Lỗi <= SL Kiểm tra
               if (val > ins) val = ins;
               if (val < 0) val = 0;
               
               next.failedQuantity = val;
-              // Rule 3: sl đạt = sl kiểm tra - sl lỗi
               next.passedQuantity = Number((ins - val).toFixed(2));
           }
           else {
@@ -474,7 +475,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
     if (!formData.ma_ct || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin và chọn công đoạn."); return; }
     
-    // Final Enforcement of Rule 1
     if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
     if (ins > ipo) { alert("Số lượng kiểm tra không được vượt quá số lượng IPO."); return; }
 
@@ -592,9 +592,9 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
 
         <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
-            <h3 className="text-blue-700 font-bold uppercase tracking-widest flex items-center gap-2 border-b border-blue-50 pb-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ÁNH HIỆN TRƯỜNG</h3>
+            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ÁNH HIỆN TRƯỜNG</h3>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
+                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
@@ -780,7 +780,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                       )}
                   </div>
                   <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
-                      <button onClick={() => setShowHistory(false)} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-[0.98] transition-all">Đóng lịch sử</button>
+                      <button onClick={() => setShowHistory(false)} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-98 transition-all">Đóng lịch sử</button>
                   </div>
               </div>
 
@@ -809,9 +809,19 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                               ) : previewData ? (
                                   <>
                                       <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-100 flex justify-between items-center shadow-inner">
-                                          <div className="space-y-1">
-                                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Chỉ số chất lượng</p>
-                                              <p className="text-3xl font-black text-blue-700 tracking-tighter">{previewData.score}% <span className="text-xs text-slate-400 font-bold uppercase ml-1">Score</span></p>
+                                          <div className="grid grid-cols-3 gap-6 flex-1 pr-4">
+                                              <div className="text-center">
+                                                  <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">KIỂM TRA</p>
+                                                  <p className="text-xl font-black text-blue-700">{previewData.inspectedQuantity || 0}</p>
+                                              </div>
+                                              <div className="text-center">
+                                                  <p className="text-[7px] font-black text-green-500 uppercase tracking-widest mb-0.5">ĐẠT</p>
+                                                  <p className="text-xl font-black text-green-600">{previewData.passedQuantity || 0}</p>
+                                              </div>
+                                              <div className="text-center">
+                                                  <p className="text-[7px] font-black text-red-500 uppercase tracking-widest mb-0.5">HỎNG</p>
+                                                  <p className="text-xl font-black text-red-600">{previewData.failedQuantity || 0}</p>
+                                              </div>
                                           </div>
                                           <div className={`px-4 py-1.5 rounded-xl border font-black text-[9px] uppercase tracking-widest ${previewData.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-lg shadow-green-100' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
                                               {previewData.status}
@@ -833,16 +843,30 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
                                               <Activity className="w-3.5 h-3.5" /> Kết quả tiêu chí ({previewData.items?.length || 0})
                                           </h4>
-                                          <div className="space-y-2">
+                                          <div className="space-y-3">
                                               {previewData.items?.map((it, idx) => (
-                                                  <div key={idx} className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between gap-4">
-                                                      <div className="flex-1 overflow-hidden">
-                                                          <p className="text-[10px] font-black text-slate-800 uppercase truncate leading-tight">{it.label}</p>
-                                                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{it.category}</p>
+                                                  <div key={idx} className="p-4 bg-white border border-slate-100 rounded-[1.5rem] shadow-sm space-y-3">
+                                                      <div className="flex items-center justify-between gap-4">
+                                                          <div className="flex-1 overflow-hidden">
+                                                              <p className="text-[10px] font-black text-slate-800 uppercase truncate leading-tight">{it.label}</p>
+                                                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{it.category}</p>
+                                                          </div>
+                                                          <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border ${it.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : it.status === CheckStatus.FAIL ? 'text-red-600 bg-red-50 border-red-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
+                                                              {it.status}
+                                                          </span>
                                                       </div>
-                                                      <span className={`shrink-0 px-2 py-0.5 rounded text-[8px] font-black uppercase border ${it.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200'}`}>
-                                                          {it.status}
-                                                      </span>
+                                                      {it.images && it.images.length > 0 && (
+                                                          <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                                                              {it.images.map((img, iIdx) => (
+                                                                  <img 
+                                                                      key={iIdx} 
+                                                                      src={img} 
+                                                                      className="w-16 h-16 rounded-xl object-cover border border-slate-100 shadow-sm transition-transform hover:scale-105" 
+                                                                      onClick={() => setLightboxState({ images: it.images!, index: iIdx })}
+                                                                  />
+                                                              ))}
+                                                          </div>
+                                                      )}
                                                   </div>
                                               ))}
                                           </div>
@@ -881,8 +905,13 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       )}
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); lookupPlanInfo(data); setShowScanner(false); }} />}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onSave={onImageSave} onClose={() => setEditorState(null)} readOnly={false} />}
+      
+      {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
+
       <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
     </div>
   );
 };
+
+export default InspectionFormPQC;

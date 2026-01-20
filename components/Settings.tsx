@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { CheckItem, User, Workshop, Role } from '../types';
 import { TemplateEditor } from './TemplateEditor';
@@ -147,7 +148,11 @@ export const Settings: React.FC<SettingsProps> = ({
   const handleSaveProfile = async () => {
       if (!profileData.name) { alert("Tên không được để trống"); return; }
       setIsSavingProfile(true);
-      try { await onUpdateUser(profileData); setIsEditingProfile(false); } 
+      try { 
+          // ISO Clean Update: Gửi object profile đầy đủ
+          await onUpdateUser(profileData); 
+          setIsEditingProfile(false); 
+      } 
       catch (error) { alert("Lỗi khi cập nhật thông tin cá nhân"); } finally { setIsSavingProfile(false); }
   };
 
@@ -207,29 +212,150 @@ export const Settings: React.FC<SettingsProps> = ({
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <div className="lg:col-span-2 space-y-4 md:space-y-6 relative">
                             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
-                                <div className="bg-slate-900 p-6 md:p-8 flex flex-col items-center text-center relative group">
+                                <div className="bg-slate-900 p-6 md:p-8 flex flex-col items-center text-center relative group min-h-[280px] justify-center">
                                     <div className="absolute top-3 right-3 md:top-4 md:right-4 bg-white/10 px-2 py-1 md:px-3 rounded-full text-[9px] md:text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-1.5 border border-white/10"><ShieldCheck className="w-3 h-3 text-blue-400" /><span className="hidden md:inline">Hệ thống</span> {profileData.role}</div>
-                                    <div className="relative"><div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white/20 shadow-2xl overflow-hidden mb-3 md:mb-4 bg-slate-800"><img src={profileData.avatar} alt={profileData.name} className="w-full h-full object-cover" /></div>{isEditingProfile && (<button onClick={() => profileFileInputRef.current?.click()} className="absolute bottom-2 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-50 transition-all active:scale-95"><Camera className="w-4 h-4 md:w-5 md:h-5" /></button>)}<input type="file" ref={profileFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange}/></div>
-                                    {isEditingProfile ? (<div className="w-full max-w-sm space-y-2"><input value={profileData.name} onChange={e => setProfileData({...profileData, name: e.target.value})} className="w-full px-4 py-2 text-center text-lg md:text-xl font-black text-slate-900 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400" placeholder="Nhập họ và tên"/></div>) : (<h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{profileData.name}</h3>)}
+                                    <div className="relative">
+                                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white/20 shadow-2xl overflow-hidden mb-3 md:mb-4 bg-slate-800 flex items-center justify-center">
+                                            <img 
+                                                src={profileData.avatar} 
+                                                alt={profileData.name} 
+                                                className="w-full h-full object-cover" 
+                                                onError={(e) => {
+                                                    // Fallback khi ảnh không load được
+                                                    const name = profileData.name || 'User';
+                                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=256`;
+                                                }}
+                                            />
+                                        </div>
+                                        {isEditingProfile && (
+                                            <button onClick={() => profileFileInputRef.current?.click()} className="absolute bottom-2 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all active:scale-95 border-2 border-slate-900">
+                                                <Camera className="w-4 h-4 md:w-5 md:h-5" />
+                                            </button>
+                                        )}
+                                        <input type="file" ref={profileFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange}/>
+                                    </div>
+                                    {isEditingProfile ? (
+                                        <div className="w-full max-w-sm space-y-2">
+                                            <input 
+                                                value={profileData.name} 
+                                                onChange={e => setProfileData({...profileData, name: e.target.value.toUpperCase()})} 
+                                                className="w-full px-4 py-2 text-center text-lg md:text-xl font-black text-slate-900 bg-white rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 placeholder:text-slate-400 uppercase" 
+                                                placeholder="Nhập họ và tên..."
+                                            />
+                                        </div>
+                                    ) : (
+                                        <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{profileData.name}</h3>
+                                    )}
                                     <p className="text-blue-400 font-bold text-sm mt-1">@{profileData.username}</p>
                                 </div>
                                 <div className="p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
                                     <div className="space-y-3 md:space-y-4">
-                                        <div><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Mã nhân viên (MSNV)</label>{isEditingProfile ? (<input value={profileData.msnv || ''} onChange={e => setProfileData({...profileData, msnv: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập mã nhân viên..."/>) : (<p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.msnv || '---'}</p>)}</div>
-                                        <div><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Chức vụ</label>{isEditingProfile ? (<input value={profileData.position || ''} onChange={e => setProfileData({...profileData, position: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập chức vụ..."/>) : (<p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.position || '---'}</p>)}</div>
-                                        <div><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Ngày nhận việc</label>{isEditingProfile ? (<input type="date" value={profileData.joinDate || ''} onChange={e => setProfileData({...profileData, joinDate: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"/>) : (<p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100 font-mono">{profileData.joinDate || '---'}</p>)}</div>
+                                        <div>
+                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Mã nhân viên (MSNV)</label>
+                                            {isEditingProfile ? (
+                                                <input value={profileData.msnv || ''} onChange={e => setProfileData({...profileData, msnv: e.target.value.toUpperCase()})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập mã nhân viên..."/>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.msnv || '---'}</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Chức vụ</label>
+                                            {isEditingProfile ? (
+                                                <input value={profileData.position || ''} onChange={e => setProfileData({...profileData, position: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập chức vụ..."/>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.position || '---'}</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Ngày nhận việc</label>
+                                            {isEditingProfile ? (
+                                                <input type="date" value={profileData.joinDate || ''} onChange={e => setProfileData({...profileData, joinDate: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"/>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100 font-mono">{profileData.joinDate || '---'}</p>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="space-y-3 md:space-y-4">
-                                        <div><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nơi làm việc</label>{isEditingProfile ? (<input value={profileData.workLocation || ''} onChange={e => setProfileData({...profileData, workLocation: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập nơi làm việc..."/>) : (<p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.workLocation || '---'}</p>)}</div>
-                                        <div><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Trình độ</label>{isEditingProfile ? (<input value={profileData.education || ''} onChange={e => setProfileData({...profileData, education: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập trình độ..."/>) : (<p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.education || '---'}</p>)}</div>
-                                        <div><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Quyền truy cập</label><div className="flex flex-wrap gap-1.5 mt-1">{(profileData.allowedModules || []).map(m => (<span key={m} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100 uppercase">{m}</span>))}{(!profileData.allowedModules || profileData.allowedModules.length === 0) && <span className="text-xs italic text-slate-400">Không có modules</span>}</div></div>
+                                        <div>
+                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nơi làm việc</label>
+                                            {isEditingProfile ? (
+                                                <input value={profileData.workLocation || ''} onChange={e => setProfileData({...profileData, workLocation: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập nơi làm việc..."/>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.workLocation || '---'}</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Trình độ</label>
+                                            {isEditingProfile ? (
+                                                <input value={profileData.education || ''} onChange={e => setProfileData({...profileData, education: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập trình độ..."/>
+                                            ) : (
+                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.education || '---'}</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Quyền truy cập</label>
+                                            <div className="flex flex-wrap gap-1.5 mt-1">
+                                                {(profileData.allowedModules || []).map(m => (
+                                                    <span key={m} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100 uppercase">{m}</span>
+                                                ))}
+                                                {(!profileData.allowedModules || profileData.allowedModules.length === 0) && (
+                                                    <span className="text-xs italic text-slate-400">Không có modules</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            {!isEditingProfile && (<button onClick={() => setIsEditingProfile(true)} className="absolute -bottom-3 right-4 md:right-6 bg-blue-600 text-white w-12 h-12 md:w-14 md:h-14 rounded-full shadow-xl shadow-blue-500/40 flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all z-10 border-4 border-slate-50"><Edit3 className="w-5 h-5 md:w-6 md:h-6" /></button>)}
-                            {isEditingProfile && (<div className="flex justify-end gap-3 mt-4 animate-in slide-in-from-bottom-2 fade-in duration-300"><Button variant="secondary" onClick={() => { setIsEditingProfile(false); setProfileData(currentUser); }} className="text-xs md:text-sm">Hủy bỏ</Button><Button onClick={handleSaveProfile} disabled={isSavingProfile} icon={isSavingProfile ? <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin"/> : <Save className="w-3 h-3 md:w-4 md:h-4"/>} className="text-xs md:text-sm">{isSavingProfile ? 'Đang lưu...' : 'Lưu thay đổi'}</Button></div>)}
+                            {!isEditingProfile && (
+                                <button onClick={() => setIsEditingProfile(true)} className="absolute -bottom-3 right-4 md:right-6 bg-blue-600 text-white w-12 h-12 md:w-14 md:h-14 rounded-full shadow-xl shadow-blue-500/40 flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all z-10 border-4 border-slate-50">
+                                    <Edit3 className="w-5 h-5 md:w-6 md:h-6" />
+                                </button>
+                            )}
+                            {isEditingProfile && (
+                                <div className="flex justify-end gap-3 mt-4 animate-in slide-in-from-bottom-2 fade-in duration-300">
+                                    <Button variant="secondary" onClick={() => { setIsEditingProfile(false); setProfileData(currentUser); }} className="text-xs md:text-sm">Hủy bỏ</Button>
+                                    <Button onClick={handleSaveProfile} disabled={isSavingProfile} icon={isSavingProfile ? <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin"/> : <Save className="w-3 h-3 md:w-4 md:h-4"/>} className="text-xs md:text-sm">
+                                        {isSavingProfile ? 'Đang lưu...' : 'Lưu thay đổi'}
+                                    </Button>
+                                </div>
+                            )}
                         </div>
-                        <div className="lg:col-span-1 pb-10 md:pb-0"><div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 md:p-6 space-y-4 md:space-y-6 sticky top-24"><div className="flex items-center gap-3"><div className="p-3 bg-red-50 text-red-600 rounded-2xl"><Lock className="w-5 h-5 md:w-6 md:h-6" /></div><h3 className="font-black text-slate-800 uppercase tracking-tighter text-sm md:text-base">Bảo mật tài khoản</h3></div><div className="space-y-4"><div className="space-y-2"><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mật khẩu mới</label><div className="relative group"><input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full pl-4 pr-10 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Nhập mật khẩu mới..."/><button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors">{showPassword ? <EyeOff className="h-4 h-4" /> : <Eye className="h-4 h-4" />}</button></div></div><div className="space-y-2"><label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Xác nhận mật khẩu</label><input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Xác nhận lại mật khẩu..."/></div><Button className="w-full py-3 md:py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-200 text-xs md:text-sm" onClick={handleChangePassword} disabled={isUpdatingPassword || !newPassword || !confirmPassword} icon={isUpdatingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}>Cập nhật mật khẩu</Button></div><div className="p-4 bg-orange-50 rounded-2xl border border-orange-100"><div className="flex items-start gap-3"><AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" /><p className="text-[9px] md:text-[10px] text-orange-800 font-medium leading-relaxed uppercase tracking-tighter">Ghi chú: Vui lòng lưu lại mật khẩu mới ở nơi an toàn. Bạn sẽ cần sử dụng nó cho lần đăng nhập tiếp theo.</p></div></div></div></div>
+                        <div className="lg:col-span-1 pb-10 md:pb-0">
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 md:p-6 space-y-4 md:space-y-6 sticky top-24">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 bg-red-50 text-red-600 rounded-2xl">
+                                        <Lock className="w-5 h-5 md:w-6 md:h-6" />
+                                    </div>
+                                    <h3 className="font-black text-slate-800 uppercase tracking-tighter text-sm md:text-base">Bảo mật tài khoản</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mật khẩu mới</label>
+                                        <div className="relative group">
+                                            <input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full pl-4 pr-10 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Nhập mật khẩu mới..."/>
+                                            <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors">
+                                                {showPassword ? <EyeOff className="h-4 h-4" /> : <Eye className="h-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Xác nhận mật khẩu</label>
+                                        <input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Xác nhận lại mật khẩu..."/>
+                                    </div>
+                                    <Button className="w-full py-3 md:py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-200 text-xs md:text-sm" onClick={handleChangePassword} disabled={isUpdatingPassword || !newPassword || !confirmPassword} icon={isUpdatingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}>
+                                        Cập nhật mật khẩu
+                                    </Button>
+                                </div>
+                                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                                    <div className="flex items-start gap-3">
+                                        <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
+                                        <p className="text-[9px] md:text-[10px] text-orange-800 font-medium leading-relaxed uppercase tracking-tighter">
+                                            Ghi chú: Vui lòng lưu lại mật khẩu mới ở nơi an toàn. Bạn sẽ cần sử dụng nó cho lần đăng nhập tiếp theo.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

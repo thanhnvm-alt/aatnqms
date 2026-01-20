@@ -10,7 +10,7 @@ import {
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from "@google/ai";
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -168,6 +168,8 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
         id: `mat-${Date.now()}`,
         name: '',
         category: '',
+        // Fix: Added missing required property inspectType to satisfy MaterialIQC interface
+        inspectType: '100%',
         scope: 'PROJECT',
         projectCode: formData.ma_ct || '',
         projectName: formData.ten_ct || '',

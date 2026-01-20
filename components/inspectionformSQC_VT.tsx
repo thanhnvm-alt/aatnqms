@@ -209,6 +209,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         id: `mat-${Date.now()}`,
         name: '',
         category: '',
+        // Fix: Added missing required property inspectType to satisfy MaterialIQC interface
+        inspectType: '100%',
         scope: 'COMMON',
         projectCode: 'DÙNG CHUNG',
         projectName: 'VẬT TƯ KHO TỔNG',

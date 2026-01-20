@@ -6,7 +6,8 @@ import {
     CheckCircle2, Clock, MessageSquare, Camera, Paperclip, 
     Send, Loader2, BrainCircuit, Maximize2, Plus, 
     X, FileText, Image as ImageIcon, Save, Sparkles, BookOpen,
-    ChevronDown, Filter, RefreshCw, ShieldCheck, PenTool, AlertOctagon
+    ChevronDown, Filter, RefreshCw, ShieldCheck, PenTool, AlertOctagon,
+    Edit3, Search
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
@@ -46,17 +47,13 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const [isSaving, setIsSaving] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   
-  // Comment State
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
   
-  // Library State
   const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
-  const [selectedStage, setSelectedStage] = useState<string>('');
   const [showLibrary, setShowLibrary] = useState(false);
 
-  // UI State
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; context?: string } | null>(null);
 
   const commentFileRef = useRef<HTMLInputElement>(null);
@@ -66,51 +63,30 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const afterFileRef = useRef<HTMLInputElement>(null);
   const afterCameraRef = useRef<HTMLInputElement>(null);
 
-  // --- PERMISSIONS ---
+  // --- ISO RBAC (CRITICAL) ---
   const isAdmin = user.role === 'ADMIN';
   const isManager = user.role === 'MANAGER';
   const isQA = user.role === 'QA';
   const isOwner = ncr.createdBy === user.name;
-  const isClosed = ncr.status === 'CLOSED';
-  const isLocked = isClosed && !isAdmin;
-  const canModify = isAdmin || isManager || isOwner;
+  
+  // Logic 2: Trạng thái CLOSED sẽ khóa toàn bộ phiếu, không liên quan đến phê duyệt detailPQC
+  const isClosed = formData.status === 'CLOSED';
+  const isLocked = isClosed;
+
   const canApprove = (isAdmin || isManager || isQA) && !isClosed;
+  const canModify = (isAdmin || isManager || isOwner) && !isClosed;
 
   useEffect(() => {
       fetchDefectLibrary().then(setLibrary);
   }, []);
-
-  const stages = useMemo(() => {
-      const unique = new Set(library.map(item => item.stage || 'Chung'));
-      return Array.from(unique).sort();
-  }, [library]);
-
-  const filteredDefects = useMemo(() => {
-      if (!selectedStage) return library;
-      return library.filter(item => item.stage === selectedStage);
-  }, [library, selectedStage]);
 
   useEffect(() => {
       setNcr(initialNcr);
       setFormData(initialNcr);
   }, [initialNcr]);
 
-  const handleApplyDefect = (defect: DefectLibraryItem) => {
-      if (window.confirm("Áp dụng thông tin lỗi này? Mô tả và mức độ sẽ được cập nhật.")) {
-          setFormData(prev => ({
-              ...prev,
-              issueDescription: defect.description,
-              defect_code: defect.code,
-              severity: defect.severity as any,
-              solution: defect.suggestedAction || prev.solution
-          }));
-          setIsEditing(true);
-          setShowLibrary(false);
-      }
-  };
-
   const handleRunAI = async () => {
-      if (!formData.issueDescription) return;
+      if (!formData.issueDescription || isLocked) return;
       setIsAiLoading(true);
       try {
           const result = await generateNCRSuggestions(formData.issueDescription, 'General');
@@ -120,29 +96,40 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   };
 
   const handleSaveChanges = async () => {
+      if (isLocked) return;
       setIsSaving(true);
       try {
-          let statusToSave = formData.status;
-          if (statusToSave === 'OPEN' && (formData.imagesAfter?.length || 0) > 0) statusToSave = 'IN_PROGRESS';
-          const finalData = { ...formData, status: statusToSave };
-          await saveNcrMapped(finalData.inspection_id || '', finalData, ncr.createdBy || user.name);
-          setNcr(finalData); setFormData(finalData); setIsEditing(false);
+          // Logic 1: Trạng thái tự động dựa trên minh chứng xử lý
+          let finalStatus = formData.status;
+          if (finalStatus !== 'CLOSED') {
+              finalStatus = (formData.imagesAfter && formData.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
+          }
+          
+          const dataToSave = { ...formData, status: finalStatus };
+          await saveNcrMapped(dataToSave.inspection_id || '', dataToSave, ncr.createdBy || user.name);
+          setNcr(dataToSave);
+          setFormData(dataToSave);
+          setIsEditing(false);
           if (onUpdate) onUpdate();
       } catch (error) { alert("Lỗi khi lưu NCR."); } finally { setIsSaving(false); }
   };
 
   const handleApprove = async () => {
-      if (!window.confirm("Xác nhận phê duyệt và đóng NCR này?")) return;
+      if (!window.confirm("Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa không thể chỉnh sửa.")) return;
       setIsSaving(true);
       try {
+          // Logic 2: Chỉ chuyển trạng thái NCR = close (màu xanh) và khóa NCR, không liên quan PQC status
           const approvedData = { ...formData, status: 'CLOSED' };
           await saveNcrMapped(approvedData.inspection_id || '', approvedData, ncr.createdBy || user.name);
-          setNcr(approvedData); setFormData(approvedData); setIsEditing(false);
+          setNcr(approvedData);
+          setFormData(approvedData);
+          setIsEditing(false);
           if (onUpdate) onUpdate();
       } catch (error) { alert("Lỗi khi phê duyệt."); } finally { setIsSaving(false); }
   };
 
   const handleAddImage = async (e: React.ChangeEvent<HTMLInputElement>, type: 'BEFORE' | 'AFTER' | 'COMMENT') => {
+      if (isLocked && type !== 'COMMENT') return;
       const files = e.target.files;
       if (!files) return;
       const processed = await Promise.all(Array.from(files).map(async (f: File) => {
@@ -153,12 +140,18 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           });
           return resizeImage(base64);
       }));
+      
       if (type === 'COMMENT') {
           setCommentAttachments(prev => [...prev, ...processed]);
       } else {
           setFormData(prev => {
               const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-              return { ...prev, [field]: [...(prev[field] as string[] || []), ...processed] };
+              const newImages = [...(prev[field] as string[] || []), ...processed];
+              let newStatus = prev.status;
+              if (newStatus !== 'CLOSED' && type === 'AFTER') {
+                  newStatus = newImages.length > 0 ? 'IN_PROGRESS' : 'OPEN';
+              }
+              return { ...prev, [field]: newImages, status: newStatus };
           });
           setIsEditing(true);
       }
@@ -166,10 +159,15 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   };
 
   const removeImage = (index: number, type: 'BEFORE' | 'AFTER') => {
+      if (isLocked) return;
       setFormData(prev => {
           const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
           const newList = (prev[field] || []).filter((_, i) => i !== index);
-          return { ...prev, [field]: newList };
+          let newStatus = prev.status;
+          if (newStatus !== 'CLOSED' && type === 'AFTER') {
+              newStatus = newList.length > 0 ? 'IN_PROGRESS' : 'OPEN';
+          }
+          return { ...prev, [field]: newList, status: newStatus };
       });
       setIsEditing(true);
   };
@@ -190,134 +188,248 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       const updatedNcr = { ...formData, comments: updatedComments };
       try {
           await saveNcrMapped(ncr.inspection_id || '', updatedNcr, ncr.createdBy || user.name);
-          setFormData(updatedNcr); setNcr(updatedNcr); setNewComment(''); setCommentAttachments([]);
+          setFormData(updatedNcr);
+          setNcr(updatedNcr);
+          setNewComment('');
+          setCommentAttachments([]);
       } catch (e) { alert("Lỗi khi gửi bình luận."); } finally { setIsSubmitting(false); }
-  };
-
-  const handleEditCommentImage = (idx: number) => {
-      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
-  };
-
-  const updateCommentImage = (idx: number, newImg: string) => {
-      setCommentAttachments(prev => {
-          const next = [...prev];
-          next[idx] = newImg;
-          return next;
-      });
   };
 
   const openGallery = (images: string[], index: number, context?: string) => {
       setLightboxState({ images, index, context });
   };
 
+  const handleEditCommentImage = (index: number) => {
+      setLightboxState({ images: commentAttachments, index, context: 'PENDING_COMMENT' });
+  };
+
+  const updateCommentImage = (index: number, updatedImage: string) => {
+      setCommentAttachments(prev => {
+          const next = [...prev];
+          next[index] = updatedImage;
+          return next;
+      });
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {/* HEADER ACTION BAR */}
       <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
           <div className="flex items-center gap-2">
               <button onClick={onBack} className="flex items-center gap-1.5 text-slate-600 font-bold text-xs px-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors active:scale-95"><ArrowLeft className="w-4 h-4"/></button>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:inline">Chi tiết NCR</span>
+              <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Báo cáo lỗi NCR</span>
+                  <span className="text-[11px] font-black text-slate-800 uppercase font-mono">#{ncr.id.split('-').pop()}</span>
+              </div>
           </div>
           <div className="flex gap-2">
-              {canApprove && <button onClick={handleApprove} disabled={isSaving} className="bg-teal-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 shadow-lg active:scale-95 hover:bg-teal-700"><ShieldCheck className="w-3 h-3" /> Phê duyệt / Đóng</button>}
+              {/* Nút liên kết tới Detail PQC liên quan */}
+              <button 
+                onClick={() => onViewInspection(ncr.inspection_id || '')}
+                className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-white hover:text-blue-600 transition-all active:scale-95 shadow-sm"
+              >
+                  <FileText className="w-4 h-4" />
+                  XEM PHIẾU QC GỐC
+              </button>
+
+              {canApprove && (
+                  <button 
+                    onClick={handleApprove} 
+                    disabled={isSaving} 
+                    className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-95 hover:bg-emerald-700 transition-all"
+                  >
+                      <ShieldCheck className="w-4 h-4" /> 
+                      PHÊ DUYỆT & ĐÓNG NCR
+                  </button>
+              )}
               {isEditing ? (
                   <>
                     <button onClick={() => { setFormData(ncr); setIsEditing(false); }} className="px-3 py-1.5 text-slate-500 font-bold text-[10px] hover:bg-slate-100 rounded-lg">Hủy</button>
-                    <button onClick={handleSaveChanges} disabled={isSaving} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 shadow-lg active:scale-95">{isSaving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Lưu</button>
+                    <button onClick={handleSaveChanges} disabled={isSaving} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg shadow-blue-900/10 active:scale-95 transition-all">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Lưu cập nhật</button>
                   </>
               ) : (
-                  canModify && !isLocked && <button onClick={() => setIsEditing(true)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 shadow-lg active:scale-95"><AlertTriangle className="w-3 h-3"/> Sửa</button>
+                  canModify && <button onClick={() => setIsEditing(true)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Edit3 className="w-4 h-4"/> Sửa hồ sơ</button>
               )}
-              <button onClick={() => onViewInspection(ncr.inspection_id || '')} className="text-blue-600 bg-blue-50 px-2 py-1.5 rounded-lg hover:bg-blue-100 active:scale-95"><FileText className="w-4 h-4"/></button>
           </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-24">
         <div className="max-w-5xl mx-auto space-y-4">
             
-            {/* Header Status Card */}
-            <div className={`rounded-xl p-4 border shadow-sm relative overflow-hidden transition-colors ${formData.status === 'CLOSED' ? 'bg-green-50 border-green-100' : 'bg-white border-slate-200'}`}>
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="bg-slate-900 text-white px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest">NCR: {formData.id}</span>
-                            {isEditing ? (<select value={formData.severity} onChange={e => setFormData({...formData, severity: e.target.value as any})} className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-white outline-none"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select>) : (<span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : formData.severity === 'MAJOR' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{formData.severity}</span>)}
-                            {isEditing ? (<select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-white outline-none"><option value="OPEN">OPEN</option><option value="IN_PROGRESS">IN PROGRESS</option><option value="CLOSED">CLOSED</option></select>) : (<span className={`border px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${formData.status === 'CLOSED' ? 'bg-green-100 text-green-700' : formData.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-red-50 text-red-700'}`}>{formData.status}</span>)}
-                        </div>
-                        <div>{isEditing ? (<textarea value={formData.issueDescription} onChange={e => setFormData({...formData, issueDescription: e.target.value})} className="w-full text-base font-bold text-slate-800 bg-slate-50 border-b-2 border-blue-500 outline-none resize-none p-2 rounded-t-lg" rows={2} />) : (<h1 className="text-base font-bold text-slate-800 uppercase leading-tight tracking-tight">{formData.issueDescription}</h1>)}</div>
+            {/* --- STATUS & ISSUE DESCRIPTION CARD --- */}
+            <div className={`rounded-[2rem] p-6 border shadow-sm relative overflow-hidden transition-all duration-500 ${formData.status === 'CLOSED' ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 shadow-xl shadow-slate-900/5'}`}>
+                {formData.status === 'CLOSED' && (
+                    <div className="absolute -right-6 -top-6 p-10 opacity-10 pointer-events-none rotate-12">
+                        <CheckCircle2 className="w-32 h-32 text-green-600" />
+                    </div>
+                )}
+                
+                <div className="space-y-4 relative z-10">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {isEditing ? (
+                            <select value={formData.severity} onChange={e => setFormData({...formData, severity: e.target.value as any})} className="px-3 py-1 rounded-lg text-[9px] font-black uppercase border bg-white outline-none focus:ring-2 ring-blue-100"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select>
+                        ) : (
+                            <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : formData.severity === 'MAJOR' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{formData.severity}</span>
+                        )}
+                        
+                        <span className={`border px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-[0.2em] shadow-sm ${formData.status === 'CLOSED' ? 'bg-green-600 text-white border-green-600' : 'bg-indigo-600 text-white border-indigo-600'}`}>{formData.status}</span>
+                    </div>
+                    
+                    <div>
+                        {isEditing ? (
+                            <textarea value={formData.issueDescription} onChange={e => setFormData({...formData, issueDescription: e.target.value})} className="w-full text-base font-black text-slate-800 bg-slate-50 border-2 border-blue-500 outline-none resize-none p-4 rounded-2xl shadow-inner transition-all uppercase" rows={2} />
+                        ) : (
+                            <h1 className="text-xl font-black text-slate-900 uppercase leading-tight tracking-tight">{formData.issueDescription}</h1>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+                        <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Người phụ trách</p><p className="text-[11px] font-black text-slate-800 uppercase">{formData.responsiblePerson || '---'}</p></div>
+                        <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Hạn xử lý (Deadline)</p><p className={`text-[11px] font-black font-mono ${formData.deadline && new Date(formData.deadline) < new Date() && !isClosed ? 'text-red-600' : 'text-slate-800'}`}>{formData.deadline || 'ASAP'}</p></div>
+                        <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Người báo cáo</p><p className="text-[11px] font-black text-slate-800 uppercase">{formData.createdBy}</p></div>
+                        <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Ngày ghi nhận</p><p className="text-[11px] font-black text-slate-800 font-mono">{new Date(formData.createdDate).toLocaleDateString('vi-VN')}</p></div>
                     </div>
                 </div>
             </div>
 
-            {/* Analysis Section with AI */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                    <div className="flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-purple-600" /><h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">Phân tích Kỹ thuật</h3></div>
-                    {isEditing && <button onClick={handleRunAI} disabled={isAiLoading || !formData.issueDescription} className="bg-purple-600 text-white px-2 py-1 rounded text-[9px] font-bold uppercase flex items-center gap-1 shadow-md active:scale-95 disabled:opacity-30">{isAiLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin"/> : <Sparkles className="w-2.5 h-2.5" />} AI Phân tích</button>}
+            {/* --- TECHNICAL ANALYSIS SECTION --- */}
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-purple-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Phân tích Kỹ thuật & Hành động</h3></div>
+                    {isEditing && (
+                        <button onClick={handleRunAI} disabled={isAiLoading || !formData.issueDescription} className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-30 transition-all">
+                            {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3 text-purple-400" />} 
+                            AI PHÂN TÍCH FISHBONE
+                        </button>
+                    )}
                 </div>
-                <div className="p-4 space-y-4">
-                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Root Cause</label>{isEditing ? (<textarea value={formData.rootCause} onChange={e => setFormData({...formData, rootCause: e.target.value})} className="w-full p-3 bg-slate-50 rounded-lg border border-slate-200 text-[11px] outline-none" rows={2} />) : (<div className="p-3 bg-slate-50 rounded-lg text-[11px] font-bold text-slate-700 italic leading-relaxed">{formData.rootCause || 'Đang chờ phân tích...'}</div>)}</div>
-                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Action Plan</label>{isEditing ? (<textarea value={formData.solution} onChange={e => setFormData({...formData, solution: e.target.value})} className="w-full p-3 bg-blue-50 rounded-lg border border-blue-100 text-[11px] outline-none text-blue-900" rows={2} />) : (<div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 text-[11px] font-bold text-blue-900 leading-relaxed">{formData.solution || 'Chưa cập nhật biện pháp khắc phục.'}</div>)}</div>
+                <div className="p-6 space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Root Cause (Nguyên nhân gốc rễ)</label>
+                        {isEditing ? (
+                            <textarea value={formData.rootCause} onChange={e => setFormData({...formData, rootCause: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 text-[12px] font-medium outline-none focus:border-blue-200 transition-all" rows={2} />
+                        ) : (
+                            <div className="p-4 bg-slate-50/50 rounded-2xl text-[12px] font-bold text-slate-700 italic leading-relaxed border border-slate-100 shadow-inner">
+                                {formData.rootCause || 'Đang chờ phân tích kỹ thuật...'}
+                            </div>
+                        )}
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> Action Plan (Biện pháp xử lý)</label>
+                        {isEditing ? (
+                            <textarea value={formData.solution} onChange={e => setFormData({...formData, solution: e.target.value})} className="w-full p-4 bg-blue-50/30 rounded-2xl border-2 border-blue-50 text-[12px] font-black outline-none focus:border-blue-200 text-blue-900 transition-all" rows={2} />
+                        ) : (
+                            <div className="p-4 bg-blue-50/30 rounded-2xl border border-blue-100 text-[12px] font-black text-blue-900 leading-relaxed shadow-inner">
+                                {formData.solution || 'Chưa cập nhật biện pháp khắc phục.'}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Images Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    {/* Fixed: Use specific refs to resolve missing cameraInputRef and fileInputRef */}
-                    <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-red-50/30"><label className="text-[9px] font-bold text-red-500 uppercase flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> TRƯỚC XỬ LÝ (ISSUE)</label>{isEditing && <div className="flex gap-1"><button onClick={() => beforeCameraRef.current?.click()} className="p-1 bg-white text-slate-500 rounded border border-slate-200"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => beforeFileRef.current?.click()} className="p-1 bg-white text-slate-500 rounded border border-slate-200"><Plus className="w-3.5 h-3.5"/></button></div>}</div>
-                    <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesBefore?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => openGallery(formData.imagesBefore!, idx)} />{isEditing && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
+            {/* --- VISUAL EVIDENCE GRID --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* BEFORE SECTION */}
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-red-50/20">
+                        <label className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+                            <AlertOctagon className="w-4 h-4"/> HIỆN TRẠNG LỖI (BEFORE)
+                        </label>
+                        {isEditing && !isLocked && (
+                            <div className="flex gap-2">
+                                <button onClick={() => beforeCameraRef.current?.click()} className="p-2 bg-white text-red-600 rounded-xl border border-red-100 shadow-sm active:scale-90 transition-all"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => beforeFileRef.current?.click()} className="p-2 bg-white text-red-600 rounded-xl border border-red-100 shadow-sm active:scale-90 transition-all"><Plus className="w-4 h-4"/></button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-5 grid grid-cols-2 gap-3">
+                        {formData.imagesBefore?.map((img, idx) => (
+                            <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-red-400 transition-all" onClick={() => openGallery(formData.imagesBefore!, idx)}>
+                                <img src={img} className="w-full h-full object-cover" />
+                                {isEditing && !isLocked && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
+                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    {/* Fixed: Use specific refs to resolve missing cameraInputRef and fileInputRef */}
-                    <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-green-50/30"><label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> SAU XỬ LÝ (FIX)</label>{(!isLocked || isEditing) && <div className="flex gap-1"><button onClick={() => afterCameraRef.current?.click()} className="p-1 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => afterFileRef.current?.click()} className="p-1 bg-slate-50 text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div>}</div>
-                    <div className="p-3 grid grid-cols-2 gap-2">{formData.imagesAfter?.map((img, idx) => (<div key={idx} className="aspect-square rounded-lg overflow-hidden border relative group"><img src={img} className="w-full h-full object-cover" onClick={() => openGallery(formData.imagesAfter!, idx)} />{(!isLocked || isEditing) && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-1 right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>}</div>))}</div>
+
+                {/* AFTER SECTION */}
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-green-50/20">
+                        <label className="text-[10px] font-black text-green-600 uppercase tracking-widest flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4"/> MINH CHỨNG XỬ LÝ (AFTER)
+                        </label>
+                        {!isLocked && (
+                            <div className="flex gap-2">
+                                <button onClick={() => afterCameraRef.current?.click()} className="p-2 bg-white text-green-600 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => afterFileRef.current?.click()} className="p-2 bg-white text-green-600 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><ImageIcon className="w-4 h-4"/></button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-5 grid grid-cols-2 gap-3">
+                        {formData.imagesAfter?.map((img, idx) => (
+                            <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-green-400 transition-all" onClick={() => openGallery(formData.imagesAfter!, idx)}>
+                                <img src={img} className="w-full h-full object-cover" />
+                                {!isLocked && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
+                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            {/* Discussions */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2"><MessageSquare className="w-4 h-4 text-blue-600" /><h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">Thảo luận & Theo dõi xử lý</h3></div>
-                <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto no-scrollbar">
+            {/* --- DISCUSSION SECTION --- */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Nhật ký xử lý & Thảo luận</h3>
+                </div>
+                <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                     {formData.comments?.map((comment) => (
-                        <div key={comment.id} className="flex gap-3">
-                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-8 h-8 rounded-lg border shrink-0" alt="" />
-                            <div className="flex-1 space-y-1">
-                                <div className="flex justify-between items-center"><span className="font-bold text-slate-800 text-[10px] uppercase">{comment.userName}</span><span className="text-[9px] font-bold text-slate-400">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span></div>
-                                <div className="bg-slate-50 p-2.5 rounded-lg border text-[11px] text-slate-700 font-medium whitespace-pre-wrap">{comment.content}</div>
+                        <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
+                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" />
+                            <div className="flex-1 space-y-2">
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-[1.5rem] rounded-tl-none border border-slate-100 text-[12px] text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">{comment.content}</div>
                                 {comment.attachments && comment.attachments.length > 0 && (
-                                    <div className="flex gap-2 pt-1 flex-wrap">
-                                        {comment.attachments.map((att, idx) => (<img key={idx} src={att} onClick={() => openGallery(comment.attachments!, idx)} className="w-12 h-12 object-cover rounded-lg border cursor-zoom-in" />))}
+                                    <div className="flex gap-3 flex-wrap pt-2">
+                                        {comment.attachments.map((att, idx) => (
+                                            <img key={idx} src={att} onClick={() => openGallery(comment.attachments!, idx)} className="w-20 h-20 object-cover rounded-2xl border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-110 shrink-0" />
+                                        ))}
                                     </div>
                                 )}
                             </div>
                         </div>
                     ))}
-                    {(!formData.comments || formData.comments.length === 0) && <p className="text-center text-[10px] text-slate-400 py-4 italic font-medium">Chưa có bình luận trao đổi cho phiếu này.</p>}
                 </div>
 
-                <div className="p-3 border-t border-slate-100 bg-slate-50/30 space-y-3">
-                    {commentAttachments.length > 0 && (
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                            {commentAttachments.map((img, idx) => (
-                                <div key={idx} className="relative w-16 h-16 shrink-0 group">
-                                    <img src={img} className="w-full h-full object-cover rounded-xl border-2 border-blue-200 shadow-md cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
-                                    <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full shadow-lg"><X className="w-3 h-3"/></button>
-                                    <div className="absolute inset-0 bg-black/10 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none"><PenTool className="w-4 h-4 text-white drop-shadow-md"/></div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    <div className="flex items-start gap-3">
-                        <div className="flex-1 relative">
-                            <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập bình luận hoặc cập nhật tiến độ..." className="w-full pl-3 pr-24 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] font-medium focus:ring-1 focus:ring-blue-500 outline-none resize-none h-[60px]" />
-                            <div className="absolute right-2 bottom-2 flex items-center gap-1.5">
-                                <button onClick={() => commentCameraRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl transition-all" title="Chụp ảnh"><Camera className="w-4 h-4"/></button>
-                                <button onClick={() => commentFileRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-xl transition-all" title="Chọn ảnh"><ImageIcon className="w-4 h-4"/></button>
+                {!isLocked && (
+                    <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-4">
+                        {commentAttachments.length > 0 && (
+                            <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                                {commentAttachments.map((img, idx) => (
+                                    <div key={idx} className="relative w-20 h-20 shrink-0 group">
+                                        <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
+                                        <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                                    </div>
+                                ))}
                             </div>
+                        )}
+                        <div className="flex gap-3 items-end">
+                            <div className="flex-1 relative">
+                                <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập ý kiến phản hồi hoặc tiến độ xử lý..." className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" />
+                                <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                                    <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                                    <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
+                                </div>
+                            </div>
+                            <button onClick={handlePostComment} disabled={isSubmitting || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
                         </div>
-                        <button onClick={handlePostComment} disabled={isSubmitting || (!newComment.trim() && commentAttachments.length === 0)} className="p-3.5 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 disabled:opacity-50 transition-all shrink-0">{isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : <Send className="w-5 h-5" />}</button>
                     </div>
-                </div>
+                )}
             </div>
         </div>
       </div>
@@ -331,13 +443,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
           />
       )}
-      
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleAddImage.bind(null, 'COMMENT' as any)} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleAddImage.bind(null, 'COMMENT' as any)} />
       <input type="file" ref={beforeFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
       <input type="file" ref={beforeCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
       <input type="file" ref={afterFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
       <input type="file" ref={afterCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
-      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'COMMENT')} />
-      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'COMMENT')} />
     </div>
   );
 };
