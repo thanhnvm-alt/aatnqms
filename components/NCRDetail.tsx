@@ -69,7 +69,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const isQA = user.role === 'QA';
   const isOwner = ncr.createdBy === user.name;
   
-  // Logic 2: Trạng thái CLOSED sẽ khóa toàn bộ phiếu, không liên quan đến phê duyệt detailPQC
   const isClosed = formData.status === 'CLOSED';
   const isLocked = isClosed;
 
@@ -99,7 +98,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       if (isLocked) return;
       setIsSaving(true);
       try {
-          // Logic 1: Trạng thái tự động dựa trên minh chứng xử lý
           let finalStatus = formData.status;
           if (finalStatus !== 'CLOSED') {
               finalStatus = (formData.imagesAfter && formData.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
@@ -115,17 +113,45 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   };
 
   const handleApprove = async () => {
+      // ISO-VALIDATION: Kiểm tra hình ảnh sau xử lý
+      if (!formData.imagesAfter || formData.imagesAfter.length === 0) {
+          alert("PHÊ DUYỆT BỊ CHẶN: Hồ sơ thiếu Hình ảnh minh chứng xử lý (Images After). Vui lòng cập nhật hình ảnh trước khi đóng NCR.");
+          return;
+      }
+
+      // ISO-VALIDATION: Kiểm tra các trường thông tin bắt buộc
+      const missingFields = [];
+      if (!formData.rootCause?.trim()) missingFields.push("Nguyên nhân gốc rễ (Root Cause)");
+      if (!formData.solution?.trim()) missingFields.push("Biện pháp khắc phục (Action Plan)");
+      if (!formData.responsiblePerson?.trim()) missingFields.push("Người phụ trách xử lý");
+
+      if (missingFields.length > 0) {
+          alert(`YÊU CẦU BỔ SUNG THÔNG TIN:\n- ${missingFields.join('\n- ')}\n\nVui lòng nhập đầy đủ để đảm bảo quy trình ISO.`);
+          return;
+      }
+
       if (!window.confirm("Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa không thể chỉnh sửa.")) return;
+      
       setIsSaving(true);
       try {
-          // Logic 2: Chỉ chuyển trạng thái NCR = close (màu xanh) và khóa NCR, không liên quan PQC status
-          const approvedData = { ...formData, status: 'CLOSED' };
+          // Lưu thông tin người phê duyệt và thời gian
+          const approvedData = { 
+              ...formData, 
+              status: 'CLOSED',
+              closedBy: user.name,
+              closedDate: new Date().toISOString()
+          };
+          
           await saveNcrMapped(approvedData.inspection_id || '', approvedData, ncr.createdBy || user.name);
           setNcr(approvedData);
           setFormData(approvedData);
           setIsEditing(false);
           if (onUpdate) onUpdate();
-      } catch (error) { alert("Lỗi khi phê duyệt."); } finally { setIsSaving(false); }
+          alert("NCR đã được phê duyệt và đóng thành công.");
+      } catch (error) { 
+          console.error(error);
+          alert("Lỗi khi phê duyệt."); 
+      } finally { setIsSaving(false); }
   };
 
   const handleAddImage = async (e: React.ChangeEvent<HTMLInputElement>, type: 'BEFORE' | 'AFTER' | 'COMMENT') => {
@@ -223,13 +249,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               </div>
           </div>
           <div className="flex gap-2">
-              {/* Nút liên kết tới Detail PQC liên quan */}
               <button 
                 onClick={() => onViewInspection(ncr.inspection_id || '')}
                 className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase border border-slate-200 hover:bg-white hover:text-blue-600 transition-all active:scale-95 shadow-sm"
               >
                   <FileText className="w-4 h-4" />
-                  XEM PHIẾU QC GỐC
+                  PHIẾU QC GỐC
               </button>
 
               {canApprove && (
@@ -256,7 +281,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-24">
         <div className="max-w-5xl mx-auto space-y-4">
             
-            {/* --- STATUS & ISSUE DESCRIPTION CARD --- */}
+            {/* STATUS & ISSUE DESCRIPTION CARD */}
             <div className={`rounded-[2rem] p-6 border shadow-sm relative overflow-hidden transition-all duration-500 ${formData.status === 'CLOSED' ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 shadow-xl shadow-slate-900/5'}`}>
                 {formData.status === 'CLOSED' && (
                     <div className="absolute -right-6 -top-6 p-10 opacity-10 pointer-events-none rotate-12">
@@ -272,7 +297,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : formData.severity === 'MAJOR' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>{formData.severity}</span>
                         )}
                         
-                        <span className={`border px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-[0.2em] shadow-sm ${formData.status === 'CLOSED' ? 'bg-green-600 text-white border-green-600' : 'bg-indigo-600 text-white border-indigo-600'}`}>{formData.status}</span>
+                        <span className={`border px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-[0.2em] shadow-sm ${formData.status === 'CLOSED' ? 'bg-green-600 text-white border-green-600' : 'bg-blue-600 text-white border-blue-600'}`}>{formData.status}</span>
                     </div>
                     
                     <div>
@@ -289,10 +314,17 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Người báo cáo</p><p className="text-[11px] font-black text-slate-800 uppercase">{formData.createdBy}</p></div>
                         <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Ngày ghi nhận</p><p className="text-[11px] font-black text-slate-800 font-mono">{new Date(formData.createdDate).toLocaleDateString('vi-VN')}</p></div>
                     </div>
+
+                    {isClosed && (
+                        <div className="mt-4 pt-4 border-t border-green-200 flex gap-6">
+                            <div><p className="text-[8px] font-black text-green-600 uppercase tracking-widest mb-1">Người phê duyệt đóng</p><p className="text-[11px] font-black text-green-800 uppercase">{formData.closedBy}</p></div>
+                            <div><p className="text-[8px] font-black text-green-600 uppercase tracking-widest mb-1">Thời gian đóng</p><p className="text-[11px] font-black text-green-800 font-mono">{new Date(formData.closedDate!).toLocaleString('vi-VN')}</p></div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* --- TECHNICAL ANALYSIS SECTION --- */}
+            {/* TECHNICAL ANALYSIS SECTION */}
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-purple-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Phân tích Kỹ thuật & Hành động</h3></div>
@@ -327,9 +359,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 </div>
             </div>
 
-            {/* --- VISUAL EVIDENCE GRID --- */}
+            {/* VISUAL EVIDENCE GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* BEFORE SECTION */}
                 <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-red-50/20">
                         <label className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
@@ -353,7 +384,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     </div>
                 </div>
 
-                {/* AFTER SECTION */}
                 <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-green-50/20">
                         <label className="text-[10px] font-black text-green-600 uppercase tracking-widest flex items-center gap-2">
@@ -362,7 +392,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         {!isLocked && (
                             <div className="flex gap-2">
                                 <button onClick={() => afterCameraRef.current?.click()} className="p-2 bg-white text-green-600 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><Camera className="w-4 h-4"/></button>
-                                <button onClick={() => afterFileRef.current?.click()} className="p-2 bg-white text-green-600 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><ImageIcon className="w-4 h-4"/></button>
+                                <button onClick={() => afterFileRef.current?.click()} className="p-2 bg-white text-green-600 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><ImageIcon className="w-5 h-5"/></button>
                             </div>
                         )}
                     </div>
@@ -378,7 +408,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 </div>
             </div>
 
-            {/* --- DISCUSSION SECTION --- */}
+            {/* DISCUSSION SECTION */}
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-blue-600" />

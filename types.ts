@@ -86,6 +86,8 @@ export interface NCR {
   imagesAfter?: string[];
   comments?: NCRComment[];
   createdBy?: string;
+  closedBy?: string;
+  closedDate?: string;
 }
 
 export interface CheckItem {
