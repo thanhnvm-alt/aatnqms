@@ -114,7 +114,7 @@ export const initDatabase = async () => {
     await turso.batch([
       "CREATE TABLE IF NOT EXISTS inspections_master (id TEXT PRIMARY KEY, type TEXT NOT NULL, created_at TEXT, updated_at TEXT)",
       "CREATE TABLE IF NOT EXISTS qms_images (id TEXT PRIMARY KEY, parent_entity_id TEXT NOT NULL, related_item_id TEXT, entity_type TEXT NOT NULL, image_role TEXT NOT NULL, url_hd TEXT, url_thumbnail TEXT, created_at INTEGER)",
-      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), comments_json TEXT DEFAULT ( '[]' ), closed_by TEXT, closed_date TEXT)",
+      "CREATE TABLE IF NOT EXISTS ncrs (id TEXT PRIMARY KEY, inspection_id TEXT NOT NULL, item_id TEXT NOT NULL, defect_code TEXT, severity TEXT DEFAULT 'MINOR', status TEXT DEFAULT 'OPEN', description TEXT NOT NULL, root_cause TEXT, corrective_action TEXT, preventive_action TEXT, responsible_person TEXT, deadline TEXT, images_before_json TEXT, images_after_json TEXT, created_by TEXT NOT NULL, created_at INTEGER DEFAULT (unixepoch()), updated_at INTEGER DEFAULT (unixepoch()), comments_json TEXT DEFAULT ( '[]' ))",
       `CREATE TABLE IF NOT EXISTS forms_pqc (id TEXT PRIMARY KEY, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, ma_nha_may TEXT, workshop TEXT, stage TEXT, dvt TEXT, sl_ipo REAL DEFAULT 0, qty_total REAL DEFAULT 0, qty_pass REAL DEFAULT 0, qty_fail REAL DEFAULT 0, created_by TEXT, created_at TEXT, inspector TEXT, status TEXT, data TEXT, updated_at TEXT, items_json TEXT, images_json TEXT, headcode TEXT, date TEXT, qty_ipo REAL, score REAL, summary TEXT, signature_qc TEXT, signature_prod TEXT, signature_mgr TEXT, name_prod TEXT, name_mgr TEXT, item_images_json TEXT, comments_json TEXT DEFAULT '[]', type TEXT DEFAULT 'PQC', production_comment TEXT)`,
       `CREATE TABLE IF NOT EXISTS forms_iqc (${baseColumns})`,
       `CREATE TABLE IF NOT EXISTS forms_sqc_vt (${baseColumns})`,
@@ -133,6 +133,10 @@ export const initDatabase = async () => {
       "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER)",
       "CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT, name TEXT, data TEXT, updated_at INTEGER)"
     ]);
+
+    // ISO MIGRATION: Đảm bảo bảng ncrs có cột closed_by và closed_date
+    try { await turso.execute("ALTER TABLE ncrs ADD COLUMN closed_by TEXT"); } catch(e) {}
+    try { await turso.execute("ALTER TABLE ncrs ADD COLUMN closed_date TEXT"); } catch(e) {}
 
     console.log("✅ ISO-Digital QMS Database Synced & Ready.");
   } catch (e: any) {
@@ -388,11 +392,35 @@ async function saveNCRData(inspectionId: string, ncr: NCR, inspectorName: string
     await turso.execute({ sql: "DELETE FROM qms_images WHERE parent_entity_id = ?", args: [ncrId] });
     const beforeRefs = await processAndStoreImages(ncrId, 'NCR', ncr.imagesBefore, 'BEFORE', undefined, true);
     const afterRefs = await processAndStoreImages(ncrId, 'NCR', ncr.imagesAfter, 'AFTER', undefined, true);
-    await turso.execute({ sql: `INSERT INTO ncrs (id, inspection_id, item_id, defect_code, severity, status, description, root_cause, corrective_action, preventive_action, responsible_person, deadline, images_before_json, images_after_json, created_by, created_at, updated_at, comments_json, closed_by, closed_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), ?, ?, ?) ON CONFLICT(id) DO UPDATE SET severity=excluded.severity, status=excluded.status, description=excluded.description, root_cause=excluded.root_cause, corrective_action=excluded.corrective_action, preventive_action=excluded.preventive_action, responsible_person=excluded.responsible_person, deadline=excluded.deadline, updated_at=unixepoch(), images_before_json=excluded.images_before_json, images_after_json=excluded.images_after_json, comments_json=excluded.comments_json, closed_by=COALESCE(excluded.closed_by, closed_by), closed_date=COALESCE(excluded.closed_date, closed_date)`, args: sanitizeArgs([ncrId, inspectionId, ncr.itemId || 'unknown', ncr.defect_code || null, ncr.severity || 'MINOR', ncr.status || 'OPEN', ncr.issueDescription, ncr.rootCause || null, ncr.solution || null, ncr.preventiveAction || null, ncr.responsiblePerson || null, ncr.deadline || null, JSON.stringify(beforeRefs), JSON.stringify(afterRefs), inspectorName, JSON.stringify(ncr.comments || []), ncr.closedBy || null, ncr.closedDate || null]) });
+    
+    // ISO REPOSITORY: Sử dụng INSERT OR REPLACE với logic bảo tồn cột cũ nếu null
+    await turso.execute({ 
+        sql: `INSERT INTO ncrs (id, inspection_id, item_id, defect_code, severity, status, description, root_cause, corrective_action, preventive_action, responsible_person, deadline, images_before_json, images_after_json, created_by, created_at, updated_at, comments_json, closed_by, closed_date) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch(), ?, ?, ?) 
+              ON CONFLICT(id) DO UPDATE SET 
+                severity=excluded.severity, 
+                status=excluded.status, 
+                description=excluded.description, 
+                root_cause=excluded.root_cause, 
+                corrective_action=excluded.corrective_action, 
+                preventive_action=excluded.preventive_action, 
+                responsible_person=excluded.responsible_person, 
+                deadline=excluded.deadline, 
+                updated_at=unixepoch(), 
+                images_before_json=excluded.images_before_json, 
+                images_after_json=excluded.images_after_json, 
+                comments_json=excluded.comments_json, 
+                closed_by=COALESCE(excluded.closed_by, closed_by), 
+                closed_date=COALESCE(excluded.closed_date, closed_date)`, 
+        args: sanitizeArgs([ncrId, inspectionId, ncr.itemId || 'unknown', ncr.defect_code || null, ncr.severity || 'MINOR', ncr.status || 'OPEN', ncr.issueDescription, ncr.rootCause || null, ncr.solution || null, ncr.preventiveAction || null, ncr.responsiblePerson || null, ncr.deadline || null, JSON.stringify(beforeRefs), JSON.stringify(afterRefs), inspectorName, JSON.stringify(ncr.comments || []), ncr.closedBy || null, ncr.closedDate || null]) 
+    });
     return ncrId;
 }
 
-export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => { return await saveNCRData(inspection_id, ncr, createdBy); };
+export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => { 
+    if (!inspection_id) throw new Error("ISO-VALIDATION: inspection_id is required to save NCR.");
+    return await saveNCRData(inspection_id, ncr, createdBy); 
+};
 
 export const getNcrs = async (filters: any = {}) => {
     let sql = "SELECT id, inspection_id, item_id, defect_code, severity, status, description, responsible_person, deadline, created_by, created_at, updated_at FROM ncrs";

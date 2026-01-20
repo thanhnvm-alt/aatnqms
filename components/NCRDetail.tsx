@@ -97,10 +97,10 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const handleSaveChanges = async () => {
       if (isLocked) return;
       
-      // Đảm bảo có inspection_id để tránh lỗi DB NULL constraint
+      // ISO-SAFETY: Đảm bảo có inspection_id
       const targetId = formData.inspection_id || ncr.inspection_id;
       if (!targetId) {
-          alert("Lỗi hệ thống: Không tìm thấy ID phiếu kiểm tra liên quan.");
+          alert("Lỗi: Không tìm thấy liên kết tới Phiếu kiểm tra gốc.");
           return;
       }
 
@@ -120,35 +120,35 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           if (onUpdate) onUpdate();
       } catch (error: any) { 
           console.error("Save Error:", error);
-          alert("Lỗi khi lưu NCR: Vui lòng kiểm tra kết nối mạng hoặc liên hệ kỹ thuật."); 
+          alert("Lỗi khi lưu NCR: Cơ sở dữ liệu từ chối yêu cầu (Kiểm tra lại kết nối)."); 
       } finally { setIsSaving(false); }
   };
 
   const handleApprove = async () => {
-      // ISO-VALIDATION: Kiểm tra hình ảnh sau xử lý
+      // ISO-VALIDATION: Hình ảnh xử lý là bắt buộc
       if (!formData.imagesAfter || formData.imagesAfter.length === 0) {
-          alert("PHÊ DUYỆT BỊ CHẶN: Hồ sơ thiếu Hình ảnh minh chứng xử lý (Images After). Vui lòng cập nhật hình ảnh trước khi đóng NCR.");
+          alert("PHÊ DUYỆT BỊ CHẶN: Hồ sơ thiếu Hình ảnh minh chứng xử lý (Images After).");
           return;
       }
 
-      // ISO-VALIDATION: Kiểm tra các trường thông tin bắt buộc
+      // ISO-VALIDATION: Thông tin phân tích là bắt buộc
       const missingFields = [];
-      if (!formData.rootCause?.trim()) missingFields.push("Nguyên nhân gốc rễ (Root Cause)");
-      if (!formData.solution?.trim()) missingFields.push("Biện pháp khắc phục (Action Plan)");
-      if (!formData.responsiblePerson?.trim()) missingFields.push("Người phụ trách xử lý");
+      if (!formData.rootCause?.trim()) missingFields.push("Nguyên nhân (Root Cause)");
+      if (!formData.solution?.trim()) missingFields.push("Biện pháp (Action Plan)");
+      if (!formData.responsiblePerson?.trim()) missingFields.push("Người phụ trách");
 
       if (missingFields.length > 0) {
-          alert(`YÊU CẦU BỔ SUNG THÔNG TIN:\n- ${missingFields.join('\n- ')}\n\nVui lòng nhập đầy đủ để đảm bảo quy trình ISO.`);
+          alert(`YÊU CẦU BỔ SUNG: ${missingFields.join(', ')}.`);
           return;
       }
 
       const targetId = formData.inspection_id || ncr.inspection_id;
       if (!targetId) {
-          alert("Lỗi hệ thống: Không tìm thấy ID phiếu kiểm tra liên quan.");
+          alert("Lỗi: Không tìm thấy liên kết tới Phiếu kiểm tra gốc.");
           return;
       }
 
-      if (!window.confirm("Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa không thể chỉnh sửa.")) return;
+      if (!window.confirm("Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa.")) return;
       
       setIsSaving(true);
       try {
