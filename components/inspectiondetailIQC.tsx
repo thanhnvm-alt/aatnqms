@@ -1,13 +1,13 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, MaterialIQC, NCRComment } from '../types';
 import { 
   ArrowLeft, Calendar, User as UserIcon, Building2, Box, FileText, 
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
-  LayoutList, PenTool, ChevronDown, ChevronUp, Calculator,
-  TrendingUp, Layers, MessageSquare, Loader2, Eraser, Info,
-  ClipboardList, Send, ShieldAlert, Save, Check, UserCheck, 
-  Signature, MessageCircle, UserPlus, Tag, FileCheck, Camera, Image as ImageIcon, MapPin, CheckCircle
+  LayoutList, PenTool, ChevronDown, ChevronUp,
+  Layers, MessageSquare, Loader2, Eraser, Info,
+  ClipboardList, Send, Save, Check, 
+  FileCheck, Camera, Image as ImageIcon, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -44,7 +44,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
         <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center px-1">
                 <label className="block text-slate-700 font-bold text-[9px] uppercase tracking-widest">{label}</label>
-                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa ký lại</button>}
+                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-600 flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa</button>}
             </div>
             <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-32 shadow-inner">
                 <canvas ref={canvasRef} width={400} height={128} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
@@ -67,16 +67,19 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
 
-  const isAdmin = user.role === 'ADMIN';
+  const isApproved = inspection.status === InspectionStatus.APPROVED;
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
-  const isApproved = inspection.status === InspectionStatus.APPROVED || inspection.status === InspectionStatus.COMPLETED;
-  const canModify = isAdmin || (!isApproved && (isManager || inspection.inspectorName === user.name));
+  const canModify = user.role === 'ADMIN' || (!isApproved && (isManager || inspection.inspectorName === user.name));
 
   const handleManagerApprove = async () => {
     if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }
     if (!onApprove) return;
     setIsProcessing(true);
-    try { await onApprove(inspection.id, managerSig, { managerName: user.name }); setShowManagerModal(false); onBack(); } 
+    try { 
+        await onApprove(inspection.id, managerSig, { managerName: user.name }); 
+        setShowManagerModal(false); 
+        onBack(); 
+    } 
     catch (e) { alert("Lỗi khi phê duyệt."); } finally { setIsProcessing(false); }
   };
 
@@ -135,12 +138,11 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="space-y-2">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon className="w-3 h-3" /> Bằng chứng hiện trường</p>
                         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                            {inspection.images?.map((img, idx) => (<img key={idx} src={img} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-20 h-20 rounded-lg object-cover border border-slate-200 shadow-sm cursor-zoom-in" />))}
+                            {inspection.images?.map((img, idx) => (<img key={idx} src={img} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm cursor-zoom-in" />))}
                         </div>
                     </div>
                 )}
                 
-                {/* Supporting Docs in Detail - Updated to 4 columns */}
                 <div className="space-y-2">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileCheck className="w-3 h-3 text-blue-500" /> Tài liệu hồ sơ đính kèm</p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -220,48 +222,88 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center border border-slate-100 shadow-inner">
                         {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" /> : <div className="text-[9px] text-orange-400 animate-pulse font-black">CHỜ DUYỆT</div>}
                     </div>
-                    <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || '---'}</div>
+                    <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || 'Manager Approval'}</div>
                 </div>
             </div>
         </section>
-        
-        {/* Discussion */}
-        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-blue-600" /><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ</h3></div>
+
+        <section className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-10">
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-blue-600" />
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Thảo luận hồ sơ</h3>
+            </div>
             <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
                         <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" />
                         <div className="flex-1 space-y-2">
-                            <div className="flex justify-between items-center px-1"><span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span><span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span></div>
+                            <div className="flex justify-between items-center px-1">
+                                <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
+                            </div>
                             <div className="bg-slate-50 p-4 rounded-[1.5rem] rounded-tl-none border border-slate-100 text-[12px] text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">{comment.content}</div>
+                            {comment.attachments && comment.attachments.length > 0 && (
+                                <div className="flex gap-3 flex-wrap pt-2">
+                                    {comment.attachments.map((img, i) => (
+                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
+                                            <img src={img} className="w-full h-full object-cover" alt=""/>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
             </div>
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-4">
+                <div className="flex gap-3 items-end">
+                    <div className="flex-1 relative">
+                        <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" />
+                        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                            <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
+                        </div>
+                    </div>
+                    <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
+                </div>
+            </div>
         </section>
       </div>
 
-      <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-2 py-3 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
-          <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2 h-12">
-              <button onClick={onBack} className="flex-1 h-full bg-slate-100 text-slate-500 font-black uppercase text-[8px] tracking-tight rounded-xl border border-slate-200 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap px-2"><ArrowLeft className="w-4 h-4" /> QUAY LẠI</button>
-              {!isApproved && isManager && (
-                  <button onClick={() => setShowManagerModal(true)} className="flex-[1.5] h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 border border-emerald-500"><Check className="w-4 h-4" /> DUYỆT LÔ HÀNG</button>
-              )}
-          </div>
+      <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-4 py-4 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0 flex gap-3">
+          <button onClick={onBack} className="flex-1 h-12 bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-widest rounded-xl border border-slate-200 active:scale-95 transition-all">Quay lại</button>
+          {isManager && !isApproved && (
+              <button onClick={() => setShowManagerModal(true)} className="flex-[2] h-12 bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">Phê duyệt IQC</button>
+          )}
       </div>
 
       {showManagerModal && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in duration-200">
-                  <h3 className="font-bold text-slate-800 uppercase text-sm">Manager Phê Duyệt</h3>
-                  <SignaturePad label="Chữ ký Manager" value={managerSig} onChange={setManagerSig} />
-                  <div className="flex gap-3 pt-2"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-3 text-slate-500 font-bold uppercase text-[9px] rounded-xl border">Hủy</button><button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold uppercase text-[10px] shadow-lg">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}</button></div>
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                      <div className="flex items-center gap-3"><ShieldCheck className="w-6 h-6 text-emerald-600" /><h3 className="font-black text-slate-800 uppercase tracking-tighter text-base">Manager Approval</h3></div>
+                      <button onClick={() => setShowManagerModal(false)}><X className="w-7 h-7 text-slate-400"/></button>
+                  </div>
+                  <div className="p-8 space-y-6 bg-slate-50/30">
+                      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 text-center shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Authorized System User</p><p className="text-base font-black text-slate-800 uppercase tracking-tight">{user.name}</p></div>
+                      <SignaturePad label="Chữ ký điện tử Manager *" value={managerSig} onChange={setManagerSig} />
+                  </div>
+                  <div className="p-6 border-t bg-white flex gap-4">
+                      <button onClick={() => setShowManagerModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[10px] rounded-2xl hover:bg-slate-50 border border-slate-100 shadow-sm transition-all">Hủy</button>
+                      <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-emerald-500/30 disabled:opacity-50 active:scale-95 transition-all">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : 'XÁC NHẬN DUYỆT'}</button>
+                  </div>
               </div>
           </div>
       )}
-      
-      {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
+
+      {lightboxState && (
+          <ImageEditorModal 
+              images={lightboxState.images} 
+              initialIndex={lightboxState.index} 
+              onClose={() => setLightboxState(null)} 
+              readOnly={true} 
+          />
+      )}
     </div>
   );
 };
