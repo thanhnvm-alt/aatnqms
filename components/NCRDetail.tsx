@@ -96,6 +96,14 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
   const handleSaveChanges = async () => {
       if (isLocked) return;
+      
+      // Đảm bảo có inspection_id để tránh lỗi DB NULL constraint
+      const targetId = formData.inspection_id || ncr.inspection_id;
+      if (!targetId) {
+          alert("Lỗi hệ thống: Không tìm thấy ID phiếu kiểm tra liên quan.");
+          return;
+      }
+
       setIsSaving(true);
       try {
           let finalStatus = formData.status;
@@ -103,13 +111,17 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               finalStatus = (formData.imagesAfter && formData.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
           }
           
-          const dataToSave = { ...formData, status: finalStatus };
-          await saveNcrMapped(dataToSave.inspection_id || '', dataToSave, ncr.createdBy || user.name);
+          const dataToSave = { ...formData, status: finalStatus, inspection_id: targetId };
+          await saveNcrMapped(targetId, dataToSave, ncr.createdBy || user.name);
+          
           setNcr(dataToSave);
           setFormData(dataToSave);
           setIsEditing(false);
           if (onUpdate) onUpdate();
-      } catch (error) { alert("Lỗi khi lưu NCR."); } finally { setIsSaving(false); }
+      } catch (error: any) { 
+          console.error("Save Error:", error);
+          alert("Lỗi khi lưu NCR: Vui lòng kiểm tra kết nối mạng hoặc liên hệ kỹ thuật."); 
+      } finally { setIsSaving(false); }
   };
 
   const handleApprove = async () => {
@@ -130,27 +142,34 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           return;
       }
 
+      const targetId = formData.inspection_id || ncr.inspection_id;
+      if (!targetId) {
+          alert("Lỗi hệ thống: Không tìm thấy ID phiếu kiểm tra liên quan.");
+          return;
+      }
+
       if (!window.confirm("Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa không thể chỉnh sửa.")) return;
       
       setIsSaving(true);
       try {
-          // Lưu thông tin người phê duyệt và thời gian
           const approvedData = { 
               ...formData, 
               status: 'CLOSED',
+              inspection_id: targetId,
               closedBy: user.name,
               closedDate: new Date().toISOString()
           };
           
-          await saveNcrMapped(approvedData.inspection_id || '', approvedData, ncr.createdBy || user.name);
+          await saveNcrMapped(targetId, approvedData, ncr.createdBy || user.name);
+          
           setNcr(approvedData);
           setFormData(approvedData);
           setIsEditing(false);
           if (onUpdate) onUpdate();
           alert("NCR đã được phê duyệt và đóng thành công.");
-      } catch (error) { 
-          console.error(error);
-          alert("Lỗi khi phê duyệt."); 
+      } catch (error: any) { 
+          console.error("Approve Error:", error);
+          alert("Lỗi khi phê duyệt: Database từ chối yêu cầu. Hãy thử 'Lưu' trước khi 'Phê duyệt'."); 
       } finally { setIsSaving(false); }
   };
 
@@ -200,6 +219,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
   const handlePostComment = async () => {
       if (!newComment.trim() && commentAttachments.length === 0) return;
+      const targetId = formData.inspection_id || ncr.inspection_id || '';
       setIsSubmitting(true);
       const newCommentObj: NCRComment = {
           id: `cmt_${Date.now()}`,
@@ -211,9 +231,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           attachments: commentAttachments
       };
       const updatedComments = [...(formData.comments || []), newCommentObj];
-      const updatedNcr = { ...formData, comments: updatedComments };
+      const updatedNcr = { ...formData, comments: updatedComments, inspection_id: targetId };
       try {
-          await saveNcrMapped(ncr.inspection_id || '', updatedNcr, ncr.createdBy || user.name);
+          await saveNcrMapped(targetId, updatedNcr, ncr.createdBy || user.name);
           setFormData(updatedNcr);
           setNcr(updatedNcr);
           setNewComment('');
@@ -263,7 +283,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     disabled={isSaving} 
                     className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-95 hover:bg-emerald-700 transition-all"
                   >
-                      <ShieldCheck className="w-4 h-4" /> 
+                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <ShieldCheck className="w-4 h-4" />} 
                       PHÊ DUYỆT & ĐÓNG NCR
                   </button>
               )}
