@@ -9,8 +9,7 @@ import {
   ChevronRight, AlertCircle, FileText,
   ClipboardList, AlertOctagon, Search, ChevronDown, Plus,
   UserCheck, Users, Camera, Image as ImageIcon, Sparkles,
-  // Added missing icon imports to fix errors on lines 570 and 583
-  ShieldCheck, Clock
+  ShieldCheck, Clock, Locate, ExternalLink, Map as MapIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject } from '../services/apiService';
@@ -85,6 +84,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Project>>({});
   
   const [floorPlans, setFloorPlans] = useState<FloorPlan[]>([]);
@@ -232,6 +232,46 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       reader.readAsDataURL(file);
   };
 
+  const handleGetLocation = () => {
+    setIsGettingLocation(true);
+    if (!navigator.geolocation) {
+      alert("Trình duyệt của bạn không hỗ trợ định vị GPS.");
+      setIsGettingLocation(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+        setEditForm(prev => ({ ...prev, location: loc }));
+        setIsGettingLocation(false);
+      },
+      (err) => {
+        let msg = "Không thể lấy vị trí hiện tại.";
+        switch(err.code) {
+          case err.PERMISSION_DENIED:
+            msg = "Quyền truy cập vị trí bị từ chối. Vui lòng kiểm tra cài đặt trình duyệt (Cho phép định vị).";
+            break;
+          case err.POSITION_UNAVAILABLE:
+            msg = "Thông tin vị trí không khả dụng (Vui lòng bật GPS trên thiết bị).";
+            break;
+          case err.TIMEOUT:
+            msg = "Hết thời gian yêu cầu vị trí GPS.";
+            break;
+        }
+        alert(msg);
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleOpenInMaps = () => {
+      const loc = editForm.location || project.location;
+      if (!loc) return;
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}`, '_blank');
+  };
+
   return (
     <div className="h-full flex flex-col bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Inter", sans-serif' }}>
       {/* Header */}
@@ -243,7 +283,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <div className="flex items-center gap-1.5 mt-1">
                     <p className="text-[9px] md:text-[10px] text-slate-400 font-mono font-bold tracking-widest">{project.ma_ct}</p>
                     <div className="h-0.5 w-0.5 rounded-full bg-slate-300"></div>
-                    <p className="text-[9px] md:text-[10px] text-blue-600 font-bold uppercase tracking-widest truncate">{activeTab === 'OVERVIEW' ? 'Project Details' : 'Technical Layouts'}</p>
+                    <p className="text-[9px] md:text-[10px] text-blue-600 font-bold uppercase tracking-widest truncate">{activeTab === 'OVERVIEW' ? 'Project Repository' : 'Technical Map'}</p>
                 </div>
             </div>
          </div>
@@ -257,7 +297,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                  />
              </div>
              <div className="flex bg-slate-100 p-0.5 md:p-1 rounded-lg md:rounded-xl border border-slate-200 mr-1 md:mr-2">
-                 <button onClick={() => setActiveTab('OVERVIEW')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'OVERVIEW' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Repository</button>
+                 <button onClick={() => setActiveTab('OVERVIEW')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'OVERVIEW' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Overview</button>
                  <button onClick={() => setActiveTab('LAYOUTS')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'LAYOUTS' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Map</button>
              </div>
              <button onClick={() => { setEditForm({ ...project }); setIsEditing(true); }} className="p-2 md:p-2.5 bg-blue-600 text-white rounded-lg md:rounded-2xl shadow-lg border border-blue-500 active:scale-90"><Edit3 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
@@ -269,10 +309,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
              <div className="h-full overflow-y-auto p-4 md:p-6 no-scrollbar pb-24 bg-[#f8fafc]">
                 <div className="max-w-[100rem] mx-auto space-y-6">
                     
-                    {/* --- RE-RESTORED STATISTICS CARDS (AS PER IMAGE) --- */}
+                    {/* --- TOP STATISTICS CARDS (AS PER IMAGE) --- */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* 1. THÔNG TIN CHI TIẾT */}
-                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[240px]">
+                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[320px]">
                             <div className="flex items-center gap-3 mb-6">
                                 <Activity className="w-5 h-5 text-blue-600" />
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">THÔNG TIN CHI TIẾT</h3>
@@ -283,17 +323,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         <Hash className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">MÃ DỰ ÁN</p>
-                                        <p className="text-sm font-black text-slate-800 uppercase">{project.ma_ct}</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">MÃ DỰ ÁN</p>
+                                        <p className="text-xs font-black text-slate-800 uppercase">{project.ma_ct}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center border border-sky-100 text-sky-600 shrink-0">
-                                        <UserIcon className="w-5 h-5" />
+                                        <UserCheck className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PROJECT MANAGER</p>
-                                        <p className="text-sm font-black text-slate-800 uppercase">{project.pm || 'CHƯA PHÂN CÔNG'}</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">PROJECT MANAGER</p>
+                                        <p className="text-xs font-black text-slate-800 uppercase">{project.pm || 'CHƯA PHÂN CÔNG'}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
@@ -301,21 +341,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         <MapPin className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">VỊ TRÍ</p>
-                                        <p className="text-sm font-black text-slate-800 uppercase">{project.location || '---'}</p>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">VỊ TRÍ</p>
+                                        <p className="text-xs font-black text-slate-800 uppercase line-clamp-1">{project.location || '---'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center border border-amber-100 text-amber-600 shrink-0">
+                                        <Calendar className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">THỜI GIAN</p>
+                                        <p className="text-xs font-black text-slate-800 uppercase">{project.startDate || '--'} • {project.endDate || '--'}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* 2. MÔ TẢ TỔNG QUAN */}
-                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[240px]">
+                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[320px]">
                             <div className="flex items-center gap-3 mb-6">
                                 <Layers className="w-5 h-5 text-indigo-600" />
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">MÔ TẢ TỔNG QUAN</h3>
                             </div>
                             <div className="flex-1">
-                                <p className="text-sm text-slate-600 italic leading-relaxed line-clamp-4">
+                                <p className="text-sm text-slate-600 italic leading-relaxed line-clamp-[6]">
                                     {project.description || 'Chưa có mô tả chi tiết cho dự án này.'}
                                 </p>
                             </div>
@@ -324,23 +373,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-3.5 h-3.5 text-blue-500" /> TIẾN ĐỘ THI CÔNG</span>
                                     <span className="text-xl font-black text-blue-700">{project.progress}%</span>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200 shadow-inner">
-                                    <div className="bg-blue-600 h-full rounded-full transition-all duration-1000" style={{ width: `${project.progress}%` }}></div>
+                                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200 shadow-inner">
+                                    <div className="bg-blue-600 h-full rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(37,99,235,0.4)]" style={{ width: `${project.progress}%` }}></div>
                                 </div>
                             </div>
                         </div>
 
                         {/* 3. CHỈ SỐ CHẤT LƯỢNG */}
-                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center h-full min-h-[240px]">
-                            <div className="w-full flex items-center gap-3 mb-2">
+                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center h-full min-h-[320px]">
+                            <div className="w-full flex items-center gap-3 mb-2 text-left">
                                 <PieChartIcon className="w-5 h-5 text-emerald-600" />
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">CHỈ SỐ CHẤT LƯỢNG</h3>
                             </div>
                             <div className="flex-1 flex flex-col items-center justify-center w-full">
-                                <div className="relative w-32 h-32">
+                                <div className="relative w-36 h-36">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1}]} innerRadius={35} outerRadius={50} paddingAngle={5} dataKey="value" stroke="none">
+                                            <Pie data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1}]} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value" stroke="none">
                                                 {pieData.length > 0 ? pieData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                 )) : <Cell fill="#f1f5f9" />}
@@ -354,12 +403,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 mt-6 w-full">
-                                <div className="flex items-center justify-center gap-2 py-2.5 bg-green-50 rounded-2xl border border-green-100">
+                                <div className="flex items-center justify-center gap-2 py-3 bg-green-50 rounded-2xl border border-green-100">
                                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
                                     <span className="text-[10px] font-black text-green-700 uppercase">{stats.completed} ĐẠT</span>
                                 </div>
-                                <div className="flex items-center justify-center gap-2 py-2.5 bg-red-50 rounded-2xl border border-red-100">
-                                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                <div className="flex items-center justify-center gap-2 py-3 bg-red-50 rounded-2xl border border-red-100">
+                                    <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_red]"></div>
                                     <span className="text-[10px] font-black text-red-700 uppercase">{stats.flagged} LỖI</span>
                                 </div>
                             </div>
@@ -588,7 +637,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </div>
                           <div className="space-y-1.5">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-blue-500" /> Vị trí thi công / Địa chỉ</label>
-                              <input value={editForm.location || ''} onChange={e => setEditForm({...editForm, location: e.target.value})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-bold text-slate-800 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm" placeholder="NHẬP VỊ TRÍ CHI TIẾT..." />
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <input 
+                                        value={editForm.location || ''} 
+                                        onChange={e => setEditForm({...editForm, location: e.target.value})} 
+                                        className="w-full pl-6 pr-12 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-bold text-slate-800 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm" 
+                                        placeholder="NHẬP VỊ TRÍ CHI TIẾT..." 
+                                    />
+                                    <button 
+                                        onClick={handleGetLocation} 
+                                        disabled={isGettingLocation} 
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all active:scale-90"
+                                        title="Lấy vị trí GPS"
+                                    >
+                                        {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Locate className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                <button 
+                                    onClick={handleOpenInMaps}
+                                    disabled={!editForm.location && !project.location}
+                                    className="p-4 bg-white border border-slate-200 rounded-[1.5rem] text-slate-400 hover:text-emerald-600 hover:border-emerald-200 transition-all active:scale-95 shadow-sm"
+                                    title="Kiểm tra trên Google Maps"
+                                >
+                                    <MapIcon className="w-5 h-5" />
+                                </button>
+                              </div>
                           </div>
                       </div>
 
@@ -598,7 +672,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                   </div>
 
-                  <div className="p-8 border-t border-slate-100 bg-white flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)]">
+                  <div className="p-8 border-t border-slate-100 bg-white flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] z-10">
                       <button onClick={() => setIsEditing(false)} className="order-2 md:order-1 px-12 py-4 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Hủy bỏ</button>
                       <button onClick={handleSaveProject} disabled={isSaving} className="order-1 md:order-2 px-20 py-4 bg-blue-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.25em] shadow-2xl shadow-blue-500/30 active:scale-95 flex items-center justify-center gap-3 transition-all">
                           {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
