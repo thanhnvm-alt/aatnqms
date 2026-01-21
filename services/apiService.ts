@@ -38,6 +38,10 @@ export const fetchPlans = async (searchTerm: string = '', page: number = 1, limi
   return await db.getPlansPaginated(searchTerm, page, limit);
 };
 
+export const fetchPlansByProject = async (maCt: string, limit?: number) => {
+  return await db.getPlansByProject(maCt, limit);
+};
+
 export const fetchInspections = async (filters: any = {}) => {
   return await db.getInspectionsList(filters);
 };

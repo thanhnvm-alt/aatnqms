@@ -1,5 +1,4 @@
 
-
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin } from "../types";
 
@@ -355,6 +354,22 @@ export async function getPlansPaginated(searchTerm: string = '', page: number = 
     const res = await turso.execute({ sql, args: [...args, limit, offset] });
     const countRes = await turso.execute("SELECT COUNT(*) as total FROM plans");
     return { items: res.rows as unknown as PlanItem[], total: Number(countRes.rows[0].total) };
+}
+
+/**
+ * Lấy danh sách kế hoạch cho một dự án cụ thể
+ */
+export async function getPlansByProject(maCt: string, limit?: number): Promise<PlanItem[]> {
+    let sql = "SELECT * FROM plans WHERE ma_ct = ? OR ten_ct = ?";
+    let args: any[] = [maCt, maCt];
+    
+    if (limit) {
+        sql += " LIMIT ?";
+        args.push(limit);
+    }
+    
+    const res = await turso.execute({ sql, args });
+    return res.rows as unknown as PlanItem[];
 }
 
 // --- SUPPLIERS ---

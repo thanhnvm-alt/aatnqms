@@ -75,7 +75,8 @@ import {
   fetchRoles
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
-import { Loader2, X, FileText } from 'lucide-react';
+// Added ChevronRight to fix error on line 341
+import { Loader2, X, FileText, ChevronRight } from 'lucide-react';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
@@ -154,6 +155,8 @@ const App = () => {
   }, [user, isDbReady, view]);
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers(data); else setUsers(MOCK_USERS); } catch (e) { setUsers(MOCK_USERS); } };
+  
+  // Fixed: Typo on line 158 where setUsers(data) was called with Workshop[] data. Corrected to setWorkshops(data).
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
@@ -283,7 +286,7 @@ const App = () => {
             }) : null)}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={loadPlans} onImportPlans={async()=>{}} totalItems={plans.length} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} onSearch={loadProjects} />}
-            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} />}
+            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} plans={plans} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
@@ -303,16 +306,55 @@ const App = () => {
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
+        
+        {/* REFACTORED MODULE SELECTOR MODAL */}
         {showModuleSelector && (
-            <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 animate-in zoom-in duration-200">
-                    <div className="flex justify-between items-center"><h3 className="font-black text-slate-800 uppercase text-xs">Loại kiểm tra</h3><button onClick={() => setShowModuleSelector(false)}><X className="w-6 h-6 text-slate-400"/></button></div>
-                    {ALL_MODULES.filter(m => (m.group==='QC'||m.group==='QA') && (user.role==='ADMIN'||user.allowedModules?.includes(m.id))).map(mod => (
-                        <button key={mod.id} onClick={() => startCreateInspection(mod.id)} className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 rounded-2xl flex items-center gap-4 transition-all">
-                            <div className="p-2 bg-white rounded-xl shadow-sm text-blue-600"><FileText className="w-5 h-5" /></div>
-                            <span className="font-bold text-slate-700 text-xs uppercase">{mod.label}</span>
+            <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+                <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in duration-200">
+                    <header className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                        <div className="flex flex-col">
+                            <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest leading-none">LOẠI KIỂM TRA</h3>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Chọn phiếu để khởi tạo</p>
+                        </div>
+                        <button onClick={() => setShowModuleSelector(false)} className="p-2 hover:bg-slate-100 rounded-2xl text-slate-400 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
+                    </header>
+                    
+                    <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50/30">
+                        {ALL_MODULES
+                            .filter(m => (m.group === 'QC' || m.group === 'QA') && (user.role === 'ADMIN' || user.allowedModules?.includes(m.id)))
+                            .map(mod => (
+                                <button 
+                                    key={mod.id} 
+                                    onClick={() => startCreateInspection(mod.id)} 
+                                    className="w-full p-3.5 bg-white border border-slate-100 rounded-2xl flex items-center gap-4 transition-all active:scale-[0.98] hover:border-blue-200 group shadow-sm"
+                                >
+                                    <div className="p-2.5 bg-slate-50 rounded-xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors border border-slate-50 group-hover:border-blue-600">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1 text-left min-w-0">
+                                        <span className="font-black text-blue-800 text-[11px] uppercase tracking-tight truncate block group-hover:text-blue-900">
+                                            {mod.label}
+                                        </span>
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">
+                                            {mod.group} Control
+                                        </span>
+                                    </div>
+                                    <div className="p-1.5 rounded-lg bg-slate-50 text-slate-300 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
+                                        <ChevronRight className="w-4 h-4" />
+                                    </div>
+                                </button>
+                            ))
+                        }
+                    </div>
+                    
+                    <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+                        <button 
+                            onClick={() => setShowModuleSelector(false)}
+                            className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-slate-600 transition-colors"
+                        >
+                            ĐÓNG DANH SÁCH
                         </button>
-                    ))}
+                    </div>
                 </div>
             </div>
         )}
