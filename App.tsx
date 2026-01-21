@@ -55,7 +55,6 @@ import { SupplierManagement } from './components/SupplierManagement';
 import { SupplierDetail } from './components/SupplierDetail';
 import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
-// Fix: Removed syncProjectsWithPlans which does not exist in apiService
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -138,7 +137,9 @@ const App = () => {
         try {
             await initDatabase(); 
             setIsDbReady(true);
-            Promise.all([loadUsers(), loadWorkshops(), loadTemplates()]);
+            loadUsers();
+            loadWorkshops();
+            loadTemplates();
         } catch (error) { setIsDbReady(true); }
     };
     startup();
@@ -206,7 +207,7 @@ const App = () => {
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false);
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
-      setInitialFormState({ type: moduleId, items: JSON.parse(JSON.stringify(template)), ...initialFormState });
+      setInitialFormState({ type: moduleId, items: JSON.parse(JSON.stringify(template)) });
       setActiveInspection(null); setView('FORM');
   };
 
@@ -222,7 +223,14 @@ const App = () => {
           <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
       </div>
       <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
-        {isDetailLoading && <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center"><div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200"><Loader2 className="w-12 h-12 text-blue-600 animate-spin" /><p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải chi tiết...</p></div></div>}
+        {isDetailLoading && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center">
+            <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+              <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải chi tiết...</p>
+            </div>
+          </div>
+        )}
         <GlobalHeader 
             user={user} view={view} onNavigate={setView} onLogout={handleLogout} 
             onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(); if(view==='PROJECTS') { loadProjects(); loadPlans(); } }} 
@@ -239,6 +247,7 @@ const App = () => {
                 activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
                 activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
                 activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
+                activeInspection?.type === 'SITE' || initialFormState?.type === 'SITE' ? <InspectionFormSITE initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} user={user} templates={templates} /> :
                 <InspectionFormPQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} plans={plans} workshops={workshops} inspections={inspections} user={user} templates={templates} />
             )}
             {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
@@ -246,7 +255,7 @@ const App = () => {
               user, 
               onBack: () => setView('LIST'), 
               onEdit: handleEditInspection, 
-              onDelete: async id => { 
+              onDelete: async (id: string) => { 
                 const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
                 const isOwner = activeInspection.inspectorName === user.name;
                 const isApproved = activeInspection.status === InspectionStatus.APPROVED;
@@ -274,9 +283,8 @@ const App = () => {
             }) : null)}
             {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={loadPlans} onImportPlans={async()=>{}} totalItems={plans.length} />}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} onSearch={loadProjects} />}
-            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} />}
+            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
-            {/* Fix: Changed BookOpen to DefectLibrary which is the correct component name for this view */}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}

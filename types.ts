@@ -62,9 +62,9 @@ export interface Supplier {
     total_pos: number;
     pass_rate: number;
     defect_rate: number;
-    total_inspected: number;
-    total_passed: number;
-    total_failed: number;
+    total_inspected?: number;
+    total_passed?: number;
+    total_failed?: number;
   };
 }
 
@@ -210,7 +210,6 @@ export interface Inspection {
   productionSignature?: string;
   productionName?: string;
   productionConfirmedDate?: string;
-  productionComment?: string;
   pmSignature?: string;
   pmComment?: string;
   pmName?: string;
@@ -230,10 +229,11 @@ export interface Inspection {
   deliveryNoteImages?: string[];
   comments?: NCRComment[];
   priority?: Priority;
-  // Spatial Data
   floor_plan_id?: string;
   coord_x?: number;
   coord_y?: number;
+  responsiblePerson?: string;
+  productionComment?: string;
 }
 
 export interface PlanItem {
