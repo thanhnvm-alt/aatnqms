@@ -536,7 +536,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* --- OVERLAYS --- */}
       {selectedPlan && (
-          <div className="fixed inset-0 z-[140] bg-white flex flex-col animate-in fade-in duration-300">
+          <div className="absolute inset-0 z-[140] bg-white flex flex-col animate-in fade-in duration-300">
             <LayoutManager floorPlan={selectedPlan} pins={pins} onBack={() => setSelectedPlan(null)} onAddPin={handleAddPin} onViewFullDetail={handleOpenFullDetail} currentUser={user} />
           </div>
       )}
@@ -633,7 +633,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           </div>
                           <div className="space-y-1.5">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 flex items-center gap-2"><Users className="w-3.5 h-3.5 text-indigo-500" /> Coordinator (PC)</label>
-                              <input value={editForm.pc || ''} onChange={e => setEditForm({...editForm, pc: e.target.value.toUpperCase()})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-black text-slate-800 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm uppercase" placeholder="NHẬP HỌ TÊN PC..." />
+                              <input value={editForm.pc || ''} onChange={e => setEditForm({...editForm, pc: e.target.value.toUpperCase()})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-black text-slate-800 outline-none focus:ring-4 focus:ring-indigo-100 text-xs shadow-sm uppercase" placeholder="NHẬP HỌ TÊN PC..." />
                           </div>
                           <div className="space-y-1.5">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 flex items-center gap-2"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> QA/QC Manager</label>
@@ -691,8 +691,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </div>
 
                   <div className="p-8 border-t border-slate-100 bg-white flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] z-10">
-                      <button onClick={() => setIsEditing(false)} className="order-2 md:order-1 px-12 py-4 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Hủy bỏ</button>
-                      <button onClick={handleSaveProject} disabled={isSaving} className="order-1 md:order-2 px-20 py-4 bg-blue-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.25em] shadow-2xl shadow-blue-500/30 active:scale-95 flex items-center justify-center gap-3 transition-all">
+                      <button onClick={() => setIsEditing(false)} className="order-2 md:order-1 px-8 py-4 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Hủy bỏ</button>
+                      <button onClick={handleSaveProject} disabled={isSaving} className="order-1 md:order-2 px-12 py-4 bg-blue-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.25em] shadow-2xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
                           {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                           CẬP NHẬT DỮ LIỆU
                       </button>
