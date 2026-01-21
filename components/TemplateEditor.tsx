@@ -1,8 +1,7 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
-import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil, LayoutGrid } from 'lucide-react';
+import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil, LayoutGrid, FileUp, FileDown } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
 import { fetchWorkshops, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 
@@ -19,6 +18,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   const [openDefectSelector, setOpenDefectSelector] = useState<string | null>(null); 
   const [defectSearchTerm, setDefectSearchTerm] = useState(''); 
+  const [isImporting, setIsImporting] = useState(false);
   
   const [isAddDefectModalOpen, setIsAddDefectModalOpen] = useState(false);
   const [newDefect, setNewDefect] = useState<Partial<DefectLibraryItem>>({
@@ -32,6 +32,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
 
   const [activeGroup, setActiveGroup] = useState<string>('');
   const [activeStage, setActiveStage] = useState<string>('');
+
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const XLSX = (window as any).XLSX;
 
   const isStandardPQC = moduleId === 'PQC';
   const isCustomStagePQC = moduleId === 'SQC_BTP';
@@ -117,6 +120,63 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
     setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
+  const handleExportExcel = () => {
+    if (!XLSX) return alert("Thư viện Excel chưa sẵn sàng.");
+    
+    const exportData = items.map(item => ({
+      'Nhóm/Công đoạn': item.stage || item.category,
+      'Hạng mục kiểm tra': item.label,
+      'Phương pháp': item.method || '',
+      'Tiêu chuẩn ISO': item.standard || '',
+      'Tần suất': item.frequency || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Checklist Template");
+    XLSX.writeFile(wb, `AATN_Template_${moduleId}_${Date.now()}.xlsx`);
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !XLSX) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json: any[] = XLSX.utils.sheet_to_json(sheet);
+
+        const importedItems: CheckItem[] = json.map((row, idx) => ({
+          id: `imp_${Date.now()}_${idx}`,
+          stage: isPQC ? (row['Nhóm/Công đoạn'] || row['Công đoạn'] || activeStage) : undefined,
+          category: isIQC ? (row['Nhóm/Công đoạn'] || row['Nhóm'] || activeGroup) : (isPQC ? (moduleId === 'SQC_BTP' ? 'SQC' : 'PQC') : 'Chung'),
+          label: row['Hạng mục kiểm tra'] || row['Hạng mục'] || 'N/A',
+          method: row['Phương pháp'] || '',
+          standard: row['Tiêu chuẩn ISO'] || row['Tiêu chuẩn'] || '',
+          frequency: row['Tần suất'] || '',
+          status: CheckStatus.PENDING,
+          defectIds: []
+        }));
+
+        if (window.confirm(`Tìm thấy ${importedItems.length} hạng mục. Bạn muốn ghi đè (OK) hay thêm mới (Cancel)?`)) {
+          setItems(importedItems);
+        } else {
+          setItems([...items, ...importedItems]);
+        }
+      } catch (err) {
+        alert("Lỗi đọc file Excel.");
+      } finally {
+        setIsImporting(false);
+        if (excelInputRef.current) excelInputRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const handleAddIQCGroup = () => {
       const newGroupName = `Nhóm mới ${Object.keys(iqcGroups).length + 1}`;
       handleAddItem(newGroupName);
@@ -155,6 +215,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   const handleRenameCustomStage = () => {
       if (!activeStage) return;
       const newName = prompt("Đổi tên công đoạn:", activeStage);
+      // Fixed: changed name.trim() to newName.trim() as 'name' was not defined in this scope.
       if (newName && newName.trim() && newName !== activeStage) {
           setItems(items.map(i => i.stage === activeStage ? { ...i, stage: newName.trim() } : i));
           setActiveStage(newName.trim());
@@ -217,13 +278,20 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
             </div>
          </div>
          <div className="flex gap-2">
+             <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
+             <button onClick={() => excelInputRef.current?.click()} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+                <FileUp className="w-4 h-4 text-blue-600" /> Nhập Excel
+             </button>
+             <button onClick={handleExportExcel} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+                <FileDown className="w-4 h-4 text-emerald-600" /> Xuất Excel
+             </button>
+             <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
              <Button variant="ghost" size="sm" onClick={onCancel} className="hidden md:flex">Hủy</Button>
              <Button onClick={() => onSave(items)} icon={<Save className="w-4 h-4"/>} size="sm">Lưu</Button>
          </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-6 no-scrollbar bg-slate-50/30">
-        
         {/* IQC / SQC_MAT CONFIGURATION UI */}
         {isIQC && (
             <div className="space-y-4">
@@ -235,7 +303,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                     </div>
                 </div>
 
-                {/* --- NEW DROPDOWN UI FOR IQC GROUPS --- */}
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center gap-4">
                     <div className="flex-1 space-y-1.5">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
@@ -346,6 +413,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       {isAddDefectModalOpen && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col"><div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50"><h3 className="font-bold text-slate-800 uppercase text-xs flex items-center gap-2"><Plus className="w-4 h-4 text-blue-600" /> Thêm Lỗi Mới</h3><button onClick={() => setIsAddDefectModalOpen(false)}><X className="w-5 h-5 text-slate-400"/></button></div><div className="p-4 space-y-3"><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Mã lỗi</label><input value={newDefect.code} onChange={e => setNewDefect({...newDefect, code: e.target.value.toUpperCase()})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase" /></div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Tên lỗi *</label><input value={newDefect.name} onChange={e => setNewDefect({...newDefect, name: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 ring-blue-500" /></div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Mức độ</label><select value={newDefect.severity} onChange={e => setNewDefect({...newDefect, severity: e.target.value as any})} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium bg-white"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div></div><div className="p-4 border-t border-slate-100 flex gap-2"><Button variant="secondary" size="sm" onClick={() => setIsAddDefectModalOpen(false)} className="flex-1">Hủy</Button><Button size="sm" onClick={handleSaveNewDefect} disabled={isSavingDefect} className="flex-1">{isSavingDefect ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Lưu'}</Button></div></div>
+          </div>
+      )}
+      
+      {isImporting && (
+          <div className="fixed inset-0 z-[300] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang xử lý file Excel...</p>
+              </div>
           </div>
       )}
     </div>

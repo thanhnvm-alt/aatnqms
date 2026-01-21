@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc } from '../types';
-// Fixed: Added missing AlertTriangle and AlertOctagon imports from lucide-react to resolve reported error
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, 
   Calendar, PenTool, Eraser, Plus, Trash2, 

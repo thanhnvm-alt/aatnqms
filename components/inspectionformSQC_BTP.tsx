@@ -1,8 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
-// Fixed: Added missing AlertTriangle and AlertOctagon imports from lucide-react. 
-// Removed unused incorrect GoogleGenAI import from @google/ai as per coding guidelines.
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
@@ -170,7 +168,6 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
         id: `mat-${Date.now()}`,
         name: '',
         category: '',
-        // Fix: Added missing required property inspectType to satisfy MaterialIQC interface
         inspectType: '100%',
         scope: 'PROJECT',
         projectCode: formData.ma_ct || '',
