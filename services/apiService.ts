@@ -1,6 +1,18 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem } from '../types';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
 import * as db from './tursoService';
+
+export const fetchFloorPlans = async (projectId: string) => await db.getFloorPlans(projectId);
+export const saveFloorPlan = async (fp: FloorPlan) => await db.saveFloorPlan(fp);
+export const deleteFloorPlan = async (id: string) => await db.deleteFloorPlan(id);
+export const fetchLayoutPins = async (fpId: string) => await db.getLayoutPins(fpId);
+export const saveLayoutPin = async (pin: LayoutPin) => await db.saveLayoutPin(pin);
+
+export const fetchSuppliers = async () => await db.getSuppliers();
+export const saveSupplier = async (s: Supplier) => await db.saveSupplier(s);
+export const deleteSupplier = async (id: string) => await db.deleteSupplier(id);
+export const fetchSupplierStats = async (name: string) => await db.getSupplierStats(name);
+export const fetchSupplierInspections = async (name: string) => await db.getSupplierInspections(name);
 
 export const uploadQMSImage = async (file: File | string, context: { entityId: string, type: any, role: any }): Promise<string> => {
     return `img_ref_${Date.now()}`;
@@ -72,8 +84,6 @@ export const fetchProjects = async (search: string = '') => await db.getProjects
 export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
 export const updateProject = async (proj: Project) => await db.updateProject(proj);
 
-export const syncProjectsWithPlans = async () => await db.syncProjectsWithPlans();
-
 export const fetchNotifications = async (userId: string) => await db.getNotifications(userId);
 export const markNotificationAsRead = async (id: string) => await db.markNotificationRead(id);
 export const markAllNotificationsAsRead = async (userId: string) => await db.markAllNotificationsRead(userId);
@@ -86,32 +96,28 @@ export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
 export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
 
-// Add exportDefectLibrary to call the export API endpoint
 export const exportDefectLibrary = async () => {
-  const response = await fetch('/api/defects/export');
-  if (!response.ok) throw new Error('Failed to export defect library');
-  const blob = await response.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  // Use a predictable name if content-disposition fails to be parsed by browser automatically
-  a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+    const response = await fetch('/api/defects/export');
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
 };
 
-// Add importDefectLibraryFile to call the import API endpoint
 export const importDefectLibraryFile = async (file: File) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const response = await fetch('/api/defects/import', {
-    method: 'POST',
-    body: formData
-  });
-  if (!response.ok) throw new Error('Failed to import defect library');
-  return await response.json();
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/defects/import', {
+        method: 'POST',
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
 };
 
 export const checkApiConnection = async () => ({ ok: await db.testConnection() });

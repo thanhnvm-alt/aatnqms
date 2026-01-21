@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification } from './types';
+import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
@@ -51,8 +51,11 @@ import { NCRList } from './components/NCRList';
 import { DefectLibrary } from './components/DefectLibrary';
 import { DefectList } from './components/DefectList';
 import { DefectDetail } from './components/DefectDetail';
+import { SupplierManagement } from './components/SupplierManagement';
+import { SupplierDetail } from './components/SupplierDetail';
 import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
+// Fix: Removed syncProjectsWithPlans which does not exist in apiService
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -70,7 +73,6 @@ import {
   saveTemplate, 
   fetchProjects, 
   createNotification,
-  syncProjectsWithPlans,
   fetchRoles
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
@@ -99,6 +101,7 @@ const App = () => {
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
+  const [activeSupplier, setActiveSupplier] = useState<Supplier | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]); 
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -181,7 +184,6 @@ const App = () => {
     try { 
       const fullInspection = await fetchInspectionById(id); 
       if (fullInspection) {
-        // ISO Guard: Check permission before opening form
         const isManagerOrAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
         const isOwner = fullInspection.inspectorName === user?.name;
         const isApproved = fullInspection.status === InspectionStatus.APPROVED;
@@ -245,16 +247,13 @@ const App = () => {
               onBack: () => setView('LIST'), 
               onEdit: handleEditInspection, 
               onDelete: async id => { 
-                // ISO Guard: Deletion logic
                 const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
                 const isOwner = activeInspection.inspectorName === user.name;
                 const isApproved = activeInspection.status === InspectionStatus.APPROVED;
-
                 if (!isManagerOrAdmin && (!isOwner || isApproved)) {
                     alert("Bạn không có quyền xóa hồ sơ này.");
                     return;
                 }
-
                 if(window.confirm("Xóa phiếu này? Dữ liệu sẽ bị xóa vĩnh viễn khỏi audit log.")){ 
                     await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); 
                 } 
@@ -277,9 +276,12 @@ const App = () => {
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} onSearch={loadProjects} />}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
+            {/* Fix: Changed BookOpen to DefectLibrary which is the correct component name for this view */}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
+            {view === 'SUPPLIERS' && <SupplierManagement user={user} onSelectSupplier={s => { setActiveSupplier(s); setView('SUPPLIER_DETAIL'); }} />}
+            {view === 'SUPPLIER_DETAIL' && activeSupplier && <SupplierDetail supplier={activeSupplier} user={user} onBack={() => setView('SUPPLIERS')} onViewInspection={handleSelectInspection} />}
             {view === 'SETTINGS' && (
                 <Settings 
                     currentUser={user} allTemplates={templates} onSaveTemplate={async (id, items) => { await saveTemplate(id, items); loadTemplates(); }}

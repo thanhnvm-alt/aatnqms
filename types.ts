@@ -20,9 +20,53 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL';
 
-export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS';
+export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS';
+
+export interface FloorPlan {
+  id: string;
+  project_id: string;
+  name: string;
+  image_url: string;
+  version: string;
+  status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
+  updated_at: number;
+  file_name?: string;
+  active_inspections?: number;
+}
+
+export interface LayoutPin {
+  id: string;
+  floor_plan_id: string;
+  inspection_id?: string;
+  x: number; // percentage 0-100
+  y: number; // percentage 0-100
+  label?: string;
+  status: InspectionStatus | 'NEW';
+}
+
+export interface Supplier {
+  id: string;
+  code: string;
+  name: string;
+  address?: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  category?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  data?: string;
+  updated_at?: number;
+  stats?: {
+    total_pos: number;
+    pass_rate: number;
+    defect_rate: number;
+    total_inspected: number;
+    total_passed: number;
+    total_failed: number;
+  };
+}
 
 export interface QMSImage {
   id: string;
@@ -186,6 +230,10 @@ export interface Inspection {
   deliveryNoteImages?: string[];
   comments?: NCRComment[];
   priority?: Priority;
+  // Spatial Data
+  floor_plan_id?: string;
+  coord_x?: number;
+  coord_y?: number;
 }
 
 export interface PlanItem {

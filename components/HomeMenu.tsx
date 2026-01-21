@@ -63,7 +63,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({ title, icon, onClick, color = "
   </div>
 );
 
-// Added SQC_VT to ICON_MAP to fix TS error: Property 'SQC_VT' is missing
+// Added SQC_VT and SUPPLIERS to ICON_MAP
 const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'IQC': <PackageCheck className="w-6 h-6"/>,
     'SQC_MAT': <Truck className="w-6 h-6"/>,
@@ -79,10 +79,11 @@ const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'OEM': <UserCheck className="w-6 h-6"/>,
     'SETTINGS': null,
     'CONVERT_3D': <Box className="w-6 h-6"/>,
-    'DEFECTS': <Hammer className="w-6 h-6"/>
+    'DEFECTS': <Hammer className="w-6 h-6"/>,
+    'SUPPLIERS': <Truck className="w-6 h-6"/>
 };
 
-// Added SQC_VT to COLOR_MAP to fix TS error: Property 'SQC_VT' is missing
+// Added SQC_VT and SUPPLIERS to COLOR_MAP
 const COLOR_MAP: Record<ModuleId, string> = {
     'IQC': "text-blue-600",
     'SQC_MAT': "text-teal-600",
@@ -98,7 +99,8 @@ const COLOR_MAP: Record<ModuleId, string> = {
     'OEM': "text-green-600",
     'SETTINGS': "text-slate-600",
     'CONVERT_3D': "text-purple-600",
-    'DEFECTS': "text-orange-600"
+    'DEFECTS': "text-orange-600",
+    'SUPPLIERS': "text-blue-600"
 };
 
 export const HomeMenu: React.FC<HomeMenuProps> = ({ onNavigate, currentUser, onLogout, onOpenSettings, onOpenProfile }) => {

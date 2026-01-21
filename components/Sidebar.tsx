@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ViewState, User } from '../types';
 import { 
@@ -11,6 +12,7 @@ import {
   PanelLeft,
   AlertTriangle,
   BookOpen,
+  Truck,
   Factory
 } from 'lucide-react';
 
@@ -25,33 +27,28 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigate, user, onLogout, collapsed, setCollapsed }) => {
-  // Guard Clause for null user
   if (!user) return null;
 
-  // Lọc menu dựa trên vai trò QC
   const menuItems = [
     { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
+    { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', icon: Truck },
     { id: 'PLAN', label: 'Kế Hoạch', icon: FileSpreadsheet },
     { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
     { id: 'DEFECT_LIBRARY', label: 'Thư Viện Lỗi', icon: BookOpen },
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
   ].filter(item => {
-    // Logic phân quyền đơn giản
     if (user.role === 'QC') {
-      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS'].includes(item.id);
+      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS', 'SUPPLIERS'].includes(item.id);
     }
     return true;
   });
 
   const isMenuItemActive = (itemId: string) => {
-      if (itemId === 'PQC_MODE') {
-          return view === 'LIST' && currentModule === 'PQC';
-      }
-      if (itemId === 'LIST') {
-          return view === 'LIST' && currentModule !== 'PQC';
-      }
+      if (itemId === 'PQC_MODE') return view === 'LIST' && currentModule === 'PQC';
+      if (itemId === 'LIST') return view === 'LIST' && currentModule !== 'PQC';
+      if (itemId === 'SUPPLIERS') return view === 'SUPPLIERS' || view === 'SUPPLIER_DETAIL';
       if (itemId === 'SETTINGS') return view === 'SETTINGS';
       if (itemId === 'DEFECT_LIBRARY') return view === 'DEFECT_LIBRARY' || view === 'DEFECT_DETAIL';
       return view === itemId;
