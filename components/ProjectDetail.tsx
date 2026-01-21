@@ -9,7 +9,7 @@ import {
   ChevronRight, AlertCircle, FileText,
   ClipboardList, AlertOctagon, Search, ChevronDown, Plus,
   UserCheck, Users, Camera, Image as ImageIcon, Sparkles,
-  ShieldCheck, Clock, Locate, ExternalLink, Map as MapIcon
+  ShieldCheck, Clock, Locate, Map as MapIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject } from '../services/apiService';
@@ -309,10 +309,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
              <div className="h-full overflow-y-auto p-4 md:p-6 no-scrollbar pb-24 bg-[#f8fafc]">
                 <div className="max-w-[100rem] mx-auto space-y-6">
                     
-                    {/* --- TOP STATISTICS CARDS (AS PER IMAGE) --- */}
+                    {/* --- TOP STATISTICS CARDS --- */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* 1. THÔNG TIN CHI TIẾT */}
-                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[320px]">
+                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[400px]">
                             <div className="flex items-center gap-3 mb-6">
                                 <Activity className="w-5 h-5 text-blue-600" />
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">THÔNG TIN CHI TIẾT</h3>
@@ -328,8 +328,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center border border-sky-100 text-sky-600 shrink-0">
-                                        <UserCheck className="w-5 h-5" />
+                                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-600 shrink-0">
+                                        <UserCheck className="w-5 h-5 text-blue-600" />
                                     </div>
                                     <div>
                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">PROJECT MANAGER</p>
@@ -337,8 +337,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100 text-indigo-600 shrink-0">
+                                        <Users className="w-5 h-5 text-indigo-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">COORDINATOR (PC)</p>
+                                        <p className="text-xs font-black text-slate-800 uppercase">{project.pc || 'CHƯA PHÂN CÔNG'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 text-emerald-600 shrink-0">
+                                        <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">QA/QC MANAGER</p>
+                                        <p className="text-xs font-black text-slate-800 uppercase">{project.qa || 'CHƯA PHÂN CÔNG'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center border border-purple-100 text-purple-600 shrink-0">
-                                        <MapPin className="w-5 h-5" />
+                                        <MapPin className="w-5 h-5 text-purple-600" />
                                     </div>
                                     <div>
                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">VỊ TRÍ</p>
@@ -347,7 +365,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center border border-amber-100 text-amber-600 shrink-0">
-                                        <Calendar className="w-5 h-5" />
+                                        <Calendar className="w-5 h-5 text-amber-600" />
                                     </div>
                                     <div>
                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">THỜI GIAN</p>
@@ -358,13 +376,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </div>
 
                         {/* 2. MÔ TẢ TỔNG QUAN */}
-                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[320px]">
+                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col h-full min-h-[400px]">
                             <div className="flex items-center gap-3 mb-6">
                                 <Layers className="w-5 h-5 text-indigo-600" />
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">MÔ TẢ TỔNG QUAN</h3>
                             </div>
                             <div className="flex-1">
-                                <p className="text-sm text-slate-600 italic leading-relaxed line-clamp-[6]">
+                                <p className="text-sm text-slate-600 italic leading-relaxed line-clamp-[10]">
                                     {project.description || 'Chưa có mô tả chi tiết cho dự án này.'}
                                 </p>
                             </div>
@@ -380,7 +398,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         </div>
 
                         {/* 3. CHỈ SỐ CHẤT LƯỢNG */}
-                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center h-full min-h-[320px]">
+                        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center h-full min-h-[400px]">
                             <div className="w-full flex items-center gap-3 mb-2 text-left">
                                 <PieChartIcon className="w-5 h-5 text-emerald-600" />
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">CHỈ SỐ CHẤT LƯỢNG</h3>
