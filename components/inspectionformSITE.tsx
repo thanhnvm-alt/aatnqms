@@ -144,7 +144,8 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        const processed = await Promise.all(Array.from(files).map(f => {
+        // Fixed error: Explicitly cast Array.from(files) to satisfy readAsDataURL parameter type
+        const processed = await Promise.all((Array.from(files) as any[]).map(f => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => resolve(await resizeImage(reader.result as string));
@@ -172,7 +173,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">{isSaving ? 'ĐANG LƯU HỒ SƠ...' : 'ĐANG XỬ LÝ HÌNH ẢNH...'}</p>
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">{isSaving ? 'ĐANG LƯU HỒ SƠ...' : 'ĐANG XỬ LÝ HÌNH ÁNH...'}</p>
               </div>
           </div>
       )}

@@ -15,6 +15,7 @@ interface DashboardProps {
   user?: User;
   onLogout?: () => void;
   onNavigate?: (view: ViewState) => void;
+  onViewInspection?: (id: string) => void;
 }
 
 const COLORS = {
@@ -25,7 +26,7 @@ const COLORS = {
   blue: '#3b82f6',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogout, onNavigate }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogout, onNavigate, onViewInspection }) => {
   const safeInspections = useMemo(() => (Array.isArray(inspections) ? inspections : []).filter(i => i !== null), [inspections]);
 
   const stats = useMemo(() => {
@@ -176,7 +177,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                     recentCritical.map((item) => (
                         <div 
                           key={item.id} 
-                          onClick={() => onNavigate?.('LIST')}
+                          onClick={() => onViewInspection?.(item.id)}
                           className="p-4 active:bg-slate-50 transition-all flex items-center justify-between group cursor-pointer"
                         >
                             <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">

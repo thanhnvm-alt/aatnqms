@@ -75,7 +75,6 @@ import {
   fetchRoles
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
-// Added ChevronRight to fix error on line 341
 import { Loader2, X, FileText, ChevronRight } from 'lucide-react';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
@@ -97,6 +96,7 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isDbReady, setIsDbReady] = useState(false);
   const [view, setView] = useState<ViewState>('DASHBOARD');
+  const [returnView, setReturnView] = useState<ViewState>('LIST');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
@@ -155,8 +155,6 @@ const App = () => {
   }, [user, isDbReady, view]);
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers(data); else setUsers(MOCK_USERS); } catch (e) { setUsers(MOCK_USERS); } };
-  
-  // Fixed: Typo on line 158 where setUsers(data) was called with Workshop[] data. Corrected to setWorkshops(data).
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
@@ -175,6 +173,7 @@ const App = () => {
   const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); localStorage.removeItem('aatn_saved_username'); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
 
   const handleSelectInspection = async (id: string) => { 
+    setReturnView(view);
     setIsDetailLoading(true); 
     try { 
       const fullInspection = await fetchInspectionById(id); 
@@ -244,7 +243,7 @@ const App = () => {
             onNavigateToRecord={handleNavigateToRecord}
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
-            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} />}
+            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} isLoading={isLoadingInspections} workshops={workshops} />}
             {view === 'FORM' && (
                 activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
@@ -256,7 +255,7 @@ const App = () => {
             {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
               inspection: activeInspection, 
               user, 
-              onBack: () => setView('LIST'), 
+              onBack: () => setView(returnView), 
               onEdit: handleEditInspection, 
               onDelete: async (id: string) => { 
                 const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -305,6 +304,7 @@ const App = () => {
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
+        {/* Fixed error: setShowScanner should be setShowQrScanner */}
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         
         {/* REFACTORED MODULE SELECTOR MODAL */}
@@ -339,7 +339,7 @@ const App = () => {
                                             {mod.group} Control
                                         </span>
                                     </div>
-                                    <div className="p-1.5 rounded-lg bg-slate-50 text-slate-300 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
+                                    <div className="p-1.5 rounded-lg bg-slate-50 text-slate-300 group-hover:text-blue-50 group-hover:bg-blue-50 transition-colors">
                                         <ChevronRight className="w-4 h-4" />
                                     </div>
                                 </button>
