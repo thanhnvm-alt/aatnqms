@@ -21,6 +21,39 @@ interface InspectionDetailProps {
   onPostComment?: (id: string, comment: NCRComment) => Promise<void>;
 }
 
+const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+      } else {
+        if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; }
+      }
+      canvas.width = width; 
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(base64Str); return; }
+      ctx.fillStyle = 'white'; 
+      ctx.fillRect(0, 0, width, height); 
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      let quality = 0.7;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > 133333 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+};
+
 const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -97,6 +130,50 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
       } catch (e) { alert("Lỗi gửi bình luận."); } finally { setIsSubmittingComment(false); }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      
+      setIsProcessing(true);
+      try {
+          const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+              const base64 = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.readAsDataURL(f);
+              });
+              return resizeImage(base64);
+          }));
+          
+          setCommentAttachments(prev => {
+              const updated = [...prev, ...processed];
+              // ISO-UX: Automatically trigger editor for the first newly added image
+              // to allow immediate technical annotation
+              setTimeout(() => {
+                handleEditCommentImage(prev.length);
+              }, 100);
+              return updated;
+          });
+      } catch (err) {
+          alert("Lỗi xử lý hình ảnh.");
+      } finally {
+          setIsProcessing(false);
+          e.target.value = '';
+      }
+  };
+
+  const handleEditCommentImage = (idx: number) => {
+      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
+  };
+
+  const updateCommentImage = (idx: number, newImg: string) => {
+      setCommentAttachments(prev => {
+          const next = [...prev];
+          next[idx] = newImg;
+          return next;
+      });
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-30 shadow-sm flex justify-between items-center shrink-0">
@@ -144,7 +221,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 )}
                 
                 <div className="space-y-2">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileCheck className="w-3 h-3 text-blue-500" /> Tài liệu hồ sơ đính kèm</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileCheck className="w-3.5 h-3.5 text-blue-500" /> Tài liệu hồ sơ đính kèm</p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                         {(inspection.supportingDocs || []).map(doc => (
                             <div key={doc.id} className={`flex items-center gap-2 p-2 rounded-lg border text-[9px] font-bold uppercase tracking-tight ${doc.verified ? 'bg-blue-50 border-blue-100 text-blue-700' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
@@ -256,6 +333,16 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 ))}
             </div>
             <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-4">
+                {commentAttachments.length > 0 && (
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                        {commentAttachments.map((img, idx) => (
+                            <div key={idx} className="relative w-20 h-20 shrink-0 group">
+                                <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
+                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <div className="flex gap-3 items-end">
                     <div className="flex-1 relative">
                         <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" />
@@ -301,9 +388,12 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
               images={lightboxState.images} 
               initialIndex={lightboxState.index} 
               onClose={() => setLightboxState(null)} 
-              readOnly={true} 
+              onSave={lightboxState.context === 'PENDING_COMMENT' ? (idx, updated) => updateCommentImage(idx, updated) : undefined}
+              readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
           />
       )}
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
     </div>
   );
 };
