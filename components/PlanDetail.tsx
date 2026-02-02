@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { PlanItem, CheckItem, Inspection, InspectionStatus } from '../types';
 import { 
   ArrowLeft, Building2, Box, Hash, Edit3, Plus, 
@@ -7,10 +7,19 @@ import {
   Info, Clock, FileText, User as UserIcon, ChevronRight,
   ImageIcon, Maximize2, Activity, History, ListChecks, Loader2,
   Package, UploadCloud, ShieldCheck, Camera, X, FileCode, Archive,
-  Table, FileUp, FileDown, Layers, Check, ClipboardList, MapPin, Factory
+  Table, FileUp, FileDown, Layers, Check, ClipboardList, MapPin, Factory,
+  Eye, FileSearch, FileType
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { uploadFileToStorage } from '../services/apiService';
+
+interface TechnicalDrawing {
+    id: string;
+    url: string;
+    name: string;
+    version: string;
+    date: string;
+}
 
 interface PlanDetailProps {
   item: PlanItem;
@@ -28,6 +37,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
   const [isSavingPlan, setIsSavingPlan] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [lightbox, setLightbox] = useState<{ images: string[], index: number } | null>(null);
+  const [previewDrawing, setPreviewDrawing] = useState<TechnicalDrawing | null>(null);
 
   // Access XLSX from global
   const XLSX = (window as any).XLSX;
@@ -36,8 +46,17 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
   const [editedName, setEditedName] = useState(item.ten_hang_muc);
   const [editedAssignee, setEditedAssignee] = useState(item.assignee || 'UNASSIGNED');
   const [editedDate, setEditedDate] = useState(item.plannedDate || 'PENDING');
-  const [editedDrawing, setEditedDrawing] = useState(item.drawing_url || '');
   const [editedDesc, setEditedDesc] = useState(item.description || '');
+
+  // Parse Drawings List
+  const [drawings, setDrawings] = useState<TechnicalDrawing[]>(() => {
+    try {
+        const data = item.drawing_url ? JSON.parse(item.drawing_url) : [];
+        return Array.isArray(data) ? data : (item.drawing_url ? [{ id: 'legacy', url: item.drawing_url, name: 'Bản vẽ gốc', version: '1.0', date: item.plannedDate || '' }] : []);
+    } catch (e) {
+        return item.drawing_url ? [{ id: 'legacy', url: item.drawing_url, name: 'Bản vẽ gốc', version: '1.0', date: item.plannedDate || '' }] : [];
+    }
+  });
 
   const [editedMaterials, setEditedMaterials] = useState<any[]>(() => {
     try { return item.materials_text ? JSON.parse(item.materials_text) : []; } catch(e) { return []; }
@@ -64,7 +83,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
             ten_hang_muc: editedName,
             assignee: editedAssignee,
             plannedDate: editedDate,
-            drawing_url: editedDrawing,
+            drawing_url: JSON.stringify(drawings),
             description: editedDesc,
             materials_text: JSON.stringify(editedMaterials),
             samples_json: JSON.stringify(editedSamples),
@@ -85,14 +104,30 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
       setIsUploading(true);
       try {
           if (target === 'SIM') {
-              // Fixed error: Explicitly cast Array.from(files) to satisfy uploadFileToStorage parameter type and access .name
               const newUrls = await Promise.all((Array.from(files) as File[]).map(file => uploadFileToStorage(file, file.name)));
               setEditedSimulations([...editedSimulations, ...newUrls]);
           } else {
-              const url = await uploadFileToStorage(files[0], files[0].name);
-              setEditedDrawing(url);
+              const file = files[0];
+              const url = await uploadFileToStorage(file, file.name);
+              const version = prompt("Nhập phiên bản bản vẽ (VD: v1.1):", "1.0") || "1.0";
+              const newDrawing: TechnicalDrawing = {
+                  id: `dwg_${Date.now()}`,
+                  url,
+                  name: file.name,
+                  version,
+                  date: new Date().toLocaleDateString('vi-VN')
+              };
+              setDrawings([...drawings, newDrawing]);
+              setIsPlanEditing(true); // Auto-enable edit mode so they can save
           }
       } catch (e) { alert("Lỗi tải file."); } finally { setIsUploading(false); }
+  };
+
+  const handleDeleteDrawing = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      if (window.confirm("Xóa bản vẽ này?")) {
+          setDrawings(drawings.filter(d => d.id !== id));
+      }
   };
 
   const exportExcel = (data: any[], fileName: string) => {
@@ -368,24 +403,47 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
                         </div>
                     </div>
 
-                    {/* Drawing / Docs Card */}
+                    {/* Technical Drawing List Card */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[360px]">
                         <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div className="flex items-center gap-2">
                                 <FileText className="w-4 h-4 text-blue-600" />
-                                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-widest">TECHNICAL DRAWING</span>
+                                <span className="text-[11px] font-bold text-slate-800 uppercase tracking-widest">TECHNICAL DRAWINGS</span>
                             </div>
                             {isPlanEditing && (
-                                <button onClick={() => drawFileInputRef.current?.click()} className="p-1.5 bg-white border border-slate-200 rounded-lg text-blue-600 hover:bg-blue-50 transition-all"><UploadCloud className="w-4 h-4"/></button>
+                                <button onClick={() => drawFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase text-blue-600 hover:bg-blue-50 transition-all">
+                                    <UploadCloud className="w-3.5 h-3.5"/> UPLOAD
+                                </button>
                             )}
                         </div>
-                        <div className="flex-1 bg-slate-100 relative">
-                            {editedDrawing ? (
-                                isPDF(editedDrawing) ? (
-                                    <iframe src={getEmbedUrl(editedDrawing)} className="w-full h-full border-none" title="Technical Spec Viewer" />
-                                ) : (
-                                    <img src={editedDrawing} className="w-full h-full object-contain cursor-zoom-in" onClick={() => setLightbox({ images: [editedDrawing], index: 0 })} />
-                                )
+                        <div className="flex-1 bg-white relative overflow-y-auto no-scrollbar">
+                            {drawings.length > 0 ? (
+                                <div className="divide-y divide-slate-50">
+                                    {drawings.map((dwg, i) => (
+                                        <div key={dwg.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center gap-3 cursor-pointer group" onClick={() => setPreviewDrawing(dwg)}>
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPDF(dwg.url) ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                {isPDF(dwg.url) ? <FileText className="w-5 h-5"/> : <ImageIcon className="w-5 h-5"/>}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-[11px] font-black text-slate-800 uppercase truncate leading-none">{dwg.name}</p>
+                                                    <span className="px-2 py-0.5 bg-slate-900 text-white rounded text-[8px] font-black uppercase tracking-tighter">REV {dwg.version}</span>
+                                                </div>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest">{dwg.date}</p>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <div className="p-1.5 text-slate-300 group-hover:text-blue-600 transition-colors">
+                                                    <Eye className="w-4 h-4"/>
+                                                </div>
+                                                {isPlanEditing && (
+                                                    <button onClick={(e) => handleDeleteDrawing(e, dwg.id)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
+                                                        <Trash2 className="w-4 h-4"/>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             ) : (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
                                     <FileCode className="w-12 h-12 mb-2 text-slate-400" />
@@ -393,7 +451,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
                                 </div>
                             )}
                             {isUploading && (
-                                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-10">
                                     <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                                 </div>
                             )}
@@ -433,6 +491,43 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
                 </div>
             </div>
         </div>
+
+        {/* --- REVIEW DRAWING MODAL --- */}
+        {previewDrawing && (
+            <div className="fixed inset-0 z-[160] bg-slate-900/90 backdrop-blur-md flex flex-col animate-in fade-in duration-300">
+                <header className="h-14 border-b border-white/10 px-4 flex items-center justify-between bg-[#0f172a] text-white shrink-0">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setPreviewDrawing(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X className="w-5 h-5"/></button>
+                        <div className="h-6 w-px bg-white/10 mx-1"></div>
+                        <div>
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90 leading-none flex items-center gap-2">
+                                <FileSearch className="w-3.5 h-3.5 text-blue-400"/> DRAWING REVIEW
+                            </h3>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 truncate max-w-[300px]">
+                                {previewDrawing.name} • REV {previewDrawing.version}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => window.open(previewDrawing.url, '_blank')} className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2">
+                            <Maximize2 className="w-3.5 h-3.5" /> OPEN FULLSCREEN
+                        </button>
+                    </div>
+                </header>
+                <div className="flex-1 bg-[#1e293b] flex items-center justify-center p-4">
+                    {isPDF(previewDrawing.url) ? (
+                        <iframe src={getEmbedUrl(previewDrawing.url)} className="w-full h-full rounded-xl shadow-2xl border border-white/5 bg-white" title="Drawing Viewer" />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center overflow-auto no-scrollbar">
+                            <img src={previewDrawing.url} className="max-w-full max-h-full object-contain shadow-2xl rounded-sm" alt="Drawing Preview" />
+                        </div>
+                    )}
+                </div>
+                <footer className="p-4 bg-[#0f172a] border-t border-white/10 flex justify-center text-white/30 text-[9px] font-black uppercase tracking-[0.4em] select-none">
+                    ISO Document Control System • AATN Digital Factory
+                </footer>
+            </div>
+        )}
 
         {/* HIDDEN INPUTS */}
         <input type="file" ref={drawFileInputRef} onChange={e => handleFileUpload(e, 'DRAW')} accept=".pdf,image/*" className="hidden" />
