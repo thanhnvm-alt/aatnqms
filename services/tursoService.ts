@@ -1,6 +1,6 @@
 
 import { turso, isTursoConfigured } from "./tursoConfig";
-import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin } from "../types";
+import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, PlanEntity } from "../types";
 
 /**
  * Helper to safely parse JSON strings from the database
@@ -96,13 +96,13 @@ export const initDatabase = async () => {
       "CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, user_id TEXT, is_read INTEGER DEFAULT 0, created_at INTEGER, data TEXT, title TEXT, message TEXT, type TEXT)",
       "CREATE TABLE IF NOT EXISTS defect_library (id TEXT PRIMARY KEY, defect_code TEXT, name TEXT, stage TEXT, category TEXT, description TEXT, severity TEXT, suggested_action TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER, data TEXT)",
       "CREATE TABLE IF NOT EXISTS templates (module_id TEXT PRIMARY KEY, data TEXT, updated_at INTEGER)",
-      "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo REAL, ma_nha_may TEXT, created_at INTEGER, assignee TEXT, status TEXT, pthsp TEXT)",
+      "CREATE TABLE IF NOT EXISTS plans (id INTEGER PRIMARY KEY AUTOINCREMENT, headcode TEXT, ma_ct TEXT, ten_ct TEXT, ten_hang_muc TEXT, dvt TEXT, so_luong_ipo REAL, ma_nha_may TEXT, created_at INTEGER, assignee TEXT, status TEXT, pthsp TEXT, drawing_url TEXT, description TEXT, materials_text TEXT, samples_json TEXT, simulations_json TEXT, plannedDate TEXT)",
       "CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, name TEXT, data TEXT, updated_at INTEGER)",
       "CREATE TABLE IF NOT EXISTS workshops (id TEXT PRIMARY KEY, code TEXT, name TEXT, data TEXT, updated_at INTEGER)",
       "CREATE TABLE IF NOT EXISTS suppliers (id TEXT PRIMARY KEY, code TEXT UNIQUE, name TEXT NOT NULL, address TEXT, contact_person TEXT, phone TEXT, email TEXT, category TEXT, status TEXT DEFAULT 'ACTIVE', data TEXT, updated_at INTEGER)"
     ]);
 
-    // 2. Tự động kiểm tra và nâng cấp cấu hình cột cho các bảng form (Đặc biệt là forms_site)
+    // 2. Tự động kiểm tra và nâng cấp cấu hình cột cho các bảng form
     const expectedCols = {
         floor_plan_id: "TEXT",
         coord_x: "REAL",
@@ -121,6 +121,16 @@ export const initDatabase = async () => {
     for (const table of ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 'forms_pqc']) {
         await ensureTableColumns(table, expectedCols);
     }
+
+    // Ensure plans table has all rich data columns
+    await ensureTableColumns('plans', {
+      drawing_url: "TEXT",
+      description: "TEXT",
+      materials_text: "TEXT",
+      samples_json: "TEXT",
+      simulations_json: "TEXT",
+      plannedDate: "TEXT"
+    });
 
   } catch (error) {
     console.error("Database initialization failed", error);
@@ -171,15 +181,15 @@ export async function saveInspection(inspection: Inspection) {
   
   if (inspection.type === 'PQC') {
     await turso.execute({
-      sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, inspector, status, data, updated_at, items_json, headcode, date, score, summary, type, production_comment, floor_plan_id, coord_x, coord_y, responsible_person)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO forms_pqc (id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, inspector, status, data, updated_at, items_json, images_json, headcode, date, score, summary, type, production_comment, floor_plan_id, coord_x, coord_y, responsible_person)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, score = excluded.score, floor_plan_id = excluded.floor_plan_id, coord_x = excluded.coord_x, coord_y = excluded.coord_y, responsible_person = excluded.responsible_person`,
       args: sanitizeArgs([
         inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
         inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
         inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
         inspection.inspectorName, inspection.status, inspection, new Date().toISOString(),
-        inspection.items, inspection.headcode, inspection.date, inspection.score, 
+        inspection.items, inspection.images, inspection.headcode, inspection.date, inspection.score, 
         inspection.summary, inspection.type, inspection.productionComment,
         inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
         inspection.responsiblePerson
@@ -354,6 +364,30 @@ export async function getPlansPaginated(searchTerm: string = '', page: number = 
     const res = await turso.execute({ sql, args: [...args, limit, offset] });
     const countRes = await turso.execute("SELECT COUNT(*) as total FROM plans");
     return { items: res.rows as unknown as PlanItem[], total: Number(countRes.rows[0].total) };
+}
+
+export async function updatePlan(id: number | string, plan: Partial<PlanItem>) {
+    const updates: string[] = [];
+    const args: any[] = [];
+
+    Object.entries(plan).forEach(([key, value]) => {
+        if (key === 'id') return;
+        updates.push(`${key} = ?`);
+        args.push(typeof value === 'object' ? JSON.stringify(value) : value);
+    });
+
+    if (updates.length === 0) return;
+
+    args.push(id);
+    try {
+        await turso.execute({
+            sql: `UPDATE plans SET ${updates.join(', ')} WHERE id = ?`,
+            args: sanitizeArgs(args)
+        });
+    } catch (error) {
+        console.error("ISO-DB: Update plan failed", error);
+        throw error;
+    }
 }
 
 /**

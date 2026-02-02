@@ -39,6 +39,7 @@ import { InspectionDetailSPR } from './components/inspectiondetailSPR';
 import { InspectionDetailSITE } from './components/inspectiondetailSITE';
 
 import { PlanList } from './components/PlanList';
+import { PlanDetail } from './components/PlanDetail';
 import { Settings } from './components/Settings';
 import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
@@ -72,7 +73,8 @@ import {
   saveTemplate, 
   fetchProjects, 
   createNotification,
-  fetchRoles
+  fetchRoles,
+  updatePlan
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText, ChevronRight } from 'lucide-react';
@@ -100,9 +102,13 @@ const App = () => {
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
+  const [activePlanItem, setActivePlanItem] = useState<PlanItem | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
   const [activeSupplier, setActiveSupplier] = useState<Supplier | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]); 
+  const [totalPlans, setTotalPlans] = useState(0);
+  const [plansLimit, setPlansLimit] = useState(10);
+  const [planSearchTerm, setPlanSearchTerm] = useState(''); // Fixed: Search term state for Plans
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
@@ -149,18 +155,38 @@ const App = () => {
   useEffect(() => {
     if (user && isDbReady) {
         if (view === 'LIST' || view === 'DASHBOARD') loadInspections();
-        if (view === 'PLAN') loadPlans();
+        if (view === 'PLAN') loadPlans(planSearchTerm, plansLimit);
         if (view === 'PROJECTS') loadProjects();
     }
-  }, [user, isDbReady, view]);
+  }, [user, isDbReady, view, plansLimit]);
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers(data); else setUsers(MOCK_USERS); } catch (e) { setUsers(MOCK_USERS); } };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
+  const loadInspections = async () => {
+    setIsLoadingInspections(true);
+    try {
+        const result = await fetchInspections();
+        setInspections(result.items || []);
+    } catch (e) {
+        console.error("Load inspections failed", e);
+    } finally {
+        setIsLoadingInspections(false);
+    }
+  };
+
   const loadProjects = async (search: string = '') => { try { const projs = await fetchProjects(search); setProjects(projs); } catch(e) {} };
-  const loadPlans = async (search: string = '') => { setIsLoadingPlans(true); try { const result = await fetchPlans(search, 1, 10); setPlans(result.items || []); } catch (e) {} finally { setIsLoadingPlans(false); } };
-  const loadInspections = async () => { setIsLoadingInspections(true); try { const data = await fetchInspections(); setInspections(data.items || []); } catch (e) {} finally { setIsLoadingInspections(false); } };
+  
+  const loadPlans = async (search: string = '', limit: number = plansLimit) => { 
+    setIsLoadingPlans(true); 
+    try { 
+      const result = await fetchPlans(search, 1, limit); 
+      setPlans(result.items || []); 
+      setTotalPlans(result.total || 0);
+      setPlanSearchTerm(search);
+    } catch (e) {} finally { setIsLoadingPlans(false); } 
+  };
   
   const handleLogin = (loggedInUser: User, remember: boolean) => { 
     const { password, ...safeUser } = loggedInUser; 
@@ -206,10 +232,24 @@ const App = () => {
       setView('LIST'); loadInspections(); 
   };
 
+  const handleUpdatePlan = async (id: number | string, updatedPlan: Partial<PlanItem>) => {
+      try {
+          await updatePlan(id, updatedPlan);
+          await loadPlans(planSearchTerm, plansLimit);
+      } catch (e) {
+          console.error("Update plan failed", e);
+          alert("Lỗi khi cập nhật thông tin sản phẩm.");
+      }
+  };
+
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false);
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
-      setInitialFormState({ type: moduleId, items: JSON.parse(JSON.stringify(template)) });
+      setInitialFormState({ 
+        ...initialFormState,
+        type: moduleId, 
+        items: JSON.parse(JSON.stringify(template)) 
+      });
       setActiveInspection(null); setView('FORM');
   };
 
@@ -235,7 +275,7 @@ const App = () => {
         )}
         <GlobalHeader 
             user={user} view={view} onNavigate={setView} onLogout={handleLogout} 
-            onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(); if(view==='PROJECTS') { loadProjects(); loadPlans(); } }} 
+            onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(planSearchTerm, plansLimit); if(view==='PROJECTS') { loadProjects(); loadPlans(planSearchTerm, plansLimit); } }} 
             onCreate={() => { setInitialFormState(undefined); setShowModuleSelector(true); }} 
             onScanClick={() => setShowQrScanner(true)} 
             onOpenSettingsTab={(tab) => { setSettingsTab(tab); setView('SETTINGS'); }}
@@ -283,7 +323,20 @@ const App = () => {
                 await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
               } 
             }) : null)}
-            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setInitialFormState({ ma_ct: item.ma_ct, ten_ct: item.ten_ct, ten_hang_muc: item.ten_hang_muc }); setShowModuleSelector(true); }} onViewInspection={handleSelectInspection} onRefresh={loadPlans} isLoading={isLoadingPlans} searchTerm="" onSearch={loadPlans} onImportPlans={async()=>{}} totalItems={plans.length} />}
+            {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={item => { setActivePlanItem(item); setView('PLAN_DETAIL'); }} onViewInspection={handleSelectInspection} onRefresh={() => loadPlans(planSearchTerm, plansLimit)} isLoading={isLoadingPlans} searchTerm={planSearchTerm} onSearch={(term) => loadPlans(term, plansLimit)} onImportPlans={async()=>{}} totalItems={totalPlans} onUpdatePlan={handleUpdatePlan} onLoadAll={() => setPlansLimit(500)} />}
+            {view === 'PLAN_DETAIL' && activePlanItem && (
+              <PlanDetail 
+                item={activePlanItem} 
+                onBack={() => setView('PLAN')} 
+                onViewInspection={handleSelectInspection}
+                onCreateInspection={() => {
+                    setInitialFormState({ ma_ct: activePlanItem.ma_ct, ten_ct: activePlanItem.ten_ct, ten_hang_muc: activePlanItem.ten_hang_muc, dvt: activePlanItem.dvt, so_luong_ipo: activePlanItem.so_luong_ipo, ma_nha_may: activePlanItem.ma_nha_may, headcode: activePlanItem.headcode });
+                    setShowModuleSelector(true);
+                }}
+                relatedInspections={inspections.filter(i => (i.ma_nha_may && i.ma_nha_may === activePlanItem.ma_nha_may) || (i.ma_ct === activePlanItem.ma_ct && i.ten_hang_muc === activePlanItem.ten_hang_muc))}
+                onUpdatePlan={handleUpdatePlan}
+              />
+            )}
             {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} plans={plans} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} onSearch={loadProjects} />}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} plans={plans} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
@@ -304,10 +357,8 @@ const App = () => {
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
         <AIChatbox inspections={inspections} plans={plans} />
-        {/* Fixed error: setShowScanner should be setShowQrScanner */}
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         
-        {/* REFACTORED MODULE SELECTOR MODAL */}
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
                 <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in duration-200">

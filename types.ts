@@ -20,7 +20,7 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL';
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS';
 
@@ -44,6 +44,18 @@ export interface LayoutPin {
   y: number; // percentage 0-100
   label?: string;
   status: InspectionStatus | 'NEW';
+}
+
+// Added Workshop interface to fix module export error
+export interface Workshop {
+  id: string;
+  code: string;
+  name: string;
+  location: string;
+  manager: string;
+  phone: string;
+  image?: string;
+  stages: string[];
 }
 
 export interface Supplier {
@@ -248,17 +260,12 @@ export interface PlanItem {
   plannedDate?: string;
   assignee?: string;
   status?: string;
-}
-
-export interface Workshop {
-  id: string;
-  code: string;
-  name: string;
-  location: string;
-  manager: string;
-  stages?: string[];
-  phone?: string;
-  image?: string;
+  // New Fields
+  drawing_url?: string;
+  description?: string;
+  materials_text?: string;
+  samples_json?: string; // JSON string for { color: string, fabric: string, other: string[] }
+  simulations_json?: string; // JSON string for image URLs
 }
 
 export interface SmartGoal {
@@ -362,6 +369,12 @@ export interface PlanEntity {
   so_luong_ipo: number;
   ma_nha_may: string;
   created_at: number;
+  // New Fields
+  drawing_url?: string;
+  description?: string;
+  materials_text?: string;
+  samples_json?: string;
+  simulations_json?: string;
 }
 
 export interface PlanResponse {

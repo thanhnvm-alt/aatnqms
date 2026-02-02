@@ -4,10 +4,12 @@ import { PlanItem, Inspection, CheckItem, InspectionStatus, CheckStatus } from '
 import { QRScannerModal } from './QRScannerModal';
 import { 
   Search, RefreshCw, Plus, 
-  Briefcase, Calendar, 
+  Briefcase, 
   Loader2, CheckCircle2, AlertCircle, FileUp,
-  Tag, QrCode, X, ChevronDown, FileDown,
-  Building2, Clock, Info, PieChart, CheckCircle, AlertTriangle, Circle, ListChecks
+  QrCode, ChevronDown,
+  Building2, Clock, ListChecks,
+  AlertTriangle,
+  FileText, ImageIcon, Info, ChevronRight
 } from 'lucide-react';
 
 interface PlanListProps {
@@ -22,16 +24,40 @@ interface PlanListProps {
   isLoading: boolean;
   totalItems: number;
   defaultTemplate?: CheckItem[];
-  onViewPlan?: (item: PlanItem) => void; 
+  onUpdatePlan: (id: number | string, updatedPlan: Partial<PlanItem>) => Promise<void>;
+  onLoadAll?: () => void;
 }
 
 export const PlanList: React.FC<PlanListProps> = ({
-  items, inspections, onSelect, onViewInspection, onRefresh, onImportPlans,
-  searchTerm, onSearch, isLoading, totalItems, defaultTemplate = [], onViewPlan
+  items, inspections, onSelect, onViewInspection, onRefresh,
+  searchTerm, onSearch, isLoading, totalItems, defaultTemplate = [], onUpdatePlan,
+  onLoadAll
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showScanner, setShowScanner] = useState(false);
+  
+  // ISO-FIX: Local state for search to ensure smooth typing
+  const [localTerm, setLocalTerm] = useState(searchTerm);
+
+  useEffect(() => {
+    setLocalTerm(searchTerm);
+  }, [searchTerm]);
+
+  // Debounce search effect: only call onSearch when user finishes typing
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (localTerm !== searchTerm) {
+        onSearch(localTerm);
+      }
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [localTerm, onSearch, searchTerm]);
+
+  const handleSearchChange = (val: string) => {
+    setLocalTerm(val);
+  };
 
   const filteredItems = useMemo(() => {
     const term = (searchTerm || '').toLowerCase().trim();
@@ -44,34 +70,17 @@ export const PlanList: React.FC<PlanListProps> = ({
     );
   }, [items, searchTerm]);
 
-  /**
-   * ISO-GROUPING LOGIC (UPDATED)
-   * 1. If ten_ct contains "nb" or "nội bộ" -> bucket "NỘI BỘ"
-   * 2. If ma_ct contains "DM" -> bucket "NHÀ XINH" (group by ten_ct)
-   * 3. If ma_ct contains "EM" -> bucket "OEM" (group by ten_ct)
-   * 4. If ma_ct contains "CT" -> group by ma_ct
-   * 5. Default -> ma_ct
-   */
   const groupedItems = useMemo(() => {
       const groups: Record<string, PlanItem[]> = {};
-      
       filteredItems.forEach(item => {
           let key = "";
           const maCt = (item.ma_ct || '').toUpperCase();
           const tenCt = (item.ten_ct || '').toUpperCase();
-
-          if (tenCt.includes('NB') || tenCt.includes('NỘI BỘ')) {
-              key = "NỘI BỘ";
-          } else if (maCt.includes('DM')) {
-              key = `NHÀ XINH - ${tenCt || 'CHƯA PHÂN LOẠI'}`;
-          } else if (maCt.includes('EM')) {
-              key = `OEM - ${tenCt || 'CHƯA PHÂN LOẠI'}`;
-          } else if (maCt.includes('CT')) {
-              key = maCt;
-          } else {
-              key = maCt || "DỰ ÁN KHÁC";
-          }
-
+          if (tenCt.includes('NB') || tenCt.includes('NỘI BỘ')) key = "NỘI BỘ";
+          else if (maCt.includes('DM')) key = `NHÀ XINH - ${tenCt || 'CHƯA PHÂN LOẠI'}`;
+          else if (maCt.includes('EM')) key = `OEM - ${tenCt || 'CHƯA PHÂN LOẠI'}`;
+          else if (maCt.includes('CT')) key = maCt;
+          else key = maCt || "DỰ ÁN KHÁC";
           if (!groups[key]) groups[key] = [];
           groups[key].push(item);
       });
@@ -94,23 +103,24 @@ export const PlanList: React.FC<PlanListProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 no-scroll-x">
-      <div className="shrink-0 bg-white px-3 py-3 border-b border-slate-200 z-20 shadow-sm">
-          <div className="flex flex-col gap-3">
+    <div className="h-full flex flex-col bg-slate-50 no-scroll-x font-sans">
+      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-20 shadow-sm">
+          <div className="max-w-7xl mx-auto flex flex-col gap-3">
                 <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input 
-                        type="text" placeholder="Tìm Mã CT, Sản phẩm..." 
-                        value={searchTerm}
-                        onChange={(e) => onSearch(e.target.value)}
-                        className="w-full pl-9 pr-10 h-10 bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 outline-none focus:bg-white transition-all shadow-inner"
+                        type="text" 
+                        placeholder="Tìm Mã CT, Sản phẩm..." 
+                        value={localTerm}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                        className="w-full pl-11 pr-12 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                     />
-                    <button onClick={() => setShowScanner(true)} className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-slate-400"><QrCode className="w-4 h-4" /></button>
+                    <button onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 text-slate-400 hover:text-blue-600 transition-colors"><QrCode className="w-5 h-5" /></button>
                 </div>
                 
-                <div className="flex items-center justify-between px-1">
+                <div className="flex items-center justify-between px-2">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        Tổng cộng: {filteredItems.length} kế hoạch
+                        TỔNG CỘNG: {totalItems} KẾ HOẠCH
                     </p>
                     <div className="flex items-center gap-2">
                         <button onClick={() => fileInputRef.current?.click()} className="h-8 w-8 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100 shadow-sm hover:bg-emerald-100"><FileUp className="w-3.5 h-3.5"/></button>
@@ -124,101 +134,63 @@ export const PlanList: React.FC<PlanListProps> = ({
         {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400"><Loader2 className="w-8 h-8 animate-spin mb-3 text-blue-500" /><p className="text-[9px] font-black uppercase tracking-widest">Đang tải kế hoạch...</p></div>
         ) : filteredItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200"><Briefcase className="w-10 h-10 mb-2 opacity-10" /><p className="font-bold text-[10px] uppercase">Trống</p></div>
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400 bg-white rounded-3xl border border-dashed border-slate-200"><Briefcase className="w-10 h-10 mb-2 opacity-10" /><p className="font-bold text-[10px] uppercase">Không tìm thấy dữ liệu</p></div>
         ) : (
-            <div className="space-y-3">
+            <div className="max-w-7xl mx-auto space-y-3">
                 {Object.keys(groupedItems).sort().map((groupKey) => {
                     const groupItems = groupedItems[groupKey];
                     const isExpanded = expandedGroups.has(groupKey);
-                    
-                    // Logic xác định Subtitle hiển thị
-                    const isSpecialBucket = groupKey.startsWith("OEM") || groupKey.startsWith("NHÀ XINH") || groupKey === "NỘI BỘ";
-                    const projectName = isSpecialBucket ? "Phân loại đặc biệt" : (groupItems[0]?.ten_ct || '');
-                    
                     const groupStats = groupItems.reduce((acc, item) => {
-                        const inspection = getInspectionStatus(item.ma_nha_may, item.ma_ct, item.ten_hang_muc);
+                        const inspection = getInspectionStatus(item.ma_nha_may || '', item.ma_ct, item.ten_hang_muc);
                         acc.total++;
-                        if (inspection) {
-                            acc.checked++;
-                            const isFail = inspection.status === InspectionStatus.FLAGGED || inspection.items?.some(it => it.status === CheckStatus.FAIL);
-                            if (isFail) acc.fail++;
-                        }
+                        if (inspection) acc.checked++;
                         return acc;
-                    }, { total: 0, checked: 0, fail: 0 });
+                    }, { total: 0, checked: 0 });
 
                     return (
-                        <div key={groupKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                            <div onClick={() => toggleGroup(groupKey)} className={`p-3 md:p-4 cursor-pointer flex items-center justify-between gap-2 ${isExpanded ? 'bg-blue-50/40 border-b border-blue-100' : 'bg-white'}`}>
+                        <div key={groupKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all">
+                            <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50/40 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
-                                    <div className={`p-2 rounded-lg shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
-                                        <Building2 className="w-4 h-4" />
-                                    </div>
-                                    <div className="flex flex-col overflow-hidden w-full">
-                                        <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
-                                            <h3 className={`font-black text-[11px] uppercase truncate max-w-[200px] md:max-w-none ${isSpecialBucket ? 'text-blue-700' : 'text-slate-800'}`}>
-                                                {groupKey}
-                                            </h3>
-                                            
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                                                    <ListChecks className="w-2.5 h-2.5" /> {groupStats.checked}/{groupStats.total}
-                                                </span>
-                                                {groupStats.fail > 0 && (
-                                                    <span className="text-[9px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                                                        <AlertTriangle className="w-2.5 h-2.5" /> {groupStats.fail}
-                                                    </span>
-                                                )}
-                                            </div>
+                                    <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}><Building2 className="w-4.5 h-4.5" /></div>
+                                    <div className="flex flex-col overflow-hidden">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-black text-[11px] uppercase truncate text-slate-800 tracking-tight">{groupKey}</h3>
+                                            <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg flex items-center gap-1"><ListChecks className="w-3 h-3" /> {groupStats.checked}/{groupStats.total}</span>
                                         </div>
-                                        <span className="text-slate-400 text-[9px] font-bold uppercase tracking-tighter truncate block mt-0.5">{projectName}</span>
                                     </div>
                                 </div>
-                                <ChevronDown className={`w-4 h-4 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                                <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
                             </div>
                             {isExpanded && (
-                                <div className="p-2 space-y-2 bg-slate-50/50">
+                                <div className="p-2.5 space-y-2 bg-slate-50/30 animate-in slide-in-from-top-1">
                                     {groupItems.map((item, idx) => {
-                                        const inspection = getInspectionStatus(item.ma_nha_may, item.ma_ct, item.ten_hang_muc);
+                                        const inspection = getInspectionStatus(item.ma_nha_may || '', item.ma_ct, item.ten_hang_muc);
                                         const isDone = inspection?.status === InspectionStatus.COMPLETED || inspection?.status === InspectionStatus.APPROVED;
                                         return (
                                             <div 
                                                 key={idx} 
-                                                onClick={() => onViewPlan?.(item)}
-                                                className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm active:scale-[0.98] transition-all flex flex-col gap-2 cursor-pointer hover:border-blue-300 group"
+                                                onClick={() => onSelect(item)}
+                                                className="bg-white p-4 rounded-[1.25rem] border border-slate-200 shadow-sm active:scale-[0.98] transition-all flex flex-col gap-3 cursor-pointer hover:border-blue-300 group"
                                             >
                                                 <div className="flex justify-between items-start">
-                                                    <span className="text-[8px] font-black bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded border border-slate-100 truncate max-w-[150px] uppercase font-mono">#{item.ma_nha_may || item.headcode || 'N/A'}</span>
-                                                    <span className="text-[8px] font-bold text-slate-400 flex items-center gap-1 uppercase"><Clock className="w-2.5 h-2.5" /> {item.plannedDate}</span>
+                                                    <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg border border-slate-200 uppercase font-mono">#{item.ma_nha_may || item.headcode || 'N/A'}</span>
+                                                    <span className="text-[8px] font-bold text-slate-400 flex items-center gap-1 uppercase tracking-widest"><Clock className="w-3 h-3 text-blue-400" /> {item.plannedDate}</span>
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <h4 className="text-[10px] font-black text-slate-800 uppercase leading-tight line-clamp-2 group-hover:text-blue-700 transition-colors">{item.ten_hang_muc}</h4>
-                                                    <p className="text-[8px] font-bold text-slate-400 uppercase truncate">Mã CT: {item.ma_ct}</p>
-                                                </div>
-                                                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                                    <span className="text-[9px] font-black text-slate-500">SL: {item.so_luong_ipo} {item.dvt}</span>
-                                                    <div className="flex items-center gap-1.5">
+                                                <h4 className="text-[12px] font-black text-slate-800 uppercase leading-tight group-hover:text-blue-700 transition-colors">{item.ten_hang_muc}</h4>
+                                                <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">SL: {item.so_luong_ipo} {item.dvt}</span>
+                                                    <div className="flex items-center gap-2">
                                                         {inspection ? (
-                                                            <button 
-                                                                onClick={(e) => { e.stopPropagation(); onViewInspection(inspection.id); }} 
-                                                                className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 border shadow-sm transition-all active:scale-95 ${isDone ? 'bg-green-600 text-white border-green-600' : 'bg-orange-500 text-white border-orange-500'}`}
-                                                            >
-                                                                {isDone ? <CheckCircle2 className="w-3 h-3"/> : <AlertCircle className="w-3 h-3"/>}
-                                                                {isDone ? 'Hoàn tất' : 'Chi tiết'}
-                                                            </button>
+                                                            <div className={`px-2.5 py-1 rounded-full text-[8px] font-black uppercase flex items-center gap-1.5 border shadow-sm ${isDone ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
+                                                                {isDone ? <CheckCircle2 className="w-3.5 h-3.5"/> : <AlertTriangle className="w-3.5 h-3.5"/>}
+                                                                {isDone ? 'APPROVED' : 'IN REVIEW'}
+                                                            </div>
                                                         ) : (
-                                                            <button 
-                                                                onClick={(e) => { e.stopPropagation(); onSelect(item, defaultTemplate); }} 
-                                                                className="px-3 py-1 bg-blue-600 text-white rounded-lg text-[8px] font-black uppercase shadow-md active:scale-90 flex items-center gap-1.5 hover:bg-blue-700 transition-all"
-                                                            >
-                                                                <Plus className="w-3 h-3" /> Kiểm tra
-                                                            </button>
+                                                            <div className="px-3 py-1 bg-blue-600 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">PENDING</div>
                                                         )}
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); onViewPlan?.(item); }}
-                                                            className="p-1.5 bg-slate-100 text-slate-400 hover:text-blue-600 rounded-lg transition-colors border border-slate-200"
-                                                        >
-                                                            <Info className="w-3 h-3" />
-                                                        </button>
+                                                        <div className="p-1 bg-slate-50 rounded-lg group-hover:bg-blue-50 transition-colors">
+                                                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500" />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -229,10 +201,20 @@ export const PlanList: React.FC<PlanListProps> = ({
                         </div>
                     );
                 })}
+                {onLoadAll && items.length < totalItems && (
+                    <div className="pt-4 pb-12 flex justify-center">
+                        <button 
+                            onClick={onLoadAll}
+                            className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-50 transition-all shadow-md active:scale-95"
+                        >
+                            Tải thêm dữ liệu ({items.length}/{totalItems})
+                        </button>
+                    </div>
+                )}
             </div>
         )}
       </div>
-      <input type="file" ref={fileInputRef} onChange={(e) => {/* Handle Import logic if needed */}} accept=".xlsx" className="hidden" />
+      <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx" />
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={(data) => { onSearch(data); setShowScanner(false); }} />}
     </div>
   );

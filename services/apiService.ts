@@ -38,6 +38,10 @@ export const fetchPlans = async (searchTerm: string = '', page: number = 1, limi
   return await db.getPlansPaginated(searchTerm, page, limit);
 };
 
+export const updatePlan = async (id: number | string, plan: Partial<PlanItem>) => {
+    return await db.updatePlan(id, plan);
+};
+
 export const fetchPlansByProject = async (maCt: string, limit?: number) => {
   return await db.getPlansByProject(maCt, limit);
 };

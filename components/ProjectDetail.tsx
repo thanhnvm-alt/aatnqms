@@ -9,7 +9,7 @@ import {
   ChevronRight, AlertCircle, FileText,
   ClipboardList, AlertOctagon, Search, ChevronDown, Plus,
   UserCheck, Users, Camera, Image as ImageIcon, Sparkles,
-  ShieldCheck, Clock, Locate, Map as MapIcon
+  ShieldCheck, Clock, Locate, Map as MapIcon, ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject } from '../services/apiService';
@@ -82,6 +82,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [projectSpecificPlans, setProjectSpecificPlans] = useState<PlanItem[]>([]);
   const [isPlansLoading, setIsPlansLoading] = useState(false);
 
+  // Pagination states for UI
+  const [plansLimit, setPlansLimit] = useState(10);
+  const [inspectionsLimit, setInspectionsLimit] = useState(10);
+  const [ncrLimit, setNcrLimit] = useState(10);
+  const [layoutLimit, setLayoutLimit] = useState(10);
+
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -103,8 +109,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   useEffect(() => {
       loadFloorPlans();
-      loadProjectPlans();
-  }, [project.ma_ct]);
+      loadProjectPlans(plansLimit);
+  }, [project.ma_ct, plansLimit]);
 
   const loadFloorPlans = async () => {
       setIsLoadingPlans(true);
@@ -115,10 +121,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       finally { setIsLoadingPlans(false); }
   };
 
-  const loadProjectPlans = async () => {
+  const loadProjectPlans = async (limit: number) => {
     setIsPlansLoading(true);
     try {
-        const data = await fetchPlansByProject(project.ma_ct);
+        // Fetch with specific limit to optimize mobile performance
+        const data = await fetchPlansByProject(project.ma_ct, limit === Infinity ? undefined : limit);
         setProjectSpecificPlans(data);
     } catch (e) {
         console.error("Failed to fetch project plans:", e);
@@ -139,11 +146,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         return matchesProject && matchesSearch;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [inspections, project, searchInList]);
-
-  const filteredPlans = useMemo(() => {
-    const term = searchInList.toLowerCase().trim();
-    return projectSpecificPlans.filter(p => !term || (p.ten_hang_muc || '').toLowerCase().includes(term));
-  }, [projectSpecificPlans, searchInList]);
 
   const projectNcrs = useMemo(() => {
       return filteredInspections.filter(i => i.status === InspectionStatus.FLAGGED);
@@ -443,19 +445,31 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><ClipboardList className="w-4 h-4" /></div>
                                     <span className="font-black text-[11px] uppercase tracking-wider text-blue-900">Kế hoạch sản xuất</span>
                                 </div>
-                                <span className="bg-white text-blue-600 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-black">{filteredPlans.length}</span>
+                                <span className="bg-white text-blue-600 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-black">{projectSpecificPlans.length}</span>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {isPlansLoading ? <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-slate-200"/></div> : 
-                                 filteredPlans.length > 0 ? filteredPlans.map((p, i) => (
-                                    <div key={i} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all group">
-                                        <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-snug mb-2 group-hover:text-blue-700">{p.ten_hang_muc}</h4>
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{p.ma_nha_may || 'N/A'}</span>
-                                            <span className="text-[9px] font-black text-blue-600 uppercase">{p.so_luong_ipo} {p.dvt}</span>
-                                        </div>
-                                    </div>
-                                )) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
+                                 projectSpecificPlans.length > 0 ? (
+                                    <>
+                                        {projectSpecificPlans.slice(0, plansLimit).map((p, i) => (
+                                            <div key={i} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all group">
+                                                <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-snug mb-2 group-hover:text-blue-700">{p.ten_hang_muc}</h4>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{p.ma_nha_may || 'N/A'}</span>
+                                                    <span className="text-[9px] font-black text-blue-600 uppercase">{p.so_luong_ipo} {p.dvt}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {projectSpecificPlans.length > plansLimit && (
+                                            <button 
+                                                onClick={() => setPlansLimit(Infinity)}
+                                                className="w-full py-3 mt-2 bg-blue-50 text-blue-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-blue-100 hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({projectSpecificPlans.length})
+                                            </button>
+                                        )}
+                                    </>
+                                ) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
                             </div>
                         </div>
 
@@ -469,15 +483,27 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 <span className="bg-white text-indigo-600 px-2 py-1 rounded-lg border border-indigo-100 text-[10px] font-black">{filteredInspections.length}</span>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-                                {filteredInspections.length > 0 ? filteredInspections.map(ins => (
-                                    <div key={ins.id} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
-                                        <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{ins.ten_hang_muc}</h4>
-                                            <div className="flex justify-between items-center"><p className="text-[8px] font-bold text-slate-400 uppercase">{ins.date}</p><span className="text-[10px] font-black text-slate-900">{ins.score}%</span></div>
-                                        </div>
-                                    </div>
-                                )) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
+                                {filteredInspections.length > 0 ? (
+                                    <>
+                                        {filteredInspections.slice(0, inspectionsLimit).map(ins => (
+                                            <div key={ins.id} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
+                                                <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{ins.ten_hang_muc}</h4>
+                                                    <div className="flex justify-between items-center"><p className="text-[8px] font-bold text-slate-400 uppercase">{ins.date}</p><span className="text-[10px] font-black text-slate-900">{ins.score}%</span></div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {filteredInspections.length > inspectionsLimit && (
+                                            <button 
+                                                onClick={() => setInspectionsLimit(Infinity)}
+                                                className="w-full py-3 mt-2 bg-indigo-50 text-indigo-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({filteredInspections.length})
+                                            </button>
+                                        )}
+                                    </>
+                                ) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
                             </div>
                         </div>
 
@@ -491,13 +517,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 <span className="bg-white text-red-600 px-2 py-1 rounded-lg border border-red-100 text-[10px] font-black">{projectNcrs.length}</span>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-                                {projectNcrs.length > 0 ? projectNcrs.map(ncr => (
-                                    <div key={ncr.id} onClick={() => handleOpenFullDetail(ncr.id)} className="p-4 bg-white border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
-                                        <div className="flex justify-between items-center"><span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span><span className="text-[9px] font-mono font-bold text-slate-400">#{ncr.id.split('-').pop()}</span></div>
-                                        <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-tight italic">"{ncr.ten_hang_muc}"</h4>
-                                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Reported by: {ncr.inspectorName}</p>
-                                    </div>
-                                )) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
+                                {projectNcrs.length > 0 ? (
+                                    <>
+                                        {projectNcrs.slice(0, ncrLimit).map(ncr => (
+                                            <div key={ncr.id} onClick={() => handleOpenFullDetail(ncr.id)} className="p-4 bg-white border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
+                                                <div className="flex justify-between items-center"><span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span><span className="text-[9px] font-mono font-bold text-slate-400">#{ncr.id.split('-').pop()}</span></div>
+                                                <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-tight italic">"{ncr.ten_hang_muc}"</h4>
+                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Reported by: {ncr.inspectorName}</p>
+                                            </div>
+                                        ))}
+                                        {projectNcrs.length > ncrLimit && (
+                                            <button 
+                                                onClick={() => setNcrLimit(Infinity)}
+                                                className="w-full py-3 mt-2 bg-red-50 text-red-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-red-100 hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({projectNcrs.length})
+                                            </button>
+                                        )}
+                                    </>
+                                ) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
                             </div>
                         </div>
 
@@ -511,15 +549,27 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 <button onClick={() => setIsUploadModalOpen(true)} className="p-1 bg-white text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"><Plus className="w-4 h-4"/></button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-                                {filteredLayouts.length > 0 ? filteredLayouts.map(fp => (
-                                    <div key={fp.id} onClick={() => handleSelectPlan(fp)} className="p-3 bg-white border border-slate-100 rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm"><img src={fp.image_url} className="w-full h-full object-cover" alt=""/></div>
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{fp.name}</h4>
-                                            <p className="text-[8px] font-bold text-slate-400 uppercase">REV {fp.version} • {fp.status}</p>
-                                        </div>
-                                    </div>
-                                )) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
+                                {filteredLayouts.length > 0 ? (
+                                    <>
+                                        {filteredLayouts.slice(0, layoutLimit).map(fp => (
+                                            <div key={fp.id} onClick={() => handleSelectPlan(fp)} className="p-3 bg-white border border-slate-100 rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm"><img src={fp.image_url} className="w-full h-full object-cover" alt=""/></div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{fp.name}</h4>
+                                                    <p className="text-[8px] font-bold text-slate-400 uppercase">REV {fp.version} • {fp.status}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {filteredLayouts.length > layoutLimit && (
+                                            <button 
+                                                onClick={() => setLayoutLimit(Infinity)}
+                                                className="w-full py-3 mt-2 bg-emerald-50 text-emerald-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-emerald-100 hover:bg-emerald-100 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({filteredLayouts.length})
+                                            </button>
+                                        )}
+                                    </>
+                                ) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
                             </div>
                         </div>
                     </div>
