@@ -2,17 +2,22 @@
 import { z } from 'zod';
 
 export const PlanSchema = z.object({
-  headcode: z.string({ required_error: "Headcode là bắt buộc" })
+  // Fix: Remove required_error as it's not supported in this Zod version's string constructor. 
+  // The .min() check already provides a specific message for empty strings.
+  headcode: z.string()
     .min(3, "Headcode phải có ít nhất 3 ký tự")
     .max(50, "Headcode quá dài"),
   
-  ma_ct: z.string({ required_error: "Mã công trình là bắt buộc" })
+  // Fix: Remove required_error as it's not supported in this Zod version's string constructor
+  ma_ct: z.string()
     .min(1, "Mã công trình không được để trống"),
   
-  ten_ct: z.string({ required_error: "Tên công trình là bắt buộc" })
+  // Fix: Remove required_error as it's not supported in this Zod version's string constructor
+  ten_ct: z.string()
     .min(1, "Tên công trình không được để trống"),
   
-  ten_hang_muc: z.string({ required_error: "Tên hạng mục là bắt buộc" })
+  // Fix: Remove required_error as it's not supported in this Zod version's string constructor
+  ten_hang_muc: z.string()
     .min(1, "Tên hạng mục không được để trống"),
   
   dvt: z.string().optional().default('PCS'),

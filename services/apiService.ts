@@ -1,152 +1,77 @@
-
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
-import * as db from './tursoService';
 
-export const fetchFloorPlans = async (projectId: string) => await db.getFloorPlans(projectId);
-export const saveFloorPlan = async (fp: FloorPlan) => await db.saveFloorPlan(fp);
-export const deleteFloorPlan = async (id: string) => await db.deleteFloorPlan(id);
-export const fetchLayoutPins = async (fpId: string) => await db.getLayoutPins(fpId);
-export const saveLayoutPin = async (pin: LayoutPin) => await db.saveLayoutPin(pin);
+const API_BASE = 'http://localhost:3001/api';
 
 /**
- * ISO-Compliant File Upload (Simulated)
- * Uploads file to storage service and returns a deterministic URL
+ * Gọi API lấy danh sách kế hoạch từ bảng IPO (PostgreSQL)
  */
-export const uploadFileToStorage = async (file: File | string, fileName: string): Promise<string> => {
-    // In a real ISO system, this calls a backend API which uploads to S3/GCS
-    // and returns a permanent signed URL.
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            // For simulation, we return the base64 or a mock static URL
-            // Real production would return: `https://storage.aatn.vn/layouts/${Date.now()}_${fileName}`
-            resolve(typeof file === 'string' ? file : URL.createObjectURL(file));
-        }, 1000);
-    });
-};
-
-export const fetchSuppliers = async () => await db.getSuppliers();
-export const saveSupplier = async (s: Supplier) => await db.saveSupplier(s);
-export const deleteSupplier = async (id: string) => await db.deleteSupplier(id);
-export const fetchSupplierStats = async (name: string) => await db.getSupplierStats(name);
-export const fetchSupplierInspections = async (name: string) => await db.getSupplierInspections(name);
-
-export const uploadQMSImage = async (file: File | string, context: { entityId: string, type: any, role: any }): Promise<string> => {
-    return `img_ref_${Date.now()}`;
-};
-
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
-  return await db.getPlansPaginated(searchTerm, page, limit);
+  const res = await fetch(`${API_BASE}/plans?search=${encodeURIComponent(searchTerm)}&page=${page}&limit=${limit}`);
+  return await res.json();
 };
 
-export const updatePlan = async (id: number | string, plan: Partial<PlanItem>) => {
-    return await db.updatePlan(id, plan);
-};
-
-export const fetchPlansByProject = async (maCt: string, limit?: number) => {
-  return await db.getPlansByProject(maCt, limit);
-};
-
-export const fetchInspections = async (filters: any = {}) => {
-  return await db.getInspectionsList(filters);
+export const fetchInspections = async () => {
+  const res = await fetch(`${API_BASE}/inspections`);
+  return await res.json();
 };
 
 export const fetchInspectionById = async (id: string) => {
-  return await db.getInspectionById(id);
+  const res = await fetch(`${API_BASE}/inspections/${id}`);
+  const json = await res.json();
+  return json.data;
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
-  await db.saveInspection(inspection);
-  return { success: true };
+  const res = await fetch(`${API_BASE}/inspections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inspection)
+  });
+  return await res.json();
 };
 
 export const deleteInspectionFromSheet = async (id: string) => {
-    return await db.deleteInspection(id);
+  const res = await fetch(`${API_BASE}/inspections/${id}`, { method: 'DELETE' });
+  return await res.json();
 };
 
-export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
-    return await db.saveNcrMapped(inspection_id, ncr, createdBy);
-};
-
-export const fetchNcrs = async (filters: any = {}) => {
-    return await db.getNcrs(filters);
-};
-
-export const fetchNcrById = async (id: string) => {
-    return await db.getNcrById(id);
-};
-
-export const fetchDefects = async (filters: any = {}) => {
-    const ncrs = await db.getNcrs(filters);
-    return { items: ncrs.items as any[], total: ncrs.total };
-};
-
-export const fetchUsers = async () => await db.getUsers();
-export const saveUser = async (user: User) => await db.saveUser(user);
-export const deleteUser = async (id: string) => await db.deleteUser(id);
-
-export const verifyUserCredentials = async (username: string, password: string): Promise<User | null> => {
+// Các phương thức Mock/Dùng tạm cho đến khi Backend hoàn thiện các bảng phụ
+export const fetchUsers = async () => [];
+export const saveUser = async (u: User) => {};
+export const deleteUser = async (id: string) => {};
+export const fetchWorkshops = async () => [];
+export const saveWorkshop = async (w: Workshop) => {};
+export const deleteWorkshop = async (id: string) => {};
+export const fetchTemplates = async () => ({});
+export const saveTemplate = async (m: string, i: CheckItem[]) => {};
+export const fetchProjects = async (s: string = '') => [];
+export const checkApiConnection = async () => {
     try {
-        const user = await db.getUserByUsername(username);
-        if (user && user.password === password) {
-            return user;
-        }
-        return null;
-    } catch (e) {
-        console.error("ISO-AUTH: Verification failed", e);
-        throw e;
-    }
+        const res = await fetch('http://localhost:3001/health');
+        return { ok: res.ok };
+    } catch { return { ok: false }; }
 };
-
-export const fetchWorkshops = async () => await db.getWorkshops();
-export const saveWorkshop = async (ws: Workshop) => await db.saveWorkshop(ws);
-export const deleteWorkshop = async (id: string) => await db.deleteWorkshop(id);
-
-export const fetchTemplates = async () => await db.getTemplates();
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => await db.saveTemplate(moduleId, items);
-
-export const fetchProjects = async (search: string = '') => await db.getProjectsPaginated(search, 10);
-export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
-export const updateProject = async (proj: Project) => await db.updateProject(proj);
-
-export const fetchNotifications = async (userId: string) => await db.getNotifications(userId);
-export const markNotificationAsRead = async (id: string) => await db.markNotificationRead(id);
-export const markAllNotificationsAsRead = async (userId: string) => await db.markAllNotificationsRead(userId);
-
-export const fetchRoles = async () => await db.getRoles();
-export const saveRole = async (role: Role) => await db.saveRole(role);
-export const deleteRole = async (id: string) => await db.deleteRole(id);
-
-export const fetchDefectLibrary = async () => await db.getDefectLibrary();
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
-export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
-
-export const exportDefectLibrary = async () => {
-    const response = await fetch('/api/defects/export');
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-};
-
-export const importDefectLibraryFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/defects/import', {
-        method: 'POST',
-        body: formData
-    });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
-};
-
-export const checkApiConnection = async () => ({ ok: await db.testConnection() });
-
-export const createNotification = async (params: { userId: string, type: Notification['type'], title: string, message: string, link?: { view: ViewState, id: string } }) => {
-    await db.addNotification(params.userId, params.type, params.title, params.message, params.link);
-    return { success: true };
-};
+export const fetchRoles = async () => [];
+export const fetchDefectLibrary = async () => [];
+export const fetchSuppliers = async () => [];
+export const fetchFloorPlans = async (p: string) => [];
+export const fetchLayoutPins = async (f: string) => [];
+export const saveLayoutPin = async (p: LayoutPin) => {};
+export const saveFloorPlan = async (f: FloorPlan) => {};
+export const deleteFloorPlan = async (id: string) => {};
+export const updatePlan = async (id: any, p: any) => {};
+export const saveSupplier = async (s: Supplier) => {};
+export const deleteSupplier = async (id: string) => {};
+export const fetchSupplierStats = async (n: string) => ({ total_pos: 0, pass_rate: 0, defect_rate: 0 });
+export const fetchSupplierInspections = async (n: string) => [];
+export const saveNcrMapped = async (id: string, n: NCR, c: string) => {};
+export const fetchNcrs = async (f: any = {}) => ({ items: [], total: 0 });
+export const fetchNcrById = async (id: string) => null;
+export const fetchDefects = async (f: any = {}) => ({ items: [], total: 0 });
+export const saveDefectLibraryItem = async (i: DefectLibraryItem) => {};
+export const deleteDefectLibraryItem = async (id: string) => {};
+export const fetchNotifications = async (u: string) => [];
+export const markNotificationAsRead = async (id: string) => {};
+export const markAllNotificationsAsRead = async (u: string) => {};
+export const verifyUserCredentials = async (u: string, p: string) => null;
+export const uploadFileToStorage = async (f: any, n: string) => 'https://via.placeholder.com/800';
