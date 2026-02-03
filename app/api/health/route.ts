@@ -1,13 +1,1 @@
-import { NextResponse } from 'next/server';
-import { turso } from '../../../services/tursoConfig';
-
-export const dynamic = 'force-dynamic';
-
-export async function GET() {
-  try {
-    await turso.execute('SELECT 1');
-    return NextResponse.json({ status: 'ok', database: 'connected' });
-  } catch (error) {
-    return NextResponse.json({ status: 'error', database: 'disconnected' }, { status: 503 });
-  }
-}
+// This file is deprecated. The health check is now handled by the Express.js backend (server.ts).

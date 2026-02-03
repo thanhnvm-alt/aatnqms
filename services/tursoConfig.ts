@@ -1,3 +1,1 @@
-// Deprecated: Using PostgreSQL Backend API
-export const isTursoConfigured = false;
-export const turso = null as any;
+// Deprecated: Turso configuration is no longer used for the PostgreSQL backend.

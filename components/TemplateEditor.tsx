@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
@@ -216,7 +217,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       if (!activeStage) return;
       const newName = prompt("Đổi tên công đoạn:", activeStage);
       // Fixed: changed name.trim() to newName.trim() as 'name' was not defined in this scope.
-      if (newName && newName.trim() && newName !== activeStage) {
+      if (newName && newName.trim() && newName.trim() !== activeStage) {
           setItems(items.map(i => i.stage === activeStage ? { ...i, stage: newName.trim() } : i));
           setActiveStage(newName.trim());
       }

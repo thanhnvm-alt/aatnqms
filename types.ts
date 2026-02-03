@@ -1,4 +1,5 @@
 
+
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -158,7 +159,7 @@ export interface CheckItem {
   image_refs?: string[]; 
   images?: string[];
   ncrId?: string;
-  ncr?: NCR;
+  ncr?: NCR; // NCR can be nested within a CheckItem
   frequency?: string;
   defectIds?: string[];
 }
@@ -387,4 +388,16 @@ export interface PlanResponse {
   dvt: string;
   soLuongIpo: number;
   ngayTao: string;
+}
+
+// Common interface for InspectionForm components
+export interface InspectionFormProps {
+  initialData?: Partial<Inspection>;
+  onSave: (inspection: Inspection) => Promise<void>;
+  onCancel: () => void;
+  plans: PlanItem[];
+  workshops: Workshop[];
+  inspections: Inspection[];
+  user: User;
+  templates: Record<string, CheckItem[]>;
 }

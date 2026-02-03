@@ -1,3 +1,4 @@
+
 import { Pool, PoolConfig } from 'pg';
 import dotenv from 'dotenv';
 
@@ -32,12 +33,16 @@ const gracefulShutdown = async (signal: string) => {
   try {
     await db.end();
     console.log('✅ Database pool closed.');
+    // @ts-ignore
     process.exit(0);
   } catch (err) {
     console.error('❌ Error during pool shutdown:', err);
+    // @ts-ignore
     process.exit(1);
   }
 };
 
+// @ts-ignore
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+// @ts-ignore
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

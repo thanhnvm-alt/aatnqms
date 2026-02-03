@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, ModuleId } from '../types';
 import { 
@@ -145,7 +146,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     setIsProcessingImages(true);
     try {
         // Fixed error: Explicitly cast Array.from(files) to satisfy readAsDataURL parameter type
-        const processed = await Promise.all((Array.from(files) as any[]).map(f => {
+        const processed = await Promise.all((Array.from(files) as File[]).map(f => {
             return new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = async () => resolve(await resizeImage(reader.result as string));

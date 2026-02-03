@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { PlanItem, CheckItem, Inspection, InspectionStatus } from '../types';
 import { 
@@ -100,17 +101,28 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'SIM' | 'DRAW') => {
       const files = e.target.files;
       if (!files?.length) return;
       setIsUploading(true);
       try {
           if (target === 'SIM') {
-              const newUrls = await Promise.all((Array.from(files) as File[]).map(file => uploadFileToStorage(file, file.name)));
+              const base64Files = await Promise.all(Array.from(files).map(fileToBase64));
+              const newUrls = await Promise.all(base64Files.map((base64, index) => uploadFileToStorage(base64, files[index].name)));
               setEditedSimulations([...editedSimulations, ...newUrls]);
           } else {
               const file = files[0];
-              const url = await uploadFileToStorage(file, file.name);
+              const base64 = await fileToBase64(file); // Fixed: Convert File to base64 string
+              const url = await uploadFileToStorage(base64, file.name); // Fixed: Pass base64 string
               const version = prompt("Nhập phiên bản bản vẽ (VD: REV 1.1):", "1.0") || "1.0";
               const newDrawing: TechnicalDrawing = {
                   id: `dwg_${Date.now()}`,
@@ -505,7 +517,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
                 <header className="h-14 border-b border-white/10 px-4 flex items-center justify-between bg-[#0f172a] text-white shrink-0 shadow-2xl relative z-10">
                     <div className="flex items-center gap-3">
                         <button onClick={() => setPreviewDrawing(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all active:scale-90 text-slate-400 hover:text-white"><X className="w-6 h-6"/></button>
-                        <div className="h-6 w-px bg-white/10 mx-1"></div>
+                        <div className="h-6 w-px bg-white/10 mx-1 hidden md:block"></div>
                         <div className="min-w-0">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90 leading-none flex items-center gap-2">
                                 <FileSearch className="w-3.5 h-3.5 text-blue-400"/> DRAWING REVIEW SYSTEM

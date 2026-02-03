@@ -1,15 +1,16 @@
 
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { plansService } from '../../services/plansService';
-import { turso } from '../../services/tursoConfig';
+// Fixed: Removed deprecated tursoConfig import and import db directly
+import { db } from '../../lib/db'; 
 import { DatabaseError, NotFoundError } from '../../lib/errors';
 
-// Mock the turso client
-vi.mock('../../services/tursoConfig', () => ({
-  turso: {
-    execute: vi.fn(),
+// Mock the db client
+vi.mock('../../lib/db', () => ({
+  db: {
+    query: vi.fn(),
   },
-  isTursoConfigured: true
 }));
 
 // Mock Logger to prevent console noise
@@ -40,7 +41,7 @@ describe('PlansService (Unit)', () => {
   describe('getPlans', () => {
     it('should return paginated plans successfully', async () => {
       // Mock DB Response: First call data, Second call count
-      (turso.execute as any)
+      (db.query as any)
         .mockResolvedValueOnce({ rows: [mockPlan] }) // Data
         .mockResolvedValueOnce({ rows: [{ total: 1 }] }); // Count
 
@@ -48,20 +49,20 @@ describe('PlansService (Unit)', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(turso.execute).toHaveBeenCalledTimes(2);
+      expect(db.query).toHaveBeenCalledTimes(2);
     });
 
     it('should handle search filters correctly', async () => {
-      (turso.execute as any)
+      (db.query as any)
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ total: 0 }] });
 
       await plansService.getPlans(1, 10, 'search-term');
 
       // Check if SQL contains WHERE clause
-      const callArgs = (turso.execute as any).mock.calls[0][0];
-      expect(callArgs.sql).toContain('WHERE');
-      expect(callArgs.args).toContain('%search-term%');
+      const callArgs = (db.query as any).mock.calls[0][0];
+      expect(callArgs).toContain('WHERE');
+      expect((db.query as any).mock.calls[0][1]).toContain('%search-term%');
     });
   });
 
@@ -76,21 +77,21 @@ describe('PlansService (Unit)', () => {
         dvt: "SET"
       };
 
-      (turso.execute as any).mockResolvedValueOnce({ rows: [{ ...input, id: 2 }] });
+      (db.query as any).mockResolvedValueOnce({ rows: [{ ...input, id: 2 }] });
 
       const result = await plansService.createPlan(input);
 
       expect(result).toMatchObject(input);
-      expect(turso.execute).toHaveBeenCalledWith(expect.objectContaining({
-        sql: expect.stringContaining('INSERT INTO searchPlans'),
+      expect(db.query).toHaveBeenCalledWith(expect.objectContaining({
+        sql: expect.stringContaining('INSERT INTO "IPO"'), // Fixed: Table name from searchPlans to "IPO"
         args: expect.arrayContaining(['HC002'])
-      }));
+      }), expect.any(Array));
     });
   });
 
   describe('getPlanById', () => {
     it('should throw NotFoundError if plan does not exist', async () => {
-      (turso.execute as any).mockResolvedValueOnce({ rows: [] });
+      (db.query as any).mockResolvedValueOnce({ rows: [] });
 
       await expect(plansService.getPlanById(999))
         .rejects
@@ -103,26 +104,26 @@ describe('PlansService (Unit)', () => {
       const transientError = new Error('Connection Refused');
       
       // Fail twice, succeed third time
-      (turso.execute as any)
+      (db.query as any)
         .mockRejectedValueOnce(transientError)
         .mockRejectedValueOnce(transientError)
         .mockResolvedValueOnce({ rows: [mockPlan] });
 
       await plansService.getPlanById(1);
 
-      expect(turso.execute).toHaveBeenCalledTimes(3);
+      expect(db.query).toHaveBeenCalledTimes(3);
     });
 
     it('should NOT retry on permanent errors (e.g. SQL Syntax)', async () => {
       const permanentError = new Error('SQL Syntax Error');
       
-      (turso.execute as any).mockRejectedValueOnce(permanentError);
+      (db.query as any).mockRejectedValueOnce(permanentError);
 
       await expect(plansService.getPlanById(1))
         .rejects
         .toThrow(permanentError);
 
-      expect(turso.execute).toHaveBeenCalledTimes(1);
+      expect(db.query).toHaveBeenCalledTimes(1);
     });
   });
 });

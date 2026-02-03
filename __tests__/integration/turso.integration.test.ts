@@ -1,7 +1,9 @@
 
+
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { plansService } from '../../services/plansService';
-import { turso } from '../../services/tursoConfig';
+// Fixed: Removed deprecated tursoConfig import
+import { db } from '../../lib/db'; // Fixed: Import db directly
 
 /**
  * INTEGRATION TESTS
@@ -15,11 +17,13 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
 
   beforeAll(async () => {
     // Optional: Setup test table or clean state
-    // await turso.execute("DELETE FROM searchPlans WHERE headcode LIKE 'TEST_%'");
+    // Fixed: Changed turso.execute to db.query and table name to "IPO"
+    await db.query("DELETE FROM \"IPO\" WHERE headcode LIKE 'TEST_%'");
   });
 
   it('should verify database connection', async () => {
-    const result = await turso.execute('SELECT 1 as val');
+    // Fixed: Changed turso.execute to db.query
+    const result = await db.query('SELECT 1 as val');
     expect(result.rows[0].val).toBe(1);
   });
 
@@ -57,7 +61,10 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
   afterAll(async () => {
     // Cleanup if needed
     if (createdId) {
-        try { await plansService.deletePlan(createdId); } catch(e) {}
+        try { 
+          // Fixed: Changed turso.execute to db.query and table name to "IPO"
+          await db.query(`DELETE FROM "IPO" WHERE id = $1`, [createdId]); 
+        } catch(e) {}
     }
   });
 });

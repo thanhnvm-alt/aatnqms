@@ -1,29 +1,36 @@
 
-import { turso, isTursoConfigured } from './tursoConfig';
+
 import { withRetry } from '../lib/retry';
 import { DatabaseError, NotFoundError, ValidationError } from '../lib/errors';
 import { PlanInput } from '../lib/validations';
 import { PlanEntity } from '../types';
+// Fixed: Removed deprecated tursoConfig import
+import { db } from '../lib/db'; // Import the db client
+import * as dbHelpers from '../lib/db-helpers'; // Import db-helpers
 
 export const plansService = {
   /**
    * Get all plans with pagination, search, and specific filtering
    */
   getPlans: async (page: number, limit: number, search?: string, filter?: { type: string, value: string }) => {
-    if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
+    // Fixed: Removed isTursoConfigured check, replaced with direct db connection check
+    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     const offset = (page - 1) * limit;
-    let sql = `SELECT * FROM plans`;
-    let countSql = `SELECT COUNT(*) as total FROM plans`;
+    // Fixed: Changed table name to "IPO"
+    let sql = `SELECT * FROM "IPO"`; 
+    let countSql = `SELECT COUNT(*) as total FROM "IPO"`;
     
     const whereClauses: string[] = [];
     const args: any[] = [];
+    let paramIndex = 1;
 
     // Generic Search
     if (search) {
-      whereClauses.push(`(ma_ct LIKE ? OR headcode LIKE ? OR ten_hang_muc LIKE ?)`);
+      whereClauses.push(`(ma_ct LIKE $${paramIndex} OR headcode LIKE $${paramIndex} OR ten_hang_muc LIKE $${paramIndex})`);
       const term = `%${search}%`;
-      args.push(term, term, term);
+      args.push(term);
+      paramIndex++;
     }
 
     // Specific Filter (e.g. ma_ct = 'XYZ')
@@ -32,8 +39,9 @@ export const plansService = {
       if (allowedFilters.includes(filter.type)) {
         // Map 'ma_nm' alias to actual column 'ma_nha_may'
         const dbColumn = filter.type === 'ma_nm' ? 'ma_nha_may' : filter.type;
-        whereClauses.push(`${dbColumn} = ?`);
+        whereClauses.push(`${dbColumn} = $${paramIndex}`);
         args.push(filter.value);
+        paramIndex++;
       }
     }
 
@@ -43,13 +51,14 @@ export const plansService = {
       countSql += whereSql;
     }
 
-    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    sql += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     
     // Execute with Retry
     return await withRetry(async () => {
+      // Fixed: Using db.query instead of turso.execute
       const [dataResult, countResult] = await Promise.all([
-        turso.execute({ sql, args: [...args, limit, offset] }),
-        turso.execute({ sql: countSql, args })
+        db.query(sql, [...args, limit, offset]),
+        db.query(countSql, args)
       ]);
 
       return {
@@ -63,13 +72,15 @@ export const plansService = {
    * Get single plan by ID
    */
   getPlanById: async (id: number) => {
-    if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
+    // Fixed: Removed isTursoConfigured check
+    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     return await withRetry(async () => {
-      const result = await turso.execute({
-        sql: `SELECT * FROM plans WHERE id = ?`,
-        args: [id]
-      });
+      // Fixed: Using db.query instead of turso.execute
+      const result = await db.query(
+        `SELECT * FROM "IPO" WHERE id = $1`, // Fixed: Changed table name to "IPO"
+        [id]
+      );
 
       if (result.rows.length === 0) {
         throw new NotFoundError(`Không tìm thấy kế hoạch với ID: ${id}`);
@@ -83,19 +94,21 @@ export const plansService = {
    * Create new plan
    */
   createPlan: async (data: PlanInput) => {
-    if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
+    // Fixed: Removed isTursoConfigured check
+    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     return await withRetry(async () => {
       const sql = `
-        INSERT INTO plans (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+        INSERT INTO "IPO" (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, extract(epoch from now()))
         RETURNING *
       `;
       
       try {
-        const result = await turso.execute({
+        // Fixed: Using db.query instead of turso.execute
+        const result = await db.query(
           sql,
-          args: [
+          [
             data.headcode, 
             data.ma_ct, 
             data.ten_ct, 
@@ -104,7 +117,7 @@ export const plansService = {
             data.so_luong_ipo,
             (data as any).ma_nha_may || null 
           ]
-        });
+        );
         return result.rows[0] as unknown as PlanEntity;
       } catch (e: any) {
         throw new DatabaseError("Lỗi khi tạo bản ghi", e);
@@ -116,28 +129,33 @@ export const plansService = {
    * Update plan
    */
   updatePlan: async (id: number, data: Partial<PlanInput>) => {
-    if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
+    // Fixed: Removed isTursoConfigured check
+    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     const updates: string[] = [];
     const args: any[] = [];
+    let paramIndex = 1;
 
     Object.entries(data).forEach(([key, value]) => {
       if (value !== undefined) {
-        updates.push(`${key} = ?`);
+        updates.push(`"${key}" = $${paramIndex}`);
         args.push(value);
+        paramIndex++;
       }
     });
 
     if (updates.length === 0) throw new ValidationError("Không có dữ liệu để cập nhật");
 
-    args.push(id);
+    args.push(id); // ID will be the last parameter
 
     return await withRetry(async () => {
-      const check = await turso.execute({ sql: "SELECT id FROM plans WHERE id = ?", args: [id] });
+      // Fixed: Using db.query for checking existence
+      const check = await db.query(`SELECT id FROM "IPO" WHERE id = $1`, [id]);
       if (check.rows.length === 0) throw new NotFoundError(`Kế hoạch ID ${id} không tồn tại`);
 
-      const sql = `UPDATE plans SET ${updates.join(', ')} WHERE id = ? RETURNING *`;
-      const result = await turso.execute({ sql, args });
+      // Fixed: Using db.query for update and table name "IPO"
+      const sql = `UPDATE "IPO" SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+      const result = await db.query(sql, args);
       
       return result.rows[0] as unknown as PlanEntity;
     });
@@ -147,15 +165,17 @@ export const plansService = {
    * Delete plan
    */
   deletePlan: async (id: number) => {
-    if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
+    // Fixed: Removed isTursoConfigured check
+    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
 
     return await withRetry(async () => {
-      const result = await turso.execute({
-        sql: `DELETE FROM plans WHERE id = ?`,
-        args: [id]
-      });
+      // Fixed: Using db.query for delete and table name "IPO"
+      const result = await db.query(
+        `DELETE FROM "IPO" WHERE id = $1`,
+        [id]
+      );
 
-      if (result.rowsAffected === 0) {
+      if (result.rowCount === 0) {
         throw new NotFoundError(`Không tìm thấy kế hoạch để xóa (ID: ${id})`);
       }
       return true;

@@ -18,7 +18,8 @@ interface PlanListProps {
   onSelect: (item: PlanItem, customItems?: CheckItem[]) => void;
   onViewInspection: (id: string) => void;
   onRefresh: () => void;
-  onImportPlans: (plans: PlanItem[]) => Promise<void>;
+  // Fixed: Added onImportPlans to props
+  onImportPlans: (plans: PlanItem[]) => Promise<void>; 
   searchTerm: string;
   onSearch: (term: string) => void;
   isLoading: boolean;
@@ -31,7 +32,7 @@ interface PlanListProps {
 export const PlanList: React.FC<PlanListProps> = ({
   items, inspections, onSelect, onViewInspection, onRefresh,
   searchTerm, onSearch, isLoading, totalItems, defaultTemplate = [], onUpdatePlan,
-  onLoadAll
+  onLoadAll, onImportPlans 
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -151,7 +152,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                         <div key={groupKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all">
                             <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50/40 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
-                                    <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}><Building2 className="w-4.5 h-4.5" /></div>
+                                    <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-blue-600'}`}><Building2 className="w-4.5 h-4.5" /></div>
                                     <div className="flex flex-col overflow-hidden">
                                         <div className="flex items-center gap-2">
                                             <h3 className="font-black text-[11px] uppercase truncate text-slate-800 tracking-tight">{groupKey}</h3>
@@ -163,12 +164,12 @@ export const PlanList: React.FC<PlanListProps> = ({
                             </div>
                             {isExpanded && (
                                 <div className="p-2.5 space-y-2 bg-slate-50/30 animate-in slide-in-from-top-1">
-                                    {groupItems.map((item, idx) => {
+                                    {groupItems.map(item => {
                                         const inspection = getInspectionStatus(item.ma_nha_may || '', item.ma_ct, item.ten_hang_muc);
                                         const isDone = inspection?.status === InspectionStatus.COMPLETED || inspection?.status === InspectionStatus.APPROVED;
                                         return (
                                             <div 
-                                                key={idx} 
+                                                key={item.id} 
                                                 onClick={() => onSelect(item)}
                                                 className="bg-white p-4 rounded-[1.25rem] border border-slate-200 shadow-sm active:scale-[0.98] transition-all flex flex-col gap-3 cursor-pointer hover:border-blue-300 group"
                                             >
@@ -213,7 +214,6 @@ export const PlanList: React.FC<PlanListProps> = ({
                 )}
             </div>
         )}
-      </div>
       <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx" />
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={(data) => { onSearch(data); setShowScanner(false); }} />}
     </div>
