@@ -1,4 +1,3 @@
-
 import express, { Request, Response, RequestHandler } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -546,6 +545,13 @@ app.get('*', (req: Request, res: Response) => {
   res.status(404).json({ error: "API Endpoint Not Found" });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 QMS PostgreSQL API running on port ${PORT}`);
-});
+// Run server only if executed directly
+// @ts-ignore
+if (typeof require !== 'undefined' && require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 QMS PostgreSQL API running on port ${PORT}`);
+  });
+}
+
+// Export app for Vercel
+export default app;
