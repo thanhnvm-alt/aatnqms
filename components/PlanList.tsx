@@ -20,7 +20,6 @@ interface PlanListProps {
   onSelect: (item: PlanItem, customItems?: CheckItem[]) => void;
   onViewInspection: (id: string) => void;
   onRefresh: () => void;
-  // Fixed: Added onImportPlans to props
   onImportPlans: (plans: PlanItem[]) => Promise<void>; 
   searchTerm: string;
   onSearch: (term: string) => void;
@@ -39,22 +38,20 @@ export const PlanList: React.FC<PlanListProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showScanner, setShowScanner] = useState(false);
-  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set()); // New state for individual plan item details
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
   
-  // ISO-FIX: Local state for search to ensure smooth typing
   const [localTerm, setLocalTerm] = useState(searchTerm);
 
   useEffect(() => {
     setLocalTerm(searchTerm);
   }, [searchTerm]);
 
-  // Debounce search effect: only call onSearch when user finishes typing
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (localTerm !== searchTerm) {
         onSearch(localTerm);
       }
-    }, 500); // 500ms delay
+    }, 500);
 
     return () => clearTimeout(delayDebounceFn);
   }, [localTerm, onSearch, searchTerm]);
@@ -110,7 +107,6 @@ export const PlanList: React.FC<PlanListProps> = ({
   };
 
   const getInspectionStatus = (item: PlanItem) => {
-      // Find all inspections related to this plan item
       const relatedInspections = inspections.filter(i => 
           (i.ma_ct === item.ma_ct && i.ten_hang_muc === item.ten_hang_muc) ||
           (item.ma_nha_may && i.ma_nha_may === item.ma_nha_may) ||
@@ -209,6 +205,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                                             <div 
                                                 key={item.id} 
                                                 className="bg-white p-4 rounded-[1.25rem] border border-slate-200 shadow-sm active:scale-[0.98] transition-all flex flex-col gap-3 cursor-pointer hover:border-blue-300 group"
+                                                onClick={() => onSelect(item)}
                                             >
                                                 <div className="flex justify-between items-start gap-2">
                                                     <div className="flex flex-col min-w-0 flex-1">

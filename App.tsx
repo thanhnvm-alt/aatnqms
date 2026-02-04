@@ -365,7 +365,14 @@ const App = () => {
     return view;
   }, [view, activeFormType, inspections]);
 
-  // Define a placeholder for onImportPlans
+  // Define onImportPlans to handle importing plans from Excel
+  const handleImportPlans = useCallback(async (plans: PlanItem[]) => {
+    // This is a placeholder. In a real implementation, you would send this data to the backend.
+    console.log("Importing plans:", plans);
+    alert("Importing plans is not yet fully implemented. Please check the backend API.");
+  }, []);
+
+  // Define handleImportUsers for user management import
   const handleImportUsers = useCallback(async (users: User[]) => {
     alert("Importing users is not yet fully implemented in the API. Please see backend code.");
     console.log("Attempted to import users:", users);
@@ -408,7 +415,7 @@ const App = () => {
         <main className="flex-1 overflow-hidden relative">
           {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={handleNavigate} onViewInspection={handleViewInspectionDetail} />}
           {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleViewInspectionDetail} isLoading={false} workshops={allWorkshops} onRefresh={refreshAllData} />}
-          {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={handleSelectPlan} onViewInspection={handleViewInspectionDetail} onRefresh={refreshAllData} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isPlansLoading} totalItems={totalPlans} onUpdatePlan={updatePlan} onImportPlans={handleImportUsers} />}
+          {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={handleSelectPlan} onViewInspection={handleViewInspectionDetail} onRefresh={refreshAllData} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isPlansLoading} totalItems={totalPlans} onUpdatePlan={updatePlan} onImportPlans={handleImportPlans} />}
           {view === 'IPO_LIST' && <IPOList onRefresh={refreshAllData} />} 
           {view === 'PLAN_DETAIL' && currentPlan && <PlanDetail item={currentPlan} onBack={() => handleNavigate('PLAN')} onCreateInspection={(items) => handleCreateInspection('PQC', { ...currentPlan, id: String(currentPlan.id), items, status: InspectionStatus.DRAFT })} relatedInspections={inspections.filter(i => i.ma_ct === currentPlan.ma_ct)} onViewInspection={handleViewInspectionDetail} onUpdatePlan={updatePlan} />}
           {view === 'PROJECTS' && <ProjectList projects={allProjects} inspections={inspections} plans={plans} onSelectProject={handleViewProjectDetail} />}

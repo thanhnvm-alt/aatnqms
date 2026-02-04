@@ -64,6 +64,7 @@ const healthHandler = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Health Check Failed:", error);
+    // Always return JSON, even with 503
     res.status(503).json({ 
       success: false, 
       status: "error", 
