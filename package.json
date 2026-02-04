@@ -31,8 +31,6 @@
     "vite": "^5.2.0",
     "@vitejs/plugin-react": "^4.2.1",
     "vitest": "^1.4.0",
-    "@types/zod": "^3.22.4",
-    "@types/vitest": "^1.4.0",
     "concurrently": "^8.2.2",
     "nodemon": "^3.1.0",
     "npm-run-all": "^4.1.5"
