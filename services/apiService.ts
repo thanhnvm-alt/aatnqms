@@ -20,32 +20,27 @@ async function callApi(endpoint: string, method: string = 'GET', data?: any) {
   
   try {
     const response = await fetch(endpoint, options);
-    
-    // ISO-ERROR-HANDLING: Robustly handle non-OK responses
-    if (!response.ok) {
-      let errorMessage = response.statusText || `HTTP Error ${response.status}`;
-      try {
-        // Try to parse JSON error message
-        const errorData = await response.json();
-        if (errorData) {
-            errorMessage = errorData.error || errorData.message || errorMessage;
+    const contentType = response.headers.get("content-type");
+
+    if (contentType && contentType.includes("application/json")) {
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || result.message || `HTTP Error ${response.status}`);
         }
-      } catch (e) {
-        // If JSON parse fails (e.g. 404 HTML page from proxy), use status text
-        // or try to read text body if short
-        try {
-            const text = await response.text();
-            if (text && text.length < 200 && !text.includes('<!DOCTYPE html>')) {
-                errorMessage = text;
-            } else if (response.status === 404) {
-                errorMessage = `API Endpoint Not Found: ${endpoint}`;
+        return result;
+    } else {
+        // Handle non-JSON response (likely HTML error page or plain text)
+        const text = await response.text();
+        if (!response.ok) {
+            // Treat 404 HTML as a specific error message
+            if (response.status === 404) {
+                throw new Error(`API Endpoint Not Found: ${endpoint}`);
             }
-        } catch {}
-      }
-      throw new Error(errorMessage);
+            throw new Error(text || `HTTP Error ${response.status}`);
+        }
+        // If success but text, return it (rare)
+        return text;
     }
-    
-    return await response.json();
   } catch (error: any) {
     // Re-throw to be caught by specific service functions
     throw error;

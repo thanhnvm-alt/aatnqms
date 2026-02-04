@@ -11,9 +11,10 @@ const config: PoolConfig = {
   },
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000, // Increased timeout for better debugging
   // Thiết lập search_path ngay khi kết nối được khởi tạo
-  options: '-c search_path=appQAQC,public'
+  // Updated: Added quotes to schema name to handle potential case-sensitivity in PostgreSQL
+  options: '-c search_path="appQAQC",public'
 };
 
 export const db = new Pool(config);
@@ -24,7 +25,11 @@ db.query('SELECT 1')
     console.log('✅ Connected to PostgreSQL (Schema: appQAQC)');
   })
   .catch((err) => {
-    console.error('❌ Failed to connect to PostgreSQL:', err.message);
+    console.error('❌ Failed to connect to PostgreSQL:');
+    console.error('   Message:', err.message);
+    if (err.code) console.error('   Code:', err.code);
+    if (err.detail) console.error('   Detail:', err.detail);
+    if (err.hint) console.error('   Hint:', err.hint);
   });
 
 // Xử lý đóng kết nối khi server tắt

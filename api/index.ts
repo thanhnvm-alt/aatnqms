@@ -543,8 +543,8 @@ app.delete('/api/layout_pins/:id', async (req: Request, res: Response) => {
 });
 
 // Catch-all 404 handler for API routes to prevent HTML response
-app.get('*', (req: Request, res: Response) => {
-  res.status(404).json({ error: "API Endpoint Not Found" });
+app.use('*', (req: Request, res: Response) => {
+  res.status(404).json({ error: "API Endpoint Not Found", path: req.originalUrl });
 });
 
 // Run server only if executed directly
