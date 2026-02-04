@@ -279,7 +279,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
             </div>
          </div>
          <div className="flex gap-2">
-             <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
+             <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx" onChange={handleImportExcel} />
              <button onClick={() => excelInputRef.current?.click()} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
                 <FileUp className="w-4 h-4 text-blue-600" /> Nhập Excel
              </button>

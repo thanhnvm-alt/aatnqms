@@ -1,8 +1,6 @@
 
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { plansService } from '../../services/plansService';
-// Fixed: Removed deprecated tursoConfig import and import db directly
 import { db } from '../../lib/db'; 
 import { DatabaseError, NotFoundError } from '../../lib/errors';
 
@@ -31,6 +29,7 @@ describe('PlansService (Unit)', () => {
     ten_hang_muc: "Test Item",
     so_luong_ipo: 100,
     dvt: "PCS",
+    ma_nha_may: "NM001", // Added for consistency
     created_at: 1234567890
   };
 
@@ -74,7 +73,8 @@ describe('PlansService (Unit)', () => {
         ten_ct: "New Project",
         ten_hang_muc: "New Item",
         so_luong_ipo: 50,
-        dvt: "SET"
+        dvt: "SET",
+        ma_nha_may: "NM002"
       };
 
       (db.query as any).mockResolvedValueOnce({ rows: [{ ...input, id: 2 }] });
@@ -82,10 +82,8 @@ describe('PlansService (Unit)', () => {
       const result = await plansService.createPlan(input);
 
       expect(result).toMatchObject(input);
-      expect(db.query).toHaveBeenCalledWith(expect.objectContaining({
-        sql: expect.stringContaining('INSERT INTO "IPO"'), // Fixed: Table name from searchPlans to "IPO"
-        args: expect.arrayContaining(['HC002'])
-      }), expect.any(Array));
+      expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO "IPO"'), 
+        expect.arrayContaining([input.headcode, input.ma_ct, input.ten_ct, input.ten_hang_muc, input.dvt, input.so_luong_ipo, input.ma_nha_may]));
     });
   });
 

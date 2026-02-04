@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, ModuleId } from '../types';
 import { 
@@ -90,7 +89,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
         <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center px-1"><label className="text-slate-600 font-bold text-[9px] uppercase tracking-widest">{label}</label>{!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3" /> Xóa</button>}</div>
             <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-28 shadow-sm">
-                <canvas ref={canvasRef} width={400} height={112} className="w-full h-full touch-none cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
+                <canvas ref={canvasRef} width={400} height={112} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
                 {!value && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] uppercase font-bold tracking-widest italic">Ký xác nhận tại đây</div>}
             </div>
         </div>
@@ -284,5 +283,3 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     </div>
   );
 };
-
-export default InspectionFormSITE;

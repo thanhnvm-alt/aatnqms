@@ -1,1 +1,0 @@
-// Deprecated - Firebase connection removed.

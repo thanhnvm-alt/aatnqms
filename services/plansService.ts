@@ -1,23 +1,16 @@
 
-
 import { withRetry } from '../lib/retry';
 import { DatabaseError, NotFoundError, ValidationError } from '../lib/errors';
 import { PlanInput } from '../lib/validations';
 import { PlanEntity } from '../types';
-// Fixed: Removed deprecated tursoConfig import
 import { db } from '../lib/db'; // Import the db client
-import * as dbHelpers from '../lib/db-helpers'; // Import db-helpers
 
 export const plansService = {
   /**
    * Get all plans with pagination, search, and specific filtering
    */
   getPlans: async (page: number, limit: number, search?: string, filter?: { type: string, value: string }) => {
-    // Fixed: Removed isTursoConfigured check, replaced with direct db connection check
-    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
-
     const offset = (page - 1) * limit;
-    // Fixed: Changed table name to "IPO"
     let sql = `SELECT * FROM "IPO"`; 
     let countSql = `SELECT COUNT(*) as total FROM "IPO"`;
     
@@ -27,7 +20,7 @@ export const plansService = {
 
     // Generic Search
     if (search) {
-      whereClauses.push(`(ma_ct LIKE $${paramIndex} OR headcode LIKE $${paramIndex} OR ten_hang_muc LIKE $${paramIndex})`);
+      whereClauses.push(`(ma_ct LIKE $${paramIndex} OR headcode LIKE $${paramIndex} OR ten_hang_muc LIKE $${paramIndex} OR ma_nha_may LIKE $${paramIndex})`); // Added ma_nha_may to search
       const term = `%${search}%`;
       args.push(term);
       paramIndex++;
@@ -55,7 +48,6 @@ export const plansService = {
     
     // Execute with Retry
     return await withRetry(async () => {
-      // Fixed: Using db.query instead of turso.execute
       const [dataResult, countResult] = await Promise.all([
         db.query(sql, [...args, limit, offset]),
         db.query(countSql, args)
@@ -72,13 +64,9 @@ export const plansService = {
    * Get single plan by ID
    */
   getPlanById: async (id: number) => {
-    // Fixed: Removed isTursoConfigured check
-    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
-
     return await withRetry(async () => {
-      // Fixed: Using db.query instead of turso.execute
       const result = await db.query(
-        `SELECT * FROM "IPO" WHERE id = $1`, // Fixed: Changed table name to "IPO"
+        `SELECT * FROM "IPO" WHERE id = $1`, 
         [id]
       );
 
@@ -94,9 +82,6 @@ export const plansService = {
    * Create new plan
    */
   createPlan: async (data: PlanInput) => {
-    // Fixed: Removed isTursoConfigured check
-    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
-
     return await withRetry(async () => {
       const sql = `
         INSERT INTO "IPO" (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
@@ -105,7 +90,6 @@ export const plansService = {
       `;
       
       try {
-        // Fixed: Using db.query instead of turso.execute
         const result = await db.query(
           sql,
           [
@@ -115,7 +99,7 @@ export const plansService = {
             data.ten_hang_muc, 
             data.dvt, 
             data.so_luong_ipo,
-            (data as any).ma_nha_may || null 
+            data.ma_nha_may || null // Ensure ma_nha_may is passed, or null if undefined
           ]
         );
         return result.rows[0] as unknown as PlanEntity;
@@ -129,9 +113,6 @@ export const plansService = {
    * Update plan
    */
   updatePlan: async (id: number, data: Partial<PlanInput>) => {
-    // Fixed: Removed isTursoConfigured check
-    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
-
     const updates: string[] = [];
     const args: any[] = [];
     let paramIndex = 1;
@@ -149,11 +130,9 @@ export const plansService = {
     args.push(id); // ID will be the last parameter
 
     return await withRetry(async () => {
-      // Fixed: Using db.query for checking existence
       const check = await db.query(`SELECT id FROM "IPO" WHERE id = $1`, [id]);
       if (check.rows.length === 0) throw new NotFoundError(`Kế hoạch ID ${id} không tồn tại`);
 
-      // Fixed: Using db.query for update and table name "IPO"
       const sql = `UPDATE "IPO" SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
       const result = await db.query(sql, args);
       
@@ -165,11 +144,7 @@ export const plansService = {
    * Delete plan
    */
   deletePlan: async (id: number) => {
-    // Fixed: Removed isTursoConfigured check
-    // if (!isTursoConfigured) throw new DatabaseError("Database connection not configured");
-
     return await withRetry(async () => {
-      // Fixed: Using db.query for delete and table name "IPO"
       const result = await db.query(
         `DELETE FROM "IPO" WHERE id = $1`,
         [id]

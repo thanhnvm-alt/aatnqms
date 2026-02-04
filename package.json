@@ -1,18 +1,25 @@
+
 {
   "name": "aa-tracking-api",
   "version": "1.0.0",
   "description": "REST API for QMS Tracking System",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js"
+    "dev:server": "nodemon --watch api --ext ts --exec ts-node api/index.ts",
+    "dev:client": "vite --open",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build:server": "tsc --project tsconfig.json",
+    "build:client": "vite build",
+    "build": "npm-run-all build:server build:client",
+    "start": "node dist/api/index.js",
+    "test": "vitest"
   },
   "dependencies": {
     "express": "^4.18.2",
     "pg": "^8.11.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^4.17.17",
@@ -20,6 +27,14 @@
     "@types/node": "^20.0.0",
     "@types/cors": "^2.8.13",
     "typescript": "^5.0.0",
-    "ts-node": "^10.9.0"
+    "ts-node": "^10.9.0",
+    "vite": "^5.2.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vitest": "^1.4.0",
+    "@types/zod": "^3.22.4",
+    "@types/vitest": "^1.4.0",
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.0",
+    "npm-run-all": "^4.1.5"
   }
 }

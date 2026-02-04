@@ -92,8 +92,9 @@ import { MOCK_USERS, MOCK_WORKSHOPS, MOCK_INSPECTIONS, MOCK_PROJECTS, IQC_CHECKL
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const App = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isDbReady, setIsDbReady] = useState(false); // PostgreSQL backend readiness
+  // TEMP: Bypass login for development
+  const [user, setUser] = useState<User | null>(MOCK_USERS[0]); // Initialize with admin mock user
+  const [isDbReady, setIsDbReady] = useState(true); // Assume DB is ready for bypassed login
   const [view, setView] = useState<ViewState>('DASHBOARD');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -134,22 +135,23 @@ const App = () => {
 
     checkDb(); // Initial check
 
-    const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
-    if (localData) {
-      try {
-        const parsedUser = JSON.parse(localData);
-        if (parsedUser?.id && parsedUser?.username && parsedUser?.role) {
-          setUser(parsedUser);
-          // Set initial view based on role or default
-          setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
-        }
-      } catch (e) {
-        console.error("Auth hydration failed:", e);
-        // Clear corrupt storage if parsing fails
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        sessionStorage.removeItem(AUTH_STORAGE_KEY);
-      }
-    }
+    // TEMP: Comment out auth hydration to bypass login
+    // const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
+    // if (localData) {
+    //   try {
+    //     const parsedUser = JSON.parse(localData);
+    //     if (parsedUser?.id && parsedUser?.username && parsedUser?.role) {
+    //       setUser(parsedUser);
+    //       // Set initial view based on role or default
+    //       setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
+    //     }
+    //   } catch (e) {
+    //     console.error("Auth hydration failed:", e);
+    //     // Clear corrupt storage if parsing fails
+    //     localStorage.removeItem(AUTH_STORAGE_KEY);
+    //     sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    //   }
+    // }
   }, []);
 
   // --- Data Loading After Login ---
@@ -384,14 +386,15 @@ const App = () => {
     return view;
   }, [view, activeFormType, inspections]);
 
-  if (!user) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} users={allUsers} dbReady={isDbReady} />;
-  }
+  // TEMP: Remove login page rendering
+  // if (!user) {
+  //   return <LoginPage onLoginSuccess={handleLoginSuccess} users={allUsers} dbReady={isDbReady} />;
+  // }
 
   // Define a placeholder for onImportPlans
-  const handleImportPlans = useCallback(async (plans: PlanItem[]) => {
-    alert("Importing plans is not yet fully implemented in the API. Please see backend code.");
-    console.log("Attempted to import plans:", plans);
+  const handleImportUsers = useCallback(async (users: User[]) => {
+    alert("Importing users is not yet fully implemented in the API. Please see backend code.");
+    console.log("Attempted to import users:", users);
     // In a real scenario, this would call an API endpoint.
   }, []);
 
@@ -410,7 +413,7 @@ const App = () => {
 
       <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'lg:ml-0'}`}>
         <GlobalHeader
-          user={user}
+          user={user as User} // Cast to User since we are bypassing login
           view={view}
           onNavigate={handleNavigate}
           onLogout={handleLogout}
@@ -433,11 +436,11 @@ const App = () => {
         <main className="flex-1 overflow-hidden relative">
           {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={handleNavigate} onViewInspection={handleViewInspectionDetail} />}
           {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleViewInspectionDetail} isLoading={false} workshops={allWorkshops} onRefresh={refreshAllData} />}
-          {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={handleSelectPlan} onViewInspection={handleViewInspectionDetail} onRefresh={refreshAllData} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isPlansLoading} totalItems={totalPlans} onUpdatePlan={updatePlan} onImportPlans={handleImportPlans} />}
+          {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={handleSelectPlan} onViewInspection={handleViewInspectionDetail} onRefresh={refreshAllData} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isPlansLoading} totalItems={totalPlans} onUpdatePlan={updatePlan} onImportPlans={handleImportUsers} />}
           {view === 'PLAN_DETAIL' && currentPlan && <PlanDetail item={currentPlan} onBack={() => handleNavigate('PLAN')} onCreateInspection={(items) => handleCreateInspection('PQC', { ...currentPlan, id: String(currentPlan.id), items, status: InspectionStatus.DRAFT })} relatedInspections={inspections.filter(i => i.ma_ct === currentPlan.ma_ct)} onViewInspection={handleViewInspectionDetail} onUpdatePlan={updatePlan} />}
           {view === 'PROJECTS' && <ProjectList projects={allProjects} inspections={inspections} plans={plans} onSelectProject={handleViewProjectDetail} />}
-          {view === 'PROJECT_DETAIL' && currentProject && <ProjectDetail project={currentProject} inspections={inspections} user={user} onBack={() => handleNavigate('PROJECTS')} onUpdate={refreshAllData} onViewInspection={handleViewInspectionDetail} onNavigate={handleNavigate} plans={plans.filter(p => p.ma_ct === currentProject.ma_ct)} />}
-          {view === 'SETTINGS' && user && <Settings currentUser={user} allTemplates={allTemplates} onSaveTemplate={() => { /* save logic */ }} users={allUsers} onAddUser={saveUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onAddWorkshop={saveWorkshop} onUpdateWorkshop={saveWorkshop} onDeleteWorkshop={deleteWorkshop} workshops={allWorkshops} onClose={() => handleNavigate('DASHBOARD')} onCheckConnection={checkApiConnection} initialTab={settingsTab} />}
+          {view === 'PROJECT_DETAIL' && currentProject && <ProjectDetail project={currentProject} inspections={inspections} user={user as User} onBack={() => handleNavigate('PROJECTS')} onUpdate={refreshAllData} onViewInspection={handleViewInspectionDetail} onNavigate={handleNavigate} plans={plans.filter(p => p.ma_ct === currentProject.ma_ct)} />}
+          {view === 'SETTINGS' && user && <Settings currentUser={user} allTemplates={allTemplates} onSaveTemplate={() => { /* save logic */ }} users={allUsers} onAddUser={saveUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onImportUsers={handleImportUsers} workshops={allWorkshops} onAddWorkshop={saveWorkshop} onUpdateWorkshop={saveWorkshop} onDeleteWorkshop={deleteWorkshop} onClose={() => handleNavigate('DASHBOARD')} onCheckConnection={checkApiConnection} initialTab={settingsTab} />}
           {view === 'CONVERT_3D' && <ThreeDConverter />}
           {view === 'NCR_LIST' && user && <NCRList currentUser={user} onSelectNcr={handleViewInspectionDetail} />}
           {view === 'DEFECT_LIBRARY' && user && <DefectLibrary currentUser={user} />}

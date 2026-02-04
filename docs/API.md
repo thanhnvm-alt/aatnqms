@@ -1,11 +1,11 @@
 
-# Turso API Integration Documentation
+# PostgreSQL API Integration Documentation
 
 ## Overview
-The application uses **Turso (LibSQL)** as the primary database. Interactions are handled via the `plansService` which abstracts SQL queries, validation, and error handling.
+The application uses **PostgreSQL** as the primary database. Interactions are handled via services that abstract SQL queries, validation, and error handling.
 
 ## Base URL
-`/api`
+`/api` (for specific API routes) or root `/` (for generic CRUD)
 
 ## Endpoints
 
@@ -21,32 +21,58 @@ Retrieves a paginated list of plans.
 |-------|------|---------|-------------|
 | `page` | `number` | `1` | Page number |
 | `limit` | `number` | `20` | Items per page (max 100) |
-| `search` | `string` | - | Search term (matches `ma_ct`, `headcode`, `ten_hang_muc`) |
+| `search` | `string` | - | Search term (matches `ma_ct`, `headcode`, `ten_hang_muc`, `ma_nha_may`) |
 
 **Response (Success 200):**
 ```json
 {
   "success": true,
-  "data": [
+  "items": [
     {
       "id": 1,
       "headcode": "HC001",
-      "maCongTrinh": "CT001",
-      ...
+      "ma_ct": "CT001",
+      "ten_ct": "Test Project",
+      "ten_hang_muc": "Test Item",
+      "ma_nha_may": "NM001",
+      "dvt": "PCS",
+      "so_luong_ipo": 100,
+      "plannedDate": "2023-11-01",
+      "assignee": "Nguyen Van A",
+      "status": "PENDING"
     }
   ],
-  "meta": {
-    "pagination": {
-      "page": 1,
-      "limit": 20,
-      "total": 50,
-      "totalPages": 3
-    }
+  "total": 50,
+  "page": 1,
+  "totalPages": 3
+}
+```
+
+#### 2. Get Plan by ID
+**GET** `/api/plans/:id`
+
+Retrieves a single plan by its ID.
+
+**Response (Success 200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "headcode": "HC001",
+    "ma_ct": "CT001",
+    "ten_ct": "Test Project",
+    "ten_hang_muc": "Test Item",
+    "ma_nha_may": "NM001",
+    "dvt": "PCS",
+    "so_luong_ipo": 100,
+    "created_at": 1678886400,
+    // ... other fields from DB
   }
 }
 ```
 
-#### 2. Create Plan
+#### 3. Create Plan
 **POST** `/api/plans`
 
 **Body (JSON):**
@@ -57,16 +83,25 @@ Retrieves a paginated list of plans.
   "ten_ct": "New Project",
   "ten_hang_muc": "Steel Beam",
   "so_luong_ipo": 100,
-  "dvt": "PCS"
+  "dvt": "PCS",
+  "ma_nha_may": "NM005"
 }
 ```
 
-#### 3. Update Plan
+#### 4. Update Plan
 **PUT** `/api/plans/:id`
 
 Partial updates allowed. Only provide fields to update.
 
-#### 4. Delete Plan
+**Body (JSON):**
+```json
+{
+  "so_luong_ipo": 200,
+  "status": "APPROVED"
+}
+```
+
+#### 5. Delete Plan
 **DELETE** `/api/plans/:id`
 
 ---
@@ -79,27 +114,24 @@ The API returns standardized error responses.
 ```json
 {
   "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message",
-    "requestId": "req_..."
-  }
+  "message": "Human readable message",
+  "error": "Mô tả lỗi kỹ thuật"
 }
 ```
 
 **Common Error Codes:**
-- `VALIDATION_ERROR` (400): Invalid input (Zod check failed).
+- `VALIDATION_ERROR` (400): Invalid input.
 - `NOT_FOUND_ERROR` (404): Resource ID not found.
-- `DATABASE_ERROR` (503): DB unavailable (automatic retry triggered before this).
-- `INTERNAL_SERVER_ERROR` (500): Unexpected crash.
+- `DATABASE_ERROR` (500/503): DB unavailable or query error.
+- `INTERNAL_SERVER_ERROR` (500): Unexpected server error.
 
 ---
 
-## Database Schema (`searchPlans`)
+## Database Schema (Example for "IPO" table)
 
 ```sql
-CREATE TABLE searchPlans (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE "IPO" (
+  id SERIAL PRIMARY KEY,
   headcode TEXT NOT NULL,
   ma_ct TEXT NOT NULL,
   ten_ct TEXT NOT NULL,
@@ -107,26 +139,9 @@ CREATE TABLE searchPlans (
   ten_hang_muc TEXT NOT NULL,
   dvt TEXT DEFAULT 'PCS',
   so_luong_ipo REAL DEFAULT 0,
-  created_at INTEGER DEFAULT (unixepoch())
+  planned_date TEXT, -- New field, if applicable
+  assignee TEXT,     -- New field, if applicable
+  status TEXT,       -- New field, if applicable
+  created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())
 );
 ```
-
-## Troubleshooting
-
-### 1. "SQLite error: no such table: searchPlans"
-**Cause:** The database is fresh and tables haven't been initialized.
-**Fix:** 
-- Restart the app. The `tursoService` attempts to auto-create tables on connection test.
-- Or check `initDatabase()` in `services/tursoService.ts`.
-
-### 2. "Network Error" / "Fetch Failed"
-**Cause:** 
-- Incorrect `TURSO_DATABASE_URL` or `TURSO_AUTH_TOKEN`.
-- Corporate firewall blocking WebSocket/HTTP connection to Turso.
-**Fix:**
-- Verify `.env` or Vercel Environment Variables.
-- Ensure URL starts with `libsql://` or `https://`.
-
-### 3. API Returns Mock Data
-**Cause:** `isTursoConfigured` check failed.
-**Fix:** Ensure environment variables are loaded correctly by `vite.config.ts`.

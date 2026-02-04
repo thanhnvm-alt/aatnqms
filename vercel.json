@@ -1,6 +1,15 @@
 
 {
+  "functions": {
+    "api/index.ts": {
+      "runtime": "node"
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

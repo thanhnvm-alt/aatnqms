@@ -1,9 +1,7 @@
 
-
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { plansService } from '../../services/plansService';
-// Fixed: Removed deprecated tursoConfig import
-import { db } from '../../lib/db'; // Fixed: Import db directly
+import { db } from '../../lib/db'; 
 
 /**
  * INTEGRATION TESTS
@@ -16,13 +14,10 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
   let createdId: number;
 
   beforeAll(async () => {
-    // Optional: Setup test table or clean state
-    // Fixed: Changed turso.execute to db.query and table name to "IPO"
     await db.query("DELETE FROM \"IPO\" WHERE headcode LIKE 'TEST_%'");
   });
 
   it('should verify database connection', async () => {
-    // Fixed: Changed turso.execute to db.query
     const result = await db.query('SELECT 1 as val');
     expect(result.rows[0].val).toBe(1);
   });
@@ -35,7 +30,8 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
       ten_ct: 'Integration Test',
       ten_hang_muc: 'Lifecycle Item',
       so_luong_ipo: 10,
-      dvt: 'PCS'
+      dvt: 'PCS',
+      ma_nha_may: 'NM-INT' // Added ma_nha_may for the new schema
     });
     
     expect(newPlan.id).toBeDefined();
@@ -62,7 +58,6 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
     // Cleanup if needed
     if (createdId) {
         try { 
-          // Fixed: Changed turso.execute to db.query and table name to "IPO"
           await db.query(`DELETE FROM "IPO" WHERE id = $1`, [createdId]); 
         } catch(e) {}
     }

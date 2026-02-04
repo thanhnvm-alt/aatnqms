@@ -1,23 +1,17 @@
 
-
 import { z } from 'zod';
 
 export const PlanSchema = z.object({
-  // Fix: Remove required_error as it's not supported in this Zod version's string constructor. 
-  // The .min() check already provides a specific message for empty strings.
   headcode: z.string()
     .min(3, "Headcode phải có ít nhất 3 ký tự")
     .max(50, "Headcode quá dài"),
   
-  // Fix: Remove required_error as it's not supported in this Zod version's string constructor
   ma_ct: z.string()
     .min(1, "Mã công trình không được để trống"),
   
-  // Fix: Remove required_error as it's not supported in this Zod version's string constructor
   ten_ct: z.string()
     .min(1, "Tên công trình không được để trống"),
   
-  // Fix: Remove required_error as it's not supported in this Zod version's string constructor
   ten_hang_muc: z.string()
     .min(1, "Tên hạng mục không được để trống"),
   
@@ -26,6 +20,9 @@ export const PlanSchema = z.object({
   so_luong_ipo: z.coerce.number()
     .min(0, "Số lượng không được âm")
     .default(0),
+  
+  // Added optional ma_nha_may for compatibility with some plan items
+  ma_nha_may: z.string().optional(),
 });
 
 export const PlanUpdateSchema = PlanSchema.partial();

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
 import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, exportDefectLibrary, importDefectLibraryFile } from '../services/apiService';
@@ -293,7 +294,6 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       <p className="font-black uppercase tracking-[0.3em] text-xs">Không tìm thấy lỗi phù hợp</p>
                   </div>
               ) : (
-                  // Fix: Added explicit type [string, DefectLibraryItem[]] to resolve unknown type error on line 312 and 331
                   Object.entries(groupedLibrary).sort().map(([stage, items]: [string, DefectLibraryItem[]]) => {
                       const isExpanded = expandedStages.has(stage) || searchTerm.length > 0;
                       return (
