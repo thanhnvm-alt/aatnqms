@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc, InspectionFormProps } from '../types';
 import { 
@@ -198,7 +197,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
         let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) {
+        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field as string)) {
             val = parseFloat(String(value)) || 0;
         }
         let mat = { ...nextMaterials[idx], [field]: val };

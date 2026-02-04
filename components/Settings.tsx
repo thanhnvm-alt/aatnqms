@@ -92,7 +92,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
   useEffect(() => {
     if (isAdminOrManager) {
-        handleTestConnection();
+        // Initial silent check
+        if(onCheckConnection) onCheckConnection().then(success => setConnStatus(success ? 'SUCCESS' : 'ERROR'));
         loadRoles();
     }
   }, []);
@@ -118,11 +119,24 @@ export const Settings: React.FC<SettingsProps> = ({
   const handleDeleteRole = async (id: string) => { await apiDeleteRole(id); await loadRoles(); };
 
   const handleTestConnection = async () => {
-    if (!onCheckConnection) return;
     setIsChecking(true);
-    const success = await onCheckConnection();
-    setIsChecking(false);
-    setConnStatus(success ? 'SUCCESS' : 'ERROR');
+    try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+            setConnStatus('SUCCESS');
+            alert(`✅ KẾT NỐI THÀNH CÔNG!\n\n- Database: Connected\n- Schema Check: ${data.schema_check}\n- Table (ipo) Records: ${data.row_count}\n- Latency: ${data.latency_ms}ms\n- Server Time: ${data.server_time}`);
+        } else {
+            setConnStatus('ERROR');
+            alert(`❌ LỖI KẾT NỐI:\n\n${data.error || 'Unknown Error'}\n${data.details || ''}`);
+        }
+    } catch (e: any) {
+        setConnStatus('ERROR');
+        alert(`❌ LỖI MẠNG:\n\n${e.message || "Network Error"}`);
+    } finally {
+        setIsChecking(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -171,7 +185,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         <h2 className="text-base md:text-lg font-bold text-slate-800 uppercase tracking-tight">Cài đặt hệ thống</h2>
                     </div>
                  </div>
-                 {isAdminOrManager && onCheckConnection && (
+                 {isAdminOrManager && (
                     <Button variant={connStatus === 'ERROR' ? 'danger' : 'secondary'} size="sm" onClick={handleTestConnection} disabled={isChecking} icon={isChecking ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Wifi className="w-4 h-4"/>} className="md:hidden"></Button>
                  )}
              </div>
@@ -192,6 +206,30 @@ export const Settings: React.FC<SettingsProps> = ({
 
         <div className="flex-1 overflow-y-auto p-3 md:p-6 no-scrollbar">
             <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
+                {/* --- DIAGNOSTIC PANEL (VISIBLE TO ADMINS) --- */}
+                {isAdminOrManager && (
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${connStatus === 'SUCCESS' ? 'bg-green-100 text-green-600' : connStatus === 'ERROR' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
+                                <Database className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-xs font-bold text-slate-800 uppercase">Trạng thái Database</h3>
+                                <p className="text-[10px] text-slate-500 font-medium">Schema: appQAQC • {connStatus === 'SUCCESS' ? 'Online' : connStatus === 'ERROR' ? 'Error' : 'Unknown'}</p>
+                            </div>
+                        </div>
+                        <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            onClick={handleTestConnection} 
+                            disabled={isChecking} 
+                            icon={isChecking ? <Loader2 className="w-4 h-4 animate-spin"/> : <RefreshCw className="w-4 h-4"/>}
+                        >
+                            {isChecking ? 'Checking...' : 'Check Connection'}
+                        </Button>
+                    </div>
+                )}
+
                 {activeTab === 'TEMPLATE' && isAdminOrManager && (
                     <div className="space-y-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'}`}>{m.label}</button>))}</div></div>

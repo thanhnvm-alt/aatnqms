@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc, InspectionFormProps } from '../types';
 import { 
@@ -199,7 +198,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
         let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = parseFloat(String(value)) || 0; }
+        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field as string)) { val = parseFloat(String(value)) || 0; }
         let mat = { ...nextMaterials[idx], [field]: val };
         if (field === 'inspectQty') { if (val > mat.deliveryQty) val = mat.deliveryQty; if (val < 0) val = 0; mat.inspectQty = val; mat.passQty = val; mat.failQty = 0; }
         else if (field === 'passQty') { if (val > mat.inspectQty) val = mat.inspectQty; if (val < 0) val = 0; mat.passQty = val; mat.failQty = Number((mat.inspectQty - val).toFixed(2)); }
@@ -349,7 +348,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                     const isExp = expandedMaterial === mat.id;
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                     
-                    // Logic tính toán Nhãn trạng thái
                     const hasFail = mat.items?.some(it => it.status === CheckStatus.FAIL);
                     const hasCond = mat.items?.some(it => it.status === CheckStatus.CONDITIONAL);
                     const allPass = (mat.items?.length || 0) > 0 && mat.items?.every(it => it.status === CheckStatus.PASS);

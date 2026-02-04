@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   BookOpen,
   Truck,
-  Factory
+  Database
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -32,8 +32,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
   const menuItems = [
     { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
+    { id: 'IPO_LIST', label: 'Dữ liệu IPO', icon: Database }, // Added IPO List
     { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', icon: Truck },
-    { id: 'PLAN', label: 'Kế Hoạch', icon: FileSpreadsheet },
+    { id: 'PLAN', label: 'Kế Hoạch SX', icon: FileSpreadsheet },
     { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
     { id: 'DEFECT_LIBRARY', label: 'Thư Viện Lỗi', icon: BookOpen },
@@ -51,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
       if (itemId === 'SUPPLIERS') return view === 'SUPPLIERS' || view === 'SUPPLIER_DETAIL';
       if (itemId === 'SETTINGS') return view === 'SETTINGS';
       if (itemId === 'DEFECT_LIBRARY') return view === 'DEFECT_LIBRARY' || view === 'DEFECT_DETAIL';
+      if (itemId === 'IPO_LIST') return view === 'IPO_LIST';
       return view === itemId;
   };
 

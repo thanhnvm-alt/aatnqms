@@ -296,6 +296,7 @@ export const PlanList: React.FC<PlanListProps> = ({
                 )}
             </div>
         )}
+      </div>
       <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx" />
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={(data) => { onSearch(data); setShowScanner(false); }} />}
     </div>

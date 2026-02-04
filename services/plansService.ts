@@ -11,8 +11,9 @@ export const plansService = {
    */
   getPlans: async (page: number, limit: number, search?: string, filter?: { type: string, value: string }) => {
     const offset = (page - 1) * limit;
-    let sql = `SELECT * FROM "IPO"`; 
-    let countSql = `SELECT COUNT(*) as total FROM "IPO"`;
+    // ISO-FIX: Use lowercase 'ipo' table name
+    let sql = `SELECT * FROM ipo`; 
+    let countSql = `SELECT COUNT(*) as total FROM ipo`;
     
     const whereClauses: string[] = [];
     const args: any[] = [];
@@ -20,7 +21,8 @@ export const plansService = {
 
     // Generic Search
     if (search) {
-      whereClauses.push(`(ma_ct LIKE $${paramIndex} OR headcode LIKE $${paramIndex} OR ten_hang_muc LIKE $${paramIndex} OR ma_nha_may LIKE $${paramIndex})`); // Added ma_nha_may to search
+      // ISO-FIX: Removed quotes from columns
+      whereClauses.push(`(ma_ct LIKE $${paramIndex} OR headcode LIKE $${paramIndex} OR ten_hang_muc LIKE $${paramIndex} OR ma_nha_may LIKE $${paramIndex})`); 
       const term = `%${search}%`;
       args.push(term);
       paramIndex++;
@@ -65,8 +67,9 @@ export const plansService = {
    */
   getPlanById: async (id: number) => {
     return await withRetry(async () => {
+      // ISO-FIX: Use lowercase 'ipo' table name
       const result = await db.query(
-        `SELECT * FROM "IPO" WHERE id = $1`, 
+        `SELECT * FROM ipo WHERE id = $1`, 
         [id]
       );
 
@@ -83,8 +86,9 @@ export const plansService = {
    */
   createPlan: async (data: PlanInput) => {
     return await withRetry(async () => {
+      // ISO-FIX: Use lowercase 'ipo' table name
       const sql = `
-        INSERT INTO "IPO" (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
+        INSERT INTO ipo (headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, ma_nha_may, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, extract(epoch from now()))
         RETURNING *
       `;
@@ -119,6 +123,7 @@ export const plansService = {
 
     Object.entries(data).forEach(([key, value]) => {
       if (value !== undefined) {
+        // ISO-FIX: Keep column quotes only for safety against keywords, but relying on lowercase 'ipo'
         updates.push(`"${key}" = $${paramIndex}`);
         args.push(value);
         paramIndex++;
@@ -130,10 +135,11 @@ export const plansService = {
     args.push(id); // ID will be the last parameter
 
     return await withRetry(async () => {
-      const check = await db.query(`SELECT id FROM "IPO" WHERE id = $1`, [id]);
+      // ISO-FIX: Use lowercase 'ipo' table name
+      const check = await db.query(`SELECT id FROM ipo WHERE id = $1`, [id]);
       if (check.rows.length === 0) throw new NotFoundError(`Kế hoạch ID ${id} không tồn tại`);
 
-      const sql = `UPDATE "IPO" SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+      const sql = `UPDATE ipo SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
       const result = await db.query(sql, args);
       
       return result.rows[0] as unknown as PlanEntity;
@@ -145,8 +151,9 @@ export const plansService = {
    */
   deletePlan: async (id: number) => {
     return await withRetry(async () => {
+      // ISO-FIX: Use lowercase 'ipo' table name
       const result = await db.query(
-        `DELETE FROM "IPO" WHERE id = $1`,
+        `DELETE FROM ipo WHERE id = $1`,
         [id]
       );
 

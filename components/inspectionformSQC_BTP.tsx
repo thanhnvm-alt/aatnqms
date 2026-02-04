@@ -193,7 +193,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
         let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) {
+        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field as string)) {
             val = parseFloat(String(value)) || 0;
         }
         let mat = { ...nextMaterials[idx], [field]: val };

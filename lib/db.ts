@@ -11,25 +11,24 @@ const config: PoolConfig = {
   },
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000, // Increased timeout for better debugging
-  // Thiết lập search_path ngay khi kết nối được khởi tạo
-  // Updated: Added quotes to schema name to handle potential case-sensitivity in PostgreSQL
+  connectionTimeoutMillis: 10000,
+  // QUAN TRỌNG: Thiết lập search_path ưu tiên schema "appQAQC".
+  // Dấu ngoặc kép "" là BẮT BUỘC vì tên schema có chứa chữ Hoa (Mixed Case).
+  // Nếu không có "", Postgres sẽ tìm 'appqaqc' và gây lỗi không tìm thấy bảng.
   options: '-c search_path="appQAQC",public'
 };
 
 export const db = new Pool(config);
 
 // Kiểm tra kết nối khi khởi động
-db.query('SELECT 1')
-  .then(() => {
-    console.log('✅ Connected to PostgreSQL (Schema: appQAQC)');
+db.query('SELECT current_schema()')
+  .then((res) => {
+    console.log(`✅ Connected to PostgreSQL | Database: aaTrackingApps | Active Schema: ${res.rows[0].current_schema}`);
   })
   .catch((err) => {
     console.error('❌ Failed to connect to PostgreSQL:');
     console.error('   Message:', err.message);
     if (err.code) console.error('   Code:', err.code);
-    if (err.detail) console.error('   Detail:', err.detail);
-    if (err.hint) console.error('   Hint:', err.hint);
   });
 
 // Xử lý đóng kết nối khi server tắt

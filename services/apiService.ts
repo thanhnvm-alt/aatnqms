@@ -1,5 +1,5 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
+import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin, IPOItem } from '../types';
 import { MOCK_USERS, MOCK_PROJECTS, MOCK_WORKSHOPS, MOCK_INSPECTIONS, MOCK_PLAN_DATA } from '../constants';
 
 // Dynamically set API_BASE and API_PREFIX based on the environment
@@ -29,30 +29,42 @@ async function callApi(endpoint: string, method: string = 'GET', data?: any) {
         }
         return result;
     } else {
-        // Handle non-JSON response (likely HTML error page or plain text)
         const text = await response.text();
         if (!response.ok) {
-            // Treat 404 HTML as a specific error message
             if (response.status === 404) {
                 throw new Error(`API Endpoint Not Found: ${endpoint}`);
             }
             throw new Error(text || `HTTP Error ${response.status}`);
         }
-        // If success but text, return it (rare)
         return text;
     }
   } catch (error: any) {
-    // Re-throw to be caught by specific service functions
     throw error;
   }
 }
 
 /**
- * ISO QMS API: Plans (Bảng IPO)
+ * ISO QMS API: IPOs (Specialized View)
+ * Updated to new endpoint to prevent routing issues
+ */
+export const fetchIPOs = async (searchTerm: string = '', page: number = 1, limit: number = 50) => {
+  let url = `${API_PREFIX}/production/ipos?page=${page}&limit=${limit}`;
+  if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+  
+  try {
+    return await callApi(url);
+  } catch (error) {
+    console.warn(`Error fetching IPOs, returning empty:`, error);
+    return { success: false, data: [], total: 0 };
+  }
+};
+
+/**
+ * ISO QMS API: Plans (Bảng IPO - Legacy mapped)
  */
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20, plannedDate?: string, assignee?: string, status?: string) => {
+  let url = `${API_PREFIX}/plans?page=${page}&limit=${limit}`;
   try {
-    let url = `${API_PREFIX}/plans?page=${page}&limit=${limit}`;
     if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
     if (plannedDate) url += `&plannedDate=${encodeURIComponent(plannedDate)}`;
     if (assignee) url += `&assignee=${encodeURIComponent(assignee)}`;
@@ -64,8 +76,8 @@ export const fetchPlans = async (searchTerm: string = '', page: number = 1, limi
       ...res,
       items: res.items.map((item: any) => ({
         ...item,
-        plannedDate: item.planned_date, // Transform snake_case to camelCase
-        ma_nha_may: item.ma_nha_may || item.ma_nm, // Handle potential aliases
+        plannedDate: item.planned_date,
+        ma_nha_may: item.ma_nha_may || item.ma_nm,
         drawing_url: item.drawing_url,
         description: item.description,
         materials_text: item.materials_text,
@@ -74,8 +86,7 @@ export const fetchPlans = async (searchTerm: string = '', page: number = 1, limi
       }))
     };
   } catch (error) {
-    console.warn("Error fetching plans, falling back to mock:", error);
-    // Fallback to mock data to prevent app crash
+    console.warn(`Error fetching plans (${url}), falling back to mock:`, error);
     return {
       success: true,
       items: MOCK_PLAN_DATA,
@@ -97,7 +108,6 @@ export const fetchPlansByProject = async (projectCode: string, limit?: number) =
 };
 
 export const updatePlan = async (id: number | string, plan: Partial<PlanItem>) => {
-  // Convert camelCase back to snake_case for backend compatibility if necessary
   const payload: any = { ...plan };
   if (payload.plannedDate) {
     payload.planned_date = payload.plannedDate;
@@ -106,6 +116,7 @@ export const updatePlan = async (id: number | string, plan: Partial<PlanItem>) =
   return await callApi(`${API_PREFIX}/plans/${id}`, 'PUT', payload);
 };
 
+// ... (Rest of the file remains unchanged: fetchInspections, fetchInspectionById, saveInspection, updateInspection, deleteInspection, fetchUsers, saveUser, updateUser, deleteUser, verifyUserCredentials, fetchWorkshops, saveWorkshop, deleteWorkshop, fetchProjects, updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, and other mocks)
 
 /**
  * ISO QMS API: Inspections
@@ -113,7 +124,6 @@ export const updatePlan = async (id: number | string, plan: Partial<PlanItem>) =
 export const fetchInspections = async (page: number = 1, limit: number = 20) => {
   try {
     const res = await callApi(`${API_PREFIX}/inspections?page=${page}&limit=${limit}`);
-    // Ensure camelCase for inspectorName from backend's snake_case inspector_name
     return res.items.map((item: any) => ({
       ...item,
       inspectorName: item.inspector_name
@@ -127,7 +137,6 @@ export const fetchInspections = async (page: number = 1, limit: number = 20) => 
 export const fetchInspectionById = async (id: string) => {
   try {
     const res = await callApi(`${API_PREFIX}/inspections/${id}`);
-    // Ensure camelCase for inspectorName, managerSignature, productionSignature from backend
     if (res.data) {
       return {
         ...res.data,
@@ -141,25 +150,21 @@ export const fetchInspectionById = async (id: string) => {
         confirmedDate: res.data.confirmed_date,
         updatedAt: res.data.updated_at,
         createdAt: res.data.created_at,
-        // Ensure comments are parsed if they come as JSON strings
         comments: res.data.comments ? (typeof res.data.comments === 'string' ? JSON.parse(res.data.comments) : res.data.comments) : []
       };
     }
     return res.data;
   } catch (error) {
     console.warn(`Error fetching inspection detail for ${id}, using mock if available.`);
-    // Return mock if found
     const mock = MOCK_INSPECTIONS.find(i => i.id === id);
     return mock || null;
   }
 };
 
 export const saveInspection = async (inspection: Inspection) => {
-  // Convert camelCase to snake_case for backend
   const payload: any = { ...inspection };
   payload.inspector_name = payload.inspectorName;
   delete payload.inspectorName;
-  // Convert comments to JSON string before sending to backend
   if (payload.comments) {
     payload.comments = JSON.stringify(payload.comments);
   }
@@ -167,7 +172,6 @@ export const saveInspection = async (inspection: Inspection) => {
 };
 
 export const updateInspection = async (inspection: Inspection) => {
-  // Convert camelCase to snake_case for backend
   const payload: any = { ...inspection };
   payload.inspector_name = payload.inspectorName;
   delete payload.inspectorName;
@@ -203,7 +207,6 @@ export const updateInspection = async (inspection: Inspection) => {
     payload.updated_at = payload.updatedAt;
     delete payload.updatedAt;
   }
-  // Convert comments to JSON string before sending to backend
   if (payload.comments) {
     payload.comments = JSON.stringify(payload.comments);
   }
@@ -215,13 +218,9 @@ export const deleteInspection = async (id: string) => {
   return await callApi(`${API_PREFIX}/inspections/${id}`, 'DELETE');
 };
 
-/**
- * ISO QMS API: Users
- */
 export const fetchUsers = async () => {
   try {
     const res = await callApi(`${API_PREFIX}/users?pageSize=100`); 
-    // Ensure camelCase for fields from backend
     return res.data.map((user: any) => ({
       ...user,
       allowedModules: user.allowed_modules,
@@ -232,7 +231,7 @@ export const fetchUsers = async () => {
     }));
   } catch (error) {
     console.warn("Backend unavailable (users), using mock:", error);
-    return MOCK_USERS; // Fallback to mock data
+    return MOCK_USERS;
   }
 };
 
@@ -272,7 +271,6 @@ export const verifyUserCredentials = async (username: string, password: string):
   try {
     const res = await callApi(`${API_PREFIX}/users/verify`, 'POST', { username, password });
     if (res.success && res.data) {
-      // Ensure camelCase conversion for the returned user
       return {
         ...res.data,
         allowedModules: res.data.allowed_modules,
@@ -285,15 +283,10 @@ export const verifyUserCredentials = async (username: string, password: string):
   } catch (error) {
     console.warn("Backend verification failed, trying mock:", error);
   }
-  // Fallback to mock if backend fails or user not found there
   const mockUser = MOCK_USERS.find(u => u.username === username && u.password === password);
   return mockUser || null;
 };
 
-
-/**
- * ISO QMS API: Workshops
- */
 export const fetchWorkshops = async () => {
   try {
     const res = await callApi(`${API_PREFIX}/workshops`);
@@ -306,7 +299,6 @@ export const fetchWorkshops = async () => {
 
 export const saveWorkshop = async (workshop: Workshop) => {
   const payload: any = { ...workshop };
-  // No complex camelCase conversion for workshops in payload
   if (workshop.id && (await callApi(`${API_PREFIX}/workshops/${workshop.id}`).catch(() => null))?.data) {
     return await callApi(`${API_PREFIX}/workshops/${workshop.id}`, 'PUT', payload);
   } else {
@@ -318,18 +310,14 @@ export const deleteWorkshop = async (id: string) => {
   return await callApi(`${API_PREFIX}/workshops/${id}`, 'DELETE');
 };
 
-/**
- * ISO QMS API: Projects
- */
 export const fetchProjects = async (searchTerm: string = '') => {
   try {
     const res = await callApi(`${API_PREFIX}/projects?search=${encodeURIComponent(searchTerm)}`);
-    // Ensure camelCase for project properties
     return res.data.map((project: any) => ({
       ...project,
       startDate: project.start_date,
       endDate: project.end_date,
-      smartGoals: project.smart_goals // Assuming this might be JSON
+      smartGoals: project.smart_goals 
     }));
   } catch (error) {
     console.warn("Error fetching projects, falling back to mock:", error);
@@ -343,20 +331,17 @@ export const updateProject = async (project: Project) => {
   delete payload.startDate;
   payload.end_date = payload.endDate;
   delete payload.endDate;
-  payload.smart_goals = payload.smartGoals; // Convert to JSON string for backend if needed
+  payload.smart_goals = payload.smartGoals;
   delete payload.smartGoals;
   return await callApi(`${API_PREFIX}/projects/${project.id}`, 'PUT', payload);
 };
 
-/**
- * ISO QMS API: Floor Plans & Layout Pins
- */
 export const fetchFloorPlans = async (projectId: string) => {
   try {
     const res = await callApi(`${API_PREFIX}/floor_plans?project_id=${projectId}`);
     return res.data.map((plan: any) => ({
       ...plan,
-      image_url: plan.image_url, // Ensure correct URL
+      image_url: plan.image_url, 
       updated_at: plan.updated_at,
       file_name: plan.file_name
     }));
@@ -368,8 +353,8 @@ export const fetchFloorPlans = async (projectId: string) => {
 
 export const saveFloorPlan = async (floorPlan: FloorPlan) => {
   const payload: any = { ...floorPlan };
-  payload.image_url = payload.image_url; // Ensure correct URL is passed
-  payload.updated_at = Math.floor(Date.now() / 1000); // Set backend timestamp
+  payload.image_url = payload.image_url; 
+  payload.updated_at = Math.floor(Date.now() / 1000); 
   payload.file_name = payload.file_name;
   if (floorPlan.id && (await callApi(`${API_PREFIX}/floor_plans/${floorPlan.id}`).catch(() => null))?.data) {
     return await callApi(`${API_PREFIX}/floor_plans/${floorPlan.id}`, 'PUT', payload);
@@ -403,7 +388,6 @@ export const saveLayoutPin = async (pin: LayoutPin) => {
   }
 };
 
-
 // Other services (keeping mocks for now to focus on core)
 export const fetchTemplates = async () => ({});
 export const saveTemplate = async (m: string, i: CheckItem[]) => {};
@@ -431,24 +415,19 @@ export const fetchNotifications = async (u: string) => [];
 export const markNotificationAsRead = async (id: string) => {};
 export const markAllNotificationsAsRead = async (u: string) => {};
 
-
 export const checkApiConnection = async () => {
     try {
-        // Use relative path to leverage proxy
         const res = await fetch(`${API_PREFIX}/health`);
         return res.ok;
     } catch { return false; }
 };
 
 export const uploadFileToStorage = async (base64Data: string, fileName: string) => {
-  // In a real app, this would upload to Cloud Storage (Firebase, S3, GCS)
-  // For now, just return the base64 string or a placeholder
   console.log(`Simulating upload for ${fileName}. Data length: ${base64Data.length}`);
-  return base64Data; // Or a static placeholder
+  return base64Data; 
 };
 
 export const createNotification = async (userId: string, type: Notification['type'], title: string, message: string, link?: { view: ViewState, id: string }) => {
-    // MOCK: In a real app, this would hit a backend endpoint
     console.log(`Notification for ${userId}: ${title} - ${message}`);
     return { id: `notif_${Date.now()}`, userId, type, title, message, isRead: false, createdAt: Math.floor(Date.now() / 1000), link };
 };

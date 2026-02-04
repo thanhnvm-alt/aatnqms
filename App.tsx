@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   User, ViewState, Inspection, PlanItem, Workshop, Role, CheckItem, 
   Notification, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin, Project, NCR, InspectionStatus,
-  InspectionFormProps // Import the common interface
+  InspectionFormProps
 } from './types';
 import { 
   fetchPlans, 
@@ -15,7 +15,7 @@ import {
   checkApiConnection, 
   fetchUsers, 
   saveUser, 
-  updateUser,
+  updateUser, 
   deleteUser, 
   fetchWorkshops, 
   saveWorkshop, 
@@ -53,6 +53,7 @@ import { HomeMenu } from './components/HomeMenu';
 import { Dashboard } from './components/Dashboard';
 import { InspectionList } from './components/InspectionList';
 import { PlanList } from './components/PlanList';
+import { IPOList } from './components/IPOList'; // Added IPOList import
 import { ProjectList } from './components/ProjectList';
 import { Settings } from './components/Settings';
 import { ThreeDConverter } from './components/ThreeDConverter';
@@ -72,7 +73,6 @@ import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
 import { InspectionFormFQC } from './components/inspectionformFQC';
 import { InspectionFormSPR } from './components/inspectionformSPR';
 import { InspectionFormSITE } from './components/inspectionformSITE';
-// Explicitly import all InspectionDetail components
 import { InspectionDetailPQC } from './components/inspectiondetailPQC';
 import { InspectionDetailIQC } from './components/inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
@@ -93,8 +93,8 @@ const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const App = () => {
   // TEMP: Bypass login for development
-  const [user, setUser] = useState<User | null>(MOCK_USERS[0]); // Initialize with admin mock user
-  const [isDbReady, setIsDbReady] = useState(true); // Assume DB is ready for bypassed login
+  const [user, setUser] = useState<User | null>(MOCK_USERS[0]); 
+  const [isDbReady, setIsDbReady] = useState(true); 
   const [view, setView] = useState<ViewState>('DASHBOARD');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -122,7 +122,7 @@ const App = () => {
   const [currentSupplier, setCurrentSupplier] = useState<Supplier | null>(null);
   const [currentDefect, setCurrentDefect] = useState<Defect | null>(null);
 
-  const [activeFormType, setActiveFormType] = useState<string | null>(null); // For inspection forms
+  const [activeFormType, setActiveFormType] = useState<string | null>(null); 
   const [settingsTab, setSettingsTab] = useState<'PROFILE' | 'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'ROLES'>('PROFILE');
 
 
@@ -133,30 +133,12 @@ const App = () => {
       setIsDbReady(isReady);
     };
 
-    checkDb(); // Initial check
-
-    // TEMP: Comment out auth hydration to bypass login
-    // const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
-    // if (localData) {
-    //   try {
-    //     const parsedUser = JSON.parse(localData);
-    //     if (parsedUser?.id && parsedUser?.username && parsedUser?.role) {
-    //       setUser(parsedUser);
-    //       // Set initial view based on role or default
-    //       setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD');
-    //     }
-    //   } catch (e) {
-    //     console.error("Auth hydration failed:", e);
-    //     // Clear corrupt storage if parsing fails
-    //     localStorage.removeItem(AUTH_STORAGE_KEY);
-    //     sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    //   }
-    // }
+    checkDb(); 
   }, []);
 
   // --- Data Loading After Login ---
   const refreshAllData = useCallback(async () => {
-    if (!user) return; // Only fetch if logged in
+    if (!user) return; 
     console.log("Refreshing all application data...");
 
     // Fetch static/less frequent data
@@ -175,7 +157,6 @@ const App = () => {
       setAllDefectLibrary(defectLibraryData);
     } catch (error) {
       console.error("Failed to fetch static data:", error);
-      // Fallback to mocks if backend isn't ready for everything
       setAllUsers(MOCK_USERS);
       setAllWorkshops(MOCK_WORKSHOPS);
       setAllProjects(MOCK_PROJECTS);
@@ -185,7 +166,7 @@ const App = () => {
     try {
         const [inspectionsData, plansData, ncrsData, defectsData, suppliersData] = await Promise.all([
             fetchInspections(),
-            fetchPlans(planSearchTerm, plansPage, 20), // Always start with initial page/limit
+            fetchPlans(planSearchTerm, plansPage, 20), 
             fetchNcrs(),
             fetchDefects(),
             fetchSuppliers()
@@ -212,7 +193,7 @@ const App = () => {
       'SPR': SPR_CHECKLIST_TEMPLATE,
       'SQC_BTP': SQC_BTP_CHECKLIST_TEMPLATE,
       'SQC_MAT': SQC_MAT_CHECKLIST_TEMPLATE,
-      'SQC_VT': SQC_MAT_CHECKLIST_TEMPLATE, // SQC_VT uses the same template as SQC_MAT for now
+      'SQC_VT': SQC_MAT_CHECKLIST_TEMPLATE, 
     });
 
   }, [user, planSearchTerm, plansPage]);
@@ -221,7 +202,7 @@ const App = () => {
   useEffect(() => {
     if (user && isDbReady) {
       refreshAllData();
-      const intervalId = setInterval(refreshAllData, 60000); // Refresh every minute
+      const intervalId = setInterval(refreshAllData, 60000); 
       return () => clearInterval(intervalId);
     }
   }, [user, isDbReady, refreshAllData]);
@@ -241,7 +222,7 @@ const App = () => {
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    setView('DASHBOARD'); // Reset view on logout
+    setView('DASHBOARD'); 
     setCurrentInspection(null);
     setCurrentPlan(null);
     setCurrentProject(null);
@@ -253,12 +234,12 @@ const App = () => {
   // --- Navigation & View Management ---
   const handleNavigate = useCallback((newView: ViewState) => {
     setView(newView);
-    setCurrentInspection(null); // Clear context when changing main view
+    setCurrentInspection(null); 
     setCurrentPlan(null);
     setCurrentProject(null);
     setCurrentSupplier(null);
     setCurrentDefect(null);
-    setActiveFormType(null); // Clear active form
+    setActiveFormType(null); 
   }, []);
 
   const handleCreateInspection = useCallback((type: string, initialData?: Partial<Inspection>) => {
@@ -274,7 +255,7 @@ const App = () => {
       inspectorName: user?.name || 'N/A',
       score: 0,
       images: [],
-      so_luong_ipo: 0, // Default to 0
+      so_luong_ipo: 0, 
       ...initialData
     } as Inspection); 
     handleNavigate('FORM');
@@ -287,8 +268,8 @@ const App = () => {
       } else {
           await saveInspection(inspection);
       }
-      setCurrentInspection(null); // Clear form context
-      handleNavigate('LIST'); // Go back to list
+      setCurrentInspection(null); 
+      handleNavigate('LIST'); 
       refreshAllData();
       await createNotification(user?.id || 'admin', 'INSPECTION', `New ${inspection.type} Report`, `${inspection.inspectorName} submitted a new ${inspection.type} report for ${inspection.ma_ct || inspection.ten_hang_muc}.`, { view: 'DETAIL', id: inspection.id });
     } catch (e) {
@@ -346,8 +327,6 @@ const App = () => {
   
   const handleUpdateProject = useCallback(async (updatedProject: Project) => {
     try {
-      // The actual update was already handled in ProjectDetail.
-      // We just need to ensure App's state is consistent and/or refresh global data.
       setCurrentProject(updatedProject); 
       refreshAllData();
     } catch (e) {
@@ -382,20 +361,14 @@ const App = () => {
 
   const currentModule = useMemo(() => {
     if (view === 'FORM' && activeFormType) return activeFormType;
-    if (view === 'LIST') return inspections[0]?.type || 'PQC'; // Default for list view
+    if (view === 'LIST') return inspections[0]?.type || 'PQC'; 
     return view;
   }, [view, activeFormType, inspections]);
-
-  // TEMP: Remove login page rendering
-  // if (!user) {
-  //   return <LoginPage onLoginSuccess={handleLoginSuccess} users={allUsers} dbReady={isDbReady} />;
-  // }
 
   // Define a placeholder for onImportPlans
   const handleImportUsers = useCallback(async (users: User[]) => {
     alert("Importing users is not yet fully implemented in the API. Please see backend code.");
     console.log("Attempted to import users:", users);
-    // In a real scenario, this would call an API endpoint.
   }, []);
 
   // Main Application UI
@@ -413,7 +386,7 @@ const App = () => {
 
       <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'lg:ml-0'}`}>
         <GlobalHeader
-          user={user as User} // Cast to User since we are bypassing login
+          user={user as User} 
           view={view}
           onNavigate={handleNavigate}
           onLogout={handleLogout}
@@ -429,7 +402,6 @@ const App = () => {
           activeFormType={activeFormType}
           onNavigateToRecord={(targetView, id) => {
             if (targetView === 'DETAIL') handleViewInspectionDetail(id);
-            // Add other navigation logic as needed
           }}
         />
 
@@ -437,15 +409,18 @@ const App = () => {
           {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={handleNavigate} onViewInspection={handleViewInspectionDetail} />}
           {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleViewInspectionDetail} isLoading={false} workshops={allWorkshops} onRefresh={refreshAllData} />}
           {view === 'PLAN' && <PlanList items={plans} inspections={inspections} onSelect={handleSelectPlan} onViewInspection={handleViewInspectionDetail} onRefresh={refreshAllData} searchTerm={planSearchTerm} onSearch={setPlanSearchTerm} isLoading={isPlansLoading} totalItems={totalPlans} onUpdatePlan={updatePlan} onImportPlans={handleImportUsers} />}
+          {view === 'IPO_LIST' && <IPOList onRefresh={refreshAllData} />} 
           {view === 'PLAN_DETAIL' && currentPlan && <PlanDetail item={currentPlan} onBack={() => handleNavigate('PLAN')} onCreateInspection={(items) => handleCreateInspection('PQC', { ...currentPlan, id: String(currentPlan.id), items, status: InspectionStatus.DRAFT })} relatedInspections={inspections.filter(i => i.ma_ct === currentPlan.ma_ct)} onViewInspection={handleViewInspectionDetail} onUpdatePlan={updatePlan} />}
           {view === 'PROJECTS' && <ProjectList projects={allProjects} inspections={inspections} plans={plans} onSelectProject={handleViewProjectDetail} />}
           {view === 'PROJECT_DETAIL' && currentProject && <ProjectDetail project={currentProject} inspections={inspections} user={user as User} onBack={() => handleNavigate('PROJECTS')} onUpdate={refreshAllData} onViewInspection={handleViewInspectionDetail} onNavigate={handleNavigate} plans={plans.filter(p => p.ma_ct === currentProject.ma_ct)} />}
-          {view === 'SETTINGS' && user && <Settings currentUser={user} allTemplates={allTemplates} onSaveTemplate={() => { /* save logic */ }} users={allUsers} onAddUser={saveUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onImportUsers={handleImportUsers} workshops={allWorkshops} onAddWorkshop={saveWorkshop} onUpdateWorkshop={saveWorkshop} onDeleteWorkshop={deleteWorkshop} onClose={() => handleNavigate('DASHBOARD')} onCheckConnection={checkApiConnection} initialTab={settingsTab} />}
+          {view === 'SETTINGS' && user && <Settings currentUser={user} allTemplates={allTemplates} onSaveTemplate={() => { }} users={allUsers} onAddUser={saveUser} onUpdateUser={updateUser} onDeleteUser={deleteUser} onImportUsers={handleImportUsers} workshops={allWorkshops} onAddWorkshop={saveWorkshop} onUpdateWorkshop={saveWorkshop} onDeleteWorkshop={deleteWorkshop} onClose={() => handleNavigate('DASHBOARD')} onCheckConnection={checkApiConnection} initialTab={settingsTab} />}
           {view === 'CONVERT_3D' && <ThreeDConverter />}
           {view === 'NCR_LIST' && user && <NCRList currentUser={user} onSelectNcr={handleViewInspectionDetail} />}
           {view === 'DEFECT_LIBRARY' && user && <DefectLibrary currentUser={user} />}
           {view === 'DEFECT_LIST' && user && <DefectList currentUser={user} onSelectDefect={handleViewDefectDetail} onViewInspection={handleViewInspectionDetail} />}
           {view === 'DEFECT_DETAIL' && currentDefect && user && <DefectDetail defect={currentDefect} user={user} onBack={() => handleNavigate('DEFECT_LIST')} onViewInspection={handleViewInspectionDetail} />}
+          {view === 'SUPPLIERS' && user && <SupplierManagement user={user} onSelectSupplier={handleViewSupplierDetail} />}
+          {view === 'SUPPLIER_DETAIL' && currentSupplier && user && <SupplierDetail supplier={currentSupplier} user={user} onBack={() => handleNavigate('SUPPLIERS')} onViewInspection={handleViewInspectionDetail} />}
           
           {view === 'FORM' && currentInspection && user && (() => {
             const FormComponent = getInspectionFormComponent(activeFormType || 'PQC'); 
@@ -462,7 +437,6 @@ const App = () => {
           })()}
 
           {view === 'DETAIL' && currentInspection && user && (() => {
-            // Defined the map explicitly
             const DetailComponentMap: Record<string, React.FC<any>> = {
                 'InspectionDetailPQC': InspectionDetailPQC,
                 'InspectionDetailIQC': InspectionDetailIQC,
@@ -474,10 +448,9 @@ const App = () => {
                 'InspectionDetailSPR': InspectionDetailSPR,
                 'InspectionDetailSITE': InspectionDetailSITE,
             };
-            // Dynamically select the correct detail component
             const FormComponent = getInspectionFormComponent(currentInspection.type as string);
             const detailComponentName = FormComponent ? (FormComponent.name).replace('Form', 'Detail') : '';
-            const FinalDetailComponent = DetailComponentMap[detailComponentName] || InspectionDetailPQC; // Fallback
+            const FinalDetailComponent = DetailComponentMap[detailComponentName] || InspectionDetailPQC; 
 
             return <FinalDetailComponent
               inspection={currentInspection}
@@ -488,16 +461,16 @@ const App = () => {
               onApprove={async (id, sig, extra) => {
                 const updatedInspection = { ...currentInspection, status: InspectionStatus.APPROVED, managerSignature: sig, managerName: user.name, confirmedDate: new Date().toISOString(), ...extra };
                 await updateInspection(updatedInspection);
-                setCurrentInspection(updatedInspection); // Update current for UI refresh
-                refreshAllData(); // Refresh list data
+                setCurrentInspection(updatedInspection); 
+                refreshAllData(); 
                 await createNotification(user.id, 'INSPECTION', `${updatedInspection.type} Approved`, `Your ${updatedInspection.type} report for ${updatedInspection.ma_ct || updatedInspection.ten_hang_muc} has been approved by ${user.name}.`, { view: 'DETAIL', id: updatedInspection.id });
               }}
               onPostComment={async (id, comment) => {
                 const updatedComments = [...(currentInspection.comments || []), comment];
                 const updatedInspection = { ...currentInspection, comments: updatedComments };
                 await updateInspection(updatedInspection);
-                setCurrentInspection(updatedInspection); // Update current for UI refresh
-                refreshAllData(); // Refresh list data
+                setCurrentInspection(updatedInspection); 
+                refreshAllData(); 
                 await createNotification(currentInspection.inspectorName, 'COMMENT', `New Comment on ${currentInspection.type}`, `${user.name} commented on inspection ${currentInspection.id.split('-').pop()}`, { view: 'DETAIL', id: updatedInspection.id });
               }}
               workshops={allWorkshops}

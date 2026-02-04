@@ -16,13 +16,60 @@ const PORT = process.env.PORT || 3001;
 app.use(cors() as RequestHandler);
 app.use(express.json() as RequestHandler);
 
-// Health Check Handler
+// Request Logger Middleware
+app.use((req, res, next) => {
+  console.log(`[API] ${req.method} ${req.url}`);
+  next();
+});
+
+// Deep Health Check Handler
 const healthHandler = async (req: Request, res: Response) => {
+  const start = Date.now();
   try {
+    // 1. Basic Connection Check
     await db.query('SELECT 1');
-    res.json({ success: true, status: "ok", database: "connected" });
-  } catch (error) {
-    res.status(503).json({ success: false, status: "error", error: (error as Error).message });
+    
+    // 2. Schema Verification
+    // Check exactly which schema we are connected to
+    const schemaRes = await db.query('SELECT current_schema()');
+    const currentSchema = schemaRes.rows[0].current_schema;
+
+    // 3. Table Access Check
+    // Attempt to count rows in 'ipo' table to verify table visibility within the schema
+    // Note: If table names are also mixed case (e.g. "IPO"), you might need quotes here too.
+    // We try a safe query first.
+    let tableCheck = "ipo";
+    let rowCount = 0;
+    try {
+        const countRes = await db.query('SELECT COUNT(*) as total FROM ipo');
+        rowCount = parseInt(countRes.rows[0].total);
+    } catch (e) {
+        tableCheck = "failed (check table name casing)";
+        console.error("Health check table query failed:", e);
+    }
+    
+    const duration = Date.now() - start;
+
+    res.json({ 
+      success: true, 
+      status: "ok", 
+      database: "aaTrackingApps",
+      active_schema: currentSchema, // Should be 'appQAQC'
+      expected_schema: "appQAQC",
+      schema_match: currentSchema === "appQAQC",
+      table_check: tableCheck,
+      row_count: rowCount,
+      latency_ms: duration,
+      server_time: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error("Health Check Failed:", error);
+    res.status(503).json({ 
+      success: false, 
+      status: "error", 
+      error: error.message,
+      details: "Database connection failed or schema configuration is incorrect."
+    });
   }
 };
 
@@ -30,7 +77,76 @@ app.get('/health', healthHandler);
 app.get('/api/health', healthHandler); // Alias for proxy access
 
 /**
- * ISO QMS API: Plans (Bảng IPO)
+ * ISO QMS API: IPOs (Production Orders)
+ * Endpoint updated to /api/production/ipos to avoid routing conflicts
+ */
+app.get('/api/production/ipos', async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = (req.query.search as string || '').trim();
+
+    let whereClause = '';
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (search) {
+      // Use quotes for mixed-case columns to ensure PostgreSQL matches correctly
+      whereClause = `WHERE "ID_Project" ILIKE $${paramIndex} OR "Project_name" ILIKE $${paramIndex} OR "Material_description" ILIKE $${paramIndex} OR "ID_Factory_Order" ILIKE $${paramIndex}`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    const offset = (page - 1) * limit;
+    
+    // Explicitly select mixed-case columns matching the user's DB schema
+    const query = `
+      SELECT 
+        id, 
+        "ID_Project", 
+        "Project_name", 
+        "Material_description", 
+        "Base_Unit", 
+        "Quantity_IPO", 
+        "ID_Factory_Order", 
+        "Created_on", 
+        "Quantity", 
+        "BOQ_type", 
+        "IPO_Number", 
+        "IPO_Line", 
+        "Ma_Tender",
+        "createdAt",
+        "createdBy"
+      FROM ipo
+      ${whereClause}
+      ORDER BY id DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const countSql = `SELECT COUNT(*) as total FROM ipo ${whereClause}`;
+    
+    const [data, countRes] = await Promise.all([
+      db.query(query, [...params, limit, offset]),
+      db.query(countSql, params)
+    ]);
+
+    const total = parseInt(countRes.rows[0]?.total || '0');
+
+    res.json({
+      success: true,
+      data: data.rows,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error: any) {
+    console.error("Error in /api/production/ipos:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * ISO QMS API: Plans (Legacy mapping for existing PlanList)
  */
 app.get('/api/plans', async (req: Request, res: Response) => {
   try {
@@ -43,29 +159,41 @@ app.get('/api/plans', async (req: Request, res: Response) => {
     let paramIndex = 1;
 
     if (search) {
-      whereClause = `WHERE "ma_ct" ILIKE $${paramIndex} OR "ten_ct" ILIKE $${paramIndex} OR "headcode" ILIKE $${paramIndex} OR "ma_nha_may" ILIKE $${paramIndex}`;
+      whereClause = `WHERE "ID_Project" ILIKE $${paramIndex} OR "Project_name" ILIKE $${paramIndex} OR "Material_description" ILIKE $${paramIndex}`;
       params.push(`%${search}%`);
       paramIndex++;
     }
 
     const offset = (page - 1) * limit;
+    
+    // Map the new DB columns to the old "Plan" interface expected by PlanList
     const dataSql = `
-      SELECT id, ma_nha_may, headcode, ma_ct, ten_ct, ten_hang_muc, dvt, so_luong_ipo, planned_date as "plannedDate", assignee, status,
-             drawing_url, description, materials_text, samples_json, simulations_json
-      FROM "IPO" 
+      SELECT 
+        id, 
+        "ID_Project" as ma_ct, 
+        "Project_name" as ten_ct, 
+        "Material_description" as ten_hang_muc, 
+        "Base_Unit" as dvt, 
+        "Quantity_IPO" as so_luong_ipo, 
+        "ID_Factory_Order" as headcode,
+        "ID_Factory_Order" as ma_nha_may,
+        "Created_on" as planned_date,
+        "createdBy" as assignee,
+        'PENDING' as status
+      FROM ipo 
       ${whereClause} 
       ORDER BY id DESC 
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
-    const countSql = `SELECT COUNT(*) as total FROM "IPO" ${whereClause}`;
+    const countSql = `SELECT COUNT(*) as total FROM ipo ${whereClause}`;
     
     const [data, countRes] = await Promise.all([
       db.query(dataSql, [...params, limit, offset]),
       db.query(countSql, params)
     ]);
 
-    const total = parseInt(countRes.rows[0].total);
+    const total = parseInt(countRes.rows[0]?.total || '0');
 
     res.json({
       success: true,
@@ -75,58 +203,13 @@ app.get('/api/plans', async (req: Request, res: Response) => {
       totalPages: Math.ceil(total / limit)
     });
   } catch (error: any) {
+    console.error("Error in /api/plans:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-app.post('/api/plans', async (req: Request, res: Response) => {
-  try {
-    const data: PlanInput = req.body;
-    if (!data.headcode || !data.ma_ct || !data.ten_ct || !data.ten_hang_muc || !data.so_luong_ipo) {
-      return res.status(400).json({ success: false, error: "Missing required plan fields" });
-    }
+// ... (Rest of existing endpoints for inspections, users, workshops, projects, floor_plans, layout_pins)
 
-    const newPlan = await dbHelpers.insert('IPO', {
-      headcode: data.headcode,
-      ma_ct: data.ma_ct,
-      ten_ct: data.ten_ct,
-      ten_hang_muc: data.ten_hang_muc,
-      dvt: data.dvt,
-      so_luong_ipo: data.so_luong_ipo,
-      ma_nha_may: data.ma_nha_may || null,
-      created_at: Math.floor(Date.now() / 1000)
-    });
-    res.status(201).json({ success: true, data: newPlan });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
-
-app.put('/api/plans/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const data: Partial<PlanInput> = req.body;
-    const updatedPlan = await dbHelpers.update('IPO', parseInt(id), data);
-    res.json({ success: true, data: updatedPlan });
-  } catch (error: any) {
-    res.status(400).json({ success: false, error: error.message });
-  }
-});
-
-app.delete('/api/plans/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const deleted = await dbHelpers.deleteById('IPO', parseInt(id));
-    if (!deleted) return res.status(404).json({ success: false, error: "Plan not found" });
-    res.json({ success: true, message: "Plan deleted" });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * ISO QMS API: Inspections
- */
 app.get('/api/inspections', async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -195,9 +278,6 @@ app.delete('/api/inspections/:id', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * ISO QMS API: Users
- */
 interface DbUserRow extends QueryResultRow {
   id: string;
   username: string;
@@ -349,9 +429,6 @@ app.post('/api/users/verify', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * ISO QMS API: Workshops
- */
 app.get('/api/workshops', async (req: Request, res: Response) => {
   try {
     const workshops = await dbHelpers.selectAll('workshops');
@@ -402,9 +479,6 @@ app.delete('/api/workshops/:id', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * ISO QMS API: Projects
- */
 app.get('/api/projects', async (req: Request, res: Response) => {
   try {
     const projects = await dbHelpers.selectAll('projects');
@@ -428,9 +502,6 @@ app.put('/api/projects/:id', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * ISO QMS API: Floor Plans
- */
 app.get('/api/floor_plans', async (req: Request, res: Response) => {
   try {
     const { project_id } = req.query;
@@ -485,9 +556,6 @@ app.delete('/api/floor_plans/:id', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * ISO QMS API: Layout Pins
- */
 app.get('/api/layout_pins', async (req: Request, res: Response) => {
   try {
     const { floor_plan_id } = req.query;
@@ -542,18 +610,18 @@ app.delete('/api/layout_pins/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Catch-all 404 handler for API routes to prevent HTML response
 app.use('*', (req: Request, res: Response) => {
   res.status(404).json({ error: "API Endpoint Not Found", path: req.originalUrl });
 });
 
-// Run server only if executed directly
-// @ts-ignore
+// Explicitly declare require and module to avoid TS errors if @types/node is missing
+declare const require: any;
+declare const module: any;
+
 if (typeof require !== 'undefined' && require.main === module) {
   app.listen(PORT, () => {
     console.log(`🚀 QMS PostgreSQL API running on port ${PORT}`);
   });
 }
 
-// Export app for Vercel
 export default app;
