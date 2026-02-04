@@ -117,7 +117,7 @@ app.delete('/api/plans/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await dbHelpers.deleteById('IPO', parseInt(id));
-    if (!deleted) return res.status(404).json({ success: false, message: "Plan not found" });
+    if (!deleted) return res.status(404).json({ success: false, error: "Plan not found" });
     res.json({ success: true, message: "Plan deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -149,9 +149,10 @@ app.get('/api/inspections/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const result = await db.query('SELECT * FROM "inspections" WHERE id = $1', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, message: "Not found" });
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Inspection not found" });
     res.json({ success: true, data: result.rows[0] });
   } catch (error: any) {
+    console.error("API Error fetching inspection:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -187,7 +188,7 @@ app.delete('/api/inspections/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await dbHelpers.deleteById('inspections', id);
-    if (!deleted) return res.status(404).json({ success: false, message: "Inspection not found" });
+    if (!deleted) return res.status(404).json({ success: false, error: "Inspection not found" });
     res.json({ success: true, message: "Inspection deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -307,7 +308,7 @@ app.delete('/api/users/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await dbHelpers.deleteById('users', id);
-    if (!deleted) return res.status(404).json({ success: false, message: "User not found" });
+    if (!deleted) return res.status(404).json({ success: false, error: "User not found" });
     res.json({ success: true, message: "User deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -394,7 +395,7 @@ app.delete('/api/workshops/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await dbHelpers.deleteById('workshops', id);
-    if (!deleted) return res.status(404).json({ success: false, message: "Workshop not found" });
+    if (!deleted) return res.status(404).json({ success: false, error: "Workshop not found" });
     res.json({ success: true, message: "Workshop deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: (error as Error).message });
@@ -477,7 +478,7 @@ app.delete('/api/floor_plans/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await dbHelpers.deleteById('floor_plans', id);
-    if (!deleted) return res.status(404).json({ success: false, message: "Floor plan not found" });
+    if (!deleted) return res.status(404).json({ success: false, error: "Floor plan not found" });
     res.json({ success: true, message: "Floor plan deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: (error as Error).message });
@@ -534,7 +535,7 @@ app.delete('/api/layout_pins/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await dbHelpers.deleteById('layout_pins', id);
-    if (!deleted) return res.status(404).json({ success: false, message: "Layout pin not found" });
+    if (!deleted) return res.status(404).json({ success: false, error: "Layout pin not found" });
     res.json({ success: true, message: "Layout pin deleted" });
   } catch (error: any) {
     res.status(500).json({ success: false, error: (error as Error).message });

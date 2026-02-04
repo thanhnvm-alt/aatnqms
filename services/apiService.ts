@@ -27,8 +27,8 @@ async function callApi(endpoint: string, method: string = 'GET', data?: any) {
       try {
         // Try to parse JSON error message
         const errorData = await response.json();
-        if (errorData && errorData.error) {
-          errorMessage = errorData.error;
+        if (errorData) {
+            errorMessage = errorData.error || errorData.message || errorMessage;
         }
       } catch (e) {
         // If JSON parse fails (e.g. 404 HTML page from proxy), use status text
@@ -38,7 +38,7 @@ async function callApi(endpoint: string, method: string = 'GET', data?: any) {
             if (text && text.length < 200 && !text.includes('<!DOCTYPE html>')) {
                 errorMessage = text;
             } else if (response.status === 404) {
-                errorMessage = "API Endpoint Not Found (404)";
+                errorMessage = `API Endpoint Not Found: ${endpoint}`;
             }
         } catch {}
       }
@@ -152,7 +152,7 @@ export const fetchInspectionById = async (id: string) => {
     }
     return res.data;
   } catch (error) {
-    console.error("Error fetching inspection detail:", error);
+    console.warn(`Error fetching inspection detail for ${id}, using mock if available.`);
     // Return mock if found
     const mock = MOCK_INSPECTIONS.find(i => i.id === id);
     return mock || null;
