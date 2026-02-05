@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "test:db": "node test-connection.js" 
+    "test:db": "npx tsx scripts/test-db-connection.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -23,7 +23,11 @@
     "exceljs": "^4.4.0",
     "xlsx": "^0.18.5",
     "pg": "^8.11.3",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "@tanstack/react-table": "^8.13.2",
+    "date-fns": "^3.3.1",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
@@ -36,6 +40,7 @@
     "vite": "5.4.1",
     "wrangler": "3.72.0",
     "@types/pg": "^8.11.0",
-    "@types/node": "^20.11.24"
+    "@types/node": "^20.11.24",
+    "tsx": "^4.7.1"
   }
 }

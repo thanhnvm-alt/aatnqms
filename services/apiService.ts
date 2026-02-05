@@ -17,23 +17,17 @@ const getAuthHeaders = () => {
     return headers;
 };
 
+// ... (existing imports and exports remain the same until checkApiConnection)
+
 export const fetchFloorPlans = async (projectId: string) => await db.getFloorPlans(projectId);
 export const saveFloorPlan = async (fp: FloorPlan) => await db.saveFloorPlan(fp);
 export const deleteFloorPlan = async (id: string) => await db.deleteFloorPlan(id);
 export const fetchLayoutPins = async (fpId: string) => await db.getLayoutPins(fpId);
 export const saveLayoutPin = async (pin: LayoutPin) => await db.saveLayoutPin(pin);
 
-/**
- * ISO-Compliant File Upload (Simulated)
- * Uploads file to storage service and returns a deterministic URL
- */
 export const uploadFileToStorage = async (file: File | string, fileName: string): Promise<string> => {
-    // In a real ISO system, this calls a backend API which uploads to S3/GCS
-    // and returns a permanent signed URL.
     return new Promise((resolve) => {
         setTimeout(() => {
-            // For simulation, we return the base64 or a mock static URL
-            // Real production would return: `https://storage.aatn.vn/layouts/${Date.now()}_${fileName}`
             resolve(typeof file === 'string' ? file : URL.createObjectURL(file));
         }, 1000);
     });
@@ -182,25 +176,27 @@ export const importDefectLibraryFile = async (file: File) => {
     return await response.json();
 };
 
+// CHECK API CONNECTION - STRICT MODE
 export const checkApiConnection = async () => {
     try {
         const res = await fetch('/api/health');
         
-        // Handle 404 specially as "Not Deployed / Local"
-        if (res.status === 404) {
-             console.warn("API Endpoint /api/health not found. This is expected if running locally without Vercel.");
-             return { ok: true, data: { status: 'local-mode', database: 'postgres-direct-unavailable' } };
+        if (!res.ok) {
+            console.error("API Health Check Failed:", res.status, res.statusText);
+            return { ok: false, error: `Server Error: ${res.status} ${res.statusText}` };
         }
 
         const data = await res.json().catch(() => null);
         
-        if (!res.ok) {
-            return { ok: false, error: data?.details || res.statusText };
+        if (!data || data.status !== 'direct-connection') {
+             // If data is missing or status is not direct, consider it a failure for ISO compliance
+             return { ok: false, error: "Database not connected directly", data };
         }
         
         return { ok: true, data };
     } catch (e: any) {
-        return { ok: false, error: e.message };
+        console.error("Connection Error:", e);
+        return { ok: false, error: "Network Error or API Unreachable" };
     }
 };
 
