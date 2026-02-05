@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { FloorPlan, LayoutPin, InspectionStatus, CheckStatus, Inspection, NCRComment, User } from '../types';
 import { 
@@ -19,7 +18,7 @@ import {
     Maximize2,
     Flag
 } from 'lucide-react';
-import { fetchInspectionById, saveInspection, updateInspection, fetchUsers, saveLayoutPin } from '../services/apiService';
+import { fetchInspectionById, saveInspectionToSheet, fetchUsers, saveLayoutPin } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 
 interface LayoutManagerProps {
@@ -147,7 +146,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         setIsUpdating(true);
         try {
             const updated = { ...quickDetail, status: newStatus, updatedAt: new Date().toISOString() };
-            await updateInspection(updated);
+            await saveInspectionToSheet(updated);
             setQuickDetail(updated);
             setPins(prev => prev.map(p => p.inspection_id === quickDetail.id ? { ...p, status: newStatus } : p));
         } catch (e) {
@@ -174,7 +173,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 comments: [...(quickDetail.comments || []), comment],
                 updatedAt: new Date().toISOString()
             };
-            await updateInspection(updated);
+            await saveInspectionToSheet(updated);
             setQuickDetail(updated);
             setNewComment('');
         } catch (e: any) {
@@ -203,7 +202,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 images: [...(quickDetail.images || []), ...processed],
                 updatedAt: new Date().toISOString()
             };
-            await updateInspection(updated);
+            await saveInspectionToSheet(updated);
             setQuickDetail(updated);
         } catch (err) {
             alert("Lỗi khi thêm ảnh nhanh.");
@@ -222,7 +221,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 images: quickDetail.images?.filter((_, i) => i !== idx),
                 updatedAt: new Date().toISOString()
             };
-            await updateInspection(updated);
+            await saveInspectionToSheet(updated);
             setQuickDetail(updated);
         } catch (err) {
             alert("Lỗi khi xóa ảnh.");
@@ -240,7 +239,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 responsiblePerson: targetUser.name,
                 updatedAt: new Date().toISOString()
             };
-            await updateInspection(updated);
+            await saveInspectionToSheet(updated);
             setQuickDetail(updated);
             setIsUserSelectorOpen(false);
         } catch (e) {
@@ -407,7 +406,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                     <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
                     <div className="overflow-hidden">
                         <h2 className="text-[10px] md:text-[11px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[140px] md:max-w-[200px]">{floorPlan.name}</h2>
-                        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">REV {floorPlan.version}</p>
+                        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate mt-0.5">REV {floorPlan.version}</p>
                     </div>
                 </div>
 
@@ -536,7 +535,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                     </div>
                     
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white text-[8px] md:text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 pointer-events-none opacity-60">
-                        <Info className="w-3 h-3 md:w-3.5 h-3.5 text-blue-400" />
+                        <Info className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-400" />
                         <span>{isAddingMode ? 'TAP TO ADD' : 'HOLD TO DROP PIN'}</span>
                     </div>
                 </div>
@@ -759,7 +758,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                         const newImages = [...(quickDetail.images || [])];
                         newImages[idx] = updated;
                         const final = { ...quickDetail, images: newImages, updatedAt: new Date().toISOString() };
-                        await updateInspection(final);
+                        await saveInspectionToSheet(final);
                         setQuickDetail(final);
                     }} 
                     onClose={() => setLightbox(null)} 

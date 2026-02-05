@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, Inspection, InspectionStatus, CheckStatus, FloorPlan, LayoutPin, ModuleId, User, ViewState, PlanItem, NCR } from '../types';
+import { Project, Inspection, InspectionStatus, CheckStatus, FloorPlan, LayoutPin, ModuleId, User, ViewState, PlanItem } from '../types';
 import { 
   ArrowLeft, MapPin, Calendar, User as UserIcon, CheckCircle2, 
   AlertTriangle, PieChart as PieChartIcon, 
@@ -12,7 +12,7 @@ import {
   ShieldCheck, Clock, Locate, Map as MapIcon, ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspection, updateInspection, fetchInspectionById, fetchPlansByProject } from '../services/apiService';
+import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject } from '../services/apiService';
 import { FloorPlanLibrary } from './FloorPlanLibrary';
 import { LayoutManager } from './LayoutManager';
 import { InspectionFormSITE } from './inspectionformSITE';
@@ -21,7 +21,7 @@ import { InspectionDetailSITE } from './inspectiondetailSITE';
 import { InspectionDetailPQC } from './inspectiondetailPQC';
 import { InspectionDetailIQC } from './inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './inspectiondetailSQC_VT';
-import { InspectionDetailSQC_BTP } from './inspectiondetailSQC_BTP'; 
+import { InspectionDetailSQC_BTP } from './inspectiondetailSQC_BTP';
 import { InspectionDetailFRS } from './inspectiondetailFRS';
 import { InspectionDetailStepVecni } from './inspectiondetailStepVecni';
 import { InspectionDetailFQC } from './inspectiondetailFQC';
@@ -34,7 +34,7 @@ interface ProjectDetailProps {
   plans?: PlanItem[];
   user: User;
   onBack: () => void;
-  onUpdate?: () => void; // Parent expects no arguments for a refresh signal
+  onUpdate?: () => void; 
   onViewInspection: (id: string) => void;
   onNavigate?: (view: ViewState) => void;
 }
@@ -148,25 +148,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   }, [inspections, project, searchInList]);
 
   const projectNcrs = useMemo(() => {
-    // Collect all NCRs from all relevant inspections
-    const allNcrs: (NCR & { parentInspectionId: string, parentInspectionTenHangMuc: string, parentInspectionInspectorName: string })[] = [];
-    filteredInspections.forEach(inspection => {
-      if (inspection.items) {
-        inspection.items.forEach(item => {
-          // Only include NCRs from items that are marked as FAIL and actually have an NCR object
-          if (item.status === CheckStatus.FAIL && item.ncr) {
-            allNcrs.push({
-              ...item.ncr,
-              parentInspectionId: inspection.id,
-              parentInspectionTenHangMuc: inspection.ten_hang_muc || '',
-              parentInspectionInspectorName: inspection.inspectorName || ''
-            });
-          }
-        });
-      }
-    });
-    // Sort NCRs by creation date, most recent first
-    return allNcrs.sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
+      return filteredInspections.filter(i => i.status === InspectionStatus.FLAGGED);
   }, [filteredInspections]);
 
   const filteredLayouts = useMemo(() => {
@@ -219,11 +201,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       setIsSaving(true);
       try {
           const inspectionWithSpatial = { ...newInsp, floor_plan_id: selectedPlan.id, coord_x: pendingPinCoord.x, coord_y: pendingPinCoord.y, ma_ct: project.ma_ct, ten_ct: project.name };
-          await saveInspection(inspectionWithSpatial); 
+          await saveInspectionToSheet(inspectionWithSpatial);
           const newPin: LayoutPin = { id: `pin_${Date.now()}`, floor_plan_id: selectedPlan.id, inspection_id: inspectionWithSpatial.id, x: pendingPinCoord.x, y: pendingPinCoord.y, label: inspectionWithSpatial.ten_hang_muc, status: inspectionWithSpatial.status };
           await saveLayoutPin(newPin);
           const updatedPins = await fetchLayoutPins(selectedPlan.id);
-          setPins(updatedPins); 
+          setPins(updatedPins);
           setIsInspectionFormOpen(false);
           setPendingPinCoord(null);
           if (onUpdate) onUpdate();
@@ -344,9 +326,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     </div>
                                     <div>
                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">MÃ DỰ ÁN</p>
-                                        <p className="text-[11px] font-bold text-slate-800 tracking-tight uppercase">
-                                            {project.ma_ct || '---'} {project.code && `• ${project.code}`}
-                                        </p>
+                                        <p className="text-xs font-black text-slate-800 uppercase">{project.ma_ct}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
@@ -539,14 +519,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {projectNcrs.length > 0 ? (
                                     <>
-                                        {projectNcrs.slice(0, ncrLimit).map(ncrItem => ( // Renamed to ncrItem to avoid confusion
-                                            <div key={ncrItem.id} onClick={() => handleOpenFullDetail(ncrItem.parentInspectionId)} className="p-4 bg-white border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span>
-                                                    <span className="text-[9px] font-mono font-bold text-slate-400">#{ncrItem.id.split('-').pop()}</span>
-                                                </div>
-                                                <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-tight italic">"{ncrItem.issueDescription}"</h4>
-                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Reported by: {ncrItem.parentInspectionInspectorName}</p>
+                                        {projectNcrs.slice(0, ncrLimit).map(ncr => (
+                                            <div key={ncr.id} onClick={() => handleOpenFullDetail(ncr.id)} className="p-4 bg-white border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
+                                                <div className="flex justify-between items-center"><span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span><span className="text-[9px] font-mono font-bold text-slate-400">#{ncr.id.split('-').pop()}</span></div>
+                                                <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-tight italic">"{ncr.ten_hang_muc}"</h4>
+                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Reported by: {ncr.inspectorName}</p>
                                             </div>
                                         ))}
                                         {projectNcrs.length > ncrLimit && (
@@ -616,7 +593,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {fullDetailId && (
           <div className="absolute inset-0 z-[150] bg-white flex flex-col animate-in slide-in-from-bottom duration-300 shadow-2xl">
-              {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4"/><p className="text-[10px] font-black text-slate-700 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (sig || extra.managerSignature) { updated.status = InspectionStatus.APPROVED; updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await updateInspection(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await updateInspection(updated); setFullDetailData(updated); }} workshops={[]} />; })() : null}
+              {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4"/><p className="text-[10px] font-black text-slate-700 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (sig || extra.managerSignature) { updated.status = InspectionStatus.APPROVED; updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await saveInspectionToSheet(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await saveInspectionToSheet(updated); setFullDetailData(updated); }} />; })() : null}
           </div>
       )}
 
@@ -722,7 +699,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   <input type="date" value={editForm.startDate || ''} onChange={e => setEditForm({...editForm, startDate: e.target.value})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-black text-slate-800 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm" />
                               </div>
                               <div className="space-y-1.5">
-                                  <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-3 flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-red-500" /> Ngày Kết Thúc</label>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-red-500" /> Ngày Kết Thúc</label>
                                   <input type="date" value={editForm.endDate || ''} onChange={e => setEditForm({...editForm, endDate: e.target.value})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-black text-slate-800 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm" />
                               </div>
                           </div>

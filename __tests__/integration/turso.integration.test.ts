@@ -1,7 +1,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { plansService } from '../../services/plansService';
-import { db } from '../../lib/db'; 
+import { turso } from '../../services/tursoConfig';
 
 /**
  * INTEGRATION TESTS
@@ -14,11 +14,12 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
   let createdId: number;
 
   beforeAll(async () => {
-    await db.query("DELETE FROM \"IPO\" WHERE headcode LIKE 'TEST_%'");
+    // Optional: Setup test table or clean state
+    // await turso.execute("DELETE FROM searchPlans WHERE headcode LIKE 'TEST_%'");
   });
 
   it('should verify database connection', async () => {
-    const result = await db.query('SELECT 1 as val');
+    const result = await turso.execute('SELECT 1 as val');
     expect(result.rows[0].val).toBe(1);
   });
 
@@ -30,8 +31,7 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
       ten_ct: 'Integration Test',
       ten_hang_muc: 'Lifecycle Item',
       so_luong_ipo: 10,
-      dvt: 'PCS',
-      ma_nha_may: 'NM-INT' // Added ma_nha_may for the new schema
+      dvt: 'PCS'
     });
     
     expect(newPlan.id).toBeDefined();
@@ -57,9 +57,7 @@ describe.skipIf(!runIntegration)('Turso Integration Tests', () => {
   afterAll(async () => {
     // Cleanup if needed
     if (createdId) {
-        try { 
-          await db.query(`DELETE FROM "IPO" WHERE id = $1`, [createdId]); 
-        } catch(e) {}
+        try { await plansService.deletePlan(createdId); } catch(e) {}
     }
   });
 });

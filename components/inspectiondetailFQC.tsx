@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, User, Workshop, CheckStatus } from '../types';
 import { ArrowLeft, Box, Edit3, Trash2, ShieldCheck, ScanEye, CheckCircle2, AlertOctagon, X, Loader2, Eraser, Calendar, Image as ImageIcon, Maximize2 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
-import { NCRDetail } from './NCRDetail';
 
 interface InspectionDetailProps {
   inspection: Inspection;

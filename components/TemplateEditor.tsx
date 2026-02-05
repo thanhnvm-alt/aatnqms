@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
@@ -217,7 +216,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
       if (!activeStage) return;
       const newName = prompt("Đổi tên công đoạn:", activeStage);
       // Fixed: changed name.trim() to newName.trim() as 'name' was not defined in this scope.
-      if (newName && newName.trim() && newName.trim() !== activeStage) {
+      if (newName && newName.trim() && newName !== activeStage) {
           setItems(items.map(i => i.stage === activeStage ? { ...i, stage: newName.trim() } : i));
           setActiveStage(newName.trim());
       }
@@ -279,7 +278,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
             </div>
          </div>
          <div className="flex gap-2">
-             <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx" onChange={handleImportExcel} />
+             <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
              <button onClick={() => excelInputRef.current?.click()} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
                 <FileUp className="w-4 h-4 text-blue-600" /> Nhập Excel
              </button>

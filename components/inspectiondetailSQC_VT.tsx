@@ -183,9 +183,9 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
       setIsProcessing(true);
       try {
           await onApprove(inspection.id, "", { 
-              productionSignature: prodSig, 
-              productionName: prodName.toUpperCase(),
-              productionComment: prodComment
+              signature: prodSig, 
+              name: prodName.toUpperCase(),
+              comment: prodComment
           });
           alert("Đã xác nhận từ đại diện Nhà cung cấp.");
           setShowProductionModal(false);
@@ -429,10 +429,12 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                 <div className="space-y-3">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Đại diện NCC</p>
                     <div className="bg-slate-50 p-4 rounded-[1.5rem] border border-slate-100 h-32 flex items-center justify-center overflow-hidden shadow-inner">
-                        {inspection.productionSignature ? <img src={inspection.productionSignature} className="h-full object-contain" /> : <div className="text-[10px] text-orange-400 animate-pulse font-black">CHỜ XÁC NHẬN</div>}
+                        {(inspection.productionSignature || prodSig) ? (
+                            <img src={inspection.productionSignature || prodSig} className="h-full object-contain" />
+                        ) : <div className="text-[10px] font-black text-slate-300 uppercase italic">Chờ xác nhận</div>}
                     </div>
                     <div className="text-center">
-                        <p className="text-[12px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || 'Đại diện NCC'}</p>
+                        <p className="text-[12px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || prodName || '---'}</p>
                     </div>
                 </div>
 
@@ -505,7 +507,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
         </section>
       </div>
 
-      {/* --- MOBILE-OPTIMIZED BOTTOM ACTION BAR --- */}
+      {/* --- REFACTORED MOBILE-OPTIMIZED BOTTOM ACTION BAR --- */}
       <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-2 py-3 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
           <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2 h-12">
               <button 
@@ -515,36 +517,62 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                   <ArrowLeft className="w-4 h-4" />
                   <span className="whitespace-nowrap">QUAY LẠI</span>
               </button>
-
-              {!isApproved && isManager && (
-                  <button 
-                    onClick={() => setShowManagerModal(true)} 
-                    className="flex-[2] h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 border border-emerald-500"
-                  >
-                      <Check className="w-4 h-4" />
-                      <span className="whitespace-nowrap">PHÊ DUYỆT BTP</span>
-                  </button>
+              
+              {!isApproved && (
+                  <div className="flex-[2] h-full flex gap-2">
+                      <button 
+                        onClick={() => setShowProductionModal(true)} 
+                        className={`flex-1 h-full font-black uppercase text-[8px] tracking-tight rounded-xl flex flex-row items-center justify-center gap-1.5 transition-all active:scale-95 shadow-md border ${
+                            isProdSigned 
+                            ? 'bg-indigo-50 text-indigo-400 border-indigo-100 cursor-default' 
+                            : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+                        }`}
+                        disabled={isProdSigned}
+                      >
+                          {isProdSigned ? <CheckCircle2 className="w-4 h-4"/> : <UserPlus className="w-4 h-4"/>} 
+                          <span className="whitespace-nowrap">{isProdSigned ? 'ĐÃ XÁC NHẬN' : 'NCC XÁC NHẬN'}</span>
+                      </button>
+                      
+                      {isManager && (
+                          <button 
+                            onClick={() => setShowManagerModal(true)} 
+                            className="flex-1 h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 border border-transparent"
+                          >
+                              <Check className="w-4 h-4"/> 
+                              <span className="whitespace-nowrap">PHÊ DUYỆT</span>
+                          </button>
+                      )}
+                  </div>
               )}
           </div>
       </div>
 
       {showManagerModal && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-8 space-y-6 flex flex-col animate-in zoom-in duration-200">
-                  <div className="flex justify-between items-center px-1">
-                      <h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">Manager Phê Duyệt</h3>
-                      <button onClick={() => setShowManagerModal(false)} className="p-1 hover:bg-slate-100 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400"/></button>
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                      <div className="flex items-center gap-3"><ShieldCheck className="w-6 h-6 text-emerald-600" /><h3 className="font-black text-slate-800 uppercase tracking-tighter text-base">QA/QC Manager Approval</h3></div>
+                      <button onClick={() => setShowManagerModal(false)}><X className="w-7 h-7 text-slate-400"/></button>
                   </div>
-                  <SignaturePad label="Chữ ký điện tử QA/QC Manager *" value={managerSig} onChange={setManagerSig} />
-                  <div className="flex gap-4 pt-2">
-                      <button onClick={() => setShowManagerModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] rounded-2xl border border-slate-100 shadow-sm transition-all">Hủy</button>
-                      <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-emerald-500/30 transition-all active:scale-95 disabled:opacity-50">
-                          {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : 'PHÊ DUYỆT'}
-                      </button>
+                  <div className="p-8 space-y-6 bg-slate-50/30">
+                      <div className="bg-white p-5 rounded-[2rem] border border-slate-100 text-center shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Authorized System User</p><p className="text-base font-black text-slate-800 uppercase tracking-tight">{user.name}</p></div>
+                      <SignaturePad label="Chữ ký điện tử Manager *" value={managerSig} onChange={setManagerSig} />
                   </div>
+                  <div className="p-6 border-t bg-white flex gap-4"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] rounded-2xl hover:bg-slate-50 border border-slate-100 shadow-sm transition-all">Hủy</button><button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-emerald-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin"/> : <ShieldCheck className="w-5 h-5"/>} XÁC NHẬN DUYỆT</button></div>
               </div>
           </div>
       )}
+
+      {showProductionModal && (
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white"><div className="flex items-center gap-3"><UserPlus className="w-6 h-6 text-indigo-600" /><h3 className="font-black text-slate-800 uppercase tracking-tighter text-base">Xác nhận Đối Tác NCC</h3></div><button onClick={() => setShowProductionModal(false)}><X className="w-7 h-7 text-slate-400"/></button></div>
+                  <div className="p-8 space-y-6 bg-slate-50/30"><div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Họ và tên đại diện *</label><input value={prodName} onChange={e => setProdName(e.target.value.toUpperCase())} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-black text-sm uppercase focus:ring-4 focus:ring-indigo-100 outline-none shadow-sm transition-all h-12" placeholder="NHẬP HỌ TÊN..." /></div><div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3">Ghi chú / Ý kiến NCC</label><textarea value={prodComment} onChange={e => setProdComment(e.target.value)} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-[2rem] font-bold text-xs outline-none focus:ring-4 focus:ring-indigo-100 h-28 resize-none shadow-sm transition-all" placeholder="Nhập ghi chú phản hồi..." /></div><SignaturePad label="Chữ ký xác nhận đại diện *" value={prodSig} onChange={setProdSig} /></div>
+                  <div className="p-6 border-t bg-white flex gap-4"><button onClick={() => setShowProductionModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] rounded-2xl hover:bg-slate-50 border border-slate-100 shadow-sm transition-all">Hủy</button><button onClick={handleProductionConfirm} disabled={isProcessing || !prodSig || !prodName} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-indigo-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>} LƯU XÁC NHẬN</button></div>
+              </div>
+          </div>
+      )}
+
       {lightboxState && (
           <ImageEditorModal 
               images={lightboxState.images} 

@@ -1,166 +1,164 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { IPOItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { IPO } from '../types';
 import { fetchIPOs } from '../services/apiService';
-import { Search, RefreshCw, Loader2, Database, List, ArrowLeft, ArrowRight, Table, Hash, Package } from 'lucide-react';
+import { 
+  Search, RefreshCw, Loader2, Box, 
+  ChevronLeft, ChevronRight, FileText, Calendar, AlertTriangle
+} from 'lucide-react';
 
 interface IPOListProps {
-  onRefresh: () => void;
+  onSelect?: (ipo: IPO) => void;
 }
 
-export const IPOList: React.FC<IPOListProps> = ({ onRefresh }) => {
-  const [ipos, setIpos] = useState<IPOItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export const IPOList: React.FC<IPOListProps> = ({ onSelect }) => {
+  const [ipos, setIpos] = useState<IPO[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [limit, setLimit] = useState(50);
 
   useEffect(() => {
     loadData();
-  }, [page, limit, searchTerm]);
+  }, []);
 
   const loadData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const result = await fetchIPOs(searchTerm, page, limit);
-      if (result && result.data) {
-        setIpos(result.data);
-        setTotal(result.total || 0);
+      const result = await fetchIPOs(searchTerm);
+      if (result.success) {
+        setIpos(result.items || []);
+      } else {
+        setError(result.error || 'Lỗi không xác định khi tải dữ liệu');
+        setIpos([]);
       }
-    } catch (e) {
-      console.error("Load IPOs failed:", e);
+    } catch (err: any) {
+      console.error("Failed to load IPOs", err);
+      setError(err.message || 'Lỗi kết nối');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSearch = (term: string) => {
-    setSearchTerm(term);
-    setPage(1); // Reset to first page on new search
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    loadData();
   };
 
-  const totalPages = Math.ceil(total / limit);
-
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {/* Header Toolbar */}
-      <div className="bg-white px-4 py-4 border-b border-slate-200 sticky top-0 z-20 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
-            <Database className="w-5 h-5" />
+    <div className="flex flex-col h-full bg-slate-50">
+      {/* Header / Toolbar */}
+      <div className="bg-white border-b border-slate-200 p-4 shadow-sm shrink-0">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg">
+              <Box className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Danh sách IPO</h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">PostgreSQL Data Source</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Dữ liệu IPO (Plans/Orders)</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Database Record View</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Tìm ID Project, Tên dự án, Mã..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchTerm)}
-              className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all"
-            />
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <form onSubmit={handleSearch} className="relative flex-1 md:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Tìm IPO, Dự án..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-indigo-100 transition-all"
+              />
+            </form>
+            <button 
+              onClick={() => loadData()} 
+              className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 shadow-sm"
+              title="Làm mới"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <button 
-            onClick={() => loadData()}
-            className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl hover:text-blue-600 hover:border-blue-200 active:scale-95 transition-all shadow-sm"
-            title="Làm mới"
-          >
-            <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
         </div>
       </div>
 
       {/* Data Table */}
-      <div className="flex-1 overflow-auto p-4 md:p-6 no-scrollbar">
-        {isLoading && ipos.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-            <p className="font-black uppercase tracking-widest text-[9px]">Đang tải dữ liệu IPO...</p>
-          </div>
-        ) : ipos.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300">
-            <Table className="w-16 h-16 opacity-10 mb-4" />
-            <p className="font-black uppercase tracking-[0.2em] text-[10px]">Không tìm thấy dữ liệu</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+      <div className="flex-1 overflow-hidden p-4">
+        <div className="max-w-7xl mx-auto h-full flex flex-col bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+          
+          <div className="flex-1 overflow-auto no-scrollbar">
+            {error ? (
+              <div className="flex flex-col items-center justify-center h-64 text-red-500 space-y-2">
+                <AlertTriangle className="w-10 h-10 opacity-50" />
+                <p className="font-bold text-sm uppercase">Kết nối thất bại</p>
+                <p className="text-xs opacity-70 max-w-md text-center">{error}</p>
+                <button onClick={() => loadData()} className="mt-4 px-4 py-2 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors">Thử lại</button>
+              </div>
+            ) : (
               <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-50/50 border-b border-slate-200 text-slate-500 font-black uppercase tracking-widest text-[9px] sticky top-0 z-10">
+                <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3 text-center w-16">ID</th>
-                    <th className="px-4 py-3 w-32">Mã Dự Án</th>
-                    <th className="px-4 py-3 min-w-[200px]">Tên Dự Án</th>
-                    <th className="px-4 py-3 min-w-[250px]">Mô Tả Vật Tư / Hạng Mục</th>
-                    <th className="px-4 py-3 w-24 text-center">ĐVT</th>
-                    <th className="px-4 py-3 w-28 text-right">SL IPO</th>
-                    <th className="px-4 py-3 w-32">Mã Nhà Máy</th>
-                    <th className="px-4 py-3 w-32">Ngày tạo</th>
+                    <th className="p-4 w-16 text-center">#</th>
+                    <th className="p-4">Thông tin Dự Án</th>
+                    <th className="p-4">Hạng mục / Vật tư</th>
+                    <th className="p-4">Thông tin Lệnh SX</th>
+                    <th className="p-4 text-right">Số lượng</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ipos.map((item, idx) => (
-                    <tr key={item.id || idx} className="hover:bg-blue-50/30 transition-colors group">
-                      <td className="px-4 py-3 text-center text-[10px] font-mono text-slate-400">{item.id}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Hash className="w-3 h-3 text-blue-400" />
-                          <span className="font-bold text-[11px] text-blue-700">{item.ID_Project}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-[11px] text-slate-700 uppercase">{item.Project_name}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-start gap-2">
-                          <Package className="w-3 h-3 text-slate-400 mt-0.5" />
-                          <span className="text-[11px] font-medium text-slate-600 line-clamp-2" title={item.Material_description}>{item.Material_description}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center text-[10px] font-bold text-slate-500 bg-slate-50/50">{item.Base_Unit}</td>
-                      <td className="px-4 py-3 text-right font-mono text-[11px] font-bold text-slate-800">{item.Quantity_IPO}</td>
-                      <td className="px-4 py-3 text-[10px] font-bold text-slate-500">{item.ID_Factory_Order}</td>
-                      <td className="px-4 py-3 text-[10px] text-slate-400 font-mono">{item.Created_on}</td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-slate-50">
+                  {isLoading ? (
+                     <tr><td colSpan={5} className="p-10 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500"/></td></tr>
+                  ) : ipos.length === 0 ? (
+                     <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold text-xs uppercase">Không tìm thấy dữ liệu IPO</td></tr>
+                  ) : (
+                    ipos.map((ipo, idx) => (
+                      <tr key={ipo.id || idx} className="hover:bg-slate-50/80 transition-colors group">
+                        <td className="p-4 text-center">
+                          <span className="text-[10px] font-mono text-slate-300 font-bold">{idx + 1}</span>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-black text-slate-800 uppercase">{ipo.Project_name || 'N/A'}</span>
+                            <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 w-fit mt-1">{ipo.ID_Project}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-medium text-slate-700">{ipo.Material_description}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1">
+                             <div className="flex items-center gap-1.5">
+                                <FileText className="w-3 h-3 text-slate-400" />
+                                <span className="text-[10px] font-bold text-slate-600 font-mono">{ipo.ID_Factory_Order}</span>
+                             </div>
+                             <div className="flex items-center gap-1.5">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                <span className="text-[9px] text-slate-500">{ipo.Created_on ? new Date(ipo.Created_on).toLocaleDateString('vi-VN') : '-'}</span>
+                             </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="text-sm font-black text-slate-800">{ipo.Quantity_IPO}</span>
+                          <span className="text-[9px] font-bold text-slate-400 ml-1 uppercase">{ipo.Base_Unit}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
-            </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Pagination Footer */}
-      <div className="bg-white border-t border-slate-200 px-4 py-3 flex justify-between items-center shrink-0">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          Hiển thị {ipos.length} / {total} bản ghi
-        </p>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1 || isLoading}
-            className="p-2 border rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <span className="px-4 py-2 bg-slate-100 rounded-lg text-[10px] font-black text-slate-600 flex items-center">
-            Trang {page} / {totalPages || 1}
-          </span>
-          <button 
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages || isLoading}
-            className="p-2 border rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-all"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          {!error && ipos.length > 0 && (
+            <div className="p-3 border-t border-slate-100 bg-slate-50 text-center">
+               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                 Hiển thị {ipos.length} bản ghi
+               </span>
+            </div>
+          )}
+
         </div>
       </div>
     </div>

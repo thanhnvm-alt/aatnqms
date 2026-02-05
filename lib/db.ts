@@ -1,52 +1,43 @@
 
-import { Pool, PoolConfig } from 'pg';
+import { createRequire } from 'module';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const config: PoolConfig = {
-  connectionString: process.env.DATABASE_URL || 'postgresql://edbqaqc:Oe71zNGcnaS6hzra@dbtracking.apps.zuehjcybfdjyc7j.aacorporation.vn:5432/aaTrackingApps?sslmode=prefer',
+// Sử dụng createRequire để import pg an toàn trong môi trường Vite SSR
+// Điều này ngăn chặn lỗi crash module dẫn đến 404
+const require = createRequire(import.meta.url);
+const { Pool } = require('pg');
+
+const dbConfig = {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  port: parseInt(process.env.DB_PORT || '5432'),
   ssl: {
     rejectUnauthorized: false
   },
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-  // QUAN TRỌNG: Thiết lập search_path ưu tiên schema "appQAQC".
-  // Dấu ngoặc kép "" là BẮT BUỘC vì tên schema có chứa chữ Hoa (Mixed Case).
-  // Nếu không có "", Postgres sẽ tìm 'appqaqc' và gây lỗi không tìm thấy bảng.
-  options: '-c search_path="appQAQC",public'
+  connectionTimeoutMillis: 10000, // Tăng timeout để tránh lỗi mạng chập chờn
 };
 
-export const db = new Pool(config);
+console.log(`[Postgres] Initializing Pool... Host: ${dbConfig.host}`);
 
-// Kiểm tra kết nối khi khởi động
-db.query('SELECT current_schema()')
-  .then((res) => {
-    console.log(`✅ Connected to PostgreSQL | Database: aaTrackingApps | Active Schema: ${res.rows[0].current_schema}`);
-  })
-  .catch((err) => {
-    console.error('❌ Failed to connect to PostgreSQL:');
-    console.error('   Message:', err.message);
-    if (err.code) console.error('   Code:', err.code);
-  });
+export const pool = new Pool(dbConfig);
 
-// Xử lý đóng kết nối khi server tắt
-const gracefulShutdown = async (signal: string) => {
-  console.log(`\nReceived ${signal}. Closing database pool...`);
-  try {
-    await db.end();
-    console.log('✅ Database pool closed.');
-    // @ts-ignore
-    process.exit(0);
-  } catch (err) {
-    console.error('❌ Error during pool shutdown:', err);
-    // @ts-ignore
-    process.exit(1);
-  }
+// CẤU HÌNH SCHEMA: Tự động set search_path khi kết nối
+// Khắc phục lỗi "relation does not exist" khi bảng nằm trong schema riêng (appQAQC)
+pool.on('connect', (client: any) => {
+  const schema = process.env.DB_SCHEMA || 'public';
+  client.query(`SET search_path TO "${schema}", public`)
+    .catch((err: any) => console.error('[Postgres] Failed to set search_path', err));
+});
+
+pool.on('error', (err: any) => {
+  console.error('[Postgres] Unexpected error on idle client', err);
+});
+
+export const db = {
+  query: (text: string, params?: any[]) => pool.query(text, params),
+  pool
 };
-
-// @ts-ignore
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-// @ts-ignore
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

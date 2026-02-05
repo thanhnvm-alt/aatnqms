@@ -1,5 +1,4 @@
 
-
 import React, { useMemo } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState } from '../types';
 import { 

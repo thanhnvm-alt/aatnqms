@@ -1,54 +1,70 @@
 
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-export default defineConfig(({ mode }: { mode: string }) => {
-  const env = loadEnv(mode, (process as any).cwd(), '');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export default defineConfig(({ mode }) => {
+  // Load variables from .env
+  const env = loadEnv(mode, path.resolve(), '');
   
-  // Ưu tiên API Key từ Vercel System Env
-  const apiKey = 
-    process.env.API_KEY || 
-    process.env.VITE_API_KEY || 
-    env.API_KEY || 
-    env.VITE_API_KEY || 
-    '';
-
-  // Hardcoded Turso credentials as requested (Fallback if env vars missing)
-  const tursoUrl = process.env.TURSO_DATABASE_URL || env.TURSO_DATABASE_URL || env.VITE_TURSO_DATABASE_URL || 'libsql://aatnqaqc-thanhnvm-alt.aws-ap-northeast-1.turso.io';
-  const tursoToken = process.env.TURSO_AUTH_TOKEN || env.TURSO_AUTH_TOKEN || env.VITE_TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjY5OTIyMTEsImlkIjoiY2IxYmZmOGYtYzVhNS00NTNhLTk1N2EtYjdhMWU5NzIwZTUzIiwicmlkIjoiZDcxNjFjNGYtNDQyOC00ZmIyLTgzZDEtN2JkOGUzZjcyYzFmIn0.u8k5EJwCPv1uopKKDbaJ3AiDkmZFoAI3SlvgT_Hk8HSwLiO16IegBSUc5Hg4Lca7VPU_3quNqyvxzTPNPYd3DA';
-
-  console.log(`✅ Build Mode: ${mode} - API Key detected: ${apiKey ? 'YES' : 'NO'}`);
+  // Critical: Inject env into process.env for the Backend middleware context
+  Object.keys(env).forEach(key => {
+    if (!(key in process.env)) {
+      process.env[key] = env[key];
+    }
+  });
 
   return {
-    plugins: [react()],
-    // Override resolve to remove the alias causing the build issue
-    resolve: {
-      alias: {}
-    },
+    plugins: [
+      react(),
+      {
+        name: 'express-api-plugin',
+        configureServer(server) {
+          // Mount Express at /api
+          // Note: Vite (Connect) strips /api from req.url before calling this handler
+          server.middlewares.use('/api', async (req, res, next) => {
+            try {
+              const apiPath = path.resolve(__dirname, 'api/index.ts');
+              // Use SSR load to support TS/ESM for the Backend
+              const module = await server.ssrLoadModule(apiPath);
+              const apiApp = module.default;
+              
+              if (typeof apiApp === 'function') {
+                apiApp(req, res, next);
+              } else {
+                next();
+              }
+            } catch (error) {
+              console.error('[Vite API Gateway Error]:', error);
+              if (!res.headersSent) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ 
+                  success: false, 
+                  error: 'Internal Server Error in API Gateway', 
+                  details: String(error) 
+                }));
+              }
+            }
+          });
+          console.log('📡 [Vite] Express API Gateway mounted at /api');
+        }
+      }
+    ],
     build: {
       outDir: 'dist',
-      emptyOutDir: true,
-      sourcemap: true,
-      target: 'es2022', // Updated target to a more modern ES version compatible with Vite 5.x
+      target: 'es2020',
     },
     define: {
-      // Tiêm API_KEY vào mã nguồn theo chuẩn Gemini SDK
-      'process.env.API_KEY': JSON.stringify(apiKey),
-      'process.env.VITE_API_KEY': JSON.stringify(apiKey),
-      'process.env.NODE_ENV': JSON.stringify(mode),
-      
-      // Turso Config: Support both standard and VITE_ prefixed variables for flexibility
-      'process.env.TURSO_DATABASE_URL': JSON.stringify(tursoUrl),
-      'process.env.TURSO_AUTH_TOKEN': JSON.stringify(tursoToken),
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || '')
     },
     server: {
-      proxy: {
-        '/api': {
-          target: 'http://localhost:3001',
-          changeOrigin: true,
-          secure: false,
-        },
-      },
-    },
+      host: true,
+      port: 5173
+    }
   };
 });

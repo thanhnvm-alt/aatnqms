@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc, InspectionFormProps } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, 
   Calendar, PenTool, Eraser, Plus, Trash2, 
@@ -11,6 +11,15 @@ import {
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
+
+interface InspectionFormProps {
+  initialData?: Partial<Inspection>;
+  onSave: (inspection: Inspection) => Promise<void>;
+  onCancel: () => void;
+  inspections: Inspection[];
+  user: User;
+  templates: Record<string, CheckItem[]>;
+}
 
 const SUPPORTING_DOC_TEMPLATES = [
     "Bản vẽ có chữ ký xác nhận",
@@ -198,7 +207,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
         let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field as string)) { val = parseFloat(String(value)) || 0; }
+        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = parseFloat(String(value)) || 0; }
         let mat = { ...nextMaterials[idx], [field]: val };
         if (field === 'inspectQty') { if (val > mat.deliveryQty) val = mat.deliveryQty; if (val < 0) val = 0; mat.inspectQty = val; mat.passQty = val; mat.failQty = 0; }
         else if (field === 'passQty') { if (val > mat.inspectQty) val = mat.inspectQty; if (val < 0) val = 0; mat.passQty = val; mat.failQty = Number((mat.inspectQty - val).toFixed(2)); }
@@ -321,15 +330,15 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <h3 className="text-slate-700 font-bold uppercase tracking-widest flex items-center gap-2 text-[10px] border-b border-slate-50 pb-2"><FileCheck className="w-3.5 h-3.5 text-blue-500"/> DANH MỤC TÀI LIỆU HỖ TRỢ</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {(formData.supportingDocs || []).map(doc => (
-                        <button key={doc.id} onClick={() => toggleDoc(doc.id)} className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left ${doc.verified ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-400'}`} type="button">
+                        <button key={doc.id} onClick={() => toggleDoc(doc.id)} className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-left ${doc.verified ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'}`} type="button">
                             {doc.verified ? <CheckSquare className="w-4 h-4 shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
                             <span className="text-[9px] font-bold uppercase leading-tight">{doc.name}</span>
                         </button>
                     ))}
                 </div>
-                <div className="flex gap-2 pt-2 max-w-2xl">
-                    <input value={newDocName} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100 shadow-inner" placeholder="Thêm tài liệu hỗ trợ khác..."/>
-                    <button onClick={addCustomDoc} className="px-5 py-2 bg-slate-800 text-white rounded-lg text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md">Thêm</button>
+                <div className="flex gap-2 pt-2">
+                    <input value={newDocName} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100" placeholder="Thêm tài liệu hỗ trợ khác..."/>
+                    <button onClick={addCustomDoc} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all">Thêm</button>
                 </div>
             </div>
         </section>
@@ -347,7 +356,6 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 {(formData.materials || []).map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
-                    
                     const hasFail = mat.items?.some(it => it.status === CheckStatus.FAIL);
                     const hasCond = mat.items?.some(it => it.status === CheckStatus.CONDITIONAL);
                     const allPass = (mat.items?.length || 0) > 0 && mat.items?.every(it => it.status === CheckStatus.PASS);
@@ -369,7 +377,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     <div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] font-bold text-slate-400 uppercase">{mat.scope === 'COMMON' ? 'Dùng chung' : mat.projectCode}</span><span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[8px] font-bold uppercase border border-green-100">{passRate}% ĐẠT</span></div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600 rounded-md" type="button"><Trash2 className="w-4 h-4"/></button>{isExp ? <ChevronUp className="w-5 h-5 text-blue-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}</div>
+                            <div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600" type="button"><Trash2 className="w-4 h-4"/></button>{isExp ? <ChevronUp className="w-5 h-5 text-blue-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}</div>
                         </div>
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white border-t border-slate-50">
@@ -424,18 +432,18 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
                                 <div className="grid grid-cols-12 gap-3">
                                   <div className="col-span-4">
-                                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Chủng loại</label>
+                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
                                       <select value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[10px] h-9 bg-white shadow-sm">
                                           <option value="">-- Chọn --</option>
                                           {iqcGroups.map(g => <option key={g} value={g}>{g}</option>)}
                                       </select>
                                   </div>
                                   <div className="col-span-3">
-                                      <label className="block text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Loại kiểm</label>
+                                      <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest block mb-1">Loại kiểm</label>
                                       <select value={mat.inspectType || '100%'} onChange={e => updateMaterial(matIdx, 'inspectType', e.target.value as any)} className="w-full px-2 py-1.5 border border-blue-300 rounded-lg font-black text-[10px] h-9 bg-white outline-none text-blue-700 shadow-sm"><option value="100%">100%</option><option value="AQL">AQL</option></select>
                                   </div>
                                   <div className="col-span-5">
-                                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tên Vật Tư *</label>
+                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Tên Vật Tư *</label>
                                       <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-bold focus:ring-1 ring-blue-500 outline-none text-[10px] h-9 shadow-sm" placeholder="Tên sản phẩm..."/>
                                   </div>
                                 </div>
@@ -447,7 +455,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         <input list="unit-list" value={mat.unit} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-black text-center bg-white text-[11px] h-7 uppercase" placeholder="DVT..."/>
                                         <datalist id="unit-list">{UNIT_OPTIONS.map(opt => <option key={opt} value={opt} />)}</datalist>
                                     </div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-blue-600 uppercase block text-center">SL Kiểm tra</label><input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-1 py-1 border rounded-md font-bold text-center bg-white text-[11px] h-7 ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600' : 'border-blue-300 text-blue-700'}`}/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-blue-600 uppercase block text-center">Kiểm tra</label><input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-1 py-1 border rounded-md font-bold text-center bg-white text-[11px] h-7 ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600' : 'border-blue-300 text-blue-700'}`}/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 uppercase block text-center">Đạt</label><input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 uppercase block text-center">Hỏng</label><input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/></div>
                                 </div>
@@ -491,28 +499,13 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
 
         {/* III. Summary */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-3">
-            <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs">
-                <MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT
-            </h3>
-            <textarea 
-                value={formData.summary} 
-                onChange={e => handleInputChange('summary', e.target.value)} 
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white h-20 resize-none text-[11px]" 
-                placeholder="Nhập nhận xét tổng quan của QC..."
-            />
-        </section>
+        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2"><h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT</h3><textarea value={formData.summary} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white h-20 resize-none text-[11px]" placeholder="Nhập nhận xét tổng quan của QC..."/></section>
         
         {/* IV. QC Signature */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <h3 className="text-blue-800 border-b border-blue-50 pb-2 mb-4 font-bold uppercase tracking-widest flex items-center gap-2 text-xs">
-                <PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC
-            </h3>
-            <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
-        </section>
+        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><h3 className="text-blue-800 border-b border-blue-50 pb-2 mb-4 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC</h3><SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} /></section>
       </div>
 
-      <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+      <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 shadow-sm pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
         <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 text-[10px]" type="button">HỦY BỎ</button>
         <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="h-[44px] flex-1 bg-blue-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT BÁO CÁO IQC</span></button>
       </div>

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR } from '../types';
 import { ArrowLeft, Calendar, User as UserIcon, Box, Edit3, Trash2, ShieldCheck, Palette, Layers, CheckCircle2, AlertOctagon, X, Loader2, Eraser } from 'lucide-react';
@@ -38,7 +36,7 @@ const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: str
 
 export const InspectionDetailStepVecni: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove }) => {
   const [managerSig, setManagerSig] = useState('');
-  const [showManagerModal, setShowManagerModal] = useState(false); // Renamed from showModal
+  const [showModal, setShowModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const isApproved = inspection.status === InspectionStatus.APPROVED;
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -48,7 +46,7 @@ export const InspectionDetailStepVecni: React.FC<InspectionDetailProps> = ({ ins
       setIsProcessing(true);
       try {
           if (onApprove) await onApprove(inspection.id, managerSig);
-          setShowManagerModal(false); onBack(); // Used setShowManagerModal
+          setShowModal(false); onBack();
       } catch (e) { alert("Lỗi duyệt."); } finally { setIsProcessing(false); }
   };
 
@@ -85,8 +83,8 @@ export const InspectionDetailStepVecni: React.FC<InspectionDetailProps> = ({ ins
             </div>
         </div>
       </div>
-      {!isApproved && isManager && <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 flex justify-end z-40"><button onClick={() => setShowManagerModal(true)} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] shadow-lg">DUYỆT VECNI</button></div>}
-      {showManagerModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4"><h3 className="font-bold uppercase text-sm">Xác nhận Duyệt Bước Màu</h3><SignaturePad label="Chữ ký Manager" value={managerSig} onChange={setManagerSig}/><div className="flex gap-2"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-2 border rounded-lg text-xs font-bold uppercase">Hủy</button><button onClick={handleApprove} disabled={!managerSig || isProcessing} className="flex-1 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold uppercase">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}</button></div></div></div>}
+      {!isApproved && isManager && <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 flex justify-end z-40"><button onClick={() => setShowModal(true)} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] shadow-lg">DUYỆT VECNI</button></div>}
+      {showModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4"><h3 className="font-bold uppercase text-sm">Xác nhận Duyệt Bước Màu</h3><SignaturePad label="Chữ ký Manager" value={managerSig} onChange={setManagerSig}/><div className="flex gap-2"><button onClick={() => setShowModal(false)} className="flex-1 py-2 border rounded-lg text-xs font-bold uppercase">Hủy</button><button onClick={handleApprove} disabled={!managerSig || isProcessing} className="flex-1 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold uppercase">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}</button></div></div></div>}
     </div>
   );
 };

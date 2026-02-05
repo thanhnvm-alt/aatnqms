@@ -1,6 +1,5 @@
 
 
-
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
@@ -260,7 +259,7 @@ export const MOCK_PROJECTS: Project[] = [
     pc: 'Nguyen Van D',
     qa: 'Hoang Thi E',
     progress: 100,
-    thumbnail: 'https://images.unsplash.com/photo-1600607686527-7d1bb3543e49?auto=format&fit=crop&q=80&w=600',
+    thumbnail: 'https://images.unsplash.com/photo-1600607686527-6fb886090705?auto=format&fit=crop&q=80&w=600',
     description: 'Cải tạo khu vực sảnh tây khách sạn 5 sao. Yêu cầu vật liệu cao cấp và thi công đêm.',
     location: 'Quận 3, TP.HCM'
   },

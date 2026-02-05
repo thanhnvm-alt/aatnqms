@@ -2,17 +2,17 @@
 import { z } from 'zod';
 
 export const PlanSchema = z.object({
-  headcode: z.string()
+  headcode: z.string({ required_error: "Headcode là bắt buộc" })
     .min(3, "Headcode phải có ít nhất 3 ký tự")
     .max(50, "Headcode quá dài"),
   
-  ma_ct: z.string()
+  ma_ct: z.string({ required_error: "Mã công trình là bắt buộc" })
     .min(1, "Mã công trình không được để trống"),
   
-  ten_ct: z.string()
+  ten_ct: z.string({ required_error: "Tên công trình là bắt buộc" })
     .min(1, "Tên công trình không được để trống"),
   
-  ten_hang_muc: z.string()
+  ten_hang_muc: z.string({ required_error: "Tên hạng mục là bắt buộc" })
     .min(1, "Tên hạng mục không được để trống"),
   
   dvt: z.string().optional().default('PCS'),
@@ -20,9 +20,6 @@ export const PlanSchema = z.object({
   so_luong_ipo: z.coerce.number()
     .min(0, "Số lượng không được âm")
     .default(0),
-  
-  // Added optional ma_nha_may for compatibility with some plan items
-  ma_nha_may: z.string().optional(),
 });
 
 export const PlanUpdateSchema = PlanSchema.partial();
