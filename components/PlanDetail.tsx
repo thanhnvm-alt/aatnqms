@@ -85,8 +85,7 @@ export const PlanDetail: React.FC<PlanDetailProps> = ({
       setIsUploading(true);
       try {
           if (target === 'SIM') {
-              // Fixed error: Explicitly cast Array.from(files) to satisfy uploadFileToStorage parameter type and access .name
-              const newUrls = await Promise.all((Array.from(files) as File[]).map(file => uploadFileToStorage(file, file.name)));
+              const newUrls = await Promise.all(Array.from(files).map((file: File) => uploadFileToStorage(file, file.name)));
               setEditedSimulations([...editedSimulations, ...newUrls]);
           } else {
               const url = await uploadFileToStorage(files[0], files[0].name);

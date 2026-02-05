@@ -1,4 +1,5 @@
 
+
 import { turso, isTursoConfigured } from "./tursoConfig";
 import { NCR, Inspection, PlanItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, PlanEntity } from "../types";
 
@@ -136,6 +137,7 @@ export const initDatabase = async () => {
     console.error("Database initialization failed", error);
   }
 };
+
 
 // --- FLOOR PLANS & PINS ---
 
@@ -623,7 +625,8 @@ export async function getDefectLibrary(): Promise<DefectLibraryItem[]> {
 export async function saveDefectLibraryItem(item: DefectLibraryItem) {
     await turso.execute({
         sql: "INSERT INTO defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, created_by, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), ?) ON CONFLICT(id) DO UPDATE SET defect_code = excluded.defect_code, name = excluded.name, data = excluded.data, updated_at = excluded.updated_at",
-        args: sanitizeArgs([item.id, item.code, item.name, item.stage, item.category, item.description, item.severity, item.suggestedAction, item.createdBy, item.createdAt, Math.floor(Date.now()/1000), item])
+// Fix: Removed extra argument `Math.floor(Date.now()/1000)` which did not correspond to a placeholder in the SQL query. The `updated_at` column is handled by `unixepoch()`.
+        args: sanitizeArgs([item.id, item.code, item.name, item.stage, item.category, item.description, item.severity, item.suggestedAction, item.createdBy, item.createdAt, item])
     });
 }
 

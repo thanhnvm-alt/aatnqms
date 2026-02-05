@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { User, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
@@ -70,6 +71,8 @@ const ICON_MAP: Record<ModuleId, React.ReactNode> = {
     'SQC_VT': <Truck className="w-6 h-6"/>,
     'SQC_BTP': <Package className="w-6 h-6"/>,
     'PQC': <Factory className="w-6 h-6"/>,
+    // FIX: Added missing IPO_LIST property to satisfy the Record type.
+    'IPO_LIST': <Factory className="w-6 h-6"/>,
     'FSR': <FileQuestion className="w-6 h-6"/>,
     'STEP': <Palette className="w-6 h-6"/>,
     'FQC': <ScanEye className="w-6 h-6"/>,
@@ -90,6 +93,8 @@ const COLOR_MAP: Record<ModuleId, string> = {
     'SQC_VT': "text-teal-600",
     'SQC_BTP': "text-teal-600",
     'PQC': "text-indigo-600",
+    // FIX: Added missing IPO_LIST property to satisfy the Record type.
+    'IPO_LIST': "text-indigo-600",
     'FSR': "text-orange-600",
     'STEP': "text-purple-600",
     'FQC': "text-blue-600",

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier } from './types';
+import { ViewState, Inspection, PlanItem, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier, IPO } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
@@ -18,6 +18,7 @@ import {
 } from './constants';
 import { Dashboard } from './components/Dashboard';
 import { InspectionList } from './components/InspectionList';
+import { IpoList } from './components/IpoList';
 import { InspectionFormPQC } from './components/inspectionformPQC';
 import { InspectionFormIQC } from './components/inspectionformIQC';
 import { InspectionFormSQC_VT } from './components/inspectionformSQC_VT';
@@ -56,8 +57,6 @@ import { SupplierManagement } from './components/SupplierManagement';
 import { SupplierDetail } from './components/SupplierDetail';
 import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
-import { IPOList } from './components/IPOList'; // Import new component
-
 import { 
   fetchPlans, 
   fetchInspections, 
@@ -76,7 +75,8 @@ import {
   fetchProjects, 
   createNotification,
   fetchRoles,
-  updatePlan
+  updatePlan,
+  fetchIpos
 } from './services/apiService';
 import { initDatabase } from './services/tursoService';
 import { Loader2, X, FileText, ChevronRight } from 'lucide-react';
@@ -103,6 +103,8 @@ const App = () => {
   const [returnView, setReturnView] = useState<ViewState>('LIST');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
+  const [ipos, setIpos] = useState<IPO[]>([]);
+  const [isLoadingIpos, setIsLoadingIpos] = useState(false);
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [activePlanItem, setActivePlanItem] = useState<PlanItem | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
@@ -110,7 +112,7 @@ const App = () => {
   const [plans, setPlans] = useState<PlanItem[]>([]); 
   const [totalPlans, setTotalPlans] = useState(0);
   const [plansLimit, setPlansLimit] = useState(10);
-  const [planSearchTerm, setPlanSearchTerm] = useState('');
+  const [planSearchTerm, setPlanSearchTerm] = useState(''); // Fixed: Search term state for Plans
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
@@ -143,13 +145,27 @@ const App = () => {
         } catch (e) { console.error("Auth hydrate failed", e); } 
     }
     const startup = async () => {
+        console.log("🚀 Starting App...");
+        
+        // Check Postgres Health
+        console.log("📡 Checking PostgreSQL connection...");
+        const dbStatus = await checkApiConnection();
+        if (dbStatus.ok) {
+            console.log("✅ PostgreSQL Connected:", dbStatus.data);
+        } else {
+            console.error("❌ PostgreSQL Connection Failed:", dbStatus.error);
+        }
+
         try {
             await initDatabase(); 
             setIsDbReady(true);
             loadUsers();
             loadWorkshops();
             loadTemplates();
-        } catch (error) { setIsDbReady(true); }
+        } catch (error) { 
+            console.error("Startup error:", error);
+            setIsDbReady(true); 
+        }
     };
     startup();
   }, []);
@@ -157,6 +173,7 @@ const App = () => {
   useEffect(() => {
     if (user && isDbReady) {
         if (view === 'LIST' || view === 'DASHBOARD') loadInspections();
+        if (view === 'IPO_LIST') loadIpos();
         if (view === 'PLAN') loadPlans(planSearchTerm, plansLimit);
         if (view === 'PROJECTS') loadProjects();
     }
@@ -166,6 +183,18 @@ const App = () => {
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
+  const loadIpos = async (searchTerm: string = '') => {
+    setIsLoadingIpos(true);
+    try {
+        const result = await fetchIpos(searchTerm);
+        setIpos(result);
+    } catch (e) {
+        console.error("Load IPOs failed", e);
+    } finally {
+        setIsLoadingIpos(false);
+    }
+  };
+
   const loadInspections = async () => {
     setIsLoadingInspections(true);
     try {
@@ -277,7 +306,7 @@ const App = () => {
         )}
         <GlobalHeader 
             user={user} view={view} onNavigate={setView} onLogout={handleLogout} 
-            onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PLAN') loadPlans(planSearchTerm, plansLimit); if(view==='PROJECTS') { loadProjects(); loadPlans(planSearchTerm, plansLimit); } }} 
+            onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='IPO_LIST') loadIpos(); if(view==='PLAN') loadPlans(planSearchTerm, plansLimit); if(view==='PROJECTS') { loadProjects(); loadPlans(planSearchTerm, plansLimit); } }} 
             onCreate={() => { setInitialFormState(undefined); setShowModuleSelector(true); }} 
             onScanClick={() => setShowQrScanner(true)} 
             onOpenSettingsTab={(tab) => { setSettingsTab(tab); setView('SETTINGS'); }}
@@ -287,7 +316,7 @@ const App = () => {
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
             {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} isLoading={isLoadingInspections} workshops={workshops} />}
-            {view === 'IPO_LIST' && <IPOList />} {/* New IPO List Route */}
+            {view === 'IPO_LIST' && <IpoList ipos={ipos} onSelect={(id) => alert(`Selected IPO: ${id}`)} isLoading={isLoadingIpos} onSearch={loadIpos} onRefresh={loadIpos} />}
             {view === 'FORM' && (
                 activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
                 activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :

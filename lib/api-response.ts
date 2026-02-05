@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 
 // Standard API Response Structure
 export interface ApiResponse<T = any> {
@@ -22,11 +21,6 @@ export const generateRequestId = () => {
 
 /**
  * Build a success response
- * @param data - The payload
- * @param message - Short description
- * @param code - Internal logic code
- * @param status - HTTP status code
- * @param meta - Metadata (pagination, requestId, etc.)
  */
 export function buildSuccessResponse<T>(
   data: T,
@@ -43,7 +37,11 @@ export function buildSuccessResponse<T>(
     meta,
     error: null,
   };
-  return NextResponse.json(response, { status });
+  
+  return new Response(JSON.stringify(response), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
 
 /**
@@ -55,10 +53,6 @@ export function successResponse<T>(data: T, status: number = 200, meta: any = nu
 
 /**
  * Build an error response
- * @param message - User facing message
- * @param code - Internal error code (INVALID_PARAMS, NOT_FOUND, etc.)
- * @param details - Technical details (optional)
- * @param status - HTTP status code
  */
 export function buildErrorResponse(
   message: string,
@@ -77,7 +71,10 @@ export function buildErrorResponse(
       details,
     },
   };
-  return NextResponse.json(response, { status });
+  return new Response(JSON.stringify(response), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
 
 /**
@@ -105,5 +102,8 @@ export function errorResponse(error: any, requestId?: string) {
     console.error(`[API Error] ${requestId || 'No-ID'}:`, error);
   }
 
-  return NextResponse.json(response, { status });
+  return new Response(JSON.stringify(response), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }

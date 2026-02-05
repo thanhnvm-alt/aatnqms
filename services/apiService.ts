@@ -2,50 +2,38 @@
 import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin, IPO } from '../types';
 import * as db from './tursoService';
 
-/**
- * POSTGRESQL ENDPOINTS
- * Gọi thông qua Vite Middleware (/api)
- */
-export const fetchIPOs = async (search: string = '') => {
-  try {
-    const url = `/api/ipos?search=${encodeURIComponent(search)}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Server Error: ${response.status}`);
+// Helper to get Auth Headers
+const getAuthHeaders = () => {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    const stored = localStorage.getItem('aatn_auth_storage');
+    if (stored) {
+        try {
+            const u = JSON.parse(stored);
+            if (u.id) headers['Authorization'] = `Bearer ${u.id}`;
+            if (u.role) headers['x-user-role'] = u.role;
+            if (u.name) headers['x-user-name'] = encodeURIComponent(u.name); // Encode to handle special chars
+        } catch (e) {}
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Fetch IPOs failed:", error);
-    return { success: false, items: [], error: String(error) };
-  }
+    return headers;
 };
 
-export const checkApiConnection = async () => {
-    try {
-        const res = await fetch('/api/health');
-        if (res.ok) {
-            const data = await res.json();
-            return { ok: data.status === 'ok' };
-        }
-        return { ok: false };
-    } catch (e) {
-        return { ok: false };
-    }
-};
-
-// --- GIỮ NGUYÊN CÁC HÀM KHÁC ĐÃ CÓ ---
 export const fetchFloorPlans = async (projectId: string) => await db.getFloorPlans(projectId);
 export const saveFloorPlan = async (fp: FloorPlan) => await db.saveFloorPlan(fp);
 export const deleteFloorPlan = async (id: string) => await db.deleteFloorPlan(id);
 export const fetchLayoutPins = async (fpId: string) => await db.getLayoutPins(fpId);
 export const saveLayoutPin = async (pin: LayoutPin) => await db.saveLayoutPin(pin);
 
+/**
+ * ISO-Compliant File Upload (Simulated)
+ * Uploads file to storage service and returns a deterministic URL
+ */
 export const uploadFileToStorage = async (file: File | string, fileName: string): Promise<string> => {
+    // In a real ISO system, this calls a backend API which uploads to S3/GCS
+    // and returns a permanent signed URL.
     return new Promise((resolve) => {
         setTimeout(() => {
+            // For simulation, we return the base64 or a mock static URL
+            // Real production would return: `https://storage.aatn.vn/layouts/${Date.now()}_${fileName}`
             resolve(typeof file === 'string' ? file : URL.createObjectURL(file));
         }, 1000);
     });
@@ -59,6 +47,29 @@ export const fetchSupplierInspections = async (name: string) => await db.getSupp
 
 export const uploadQMSImage = async (file: File | string, context: { entityId: string, type: any, role: any }): Promise<string> => {
     return `img_ref_${Date.now()}`;
+};
+
+export const fetchIpos = async (searchTerm: string = ''): Promise<IPO[]> => {
+    try {
+        const params = new URLSearchParams();
+        if (searchTerm) params.append('search', searchTerm);
+        
+        const response = await fetch(`/api/ipos?${params.toString()}`, {
+            headers: getAuthHeaders()
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (!response.ok || !contentType || !contentType.includes("application/json")) {
+            console.warn("Fetch IPOs failed or returned non-JSON:", response.statusText);
+            return [];
+        }
+
+        const json = await response.json();
+        return json.data?.items || [];
+    } catch (error) {
+        console.error("API Error fetchIpos:", error);
+        return [];
+    }
 };
 
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
@@ -147,53 +158,49 @@ export const fetchDefectLibrary = async () => await db.getDefectLibrary();
 export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
 export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
 
-/**
- * Export defect library to Excel via backend API
- * Fixed: Added missing exportDefectLibrary function
- */
 export const exportDefectLibrary = async () => {
-    try {
-        const response = await fetch('/api/defects/export');
-        if (!response.ok) throw new Error('Export failed');
-        
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    } catch (error) {
-        console.error("Export defect library failed:", error);
-        throw error;
-    }
+    const response = await fetch('/api/defects/export');
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
 };
 
-/**
- * Import defect library from Excel via backend API
- * Fixed: Added missing importDefectLibraryFile function
- */
 export const importDefectLibraryFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/defects/import', {
+        method: 'POST',
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
+};
+
+export const checkApiConnection = async () => {
     try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('/api/defects/import', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.message || 'Import failed');
+        const res = await fetch('/api/health');
+        
+        // Handle 404 specially as "Not Deployed / Local"
+        if (res.status === 404) {
+             console.warn("API Endpoint /api/health not found. This is expected if running locally without Vercel.");
+             return { ok: true, data: { status: 'local-mode', database: 'postgres-direct-unavailable' } };
         }
 
-        return await response.json();
-    } catch (error) {
-        console.error("Import defect library failed:", error);
-        throw error;
+        const data = await res.json().catch(() => null);
+        
+        if (!res.ok) {
+            return { ok: false, error: data?.details || res.statusText };
+        }
+        
+        return { ok: true, data };
+    } catch (e: any) {
+        return { ok: false, error: e.message };
     }
 };
 

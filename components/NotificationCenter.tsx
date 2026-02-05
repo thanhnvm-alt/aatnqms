@@ -48,7 +48,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
     return (
         <div className="flex flex-col h-full max-h-[85vh] md:max-h-[600px] bg-white shadow-[0_20px_50px_rgba(0,0,0,0.2)] rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
-            {/* Header */}
+            {/* Header: Cập nhật theo hình mẫu */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                 <div className="flex items-center gap-3">
                     <div className="relative">
@@ -80,7 +80,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 </div>
             </div>
 
-            {/* List */}
+            {/* List: Tối ưu hiển thị mobile */}
             <div className="flex-1 overflow-y-auto p-2 bg-slate-50/30 no-scrollbar">
                 {notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 text-slate-300">
@@ -103,6 +103,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                     : 'bg-white border-blue-100 shadow-sm ring-1 ring-blue-50'
                                 } active:scale-[0.98]`}
                             >
+                                {/* Circle Icon - Giống hình mẫu */}
                                 <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm border-2 ${
                                     n.isRead 
                                     ? 'bg-slate-50 border-slate-100' 
@@ -121,7 +122,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                         </span>
                                     </div>
                                     <p className={`text-[10px] leading-relaxed line-clamp-2 ${n.isRead ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
-                                        {(n.message || '').replace('undefined', 'dự án')}
+                                        {n.message.replace('undefined', 'dự án')}
                                     </p>
                                 </div>
                                 
@@ -136,13 +137,13 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 )}
             </div>
 
-            {/* Footer */}
+            {/* Footer: Cập nhật font theo hình mẫu */}
             <div className="p-4 bg-white border-t border-slate-100 shrink-0 text-center">
                 <button 
                     onClick={() => { onMarkAllRead(); onClose(); }}
                     className="w-full py-2 text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] hover:text-blue-800 transition-colors"
                 >
-                    XEM TẤT CẢ THÔNG BÁO
+                    TẢI THÊM THÔNG BÁO CŨ
                 </button>
             </div>
         </div>

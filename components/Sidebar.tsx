@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { ViewState, User } from '../types';
 import { 
@@ -13,7 +14,7 @@ import {
   AlertTriangle,
   BookOpen,
   Truck,
-  Database
+  Factory
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,17 +32,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
 
   const menuItems = [
     { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
-    { id: 'IPO_LIST', label: 'Dữ Liệu IPO', icon: Database }, // Added IPO List
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
     { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', icon: Truck },
     { id: 'PLAN', label: 'Kế Hoạch', icon: FileSpreadsheet },
+    { id: 'IPO_LIST', label: 'Danh Sách IPO', icon: Factory },
     { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
     { id: 'DEFECT_LIBRARY', label: 'Thư Viện Lỗi', icon: BookOpen },
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
   ].filter(item => {
     if (user.role === 'QC') {
-      return ['LIST', 'IPO_LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS', 'SUPPLIERS'].includes(item.id);
+      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS', 'SUPPLIERS', 'IPO_LIST'].includes(item.id);
     }
     return true;
   });

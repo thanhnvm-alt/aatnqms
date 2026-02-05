@@ -1,13 +1,16 @@
+
 import { NextResponse } from 'next/server';
-import { turso } from '../../../services/tursoConfig';
+import { query } from '../../../lib/db-postgres/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    await turso.execute('SELECT 1');
-    return NextResponse.json({ status: 'ok', database: 'connected' });
+    // Attempt a simple query to verify PostgreSQL connection
+    await query('SELECT 1');
+    return NextResponse.json({ status: 'ok', database: 'connected (postgres)' });
   } catch (error) {
-    return NextResponse.json({ status: 'error', database: 'disconnected' }, { status: 503 });
+    console.error("Health check failed:", error);
+    return NextResponse.json({ status: 'error', database: 'disconnected', details: (error as Error).message }, { status: 503 });
   }
 }
