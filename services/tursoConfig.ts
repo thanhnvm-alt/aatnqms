@@ -16,8 +16,8 @@ const getSafeValue = (envVal: any, viteVal: any, fallback: string) => {
     return String(val).trim();
 };
 
-let rawUrl = getSafeValue(process.env.TURSO_DATABASE_URL, process.env.VITE_TURSO_DATABASE_URL, FALLBACK_URL);
-let authToken = getSafeValue(process.env.TURSO_AUTH_TOKEN, process.env.VITE_TURSO_AUTH_TOKEN, FALLBACK_TOKEN);
+let rawUrl = getSafeValue(import.meta.env.TURSO_DATABASE_URL, import.meta.env.VITE_TURSO_DATABASE_URL, FALLBACK_URL);
+let authToken = getSafeValue(import.meta.env.TURSO_AUTH_TOKEN, import.meta.env.VITE_TURSO_AUTH_TOKEN, FALLBACK_TOKEN);
 
 // Chuẩn hóa URL cho Fetch API của trình duyệt
 let finalUrl = rawUrl;
@@ -35,7 +35,7 @@ finalUrl = finalUrl.replace(/\/$/, "");
 export const isTursoConfigured = finalUrl.length > 0 && !finalUrl.includes("placeholder");
 
 if (isTursoConfigured) {
-    console.log("📡 ISO-DB: Turso Connection String standardized for Fetch API.");
+    console.log(`📡 ISO-DB: Turso Connection String standardized for Fetch API. URL: ${finalUrl}, Token: ${authToken ? 'Configured' : 'NOT Configured'}`);
 }
 
 export const turso: Client = createClient({

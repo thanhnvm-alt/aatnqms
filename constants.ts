@@ -1,6 +1,5 @@
 
 
-
 import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
@@ -83,7 +82,6 @@ export const SITE_CHECKLIST_TEMPLATE = INITIAL_CHECKLIST_TEMPLATE;
 
 export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   { id: 'CONVERT_3D', label: 'AI - 2D sang 3D', group: 'TOOLS' },
-  { id: 'IPO_LIST', label: 'Danh Sách IPO', group: 'QC' },
   { id: 'IQC', label: 'IQC - Vật Liệu Đầu Vào', group: 'QC' },
   { id: 'SQC_MAT', label: 'SQC - Gia Công Ngoài - Vật Tư', group: 'QC' },
   { id: 'SQC_BTP', label: 'SQC - Gia Công Ngoài - BTP', group: 'QC' },
@@ -105,7 +103,7 @@ export const MOCK_USERS: User[] = [
     name: 'Administrator',
     role: 'ADMIN',
     avatar: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff',
-    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D', 'IPO_LIST'],
+    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'],
     msnv: 'MS-001',
     // Added missing position property
     position: 'Giám đốc hệ thống',
@@ -121,7 +119,7 @@ export const MOCK_USERS: User[] = [
     name: 'Trần Văn Quản Lý',
     role: 'MANAGER',
     avatar: 'https://ui-avatars.com/api/?name=Manager&background=6366f1&color=fff',
-    allowedModules: ['IQC', 'PQC', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D', 'IPO_LIST'],
+    allowedModules: ['IQC', 'PQC', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
     msnv: 'MS-002',
     // Added missing position property
     position: 'Quản lý QC',
@@ -137,7 +135,7 @@ export const MOCK_USERS: User[] = [
     name: 'Nguyễn Văn QC',
     role: 'QC',
     avatar: 'https://ui-avatars.com/api/?name=QC&background=10b981&color=fff',
-    allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'FSR', 'IPO_LIST'],
+    allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'FSR'],
     msnv: 'MS-003',
     // Added missing position property
     position: 'Nhân viên QC',

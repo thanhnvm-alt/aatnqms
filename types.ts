@@ -1,5 +1,4 @@
 
-
 export enum CheckStatus {
   PENDING = 'PENDING',
   PASS = 'Đạt',
@@ -21,22 +20,9 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'IPO_LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL';
 
-export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'IPO_LIST';
-
-export interface IPO {
-  id: string;
-  ma_ct?: string;
-  ten_ct?: string;
-  ten_hang_muc?: string;
-  so_luong_ipo?: number;
-  dvt?: string;
-  created_at?: number;
-  status?: string;
-  inspectorName?: string;
-  ma_nha_may?: string;
-}
+export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS';
 
 export interface FloorPlan {
   id: string;
