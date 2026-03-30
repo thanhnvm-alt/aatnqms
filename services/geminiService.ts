@@ -6,7 +6,7 @@ import { Inspection, CheckStatus, CheckItem } from "../types";
 export type GenerationMode = 'STANDARD' | 'ROTATION' | 'EXPLODED';
 
 // Fixed: Added getApiKey export to resolve import error in App.tsx
-export const getApiKey = () => process.env.API_KEY;
+export const getApiKey = () => process.env.GEMINI_API_KEY;
 
 /**
  * Phân tích toàn bộ báo cáo kiểm tra
@@ -15,7 +15,7 @@ export const generateInspectionAnalysis = async (inspection: Inspection): Promis
   const failedItems = inspection.items.filter(i => i.status === CheckStatus.FAIL);
   
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -60,7 +60,7 @@ export const generateInspectionAnalysis = async (inspection: Inspection): Promis
  */
 export const generateItemSuggestion = async (item: CheckItem, context?: string): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -89,7 +89,7 @@ export const generateNCRSuggestions = async (
   itemLabel: string
 ): Promise<{ rootCause: string; solution: string }> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -131,7 +131,7 @@ export const generate3DFrom2D = async (fileDataUrl: string, description: string,
     const data = match[2];
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image', 
@@ -143,7 +143,7 @@ export const generate3DFrom2D = async (fileDataUrl: string, description: string,
             }
         });
 
-        for (const part of response.candidates[0].content.parts) {
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
             if (part.inlineData) {
                 return `data:image/png;base64,${part.inlineData.data}`;
             }

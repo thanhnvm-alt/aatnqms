@@ -20,9 +20,38 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS';
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS';
+
+export interface IPOItem {
+  id: string;
+  ma_nha_may: string;
+  ma_ct: string;
+  ten_ct: string;
+  ten_hang_muc: string;
+  so_luong_ipo: number;
+  dvt: string;
+  drawing_url?: string;
+  description?: string;
+  materials_text?: string;
+  samples_json?: string;
+  simulations_json?: string;
+  created_at?: number;
+  headcode?: string;
+}
+
+export interface IPOResponse {
+  id: string;
+  headcode?: string;
+  maCongTrinh: string;
+  tenCongTrinh: string;
+  maNhaMay: string;
+  tenHangMuc: string;
+  dvt: string;
+  soLuongIpo: number;
+  ngayTao: string;
+}
 
 export interface FloorPlan {
   id: string;
@@ -184,6 +213,22 @@ export interface MaterialIQC {
   date: string;
 }
 
+export interface Material {
+  id: string;
+  material: string;
+  shortText: string;
+  orderUnit: string;
+  orderQuantity: number;
+  supplierName?: string;
+  projectName?: string;
+  purchaseDocument?: string;
+  deliveryDate?: string;
+  Ma_Tender?: string;
+  Factory_Order?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SupportingDoc {
     id: string;
     name: string;
@@ -246,26 +291,6 @@ export interface Inspection {
   coord_y?: number;
   responsiblePerson?: string;
   productionComment?: string;
-}
-
-export interface PlanItem {
-  id?: number | string;
-  ma_nha_may: string;
-  headcode?: string;
-  ma_ct: string;
-  ten_ct: string;
-  ten_hang_muc: string;
-  dvt?: string;
-  so_luong_ipo: number;
-  plannedDate?: string;
-  assignee?: string;
-  status?: string;
-  // New Fields
-  drawing_url?: string;
-  description?: string;
-  materials_text?: string;
-  samples_json?: string; // JSON string for { color: string, fabric: string, other: string[] }
-  simulations_json?: string; // JSON string for image URLs
 }
 
 export interface SmartGoal {
@@ -357,34 +382,4 @@ export interface DefectLibraryItem {
   incorrectImage?: string;
   createdAt?: number;
   createdBy?: string;
-}
-
-export interface PlanEntity {
-  id: number;
-  headcode: string;
-  ma_ct: string;
-  ten_ct: string;
-  ten_hang_muc: string;
-  dvt: string;
-  so_luong_ipo: number;
-  ma_nha_may: string;
-  created_at: number;
-  // New Fields
-  drawing_url?: string;
-  description?: string;
-  materials_text?: string;
-  samples_json?: string;
-  simulations_json?: string;
-}
-
-export interface PlanResponse {
-  id: number;
-  headcode: string;
-  maCongTrinh: string;
-  tenCongTrinh: string;
-  maNhaMay: string;
-  tenHangMuc: string;
-  dvt: string;
-  soLuongIpo: number;
-  ngayTao: string;
 }

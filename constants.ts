@@ -1,6 +1,6 @@
 
 
-import { CheckStatus, Inspection, InspectionStatus, Priority, PlanItem, User, ModuleId, Workshop, Project } from "./types";
+import { CheckStatus, Inspection, InspectionStatus, Priority, IPOItem, User, ModuleId, Workshop, Project } from "./types";
 
 export const INITIAL_CHECKLIST_TEMPLATE = [
   { id: 'site_1', category: 'Lắp đặt', label: 'Vệ sinh khu vực thi công', status: CheckStatus.PENDING, notes: '' },
@@ -171,28 +171,22 @@ export const MOCK_WORKSHOPS: Workshop[] = [
   }
 ];
 
-export const MOCK_PLAN_DATA: PlanItem[] = [
+export const MOCK_PLAN_DATA: IPOItem[] = [
   {
+    id: '1',
     ma_nha_may: 'NM001',
     ma_ct: 'AATN-Alpha',
     ten_ct: 'Tầng 5 - Trục A-B',
     ten_hang_muc: 'Nghiệm thu cốt thép cột',
-    plannedDate: '2023-11-01',
-    // Added missing assignee property
-    assignee: 'Nguyễn Văn A',
-    status: 'PENDING',
     dvt: 'SET',
     so_luong_ipo: 10
   },
   {
+    id: '2',
     ma_nha_may: 'NM002',
     ma_ct: 'AATN-Beta',
     ten_ct: 'Khu B - Móng M1',
     ten_hang_muc: 'Kiểm tra độ sụt bê tông',
-    plannedDate: '2023-11-02',
-    // Added missing assignee property
-    assignee: 'Trần Thị B',
-    status: 'PENDING',
     dvt: 'M3',
     so_luong_ipo: 45
   }

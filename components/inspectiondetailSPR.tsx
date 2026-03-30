@@ -12,16 +12,7 @@ interface InspectionDetailProps {
   workshops?: Workshop[];
 }
 
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    useEffect(() => { const canvas = canvasRef.current; if (canvas && value) { const ctx = canvas.getContext('2d'); const img = new Image(); img.onload = () => { ctx?.clearRect(0, 0, canvas.width, canvas.height); ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); }; img.src = value; } }, [value]);
-    const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
-    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); };
-    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
-    const clear = () => { const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
-    return (<div className="flex flex-col gap-1.5"><div className="flex justify-between items-center px-1"><label className="block text-slate-700 font-bold text-[9px] uppercase">{label}</label>{!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1" type="button"><Eraser className="w-3 h-3"/> Xóa</button>}</div><div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-24 shadow-inner"><canvas ref={canvasRef} width={400} height={96} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />{!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[9px] font-bold uppercase">Ký tại đây</div>}</div></div>);
-};
+import { SignaturePad } from './SignaturePad';
 
 export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove }) => {
   const [managerSig, setManagerSig] = useState('');
@@ -68,7 +59,25 @@ export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspectio
         </div>
       </div>
       {!isApproved && isManager && <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 flex justify-end z-40"><button onClick={() => setShowModal(true)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] shadow-lg">DUYỆT MẪU</button></div>}
-      {showModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4"><h3 className="font-bold uppercase text-sm">Duyệt Mẫu Chuẩn</h3><SignaturePad label="Chữ ký Manager" value={managerSig} onChange={setManagerSig}/><div className="flex gap-2"><button onClick={() => setShowModal(false)} className="flex-1 py-2 border rounded-lg text-xs font-bold uppercase">Hủy</button><button onClick={handleApprove} disabled={!managerSig || isProcessing} className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold uppercase">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}</button></div></div></div>}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4">
+            <h3 className="font-bold uppercase text-sm">Duyệt Mẫu Chuẩn</h3>
+            <SignaturePad 
+              label="Chữ ký Manager" 
+              value={managerSig} 
+              onChange={setManagerSig} 
+              uploadContext={{ entityId: inspection.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_MANAGER' }}
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-2 border rounded-lg text-xs font-bold uppercase">Hủy</button>
+              <button onClick={handleApprove} disabled={!managerSig || isProcessing} className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold uppercase">
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mx-auto"/> : 'XÁC NHẬN'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

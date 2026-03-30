@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, Inspection, InspectionStatus, CheckStatus, FloorPlan, LayoutPin, ModuleId, User, ViewState, PlanItem } from '../types';
+import { Project, Inspection, InspectionStatus, CheckStatus, FloorPlan, LayoutPin, ModuleId, User, ViewState, IPOItem } from '../types';
 import { 
   ArrowLeft, MapPin, Calendar, User as UserIcon, CheckCircle2, 
   AlertTriangle, PieChart as PieChartIcon, 
@@ -31,7 +31,6 @@ import { SITE_CHECKLIST_TEMPLATE } from '../constants';
 interface ProjectDetailProps {
   project: Project;
   inspections: Inspection[];
-  plans?: PlanItem[];
   user: User;
   onBack: () => void;
   onUpdate?: () => void; 
@@ -79,11 +78,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'LAYOUTS'>('OVERVIEW');
   const [searchInList, setSearchInList] = useState('');
   
-  const [projectSpecificPlans, setProjectSpecificPlans] = useState<PlanItem[]>([]);
+  const [projectSpecificPlans, setProjectSpecificPlans] = useState<IPOItem[]>([]);
   const [isPlansLoading, setIsPlansLoading] = useState(false);
 
   // Pagination states for UI
-  const [plansLimit, setPlansLimit] = useState(10);
   const [inspectionsLimit, setInspectionsLimit] = useState(10);
   const [ncrLimit, setNcrLimit] = useState(10);
   const [layoutLimit, setLayoutLimit] = useState(10);
@@ -109,8 +107,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   useEffect(() => {
       loadFloorPlans();
-      loadProjectPlans(plansLimit);
-  }, [project.ma_ct, plansLimit]);
+  }, [project.ma_ct]);
 
   const loadFloorPlans = async () => {
       setIsLoadingPlans(true);
@@ -119,19 +116,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           setFloorPlans(data);
       } catch (e) { console.error(e); }
       finally { setIsLoadingPlans(false); }
-  };
-
-  const loadProjectPlans = async (limit: number) => {
-    setIsPlansLoading(true);
-    try {
-        // Fetch with specific limit to optimize mobile performance
-        const data = await fetchPlansByProject(project.ma_ct, limit === Infinity ? undefined : limit);
-        setProjectSpecificPlans(data);
-    } catch (e) {
-        console.error("Failed to fetch project plans:", e);
-    } finally {
-        setIsPlansLoading(false);
-    }
   };
 
   const filteredInspections = useMemo(() => {
@@ -438,41 +422,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     {/* --- 4-COLUMN DATA REPOSITORY --- */}
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[600px]">
                         
-                        {/* 1. PLANS COLUMN */}
-                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="p-5 border-b border-slate-100 bg-blue-50/30 flex items-center justify-between shrink-0">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><ClipboardList className="w-4 h-4" /></div>
-                                    <span className="font-black text-[11px] uppercase tracking-wider text-blue-900">Kế hoạch sản xuất</span>
-                                </div>
-                                <span className="bg-white text-blue-600 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-black">{projectSpecificPlans.length}</span>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-                                {isPlansLoading ? <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-slate-200"/></div> : 
-                                 projectSpecificPlans.length > 0 ? (
-                                    <>
-                                        {projectSpecificPlans.slice(0, plansLimit).map((p, i) => (
-                                            <div key={i} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all group">
-                                                <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-snug mb-2 group-hover:text-blue-700">{p.ten_hang_muc}</h4>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{p.ma_nha_may || 'N/A'}</span>
-                                                    <span className="text-[9px] font-black text-blue-600 uppercase">{p.so_luong_ipo} {p.dvt}</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {projectSpecificPlans.length > plansLimit && (
-                                            <button 
-                                                onClick={() => setPlansLimit(Infinity)}
-                                                className="w-full py-3 mt-2 bg-blue-50 text-blue-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-blue-100 hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({projectSpecificPlans.length})
-                                            </button>
-                                        )}
-                                    </>
-                                ) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
-                            </div>
-                        </div>
-
                         {/* 2. INSPECTIONS COLUMN */}
                         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
                             <div className="p-5 border-b border-slate-100 bg-indigo-50/30 flex items-center justify-between shrink-0">
@@ -602,7 +551,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {isInspectionFormOpen && pendingPinCoord && (
           <div className="absolute inset-0 z-[200] bg-white flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">
               <header className="h-14 border-b px-4 flex items-center justify-between bg-slate-900 text-white shrink-0 z-10"><div className="flex items-center gap-3"><button onClick={() => setIsInspectionFormOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><ArrowLeft className="w-4 h-4" /></button><div><h2 className="text-[9px] font-black uppercase tracking-[0.2em] leading-none">New Site Inspection</h2><p className="text-[8px] font-bold text-blue-400 uppercase mt-1">Point Sync: {pendingPinCoord.x.toFixed(1)}%, {pendingPinCoord.y.toFixed(1)}%</p></div></div><button onClick={() => setIsInspectionFormOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-all"><X className="w-4 h-4" /></button></header>
-              <div className="flex-1 overflow-hidden bg-slate-50"><InspectionFormSITE onCancel={() => setIsInspectionFormOpen(false)} onSave={handleSaveInspectionFromLayout} plans={[]} workshops={[]} user={user} initialData={{ ma_ct: project.ma_ct, ten_ct: project.name, type: 'SITE' as ModuleId, floor_plan_id: selectedPlan?.id, coord_x: pendingPinCoord.x, coord_y: pendingPinCoord.y }} templates={{ 'SITE': SITE_CHECKLIST_TEMPLATE }} /></div>
+              <div className="flex-1 overflow-hidden bg-slate-50"><InspectionFormSITE onCancel={() => setIsInspectionFormOpen(false)} onSave={handleSaveInspectionFromLayout} workshops={[]} user={user} initialData={{ ma_ct: project.ma_ct, ten_ct: project.name, type: 'SITE' as ModuleId, floor_plan_id: selectedPlan?.id, coord_x: pendingPinCoord.x, coord_y: pendingPinCoord.y }} templates={{ 'SITE': SITE_CHECKLIST_TEMPLATE }} /></div>
           </div>
       )}
 

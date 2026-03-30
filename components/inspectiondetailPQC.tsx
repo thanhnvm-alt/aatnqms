@@ -7,6 +7,8 @@ import {
   Camera, Image as ImageIcon, Paperclip, PenTool, LayoutList, History, FileText, ChevronRight,
   Factory, Calendar, Activity, Hash, MapPin, Lock, ImagePlus, AlertCircle, Eye, ClipboardList
 } from 'lucide-react';
+import { SignaturePad } from './SignaturePad';
+import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
 
@@ -40,38 +42,6 @@ const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
   });
 };
 
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas && value) {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => { 
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); 
-            };
-            img.src = value;
-        }
-    }, [value]);
-    const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
-    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); } };
-    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
-    const clear = () => { const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
-    return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center px-1">
-                <label className="block text-slate-700 font-bold text-[9px] uppercase tracking-wide">{label}</label>
-                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa ký lại</button>}
-            </div>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-32 shadow-inner">
-                <canvas ref={canvasRef} width={400} height={128} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[9px] font-bold uppercase tracking-widest">Ký tại đây</div>}
-            </div>
-        </div>
-    );
-};
 
 export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -518,7 +488,12 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                   </div>
                   <div className="p-8 space-y-6 bg-slate-50/30">
                       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 text-center shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Authorized System User</p><p className="text-base font-black text-slate-800 uppercase tracking-tight">{user.name}</p></div>
-                      <SignaturePad label="Chữ ký điện tử phê duyệt *" value={managerSig} onChange={setManagerSig} />
+                      <SignaturePad 
+                        label="Chữ ký điện tử phê duyệt *" 
+                        value={managerSig} 
+                        onChange={setManagerSig} 
+                        uploadContext={{ entityId: inspection.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_MANAGER' }}
+                      />
                   </div>
                   <div className="p-6 border-t border-slate-100 bg-white flex gap-4"><button onClick={() => setShowManagerModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] tracking-widest hover:bg-slate-50 rounded-2xl transition-all">Hủy</button><button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-emerald-500/30 disabled:opacity-50 active:scale-95 transition-all">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin mx-auto"/> : 'XÁC NHẬN PHÊ DUYỆT'}</button></div>
               </div>
@@ -533,7 +508,12 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                       <div className="space-y-5">
                           <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1.5"><UserIcon className="w-4 h-4 text-indigo-500" /> Họ tên người đại diện *</label><input value={prodName} onChange={e => setProdName(e.target.value.toUpperCase())} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-black text-sm uppercase outline-none focus:ring-4 focus:ring-indigo-100 shadow-sm transition-all" placeholder="NHẬP HỌ TÊN ĐẠI DIỆN XƯỞNG..." /></div>
                           <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4 text-indigo-500" /> Ý kiến phản hồi / Ghi chú</label><textarea value={prodComment} onChange={e => setProdComment(e.target.value)} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-[2rem] font-bold text-xs outline-none focus:ring-4 focus:ring-indigo-100 h-32 resize-none shadow-sm transition-all" placeholder="Ghi chú phản hồi từ sản xuất (nếu có)..." /></div>
-                          <SignaturePad label="Chữ ký xác nhận đại diện *" value={prodSig} onChange={setProdSig} />
+                          <SignaturePad 
+                            label="Chữ ký xác nhận đại diện *" 
+                            value={prodSig} 
+                            onChange={setProdSig} 
+                            uploadContext={{ entityId: inspection.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_PRODUCTION' }}
+                          />
                       </div>
                   </div>
                   <div className="p-8 border-t border-slate-100 bg-white flex gap-4 shrink-0"><button onClick={() => setShowProductionModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] tracking-widest hover:bg-slate-50 rounded-2xl transition-all">Hủy</button><button onClick={handleProductionConfirm} disabled={isProcessing || !prodSig || !prodName.trim()} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-indigo-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>} LƯU XÁC NHẬN</button></div>

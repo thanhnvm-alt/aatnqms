@@ -1,0 +1,166 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { Loader2, Building2, ChevronDown } from 'lucide-react';
+import { IPODetail } from './IPODetail';
+import { IPOItem } from '../types';
+
+export const IPOPage = () => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filterFactoryOrder, setFilterFactoryOrder] = useState('');
+  const [filterMaTender, setFilterMaTender] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectedIpo, setSelectedIpo] = useState<IPOItem | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (filterFactoryOrder) params.append('factoryOrder', filterFactoryOrder);
+        if (filterMaTender) params.append('maTender', filterMaTender);
+        
+        const response = await fetch(`/api/ipo?${params.toString()}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch IPO data: ${response.status} ${errorText}`);
+        }
+        const result = await response.json();
+        setData(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const delayDebounceFn = setTimeout(() => {
+      fetchData();
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [filterFactoryOrder, filterMaTender]);
+
+  const groupedItems = useMemo(() => {
+      const groups: Record<string, any[]> = {};
+      data.forEach(item => {
+          const key = item.Project_name || "DỰ ÁN KHÁC";
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(item);
+      });
+      return groups;
+  }, [data]);
+
+  const toggleGroup = (key: string) => {
+      setExpandedGroups(prev => {
+          const next = new Set(prev);
+          if (next.has(key)) next.delete(key); else next.add(key);
+          return next;
+      });
+  };
+
+  const handleItemClick = (item: any) => {
+      // Map IPO item to IPOItem
+      const ipoItem: IPOItem = {
+          id: item.ID,
+          ma_nha_may: item.ID_Factory_Order || '',
+          ma_ct: item.Ma_Tender || '',
+          ten_ct: item.Project_name || '',
+          ten_hang_muc: item.Material_description || '',
+          so_luong_ipo: item.Quantity_IPO || 0,
+          dvt: item.Base_Unit || '',
+          drawing_url: item.drawing_url,
+          description: item.description,
+          materials_text: item.materials_text,
+          samples_json: item.samples_json,
+          simulations_json: item.simulations_json,
+      };
+      setSelectedIpo(ipoItem);
+  };
+
+  if (selectedIpo) {
+      return (
+          <IPODetail 
+            item={selectedIpo}
+            onBack={() => setSelectedIpo(null)}
+            onCreateInspection={() => {}}
+            onViewInspection={() => {}}
+            onUpdatePlan={async () => {}}
+          />
+      );
+  }
+
+  if (loading && data.length === 0) return <div className="flex justify-center p-10"><Loader2 className="animate-spin w-8 h-8 text-blue-500" /></div>;
+  if (error) return <div className="p-4 text-red-500">Error: {error}</div>;
+
+  return (
+    <div className="h-full flex flex-col bg-slate-50 font-sans">
+      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-20 shadow-sm">
+          <div className="max-w-7xl mx-auto flex flex-col gap-3">
+                <div className="relative w-full flex gap-2">
+                    <input 
+                        type="text" 
+                        placeholder="Filter ID_Factory_Order..." 
+                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                        value={filterFactoryOrder}
+                        onChange={(e) => setFilterFactoryOrder(e.target.value)}
+                    />
+                    <input 
+                        type="text" 
+                        placeholder="Filter Ma_Tender..." 
+                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                        value={filterMaTender}
+                        onChange={(e) => setFilterMaTender(e.target.value)}
+                    />
+                </div>
+                
+                <div className="flex items-center justify-between px-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        TỔNG CỘNG: {data.length} KẾ HOẠCH
+                    </p>
+                </div>
+          </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-24">
+            <div className="max-w-7xl mx-auto space-y-3">
+                {Object.keys(groupedItems).sort().map((groupKey) => {
+                    const groupItems = groupedItems[groupKey];
+                    const isExpanded = expandedGroups.has(groupKey);
+
+                    return (
+                        <div key={groupKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all">
+                            <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50/40 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
+                                <div className="flex items-center gap-3 overflow-hidden flex-1">
+                                    <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}><Building2 className="w-4.5 h-4.5" /></div>
+                                    <h3 className="font-black text-[11px] uppercase truncate text-slate-800 tracking-tight">{groupKey}</h3>
+                                </div>
+                                <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                            </div>
+                            {isExpanded && (
+                                <div className="p-2.5 space-y-2 bg-slate-50/30 animate-in slide-in-from-top-1">
+                                    {groupItems.map((item, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            onClick={() => handleItemClick(item)}
+                                            className="bg-white p-4 rounded-[1.25rem] border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-blue-300 transition-all"
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg border border-slate-200 uppercase font-mono">#{item.ID_Factory_Order || 'N/A'}</span>
+                                            </div>
+                                            <h4 className="text-[12px] font-black text-slate-800 uppercase leading-tight">{item.Material_description}</h4>
+                                            <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">SL: {item.Quantity_IPO} {item.Base_Unit}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+      </div>
+    </div>
+  );
+};

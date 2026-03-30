@@ -6,6 +6,8 @@ export const PlanSchema = z.object({
     .min(3, "Headcode phải có ít nhất 3 ký tự")
     .max(50, "Headcode quá dài"),
   
+  ma_nha_may: z.string().optional(),
+  
   ma_ct: z.string({ required_error: "Mã công trình là bắt buộc" })
     .min(1, "Mã công trình không được để trống"),
   

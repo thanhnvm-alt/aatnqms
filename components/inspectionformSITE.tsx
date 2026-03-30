@@ -1,12 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, ModuleId } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, ModuleId } from '../types';
 import { 
   Save, X, Camera, Image as ImageIcon, ChevronDown, 
   MapPin, Box, AlertTriangle, Trash2, LayoutList, 
   QrCode, PenTool, Eraser, Loader2, 
   AlertOctagon, Locate, History, Clock
 } from 'lucide-react';
+import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 // Added missing QRScannerModal import
 import { QRScannerModal } from './QRScannerModal';
@@ -15,7 +16,6 @@ interface InspectionFormProps {
   initialData?: Partial<Inspection>;
   onSave: (inspection: Inspection) => Promise<void>;
   onCancel: () => void;
-  plans: PlanItem[];
   workshops: Workshop[];
   user: User;
   templates: Record<string, CheckItem[]>;
@@ -48,53 +48,7 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   });
 };
 
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas && value) {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => { 
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); 
-            };
-            img.src = value;
-        }
-    }, [value]);
-    const startDrawing = (e: any) => {
-        if (readOnly) return;
-        const canvas = canvasRef.current; if (!canvas) return;
-        const ctx = canvas.getContext('2d'); if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top);
-        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000';
-        setIsDrawing(true);
-    };
-    const draw = (e: any) => {
-        if (!isDrawing || readOnly) return;
-        const canvas = canvasRef.current; if (!canvas) return;
-        const ctx = canvas.getContext('2d'); if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke();
-    };
-    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
-    const clear = () => { if (readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
-    return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center px-1"><label className="text-slate-600 font-bold text-[9px] uppercase tracking-widest">{label}</label>{!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3" /> Xóa</button>}</div>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-28 shadow-sm">
-                <canvas ref={canvasRef} width={400} height={112} className="w-full h-full touch-none cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] uppercase font-bold tracking-widest italic">Ký xác nhận tại đây</div>}
-            </div>
-        </div>
-    );
-};
+import { SignaturePad } from './SignaturePad';
 
 export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
@@ -144,16 +98,20 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        // Fixed error: Explicitly cast Array.from(files) to satisfy readAsDataURL parameter type
-        const processed = await Promise.all((Array.from(files) as any[]).map(f => {
-            return new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = async () => resolve(await resizeImage(reader.result as string));
-                reader.readAsDataURL(f);
-            });
-        }));
-        if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processed] }));
-        else setFormData(prev => ({ ...prev, items: prev.items?.map(it => it.id === activeUploadId ? { ...it, images: [...(it.images || []), ...processed] } : it) }));
+        const uploadedUrls = await Promise.all(
+            Array.from(files).map(async (file: File) => {
+                return await uploadQMSImage(file, { 
+                    entityId: formData.id || 'new', 
+                    type: 'SITE', 
+                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+                });
+            })
+        );
+        if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
+        else setFormData(prev => ({ ...prev, items: prev.items?.map(it => it.id === activeUploadId ? { ...it, images: [...(it.images || []), ...uploadedUrls] } : it) }));
+    } catch (err) {
+        console.error("ISO-UPLOAD: Failed", err);
+        alert("Lỗi tải ảnh lên.");
     } finally { setIsProcessingImages(false); e.target.value = ''; }
   };
 
@@ -263,7 +221,12 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
             <h3 className="text-amber-800 border-b border-amber-50 pb-3 font-black uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> IV. XÁC NHẬN QC HIỆN TRƯỜNG</h3>
             <textarea value={formData.summary || ''} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-1 ring-amber-200 outline-none h-28 resize-none shadow-inner" placeholder="Tóm tắt tình trạng hoàn thiện và các yêu cầu sửa chữa cần thiết..."/>
             <div className="pt-4">
-                <SignaturePad label={`Ký tên xác nhận (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
+                <SignaturePad 
+                    label={`Ký tên xác nhận (${user.name})`} 
+                    value={formData.signature} 
+                    onChange={sig => setFormData({...formData, signature: sig})} 
+                    uploadContext={{ entityId: formData.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_QC' }}
+                />
             </div>
         </section>
       </div>

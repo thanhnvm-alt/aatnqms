@@ -8,8 +8,10 @@ export default defineConfig(({ mode }) => {
   
   // Ưu tiên API Key từ Vercel System Env
   const apiKey = 
+    process.env.GEMINI_API_KEY || 
     process.env.API_KEY || 
     process.env.VITE_API_KEY || 
+    env.GEMINI_API_KEY || 
     env.API_KEY || 
     env.VITE_API_KEY || 
     '';
@@ -31,11 +33,12 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       sourcemap: true,
       target: 'es2020', // Explicit target for better iOS compatibility
+      rollupOptions: {
+        external: ['pg'],
+      },
     },
     define: {
-      // Tiêm API_KEY vào mã nguồn theo chuẩn Gemini SDK
-      'process.env.API_KEY': JSON.stringify(apiKey),
-      'process.env.VITE_API_KEY': JSON.stringify(apiKey),
+      // Platform will inject GEMINI_API_KEY automatically
       'process.env.NODE_ENV': JSON.stringify(mode),
       
       // Turso Config: Support both standard and VITE_ prefixed variables for flexibility

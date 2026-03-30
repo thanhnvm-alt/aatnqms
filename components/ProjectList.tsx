@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Project, Inspection, InspectionStatus, PlanItem } from '../types';
+import { Project, Inspection, InspectionStatus } from '../types';
 import { 
   Search, ChevronDown, Filter, Briefcase, 
   Building2, SlidersHorizontal, Check, X, 
@@ -12,7 +12,6 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 interface ProjectListProps {
   projects: Project[];
   inspections: Inspection[];
-  plans: PlanItem[];
   onSelectProject: (maCt: string) => void;
   onSearch?: (term: string) => void;
 }
@@ -23,7 +22,7 @@ const COLORS = {
   empty: '#e2e8f0'
 };
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections, plans, onSelectProject, onSearch }) => {
+export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections, onSelectProject, onSearch }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());

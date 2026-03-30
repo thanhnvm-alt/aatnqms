@@ -1,5 +1,5 @@
 
-import { PlanEntity, PlanResponse } from '../types';
+import { IPOItem, IPOResponse } from '../types';
 
 /**
  * Chuyển đổi Unix timestamp sang định dạng ngày Việt Nam (dd/MM/yyyy)
@@ -19,7 +19,7 @@ export const formatUnixDate = (timestamp: number): string => {
  * Transform Data Object: Chuyển đổi từ DB Row (Snake_case) sang App Entity (CamelCase/Formatted)
  * Giúp Frontend dễ làm việc hơn và ẩn cấu trúc DB thực tế.
  */
-export const transformPlan = (row: PlanEntity): PlanResponse => {
+export const transformIPO = (row: IPOItem): IPOResponse => {
   return {
     id: row.id,
     headcode: row.headcode,
@@ -29,7 +29,7 @@ export const transformPlan = (row: PlanEntity): PlanResponse => {
     tenHangMuc: row.ten_hang_muc,
     dvt: row.dvt || 'PCS',
     soLuongIpo: row.so_luong_ipo,
-    ngayTao: formatUnixDate(row.created_at)
+    ngayTao: formatUnixDate(row.created_at || 0)
   };
 };
 

@@ -10,7 +10,7 @@ import {
     Edit3, Search
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
-import { fetchDefectLibrary, saveNcrMapped } from '../services/apiService';
+import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
 
 interface NCRDetailProps {
@@ -176,31 +176,41 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const handleAddImage = async (e: React.ChangeEvent<HTMLInputElement>, type: 'BEFORE' | 'AFTER' | 'COMMENT') => {
       if (isLocked && type !== 'COMMENT') return;
       const files = e.target.files;
-      if (!files) return;
-      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-          const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(f);
-          });
-          return resizeImage(base64);
-      }));
+      if (!files || files.length === 0) return;
       
-      if (type === 'COMMENT') {
-          setCommentAttachments(prev => [...prev, ...processed]);
-      } else {
-          setFormData(prev => {
-              const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-              const newImages = [...(prev[field] as string[] || []), ...processed];
-              let newStatus = prev.status;
-              if (newStatus !== 'CLOSED' && type === 'AFTER') {
-                  newStatus = newImages.length > 0 ? 'IN_PROGRESS' : 'OPEN';
-              }
-              return { ...prev, [field]: newImages, status: newStatus };
-          });
-          setIsEditing(true);
+      setIsSaving(true);
+      try {
+          const uploadedUrls = await Promise.all(
+              Array.from(files).map(async (file: File) => {
+                  return await uploadQMSImage(file, { 
+                      entityId: formData.id || 'new', 
+                      type: 'NCR', 
+                      role: type 
+                  });
+              })
+          );
+          
+          if (type === 'COMMENT') {
+              setCommentAttachments(prev => [...prev, ...uploadedUrls]);
+          } else {
+              setFormData(prev => {
+                  const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+                  const newImages = [...(prev[field] as string[] || []), ...uploadedUrls];
+                  let newStatus = prev.status;
+                  if (newStatus !== 'CLOSED' && type === 'AFTER') {
+                      newStatus = newImages.length > 0 ? 'IN_PROGRESS' : 'OPEN';
+                  }
+                  return { ...prev, [field]: newImages, status: newStatus };
+              });
+              setIsEditing(true);
+          }
+      } catch (err) {
+          console.error("ISO-NCR-UPLOAD: Failed", err);
+          alert("Lỗi tải ảnh lên.");
+      } finally {
+          setIsSaving(false);
+          e.target.value = '';
       }
-      e.target.value = '';
   };
 
   const removeImage = (index: number, type: 'BEFORE' | 'AFTER') => {
@@ -249,12 +259,21 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       setLightboxState({ images: commentAttachments, index, context: 'PENDING_COMMENT' });
   };
 
-  const updateCommentImage = (index: number, updatedImage: string) => {
-      setCommentAttachments(prev => {
-          const next = [...prev];
-          next[index] = updatedImage;
-          return next;
-      });
+  const updateCommentImage = async (index: number, updatedImage: string) => {
+      try {
+          const uploadedUrl = await uploadQMSImage(updatedImage, {
+              entityId: formData.id || 'new',
+              type: 'NCR',
+              role: 'COMMENT_EDIT'
+          });
+          setCommentAttachments(prev => {
+              const next = [...prev];
+              next[index] = uploadedUrl;
+              return next;
+          });
+      } catch (err) {
+          alert("Lỗi lưu ảnh chỉnh sửa.");
+      }
   };
 
   return (
@@ -493,8 +512,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
           />
       )}
-      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleAddImage.bind(null, 'COMMENT' as any)} />
-      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleAddImage.bind(null, 'COMMENT' as any)} />
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'COMMENT')} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'COMMENT')} />
       <input type="file" ref={beforeFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
       <input type="file" ref={beforeCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
       <input type="file" ref={afterFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />

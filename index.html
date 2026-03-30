@@ -11,6 +11,24 @@
     <script>
       window.global = window;
       window.process = window.process || { env: {} };
+      // Minimal Buffer polyfill for browser compatibility
+      if (typeof window.Buffer === 'undefined') {
+        window.Buffer = {
+          isBuffer: () => false,
+          from: (data) => data,
+          alloc: (size) => new Uint8Array(size),
+          concat: (list) => {
+            let totalLength = list.reduce((acc, curr) => acc + curr.length, 0);
+            let result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (let item of list) {
+              result.set(item, offset);
+              offset += item.length;
+            }
+            return result;
+          }
+        };
+      }
     </script>
     
     <script src="https://cdn.tailwindcss.com"></script>

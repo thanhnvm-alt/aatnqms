@@ -77,7 +77,7 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
                             defect.images.map((img, idx) => (
                                 <div 
                                     key={idx} 
-                                    onClick={() => setLightboxState({ images: defect.images, index: idx })}
+                                    onClick={() => setLightboxState({ images: defect.images || [], index: idx })}
                                     className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in"
                                 >
                                     <img src={img} className="w-full h-full object-cover transition-transform group-hover:scale-110" />

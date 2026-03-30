@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR, DefectLibraryItem } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { 
   Save, X, Camera, Image as ImageIcon, ChevronDown, 
   MapPin, Box, AlertTriangle, 
@@ -11,7 +11,7 @@ import {
   Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck, CheckCircle
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { fetchPlans, fetchDefectLibrary, saveNcrMapped, fetchInspectionById } from '../services/apiService';
+import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, fetchPlans } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 
@@ -42,61 +42,7 @@ const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
   });
 };
 
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    const [isEmpty, setIsEmpty] = useState(!value);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas && value) {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => { ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); };
-            img.src = value;
-            setIsEmpty(false);
-        }
-    }, [value]);
-
-    const startDrawing = (e: any) => {
-        if (readOnly) return;
-        const canvas = canvasRef.current; if (!canvas) return;
-        const ctx = canvas.getContext('2d'); if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.beginPath();
-        ctx.moveTo(clientX - rect.left, clientY - rect.top);
-        ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000';
-        setIsDrawing(true); setIsEmpty(false);
-    };
-
-    const draw = (e: any) => {
-        if (!isDrawing || readOnly) return;
-        const canvas = canvasRef.current; if (!canvas) return;
-        const ctx = canvas.getContext('2d'); if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke();
-    };
-
-    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
-    const clearSignature = () => { if (readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } setIsEmpty(true); };
-
-    return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center px-1">
-                <label className="text-slate-600 font-bold text-[9px] uppercase tracking-widest">{label}</label>
-                {!readOnly && <button onClick={clearSignature} className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3" /> Xóa</button>}
-            </div>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-28 shadow-sm">
-                <canvas ref={canvasRef} width={400} height={112} className="w-full h-full touch-none cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {isEmpty && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-bold uppercase tracking-widest">Ký tại đây</div>}
-            </div>
-        </div>
-    );
-};
+import { SignaturePad } from './SignaturePad';
 
 const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionStage }: { isOpen: boolean; onClose: () => void; onSave: (ncr: NCR) => void; initialData?: NCR; itemName: string; inspectionStage?: string; }) => {
     const [ncrData, setNcrData] = useState<Partial<NCR>>({ severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
@@ -136,23 +82,28 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
         });
     }, [library, libSearch, inspectionStage]);
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
-        Array.from(files).forEach((file: File) => {
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                if (typeof reader.result === 'string') {
-                    const resized = await resizeImage(reader.result);
-                    setNcrData(prev => {
-                        const field = uploadTarget === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-                        return { ...prev, [field]: [...(prev[field] as string[] || []), resized] };
-                    });
-                }
-            };
-            reader.readAsDataURL(file);
-        });
-        e.target.value = '';
+        
+        setIsAiLoading(true); // Reuse AI loading state or add a new one
+        try {
+            const uploadedUrls = await Promise.all(
+                Array.from(files).map(async (file: File) => {
+                    return await uploadQMSImage(file, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget });
+                })
+            );
+            
+            setNcrData(prev => {
+                const field = uploadTarget === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+                return { ...prev, [field]: [...(prev[field] as string[] || []), ...uploadedUrls] };
+            });
+        } catch (err) {
+            alert("Lỗi tải ảnh lên.");
+        } finally {
+            setIsAiLoading(false);
+            e.target.value = '';
+        }
     };
 
     const handleAiAnalysis = async () => {
@@ -269,14 +220,13 @@ interface InspectionFormProps {
   initialData?: Partial<Inspection>;
   onSave: (inspection: Inspection) => Promise<void>;
   onCancel: () => void;
-  plans: PlanItem[];
   workshops: Workshop[];
   inspections: Inspection[];
   user: User;
   templates: Record<string, CheckItem[]>;
 }
 
-export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, plans, workshops, inspections, user, templates }) => {
+export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, workshops, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
     id: initialData?.id || `INS-${Date.now()}`, 
     date: new Date().toISOString().split('T')[0], 
@@ -355,17 +305,39 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       if (!code) return;
       setIsLookupLoading(true);
       try {
+          if (code.length === 9) {
+              const ipoItems = await fetchIpoByFactoryOrder(code);
+              if (ipoItems && ipoItems.length > 0) {
+                  const match = ipoItems[0];
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    ma_ct: match.Ma_Tender || '', 
+                    ten_ct: match.Project_name || '', 
+                    ten_hang_muc: match.Material_description || '', 
+                    dvt: match.Base_Unit || '', 
+                    so_luong_ipo: Number(match.Quantity_IPO || 0), 
+                    ma_nha_may: match.ID_Factory_Order || '', 
+                    headcode: match.ID_Factory_Order || '', 
+                    workshop: match.ID_Factory_Order || '',
+                    inspectedQuantity: 0,
+                    passedQuantity: 0,
+                    failedQuantity: 0
+                  }));
+                  setSearchCode(match.ID_Factory_Order);
+                  return;
+              }
+          }
+
           const apiRes = await fetchPlans(code, 1, 10);
           const items = apiRes.items || [];
           
           let match = null;
           if (code.length === 9) {
-              match = items.find(p => String(p.headcode || '').toUpperCase() === code);
+              match = items.find(p => String(p.ma_nha_may || '').toUpperCase() === code);
           } else if (code.length === 13) {
               match = items.find(p => String(p.ma_nha_may || '').toUpperCase() === code);
           } else {
               match = items.find(p => 
-                String(p.headcode || '').toUpperCase() === code || 
                 String(p.ma_nha_may || '').toUpperCase() === code
               ) || items[0];
           }
@@ -379,7 +351,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 dvt: match.dvt, 
                 so_luong_ipo: match.so_luong_ipo, 
                 ma_nha_may: match.ma_nha_may, 
-                headcode: match.headcode, 
                 workshop: match.ma_nha_may,
                 inspectedQuantity: 0,
                 passedQuantity: 0,
@@ -500,33 +471,31 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     
     setIsProcessingImages(true);
     try {
-        const processedImages = await Promise.all(
+        const uploadedUrls = await Promise.all(
             Array.from(files).map(async (file: File) => {
-                return new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        const resized = await resizeImage(reader.result as string);
-                        resolve(resized);
-                    };
-                    reader.readAsDataURL(file as File);
+                return await uploadQMSImage(file, { 
+                    entityId: formData.id || 'new', 
+                    type: 'INSPECTION', 
+                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
                 });
             })
         );
 
         if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...processedImages] }));
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
         } else {
             setFormData(prev => ({ 
                 ...prev, 
                 items: prev.items?.map(i => 
                     i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...processedImages] } 
+                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
                         : i
                 ) 
             }));
         }
     } catch (err) {
         console.error("ISO-UPLOAD: Failed", err);
+        alert("Lỗi tải ảnh lên.");
     } finally {
         setIsProcessingImages(false);
         e.target.value = '';
@@ -534,11 +503,41 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleEditImage = (type: 'MAIN' | 'ITEM', images: string[], index: number, itemId?: string) => { setEditorState({ images, index, context: { type, itemId } }); };
-  const onImageSave = (idx: number, updatedImg: string) => {
+  const onImageSave = async (idx: number, updatedImg: string) => {
       if (!editorState) return;
       const { type, itemId } = editorState.context;
-      if (type === 'MAIN') { setFormData(prev => { const newImgs = [...(prev.images || [])]; newImgs[idx] = updatedImg; return { ...prev, images: newImgs }; }); } 
-      else if (type === 'ITEM' && itemId) { setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? updatedImg : img) } : i) })); }
+      
+      setIsProcessingImages(true);
+      try {
+          // Convert base64 to File for upload
+          const res = await fetch(updatedImg);
+          const blob = await res.blob();
+          const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          
+          const uploadedUrl = await uploadQMSImage(file, { 
+              entityId: formData.id || 'new', 
+              type: 'INSPECTION', 
+              role: type === 'MAIN' ? 'MAIN' : 'ITEM' 
+          });
+
+          if (type === 'MAIN') { 
+              setFormData(prev => { 
+                  const newImgs = [...(prev.images || [])]; 
+                  newImgs[idx] = uploadedUrl; 
+                  return { ...prev, images: newImgs }; 
+              }); 
+          } else if (type === 'ITEM' && itemId) { 
+              setFormData(prev => ({ 
+                  ...prev, 
+                  items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) } : i) 
+              })); 
+          }
+      } catch (err) {
+          console.error("ISO-SAVE-EDIT: Failed", err);
+          alert("Lỗi lưu ảnh chỉnh sửa.");
+      } finally {
+          setIsProcessingImages(false);
+      }
   };
 
   return (
@@ -724,7 +723,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-3">
             <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-3 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><PenTool className="w-3.5 h-3.5"/> V. CHỮ KÝ XÁC NHẬN</h3>
             <div className="mb-4"><label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Ghi chú QC</label><textarea value={formData.summary || ''} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 ring-blue-100 outline-none h-20 resize-none" placeholder="Ghi chú thêm..."/></div>
-            <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} />
+            <SignaturePad 
+                label={`QC Ký Tên (${user.name})`} 
+                value={formData.signature} 
+                onChange={sig => setFormData({...formData, signature: sig})} 
+                uploadContext={{ entityId: formData.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_QC' }}
+            />
         </section>
       </div>
 

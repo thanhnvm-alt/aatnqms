@@ -1,0 +1,300 @@
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
+import { query } from "./lib/db.js";
+import multer from 'multer';
+import fs from 'fs';
+import * as XLSX from 'xlsx';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Ensure upload directory exists
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+const memoryUpload = multer({ storage: multer.memoryStorage() });
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+  const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+  // API routes
+  app.get("/api/ipo", async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appqaqc';
+      const { factoryOrder, maTender } = req.query;
+      
+      let sql = `SELECT * FROM "${schema}"."ipo" WHERE 1=1`;
+      const params: any[] = [];
+      
+      if (factoryOrder) {
+        sql += ` AND "ID_Factory_Order" = $${params.length + 1}`;
+        params.push(factoryOrder);
+      }
+      if (maTender) {
+        sql += ` AND "Ma_Tender" = $${params.length + 1}`;
+        params.push(maTender);
+      }
+      
+      sql += " LIMIT 100";
+      
+      const result = await query(sql, params);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching IPO data:', error);
+      res.status(500).json({ error: 'Failed to fetch IPO data' });
+    }
+  });
+
+  app.get("/api/ncrs", async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      const result = await query(`SELECT * FROM "${schema}"."ncrs" ORDER BY "created_at" DESC`);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching NCRs:', error);
+      res.status(500).json({ error: 'Failed to fetch NCRs' });
+    }
+  });
+
+  // Material API
+  app.get("/api/materials", async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      const result = await query(`SELECT * FROM "${schema}"."material" ORDER BY "createdAt" DESC LIMIT 500`);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching materials:', error);
+      res.status(500).json({ error: 'Failed to fetch materials' });
+    }
+  });
+
+  app.post("/api/materials", express.json(), async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      const { material, shortText, orderUnit, orderQuantity, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order } = req.body;
+      const result = await query(
+        `INSERT INTO "${schema}"."material" ("id", "material", "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "createdAt", "updatedAt") VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING *`,
+        [material, shortText, orderUnit, orderQuantity || 0, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order]
+      );
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Error creating material:', error);
+      res.status(500).json({ error: 'Failed to create material' });
+    }
+  });
+
+  app.put("/api/materials/:id", express.json(), async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      const { id } = req.params;
+      const { material, shortText, orderUnit, orderQuantity, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order } = req.body;
+      const result = await query(
+        `UPDATE "${schema}"."material" SET "material" = $1, "shortText" = $2, "orderUnit" = $3, "orderQuantity" = $4, "supplierName" = $5, "projectName" = $6, "purchaseDocument" = $7, "deliveryDate" = $8, "Ma_Tender" = $9, "Factory_Order" = $10, "updatedAt" = NOW() WHERE "id" = $11 RETURNING *`,
+        [material, shortText, orderUnit, orderQuantity || 0, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order, id]
+      );
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Error updating material:', error);
+      res.status(500).json({ error: 'Failed to update material' });
+    }
+  });
+
+  app.delete("/api/materials/:id", async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      const { id } = req.params;
+      await query(`DELETE FROM "${schema}"."material" WHERE "id" = $1`, [id]);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting material:', error);
+      res.status(500).json({ error: 'Failed to delete material' });
+    }
+  });
+
+  app.get("/api/ncrs/export", async (req, res) => {
+    try {
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        const result = await query(`SELECT * FROM "${schema}"."ncrs" ORDER BY "created_at" DESC`);
+        const ws = XLSX.utils.json_to_sheet(result.rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "NCRs");
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Disposition", "attachment; filename=NCRs.xlsx");
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buf);
+    } catch (error) {
+        console.error('Error exporting NCRs:', error);
+        res.status(500).json({ error: 'Failed to export NCRs' });
+    }
+  });
+
+  // Image Upload API
+  app.post("/api/upload", (req, res, next) => {
+    upload.single('image')(req, res, (err) => {
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(500).json({ error: err.message });
+      }
+      next();
+    });
+  }, (req, res) => {
+    console.log("Received upload request");
+    try {
+      if (!req.file) {
+        console.log("No file in request");
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      
+      console.log("File received:", req.file.filename);
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.json({ 
+        url: fileUrl,
+        url_hd: fileUrl,
+        url_thumbnail: fileUrl, // In a real app, we would generate a thumbnail
+        filename: req.file.filename,
+        size: req.file.size,
+        mime: req.file.mimetype
+      });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      res.status(500).json({ error: 'Failed to upload image' });
+    }
+  });
+
+  app.post("/api/ncrs/import", memoryUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        for (const row of data as any[]) {
+            if (row.id) {
+                await query(`
+                    UPDATE "${schema}"."ncrs" 
+                    SET "defect_code" = $1, "description" = $2, "status" = $3, "severity" = $4, "responsible_person" = $5, "updated_at" = (EXTRACT(epoch FROM now()))::bigint
+                    WHERE "id" = $6
+                `, [row.defect_code, row.description || row.issue_description, row.status, row.severity, row.responsible_person, row.id]);
+            } else {
+                const newId = `NCR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                await query(`
+                    INSERT INTO "${schema}"."ncrs" ("id", "defect_code", "description", "status", "severity", "responsible_person", "created_at", "updated_at") 
+                    VALUES ($1, $2, $3, $4, $5, $6, (EXTRACT(epoch FROM now()))::bigint, (EXTRACT(epoch FROM now()))::bigint)
+                `, [newId, row.defect_code, row.description || row.issue_description, row.status, row.severity, row.responsible_person]);
+            }
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error importing NCRs:', error);
+        res.status(500).json({ error: 'Failed to import NCRs' });
+    }
+  });
+
+  app.post("/api/query", express.json(), async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      let { sql, args } = req.body;
+      
+      // Basic SQLite to PostgreSQL syntax conversion
+      let pgSql = sql;
+      
+      // Replace ? with $1, $2, etc.
+      let paramIndex = 1;
+      pgSql = pgSql.replace(/\?/g, () => `$${paramIndex++}`);
+      
+      // Replace AUTOINCREMENT with SERIAL or just remove it if it's in CREATE TABLE (we don't need to create tables here)
+      pgSql = pgSql.replace(/AUTOINCREMENT/gi, '');
+      
+      // Replace unixepoch() with EXTRACT(epoch FROM now())
+      pgSql = pgSql.replace(/unixepoch\(\)/gi, 'EXTRACT(epoch FROM now())');
+      
+      // Handle PRAGMA table_info
+      if (pgSql.toUpperCase().startsWith('PRAGMA TABLE_INFO')) {
+        const match = pgSql.match(/PRAGMA table_info\((['"]?)(.*?)\1\)/i);
+        if (match) {
+          const tableName = match[2];
+          pgSql = `SELECT column_name as name, data_type as type FROM information_schema.columns WHERE table_schema = $2 AND table_name = $1`;
+          args = [tableName, schema];
+        }
+      }
+
+      // Set search path
+      await query(`SET search_path TO "${schema}"`);
+      
+      const result = await query(pgSql, args || []);
+      res.json({ rows: result.rows, rowCount: result.rowCount });
+    } catch (error: any) {
+      console.error('Error executing query:', error.message, req.body.sql);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/batch", express.json(), async (req, res) => {
+    try {
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
+      const { queries } = req.body; // Array of { sql, args } or strings
+      
+      await query(`SET search_path TO "${schema}"`);
+      await query('BEGIN');
+      
+      const results = [];
+      for (let q of queries) {
+        let sql = typeof q === 'string' ? q : q.sql;
+        let args = typeof q === 'string' ? [] : (q.args || []);
+        
+        let paramIndex = 1;
+        sql = sql.replace(/\?/g, () => `$${paramIndex++}`);
+        sql = sql.replace(/AUTOINCREMENT/gi, '');
+        sql = sql.replace(/unixepoch\(\)/gi, 'EXTRACT(epoch FROM now())');
+        
+        const result = await query(sql, args);
+        results.push({ rows: result.rows, rowCount: result.rowCount });
+      }
+      
+      await query('COMMIT');
+      res.json(results);
+    } catch (error: any) {
+      await query('ROLLBACK');
+      console.error('Error executing batch:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(__dirname, 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

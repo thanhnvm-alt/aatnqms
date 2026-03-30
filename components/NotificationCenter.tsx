@@ -122,7 +122,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                         </span>
                                     </div>
                                     <p className={`text-[10px] leading-relaxed line-clamp-2 ${n.isRead ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
-                                        {n.message.replace('undefined', 'dự án')}
+                                        {(n.message || '').replace('undefined', 'dự án')}
                                     </p>
                                 </div>
                                 

@@ -1,11 +1,11 @@
 
 
-import { PlanItem } from '../types';
+import { IPOItem } from '../types';
 import { MOCK_PLAN_DATA } from '../constants';
 // Fixed missing import member
 import { fetchPlans } from './apiService';
 
-export const fetchPlansFromSheet = async (): Promise<PlanItem[]> => {
+export const fetchPlansFromSheet = async (): Promise<IPOItem[]> => {
   try {
     const result = await fetchPlans('', 1, 200); 
     return result && result.items && result.items.length > 0 ? result.items : MOCK_PLAN_DATA;

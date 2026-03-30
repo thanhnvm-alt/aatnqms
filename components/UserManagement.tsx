@@ -223,7 +223,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
                       allowedModules: ['PQC', 'IQC', 'SITE']
                   };
-              }).filter((u): u is User => u !== null);
+              }).filter((u: any): u is User => u !== null);
 
               if (importedUsers.length > 0) {
                   await onImportUsers(importedUsers);

@@ -6,9 +6,10 @@ import {
     AlertTriangle, Search, Clock, CheckCircle2, 
     ArrowRight, Loader2, Calendar, User as UserIcon, 
     FileText, ChevronRight, ShieldAlert,
-    Hash, AlertCircle, Maximize2
+    Hash, AlertCircle, Maximize2, Upload, Download
 } from 'lucide-react';
 import { NCRDetail } from './NCRDetail';
+import { exportNcrs, importNcrsFile } from '../services/apiService';
 
 interface NCRListProps {
   currentUser: User;
@@ -132,6 +133,20 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       <option value="IN_PROGRESS">IN PROGRESS</option>
                       <option value="CLOSED">CLOSED</option>
                   </select>
+                  <div className="flex gap-2">
+                      <button onClick={exportNcrs} className="px-4 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-green-700 flex items-center gap-2 shadow-sm">
+                          <Download className="w-4 h-4" /> Xuất
+                      </button>
+                      <input type="file" id="ncr-import" className="hidden" onChange={async (e) => {
+                          if (e.target.files && e.target.files[0]) {
+                              await importNcrsFile(e.target.files[0]);
+                              loadNcrs();
+                          }
+                      }} />
+                      <label htmlFor="ncr-import" className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 flex items-center gap-2 cursor-pointer shadow-sm">
+                          <Upload className="w-4 h-4" /> Nhập
+                      </label>
+                  </div>
               </div>
           </div>
       </div>

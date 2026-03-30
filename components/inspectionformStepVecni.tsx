@@ -1,18 +1,17 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, PlanItem, User, Workshop, NCR } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, NCR } from '../types';
 import { Save, X, Camera, Image as ImageIcon, ChevronDown, MapPin, Box, AlertTriangle, Trash2, LayoutList, FileText, QrCode, PenTool, Eraser, Loader2 } from 'lucide-react';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
   onSave: (inspection: Inspection) => Promise<void>;
   onCancel: () => void;
-  plans: PlanItem[];
   workshops: Workshop[];
   user: User;
 }
 
-export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, plans, workshops, user }) => {
+export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, workshops, user }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
     id: `STEP-${Date.now()}`, 
     date: new Date().toISOString().split('T')[0], 

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { Inspection, PlanItem, InspectionStatus } from '../types';
+import { Inspection, InspectionStatus } from '../types';
 import { 
   Send, X, MessageSquare, Sparkles, Bot, Loader2, 
   Eraser, ShieldCheck, Move, Minimize2, GripVertical, AlertCircle
@@ -10,7 +10,6 @@ import {
 
 interface AIChatboxProps {
   inspections: Inspection[];
-  plans: PlanItem[];
 }
 
 interface Message {
@@ -41,7 +40,7 @@ const FormattedText: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AIChatbox: React.FC<AIChatboxProps> = ({ inspections, plans }) => {
+export const AIChatbox: React.FC<AIChatboxProps> = ({ inspections }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -99,30 +98,23 @@ export const AIChatbox: React.FC<AIChatboxProps> = ({ inspections, plans }) => {
 
   // Tạo Summary Context để AI trả lời được các câu hỏi tổng quát
   const dataSummary = useMemo(() => {
-    const projectStats: Record<string, { plans: number, qc: number }> = {};
-    
-    plans.forEach(p => {
-        const code = String(p.ma_ct || 'N/A');
-        if (!projectStats[code]) projectStats[code] = { plans: 0, qc: 0 };
-        projectStats[code].plans++;
-    });
+    const projectStats: Record<string, { qc: number }> = {};
     
     inspections.forEach(i => {
         const code = String(i.ma_ct || 'N/A');
-        if (!projectStats[code]) projectStats[code] = { plans: 0, qc: 0 };
+        if (!projectStats[code]) projectStats[code] = { qc: 0 };
         projectStats[code].qc++;
     });
 
     const summaryLines = Object.entries(projectStats)
-        .slice(0, 30) // Giới hạn chỉ gửi 30 dự án tiêu biểu trong summary
-        .map(([code, stats]) => `- ${code}: ${stats.plans} KH, ${stats.qc} QC`);
+        .slice(0, 30) 
+        .map(([code, stats]) => `- ${code}: ${stats.qc} QC`);
 
     return `TÓM TẮT HỆ THỐNG:
-- Tổng số kế hoạch: ${plans.length}
 - Tổng số phiếu kiểm tra: ${inspections.length}
 - Một số dự án tiêu biểu:
 ${summaryLines.join('\n')}`;
-  }, [inspections, plans]);
+  }, [inspections]);
 
   const handleSendMessage = async () => {
     const text = input.trim();
@@ -134,23 +126,14 @@ ${summaryLines.join('\n')}`;
 
     try {
       // Fixed: Initializing GoogleGenAI as per guidelines
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       // LOGIC LỌC DỮ LIỆU AN TOÀN (Safe String Handling)
       const keywords = text.toUpperCase().split(/\s+/).filter(k => k.length > 1);
       
-      let relevantPlans = plans;
       let relevantInspections = inspections;
 
       if (keywords.length > 0) {
-          relevantPlans = plans.filter(p => 
-              keywords.some(k => 
-                  (p.ma_ct && String(p.ma_ct).toUpperCase().includes(k)) || 
-                  (p.ma_nha_may && String(p.ma_nha_may).toUpperCase().includes(k)) ||
-                  (p.headcode && String(p.headcode).toUpperCase().includes(k)) ||
-                  (p.ten_hang_muc && String(p.ten_hang_muc).toUpperCase().includes(k))
-              )
-          );
           relevantInspections = inspections.filter(i => 
               keywords.some(k => 
                   (i.ma_ct && String(i.ma_ct).toUpperCase().includes(k)) || 
@@ -164,13 +147,11 @@ ${summaryLines.join('\n')}`;
 
       // Giới hạn Token khắt khe hơn (Safe Limits: ~1000 records total)
       // Nếu có từ khóa, ưu tiên kết quả lọc. Nếu không, lấy 100 bản ghi mới nhất.
-      const finalPlans = keywords.length > 0 ? relevantPlans.slice(0, 800) : plans.slice(0, 200);
       const finalInspections = keywords.length > 0 ? relevantInspections.slice(0, 200) : inspections.slice(0, 50);
 
       const dynamicContext = `
 DỮ LIỆU CHI TIẾT (Lọc theo yêu cầu):
 ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i.score}%|${i.status}`).join('\n')}
-${finalPlans.map(p => `KH|${p.ma_ct}|${p.ma_nha_may}|${p.ten_hang_muc}|${p.plannedDate}|SL:${p.so_luong_ipo}`).join('\n')}
       `;
 
       const response = await ai.models.generateContent({

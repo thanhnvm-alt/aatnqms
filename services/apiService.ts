@@ -1,6 +1,19 @@
 
-import { Inspection, PlanItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
-import * as db from './tursoService';
+import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
+import * as db from './dbService';
+
+export const fetchIpoData = async () => {
+    const response = await fetch('/api/ipo');
+    if (!response.ok) throw new Error('Failed to fetch IPO data');
+    return await response.json();
+};
+
+export const fetchIpoByFactoryOrder = async (factoryOrder: string) => {
+    const response = await fetch(`/api/ipo?factoryOrder=${encodeURIComponent(factoryOrder)}`);
+    if (!response.ok) throw new Error('Failed to fetch IPO by factory order');
+    const data = await response.json();
+    return data;
+};
 
 export const fetchFloorPlans = async (projectId: string) => await db.getFloorPlans(projectId);
 export const saveFloorPlan = async (fp: FloorPlan) => await db.saveFloorPlan(fp);
@@ -9,19 +22,34 @@ export const fetchLayoutPins = async (fpId: string) => await db.getLayoutPins(fp
 export const saveLayoutPin = async (pin: LayoutPin) => await db.saveLayoutPin(pin);
 
 /**
- * ISO-Compliant File Upload (Simulated)
- * Uploads file to storage service and returns a deterministic URL
+ * ISO-Compliant File Upload
+ * Uploads file to storage service and returns a permanent URL
  */
 export const uploadFileToStorage = async (file: File | string, fileName: string): Promise<string> => {
-    // In a real ISO system, this calls a backend API which uploads to S3/GCS
-    // and returns a permanent signed URL.
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            // For simulation, we return the base64 or a mock static URL
-            // Real production would return: `https://storage.aatn.vn/layouts/${Date.now()}_${fileName}`
-            resolve(typeof file === 'string' ? file : URL.createObjectURL(file));
-        }, 1000);
+    let fileToUpload: File | Blob;
+    
+    if (typeof file === 'string') {
+        // If it's already a remote URL, return it
+        if (file.startsWith('http') || file.startsWith('/uploads/')) return file;
+        
+        // If it's a data URL or blob URL, convert to Blob for upload
+        const res = await fetch(file);
+        fileToUpload = await res.blob();
+    } else {
+        fileToUpload = file;
+    }
+    
+    const formData = new FormData();
+    formData.append('image', fileToUpload, fileName);
+    
+    const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
     });
+    
+    if (!response.ok) throw new Error('Upload failed');
+    const data = await response.json();
+    return data.url;
 };
 
 export const fetchSuppliers = async () => await db.getSuppliers();
@@ -30,15 +58,26 @@ export const deleteSupplier = async (id: string) => await db.deleteSupplier(id);
 export const fetchSupplierStats = async (name: string) => await db.getSupplierStats(name);
 export const fetchSupplierInspections = async (name: string) => await db.getSupplierInspections(name);
 
-export const uploadQMSImage = async (file: File | string, context: { entityId: string, type: any, role: any }): Promise<string> => {
-    return `img_ref_${Date.now()}`;
+export const uploadQMSImage = async (file: File | string, entityIdOrContext: string | { entityId: string, type: any, role: any }, type?: any, role?: any): Promise<string> => {
+    let entityId: string;
+    let finalType: any;
+    
+    if (typeof entityIdOrContext === 'object') {
+        entityId = entityIdOrContext.entityId;
+        finalType = entityIdOrContext.type;
+    } else {
+        entityId = entityIdOrContext;
+        finalType = type;
+    }
+    
+    return await uploadFileToStorage(file, `qms_${finalType}_${entityId}_${Date.now()}.jpg`);
 };
 
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
   return await db.getPlansPaginated(searchTerm, page, limit);
 };
 
-export const updatePlan = async (id: number | string, plan: Partial<PlanItem>) => {
+export const updatePlan = async (id: number | string, plan: Partial<IPOItem>) => {
     return await db.updatePlan(id, plan);
 };
 
@@ -68,7 +107,10 @@ export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: 
 };
 
 export const fetchNcrs = async (filters: any = {}) => {
-    return await db.getNcrs(filters);
+    const response = await fetch('/api/ncrs');
+    if (!response.ok) throw new Error('Failed to fetch NCRs');
+    const data = await response.json();
+    return { items: data, total: data.length };
 };
 
 export const fetchNcrById = async (id: string) => {
@@ -137,6 +179,52 @@ export const importDefectLibraryFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     const response = await fetch('/api/defects/import', {
+        method: 'POST',
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
+};
+
+export const fetchMaterials = async () => {
+    const response = await fetch('/api/materials');
+    if (!response.ok) throw new Error('Failed to fetch materials');
+    return await response.json();
+};
+
+export const saveMaterial = async (material: any) => {
+    const response = await fetch(material.id ? `/api/materials/${material.id}` : '/api/materials', {
+        method: material.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(material)
+    });
+    if (!response.ok) throw new Error('Failed to save material');
+    return await response.json();
+};
+
+export const deleteMaterial = async (id: string) => {
+    const response = await fetch(`/api/materials/${id}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete material');
+    return await response.json();
+};
+
+export const exportNcrs = async () => {
+    const response = await fetch('/api/ncrs/export');
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_NCR_List_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+};
+
+export const importNcrsFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/ncrs/import', {
         method: 'POST',
         body: formData
     });

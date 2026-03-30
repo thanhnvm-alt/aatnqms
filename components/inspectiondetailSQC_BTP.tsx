@@ -8,6 +8,8 @@ import {
   UserPlus, AlertOctagon, ChevronRight, Camera, Image as ImageIcon, PenTool,
   ClipboardList, ChevronUp, ChevronDown, Factory, Activity, Save, Check
 } from 'lucide-react';
+import { SignaturePad } from './SignaturePad';
+import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
 
@@ -41,38 +43,6 @@ const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
   });
 };
 
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas && value) {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => { 
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); 
-            };
-            img.src = value;
-        }
-    }, [value]);
-    const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
-    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); }; };
-    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
-    const clear = () => { const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); ctx?.clearRect(0, 0, canvas.width, canvas.height); onChange(''); } };
-    return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center px-1">
-                <label className="block text-slate-700 font-bold text-[9px] uppercase tracking-wide">{label}</label>
-                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa ký lại</button>}
-            </div>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-32 shadow-inner">
-                <canvas ref={canvasRef} width={400} height={128} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[9px] font-bold uppercase tracking-widest">Ký tại đây</div>}
-            </div>
-        </div>
-    );
-};
 
 export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({ 
   inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment, workshops = [] 
@@ -425,7 +395,12 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                       <h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">Manager Phê Duyệt</h3>
                       <button onClick={() => setShowManagerModal(false)} className="p-1 hover:bg-slate-100 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400"/></button>
                   </div>
-                  <SignaturePad label="Chữ ký điện tử QA/QC Manager *" value={managerSig} onChange={setManagerSig} />
+                  <SignaturePad 
+                    label="Chữ ký điện tử QA/QC Manager *" 
+                    value={managerSig} 
+                    onChange={setManagerSig} 
+                    uploadContext={{ entityId: inspection.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_MANAGER' }}
+                  />
                   <div className="flex gap-4 pt-2">
                       <button onClick={() => setShowManagerModal(false)} className="flex-1 py-4 text-slate-500 font-black uppercase text-[11px] rounded-2xl border border-slate-100 shadow-sm transition-all">Hủy</button>
                       <button onClick={handleManagerApprove} disabled={isProcessing || !managerSig} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-emerald-500/30 transition-all active:scale-95 disabled:opacity-50">
