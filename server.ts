@@ -29,6 +29,7 @@ const upload = multer({ storage: storage });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
+app.use(express.json());
 const schema = process.env.DB_SCHEMA || 'appQAQC';
 
 // API routes
@@ -211,10 +212,11 @@ const schema = process.env.DB_SCHEMA || 'appQAQC';
   });
 
   app.post("/api/query", async (req, res) => {
-    console.log("Received query request:", req.body);
+    console.log("Received query request:", req.body, "Content-Type:", req.headers['content-type']);
     try {
-      if (!req.body) {
-        return res.status(400).json({ error: 'Request body is missing' });
+      if (!req.body || !req.body.sql) {
+        console.error("Invalid request body for /api/query:", req.body, "Content-Type:", req.headers['content-type']);
+        return res.status(400).json({ error: 'Request body or SQL query is missing' });
       }
       const schema = process.env.DB_SCHEMA || 'appQAQC';
       let { sql, args } = req.body;
@@ -285,7 +287,6 @@ const schema = process.env.DB_SCHEMA || 'appQAQC';
   });
 
 // Error handler
-app.use(express.json());
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
     console.error('Bad JSON');
