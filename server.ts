@@ -28,12 +28,10 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
-  const schema = process.env.DB_SCHEMA || 'appQAQC';
+const app = express();
+const schema = process.env.DB_SCHEMA || 'appQAQC';
 
-  // API routes
+// API routes
   app.get("/api/ipo", async (req, res) => {
     try {
       const schema = process.env.DB_SCHEMA || 'appqaqc';
@@ -212,15 +210,6 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json());
-  app.use((err: any, req: any, res: any, next: any) => {
-    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-      console.error('Bad JSON');
-      return res.status(400).send({ error: 'Bad JSON' });
-    }
-    next();
-  });
-
   app.post("/api/query", async (req, res) => {
     console.log("Received query request:", req.body);
     try {
@@ -249,7 +238,7 @@ async function startServer() {
           args = [tableName, schema];
         }
       }
-
+      
       // Set search path
       await query(`SET search_path TO "${schema}"`);
       
@@ -292,20 +281,32 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+// Error handler
+app.use(express.json());
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
+    console.error('Bad JSON');
+    return res.status(400).send({ error: 'Bad JSON' });
+  }
+  next(err);
+});
+
+// Vite middleware for development
+if (process.env.NODE_ENV !== "production") {
+  (async () => {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  })();
+} else {
+  const distPath = path.join(__dirname, 'dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 export default app;
 
