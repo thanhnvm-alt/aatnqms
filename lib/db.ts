@@ -43,11 +43,25 @@ export const query = async (text: string, params?: any[]): Promise<QueryResult<a
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      console.log('Response not ok:', response.status);
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        const text = await response.text();
+        console.error('Database query failed via API (non-JSON response):', text);
+        throw new Error('Database query failed via API (non-JSON response): ' + text);
+      }
       throw new Error(errorData.error || 'Database query failed via API');
     }
 
-    return await response.json();
+    try {
+      return await response.json();
+    } catch (e) {
+      const text = await response.text();
+      console.error('Database query failed to parse JSON response:', text);
+      throw new Error('Database query failed to parse JSON response: ' + text);
+    }
   }
 };
 

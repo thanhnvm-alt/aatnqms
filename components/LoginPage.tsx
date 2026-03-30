@@ -17,7 +17,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
@@ -81,24 +80,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
         <div className="bg-white p-8 pb-4 text-center flex flex-col items-center border-b border-slate-50">
             {/* Logo Container */}
             <div className="mb-4 relative w-full flex justify-center">
-                 {!logoError ? (
-                    <img 
-                        src="https://aacorporation.com/wp-content/uploads/2020/06/logo.png" 
-                        alt="AA Corporation" 
-                        className="h-32 w-auto object-contain"
-                        onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            setLogoError(true);
-                        }}
-                    />
-                 ) : (
-                    <div className="flex flex-col items-center">
-                        <h1 className="text-5xl font-bold text-red-600 tracking-tighter" style={{ fontFamily: 'serif' }}>AA</h1>
-                        <span className="text-xl font-bold text-slate-800">Corporation</span>
-                         <div className="h-1 w-16 bg-orange-500 rounded-full my-2"></div>
-                         <span className="text-xs text-slate-500 uppercase tracking-widest">Interior Solutions Since 1989</span>
-                    </div>
-                 )}
+                <div className="flex flex-col items-center">
+                    <h1 className="text-5xl font-bold text-red-600 tracking-tighter" style={{ fontFamily: 'serif' }}>AA</h1>
+                    <span className="text-xl font-bold text-slate-800">Corporation</span>
+                        <div className="h-1 w-16 bg-orange-500 rounded-full my-2"></div>
+                        <span className="text-xs text-slate-500 uppercase tracking-widest">Interior Solutions Since 1989</span>
+                </div>
             </div>
             
             <h2 className="text-lg font-bold text-slate-600 uppercase tracking-wide mt-2">Hệ thống QA/QC</h2>

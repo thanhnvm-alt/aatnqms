@@ -207,7 +207,22 @@ async function startServer() {
     }
   });
 
-  app.post("/api/query", express.json(), async (req, res) => {
+  app.use((req, res, next) => {
+    console.log("Received request:", req.method, req.url);
+    next();
+  });
+
+  app.use(express.json());
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+      console.error('Bad JSON');
+      return res.status(400).send({ error: 'Bad JSON' });
+    }
+    next();
+  });
+
+  app.post("/api/query", async (req, res) => {
+    console.log("Received query request:", req.body);
     try {
       const schema = process.env.DB_SCHEMA || 'appQAQC';
       let { sql, args } = req.body;
@@ -242,7 +257,7 @@ async function startServer() {
       res.json({ rows: result.rows, rowCount: result.rowCount });
     } catch (error: any) {
       console.error('Error executing query:', error.message, req.body.sql);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || 'Unknown error' });
     }
   });
 
