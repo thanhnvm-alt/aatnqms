@@ -213,6 +213,9 @@ const schema = process.env.DB_SCHEMA || 'appQAQC';
   app.post("/api/query", async (req, res) => {
     console.log("Received query request:", req.body);
     try {
+      if (!req.body) {
+        return res.status(400).json({ error: 'Request body is missing' });
+      }
       const schema = process.env.DB_SCHEMA || 'appQAQC';
       let { sql, args } = req.body;
       
@@ -245,7 +248,7 @@ const schema = process.env.DB_SCHEMA || 'appQAQC';
       const result = await query(pgSql, args || []);
       res.json({ rows: result.rows, rowCount: result.rowCount });
     } catch (error: any) {
-      console.error('Error executing query:', error.message, req.body.sql);
+      console.error('Error executing query:', error.message, req.body ? req.body.sql : 'No SQL');
       res.status(500).json({ error: error.message || 'Unknown error' });
     }
   });
@@ -300,6 +303,10 @@ if (process.env.NODE_ENV !== "production") {
     });
     app.use(vite.middlewares);
   })();
+  
+  app.listen(3000, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:3000`);
+  });
 } else {
   const distPath = path.join(__dirname, 'dist');
   app.use(express.static(distPath));
