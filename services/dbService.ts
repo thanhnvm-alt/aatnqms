@@ -58,7 +58,7 @@ async function ensureTableColumns(tableName: string, expectedColumns: Record<str
             AND table_name = $2
         `, [SCHEMA_NAME, tableName.replace(`${SCHEMA}.`, '').replace(/"/g, '')]);
         
-        const existingCols = res.rows.map(r => r.column_name);
+        const existingCols = res.rows.map((r: any) => r.column_name);
         
         for (const [colName, colType] of Object.entries(expectedColumns)) {
             if (!existingCols.includes(colName)) {

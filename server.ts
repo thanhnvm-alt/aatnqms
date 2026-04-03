@@ -8,14 +8,16 @@ import * as XLSX from 'xlsx';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Ensure upload directory exists
+// Ensure upload directory exists (only if not on Vercel)
 const uploadDir = path.join(__dirname, 'public', 'uploads');
-try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+if (!process.env.VERCEL) {
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+  } catch (err) {
+    console.warn("Could not create upload directory:", err);
   }
-} catch (err) {
-  console.warn("Could not create upload directory (expected on Vercel):", err);
 }
 
 const storage = multer.diskStorage({
@@ -325,7 +327,7 @@ if (process.env.NODE_ENV !== "production") {
 } else {
   const distPath = path.join(__dirname, 'dist');
   app.use(express.static(distPath));
-  app.get('*', (req, res) => {
+  app.get('*all', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
