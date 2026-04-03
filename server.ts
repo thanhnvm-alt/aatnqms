@@ -10,8 +10,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Ensure upload directory exists
 const uploadDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn("Could not create upload directory (expected on Vercel):", err);
 }
 
 const storage = multer.diskStorage({
@@ -297,12 +301,17 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
   (async () => {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    try {
+      const vitePkg = "vite";
+      const { createServer: createViteServer } = await import(vitePkg);
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.warn("Vite dev server failed to load (expected in production):", e);
+    }
   })();
   
   app.listen(3000, "0.0.0.0", () => {
