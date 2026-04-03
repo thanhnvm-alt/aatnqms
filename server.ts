@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { query } from "./lib/db.js";
+import { query } from "./lib/db";
 import multer from 'multer';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
@@ -34,6 +34,11 @@ const memoryUpload = multer({ storage: multer.memoryStorage() });
 const app = express();
 app.use(express.json());
 const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+// Health check route
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", env: process.env.NODE_ENV });
+});
 
 // API routes
   app.get("/api/ipo", async (req, res) => {

@@ -1,24 +1,33 @@
-import type { Pool, QueryResult } from 'pg';
-
-let pool: Pool | null = null;
+let pool: any = null;
 
 /**
  * Polymorphic query function that works on both server and client.
- * Server: Uses pg pool directly.
- * Client: Proxies query to /api/query endpoint.
  */
-export const query = async (text: string, params?: any[]): Promise<QueryResult<any>> => {
+export const query = async (text: string, params?: any[]): Promise<any> => {
   if (typeof window === 'undefined') {
     // Server-side logic
     if (!pool) {
-      const pg = await import('pg');
-      pool = new pg.default.Pool({
-        connectionString: process.env.DATABASE_URL,
+      const pkg = await import('pg');
+      const { Pool } = pkg.default;
+      
+      const connectionString = process.env.DATABASE_URL;
+      if (!connectionString) {
+        throw new Error('DATABASE_URL environment variable is missing');
+      }
+
+      console.log('Initializing database pool...');
+      pool = new Pool({
+        connectionString,
+        // Vercel/Serverless best practice: use SSL if required by cloud providers
         ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        max: 1, // Limit connections in serverless environment
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
       });
 
-      pool.on('error', (err) => {
-        console.error('Unexpected error on idle client', err);
+      pool.on('error', (err: any) => {
+        console.error('Unexpected error on idle database client', err);
+        pool = null; // Reset pool on fatal error
       });
     }
 
@@ -26,10 +35,10 @@ export const query = async (text: string, params?: any[]): Promise<QueryResult<a
       const start = Date.now();
       const res = await pool.query(text, params);
       const duration = Date.now() - start;
-      console.log('Executed query', { text, duration, rows: res.rowCount });
+      console.log('Executed query', { duration, rows: res.rowCount });
       return res;
     } catch (error) {
-      console.error('Database query error', { text, error });
+      console.error('Database query error:', error);
       throw error;
     }
   } else {
@@ -43,27 +52,17 @@ export const query = async (text: string, params?: any[]): Promise<QueryResult<a
     });
 
     if (!response.ok) {
-      console.log('Response not ok:', response.status);
       const responseClone = response.clone();
-      let errorData;
       try {
-        errorData = await response.json();
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Database query failed via API');
       } catch (e) {
-        const text = await responseClone.text();
-        console.error('Database query failed via API (non-JSON response):', text);
-        throw new Error('Database query failed via API (non-JSON response): ' + text);
+        const errorText = await responseClone.text();
+        throw new Error('Database query failed via API (non-JSON response): ' + errorText);
       }
-      throw new Error(errorData.error || 'Database query failed via API');
     }
 
-    const responseClone = response.clone();
-    try {
-      return await response.json();
-    } catch (e) {
-      const text = await responseClone.text();
-      console.error('Database query failed to parse JSON response:', text);
-      throw new Error('Database query failed to parse JSON response: ' + text);
-    }
+    return await response.json();
   }
 };
 
