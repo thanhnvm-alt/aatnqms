@@ -15,12 +15,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let drive: any = null;
 if (process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY) {
   try {
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
-      undefined,
-      process.env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/drive.file']
-    );
+    const auth = new google.auth.JWT({
+      email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
+      key: process.env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
     drive = google.drive({ version: 'v3', auth });
     console.log("Google Drive storage configured.");
   } catch (err) {

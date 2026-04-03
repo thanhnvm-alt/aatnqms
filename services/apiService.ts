@@ -1,6 +1,7 @@
 
 import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
 import * as db from './dbService';
+import imageCompression from 'browser-image-compression';
 
 export const fetchIpoData = async () => {
     const response = await fetch('/api/ipo');
@@ -38,6 +39,24 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     } else {
         fileToUpload = file;
     }
+
+    // ISO-Compliant: Compress image if it's too large for Vercel (Limit 4.5MB)
+    // We target 1MB for safety and performance
+    if (fileToUpload.type.startsWith('image/') && fileToUpload.size > 1024 * 1024) {
+        console.log(`ISO-STORAGE: Compressing image from ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB...`);
+        try {
+            const options = {
+                maxSizeMB: 1,
+                maxWidthOrHeight: 1920,
+                useWebWorker: true
+            };
+            const compressedFile = await imageCompression(fileToUpload as File, options);
+            console.log(`ISO-STORAGE: Compressed to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+            fileToUpload = compressedFile;
+        } catch (error) {
+            console.warn("ISO-STORAGE: Compression failed, attempting original upload", error);
+        }
+    }
     
     const formData = new FormData();
     formData.append('image', fileToUpload, fileName);
@@ -47,7 +66,10 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
         body: formData
     });
     
-    if (!response.ok) throw new Error('Upload failed');
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
     const data = await response.json();
     return data.url;
 };
