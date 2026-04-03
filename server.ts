@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { query } from "./lib/db";
+import { query } from "./lib/db.js";
 import multer from 'multer';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
