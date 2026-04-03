@@ -186,17 +186,19 @@ app.get("/api/health", (req, res) => {
 
   // Image Upload API
   app.post("/api/upload", (req, res, next) => {
-    // Use memory storage on Vercel, disk storage elsewhere
-    const uploader = process.env.VERCEL ? memoryUpload : upload;
+    // Use memory storage if cloud storage is configured or if on Vercel
+    const useCloud = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) || drive);
+    const uploader = (process.env.VERCEL || useCloud) ? memoryUpload : upload;
+    
     uploader.single('image')(req, res, (err) => {
       if (err) {
         console.error("Multer error:", err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: `Multer error: ${err.message}` });
       }
       next();
     });
   }, async (req, res) => {
-    console.log("Received upload request");
+    console.log("Received upload request. File:", req.file?.originalname, "Size:", req.file?.size);
     try {
       if (!req.file) {
         console.log("No file in request");
@@ -206,37 +208,40 @@ app.get("/api/health", (req, res) => {
       let fileUrl = "";
       let filename = "";
 
-      if (process.env.VERCEL || process.env.CLOUDINARY_URL || drive) {
-        // Upload to Cloudinary or Google Drive if on Vercel or if configured
-        if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
-          console.log("Uploading to Cloudinary...");
-          const b64 = Buffer.from(req.file.buffer).toString("base64");
-          const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
-          const result = await cloudinary.uploader.upload(dataURI, {
-            folder: "qms_uploads",
-          });
-          fileUrl = result.secure_url;
-          filename = result.public_id;
-        } else if (drive) {
-          console.log("Uploading to Google Drive...");
-          const bufferStream = new Readable();
-          bufferStream.push(req.file.buffer);
-          bufferStream.push(null);
+      const useCloudinary = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET));
 
-          const driveResponse = await drive.files.create({
-            requestBody: {
-              name: `qms_${Date.now()}_${req.file.originalname}`,
-              parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : [],
-            },
-            media: {
-              mimeType: req.file.mimetype,
-              body: bufferStream,
-            },
-            fields: 'id, webViewLink, webContentLink',
-          });
+      if (useCloudinary) {
+        console.log("Uploading to Cloudinary...");
+        const b64 = Buffer.from(req.file.buffer).toString("base64");
+        const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: "qms_uploads",
+        });
+        fileUrl = result.secure_url;
+        filename = result.public_id;
+      } else if (drive) {
+        console.log("Uploading to Google Drive...");
+        const bufferStream = new Readable();
+        bufferStream.push(req.file.buffer);
+        bufferStream.push(null);
 
-          const fileId = driveResponse.data.id;
-          // Make file publicly readable
+        const driveResponse = await drive.files.create({
+          requestBody: {
+            name: `qms_${Date.now()}_${req.file.originalname}`,
+            parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : [],
+          },
+          media: {
+            mimeType: req.file.mimetype,
+            body: bufferStream,
+          },
+          fields: 'id, webViewLink, webContentLink',
+        });
+
+        const fileId = driveResponse.data.id;
+        console.log("File uploaded to Drive. ID:", fileId);
+        
+        // Make file publicly readable
+        try {
           await drive.permissions.create({
             fileId: fileId,
             requestBody: {
@@ -244,26 +249,27 @@ app.get("/api/health", (req, res) => {
               type: 'anyone',
             },
           });
-
-          // Google Drive direct link format
-          fileUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
-          // Fallback if the above doesn't work for some reason
-          // fileUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
-          filename = fileId;
-        } else {
-          // Fallback if no Cloudinary or Google Drive keys: return a data URI (warning: limited size)
-          console.warn("No cloud storage configured on Vercel. Falling back to Data URI.");
-          const b64 = Buffer.from(req.file.buffer).toString("base64");
-          fileUrl = `data:${req.file.mimetype};base64,${b64}`;
-          filename = `temp-${Date.now()}`;
+        } catch (permErr) {
+          console.warn("Could not set public permissions on Drive file:", permErr);
         }
+
+        // Google Drive direct link format
+        fileUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
+        filename = fileId;
+      } else if (process.env.VERCEL) {
+        // Fallback if on Vercel but no cloud keys: return a data URI (warning: limited size)
+        console.warn("No cloud storage configured on Vercel. Falling back to Data URI.");
+        const b64 = Buffer.from(req.file.buffer).toString("base64");
+        fileUrl = `data:${req.file.mimetype};base64,${b64}`;
+        filename = `temp-${Date.now()}`;
       } else {
-        // Local storage
+        // Local storage (only if not on Vercel and no cloud storage)
         console.log("File received locally:", req.file.filename);
         fileUrl = `/uploads/${req.file.filename}`;
         filename = req.file.filename;
       }
 
+      console.log("Upload successful. URL:", fileUrl);
       res.json({ 
         url: fileUrl,
         url_hd: fileUrl,
@@ -272,9 +278,9 @@ app.get("/api/health", (req, res) => {
         size: req.file.size,
         mime: req.file.mimetype
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading image:', error);
-      res.status(500).json({ error: 'Failed to upload image' });
+      res.status(500).json({ error: `Upload failed: ${error.message || 'Unknown error'}` });
     }
   });
 
