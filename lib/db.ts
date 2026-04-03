@@ -7,24 +7,42 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
   if (typeof window === 'undefined') {
     // Server-side logic
     if (!pool) {
-      const pkg = await import('pg');
-      const { Pool } = pkg.default;
+      const pgModule = await import('pg');
+      const Pool = pgModule.Pool || (pgModule.default && pgModule.default.Pool);
       
-      const connectionString = process.env.DATABASE_URL;
-      if (!connectionString) {
+      if (!Pool) {
+        throw new Error('Could not find Pool constructor in pg module');
+      }
+      
+      const rawConnectionString = process.env.DATABASE_URL;
+      if (!rawConnectionString) {
         throw new Error('DATABASE_URL environment variable is missing');
       }
 
-      // Detect if SSL is needed from env or connection string
-      const useSSL = process.env.DB_SSL === 'true' || connectionString.includes('sslmode=require') || connectionString.includes('ssl=true');
+      // Detect if SSL is needed
+      const useSSL = process.env.DB_SSL === 'true' || 
+                     rawConnectionString.includes('sslmode=require') || 
+                     rawConnectionString.includes('sslmode=verify-full') ||
+                     rawConnectionString.includes('ssl=true');
+
+      // Strip SSL parameters from connection string to prevent them from overriding the ssl object
+      // This is crucial because 'sslmode=verify-full' in the URL can override rejectUnauthorized: false
+      let connectionString = rawConnectionString;
+      try {
+        const url = new URL(rawConnectionString);
+        url.searchParams.delete('sslmode');
+        url.searchParams.delete('ssl');
+        connectionString = url.toString();
+      } catch (e) {
+        console.warn('Could not parse DATABASE_URL as URL, using raw string');
+      }
 
       console.log('Initializing database pool...', { useSSL });
       pool = new Pool({
         connectionString,
-        // Vercel/Serverless best practice: use SSL if required by cloud providers
-        // We set rejectUnauthorized to false to handle self-signed certificates common in cloud DBs
+        // Force rejectUnauthorized: false for cloud DBs with self-signed certs
         ssl: useSSL ? { rejectUnauthorized: false } : false,
-        max: 1, // Limit connections in serverless environment
+        max: 1,
         idleTimeoutMillis: 10000,
         connectionTimeoutMillis: 10000,
       });

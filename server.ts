@@ -5,8 +5,38 @@ import { query } from "./lib/db.js";
 import multer from 'multer';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
+import { v2 as cloudinary } from 'cloudinary';
+import { google } from 'googleapis';
+import { Readable } from 'stream';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Configure Google Drive
+let drive: any = null;
+if (process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY) {
+  try {
+    const auth = new google.auth.JWT(
+      process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
+      undefined,
+      process.env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      ['https://www.googleapis.com/auth/drive.file']
+    );
+    drive = google.drive({ version: 'v3', auth });
+    console.log("Google Drive storage configured.");
+  } catch (err) {
+    console.error("Error configuring Google Drive:", err);
+  }
+}
+
+// Configure Cloudinary
+if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+  });
+}
 
 // Ensure upload directory exists (only if not on Vercel)
 const uploadDir = path.join(__dirname, 'public', 'uploads');
@@ -34,7 +64,8 @@ const upload = multer({ storage: storage });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 const schema = process.env.DB_SCHEMA || 'appQAQC';
 
 // Health check route
@@ -155,14 +186,16 @@ app.get("/api/health", (req, res) => {
 
   // Image Upload API
   app.post("/api/upload", (req, res, next) => {
-    upload.single('image')(req, res, (err) => {
+    // Use memory storage on Vercel, disk storage elsewhere
+    const uploader = process.env.VERCEL ? memoryUpload : upload;
+    uploader.single('image')(req, res, (err) => {
       if (err) {
         console.error("Multer error:", err);
         return res.status(500).json({ error: err.message });
       }
       next();
     });
-  }, (req, res) => {
+  }, async (req, res) => {
     console.log("Received upload request");
     try {
       if (!req.file) {
@@ -170,13 +203,72 @@ app.get("/api/health", (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
       }
       
-      console.log("File received:", req.file.filename);
-      const fileUrl = `/uploads/${req.file.filename}`;
+      let fileUrl = "";
+      let filename = "";
+
+      if (process.env.VERCEL || process.env.CLOUDINARY_URL || drive) {
+        // Upload to Cloudinary or Google Drive if on Vercel or if configured
+        if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
+          console.log("Uploading to Cloudinary...");
+          const b64 = Buffer.from(req.file.buffer).toString("base64");
+          const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+          const result = await cloudinary.uploader.upload(dataURI, {
+            folder: "qms_uploads",
+          });
+          fileUrl = result.secure_url;
+          filename = result.public_id;
+        } else if (drive) {
+          console.log("Uploading to Google Drive...");
+          const bufferStream = new Readable();
+          bufferStream.push(req.file.buffer);
+          bufferStream.push(null);
+
+          const driveResponse = await drive.files.create({
+            requestBody: {
+              name: `qms_${Date.now()}_${req.file.originalname}`,
+              parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : [],
+            },
+            media: {
+              mimeType: req.file.mimetype,
+              body: bufferStream,
+            },
+            fields: 'id, webViewLink, webContentLink',
+          });
+
+          const fileId = driveResponse.data.id;
+          // Make file publicly readable
+          await drive.permissions.create({
+            fileId: fileId,
+            requestBody: {
+              role: 'reader',
+              type: 'anyone',
+            },
+          });
+
+          // Google Drive direct link format
+          fileUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
+          // Fallback if the above doesn't work for some reason
+          // fileUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+          filename = fileId;
+        } else {
+          // Fallback if no Cloudinary or Google Drive keys: return a data URI (warning: limited size)
+          console.warn("No cloud storage configured on Vercel. Falling back to Data URI.");
+          const b64 = Buffer.from(req.file.buffer).toString("base64");
+          fileUrl = `data:${req.file.mimetype};base64,${b64}`;
+          filename = `temp-${Date.now()}`;
+        }
+      } else {
+        // Local storage
+        console.log("File received locally:", req.file.filename);
+        fileUrl = `/uploads/${req.file.filename}`;
+        filename = req.file.filename;
+      }
+
       res.json({ 
         url: fileUrl,
         url_hd: fileUrl,
-        url_thumbnail: fileUrl, // In a real app, we would generate a thumbnail
-        filename: req.file.filename,
+        url_thumbnail: fileUrl,
+        filename: filename,
         size: req.file.size,
         mime: req.file.mimetype
       });
