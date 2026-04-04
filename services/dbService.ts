@@ -1,6 +1,6 @@
 
-import { query } from "../lib/db";
-import { NCR, Inspection, IPOItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, Material } from "../types";
+import { query } from "../lib/db.js";
+import { NCR, Inspection, IPOItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, Material } from "../types.js";
 
 // Use environment variable for schema if available, otherwise default to "appQAQC"
 // Note: In client-side, process.env.DB_SCHEMA might not be available unless prefixed with VITE_
@@ -252,20 +252,6 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
 
     const unionQuery = tableQueries.join(' UNION ALL ');
     
-    // Diagnostic log
-    try {
-        const fs = require('fs');
-        const path = require('path');
-        fs.writeFileSync(path.join(process.cwd(), 'diag_query.json'), JSON.stringify({
-            SCHEMA,
-            SCHEMA_NAME,
-            tables,
-            unionQuery: unionQuery.substring(0, 500) + '...',
-            timestamp: new Date().toISOString(),
-            env_schema: process.env.DB_SCHEMA
-        }, null, 2));
-    } catch (e) {}
-
     let whereClause = '';
     const args: any[] = [];
     if (filters.status && filters.status !== 'ALL') {

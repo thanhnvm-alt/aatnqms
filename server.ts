@@ -340,6 +340,31 @@ app.get("/api/health", (req, res) => {
   });
 
   // --- NCRs ---
+  app.get("/api/ncrs", authenticate, async (req, res) => {
+    try {
+      const filters = req.query;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const result = await db.getNcrs(filters, page, limit);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch NCRs' });
+    }
+  });
+
+  app.get("/api/ncrs/:id", authenticate, async (req, res) => {
+    try {
+      const result = await db.getNcrById(String(req.params.id));
+      if (result) {
+        res.json(result);
+      } else {
+        res.status(404).json({ error: 'NCR not found' });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch NCR detail' });
+    }
+  });
+
   app.post("/api/ncrs", authenticate, async (req, res) => {
     try {
       const { inspection_id, ncr, createdBy } = req.body;
@@ -970,8 +995,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
       
       // Trigger dbService.getInspectionsList
       try {
-        const { getInspectionsList } = require('./services/dbService');
-        await getInspectionsList();
+        await db.getInspectionsList();
       } catch (e) {}
     } catch (e: any) {
       unionTest = { success: false, error: e.message };
