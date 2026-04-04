@@ -17,6 +17,9 @@ interface InspectionListProps {
   isLoading?: boolean;
   workshops?: Workshop[];
   onRefresh?: () => void;
+  total?: number;
+  page?: number;
+  onPageChange?: (page: number) => void;
 }
 
 const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -33,7 +36,7 @@ const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; 
 };
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, isLoading, workshops = [], onRefresh
+  inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -136,7 +139,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       {/* COMPACT LIST CONTENT */}
       <div className="flex-1 overflow-y-auto p-3 no-scrollbar pb-24">
         <div className="max-w-7xl mx-auto space-y-2">
-            {Object.keys(groupedData).length === 0 ? (
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                    <p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang tải dữ liệu...</p>
+                </div>
+            ) : Object.keys(groupedData).length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                     <FolderOpen className="w-16 h-16 opacity-10 mb-2" />
                     <p className="font-black uppercase tracking-widest text-[10px]">Không tìm thấy dữ liệu</p>
@@ -216,6 +224,30 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         </div>
                     );
                 })
+            )}
+
+            {/* PAGINATION CONTROLS */}
+            {total > 0 && onPageChange && (
+                <div className="flex items-center justify-between px-2 py-6 border-t border-slate-100 mt-4">
+                    <button 
+                        disabled={page <= 1 || isLoading}
+                        onClick={() => onPageChange(page - 1)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all"
+                    >
+                        Trang trước
+                    </button>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
+                        <span className="text-[8px] font-bold text-slate-300 uppercase">Tổng {total} phiếu</span>
+                    </div>
+                    <button 
+                        disabled={page * 20 >= total || isLoading}
+                        onClick={() => onPageChange(page + 1)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all"
+                    >
+                        Trang sau
+                    </button>
+                </div>
             )}
         </div>
       </div>

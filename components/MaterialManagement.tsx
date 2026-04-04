@@ -5,29 +5,38 @@ import { fetchMaterials, saveMaterial, deleteMaterial } from '../services/apiSer
 
 export const MaterialManagement = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+  const limit = 50;
 
   useEffect(() => {
-    loadMaterials();
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      loadMaterials(1);
+    }, 500);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
 
-  const loadMaterials = async () => {
+  useEffect(() => {
+    loadMaterials(page);
+  }, [page]);
+
+  const loadMaterials = async (p: number) => {
+    setIsLoading(true);
     try {
-      const data = await fetchMaterials();
-      setMaterials(data);
+      const data = await fetchMaterials(searchTerm, p, limit);
+      setMaterials(data.items || []);
+      setTotal(data.total || 0);
+      setPage(p);
     } catch (error) {
       console.error('Failed to load materials:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const filteredMaterials = materials.filter(m => 
-    (m.shortText || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.material || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.supplierName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.projectName || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +59,7 @@ export const MaterialManagement = () => {
       await saveMaterial(material);
       setIsModalOpen(false);
       setEditingMaterial(null);
-      loadMaterials();
+      loadMaterials(page);
     } catch (error) {
       console.error('Failed to save material:', error);
       alert('Lỗi khi lưu vật liệu');
@@ -61,7 +70,7 @@ export const MaterialManagement = () => {
     if (confirm('Bạn có chắc chắn muốn xóa vật liệu này?')) {
       try {
         await deleteMaterial(id);
-        loadMaterials();
+        loadMaterials(page);
       } catch (error) {
         console.error('Failed to delete material:', error);
         alert('Lỗi khi xóa vật liệu');
@@ -110,7 +119,13 @@ export const MaterialManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredMaterials.map(m => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                    Đang tải dữ liệu...
+                  </td>
+                </tr>
+              ) : materials.map(m => (
                 <tr key={m.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap">{m.material}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate" title={m.shortText}>{m.shortText}</td>
@@ -125,7 +140,7 @@ export const MaterialManagement = () => {
                   </td>
                 </tr>
               ))}
-              {filteredMaterials.length === 0 && (
+              {!isLoading && materials.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                     Không tìm thấy vật liệu nào.
@@ -135,6 +150,29 @@ export const MaterialManagement = () => {
             </tbody>
           </table>
         </div>
+        
+        {/* PAGINATION */}
+        {total > limit && (
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+                <button 
+                    disabled={page <= 1 || isLoading}
+                    onClick={() => setPage(page - 1)}
+                    className="px-4 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-600 disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                >
+                    Trang trước
+                </button>
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                    Trang {page} / {Math.ceil(total / limit)} ({total} vật liệu)
+                </div>
+                <button 
+                    disabled={page * limit >= total || isLoading}
+                    onClick={() => setPage(page + 1)}
+                    className="px-4 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-600 disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                >
+                    Trang sau
+                </button>
+            </div>
+        )}
       </div>
 
       {isModalOpen && (

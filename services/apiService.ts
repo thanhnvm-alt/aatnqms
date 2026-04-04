@@ -1,10 +1,43 @@
 
 import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
-import * as db from './dbService';
 import imageCompression from 'browser-image-compression';
 
-export const fetchIpoData = async () => {
-    const response = await fetch('/api/ipo');
+// Helper to get auth headers from localStorage
+const getAuthHeaders = () => {
+    const userStr = localStorage.getItem('aatn_qms_user');
+    if (!userStr) return {};
+    try {
+        const user = JSON.parse(userStr);
+        return {
+            'x-user-id': user.id || user.username,
+            'x-user-role': user.role || 'GUEST'
+        };
+    } catch (e) {
+        return {};
+    }
+};
+
+const apiFetch = async (url: string, options: RequestInit = {}) => {
+    const headers = {
+        ...getAuthHeaders(),
+        ...(options.headers || {})
+    };
+    const response = await fetch(url, { ...options, headers: headers as HeadersInit });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+    }
+    return await response.json();
+};
+
+export const fetchIpoData = async (page: number = 1, limit: number = 50, factoryOrder?: string, maTender?: string) => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (factoryOrder) params.append('factoryOrder', factoryOrder);
+    if (maTender) params.append('maTender', maTender);
+    
+    const response = await fetch(`/api/ipo?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch IPO data');
     return await response.json();
 };
@@ -16,11 +49,19 @@ export const fetchIpoByFactoryOrder = async (factoryOrder: string) => {
     return data;
 };
 
-export const fetchFloorPlans = async (projectId: string) => await db.getFloorPlans(projectId);
-export const saveFloorPlan = async (fp: FloorPlan) => await db.saveFloorPlan(fp);
-export const deleteFloorPlan = async (id: string) => await db.deleteFloorPlan(id);
-export const fetchLayoutPins = async (fpId: string) => await db.getLayoutPins(fpId);
-export const saveLayoutPin = async (pin: LayoutPin) => await db.saveLayoutPin(pin);
+export const fetchFloorPlans = async (projectId: string) => apiFetch(`/api/floor-plans?projectId=${projectId}`);
+export const saveFloorPlan = async (fp: FloorPlan) => apiFetch('/api/floor-plans', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fp)
+});
+export const deleteFloorPlan = async (id: string) => apiFetch(`/api/floor-plans/${id}`, { method: 'DELETE' });
+export const fetchLayoutPins = async (fpId: string) => apiFetch(`/api/layout-pins?fpId=${fpId}`);
+export const saveLayoutPin = async (pin: LayoutPin) => apiFetch('/api/layout-pins', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pin)
+});
 
 /**
  * ISO-Compliant File Upload
@@ -74,11 +115,19 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     return data.url;
 };
 
-export const fetchSuppliers = async () => await db.getSuppliers();
-export const saveSupplier = async (s: Supplier) => await db.saveSupplier(s);
-export const deleteSupplier = async (id: string) => await db.deleteSupplier(id);
-export const fetchSupplierStats = async (name: string) => await db.getSupplierStats(name);
-export const fetchSupplierInspections = async (name: string) => await db.getSupplierInspections(name);
+export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20) => {
+    const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString() });
+    return apiFetch(`/api/suppliers?${params.toString()}`);
+};
+export const saveSupplier = async (s: Supplier) => apiFetch('/api/suppliers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(s)
+});
+export const deleteSupplier = async (id: string) => apiFetch(`/api/suppliers/${id}`, { method: 'DELETE' });
+export const fetchSupplierStats = async (name: string) => apiFetch(`/api/suppliers/stats?name=${encodeURIComponent(name)}`);
+export const fetchSupplierInspections = async (name: string) => apiFetch(`/api/suppliers/inspections?name=${encodeURIComponent(name)}`);
+export const fetchSupplierMaterials = async (name: string) => apiFetch(`/api/suppliers/materials?name=${encodeURIComponent(name)}`);
 
 export const uploadQMSImage = async (file: File | string, entityIdOrContext: string | { entityId: string, type: any, role: any }, type?: any, role?: any): Promise<string> => {
     let entityId: string;
@@ -96,93 +145,128 @@ export const uploadQMSImage = async (file: File | string, entityIdOrContext: str
 };
 
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
-  return await db.getPlansPaginated(searchTerm, page, limit);
+    const params = new URLSearchParams({ search: searchTerm, page: page.toString(), limit: limit.toString() });
+    return apiFetch(`/api/plans?${params.toString()}`);
 };
 
 export const updatePlan = async (id: number | string, plan: Partial<IPOItem>) => {
-    return await db.updatePlan(id, plan);
+    return apiFetch(`/api/plans/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(plan)
+    });
 };
 
 export const fetchPlansByProject = async (maCt: string, limit?: number) => {
-  return await db.getPlansByProject(maCt, limit);
+    const params = new URLSearchParams({ maCt });
+    if (limit) params.append('limit', limit.toString());
+    return apiFetch(`/api/plans/by-project?${params.toString()}`);
 };
 
-export const fetchInspections = async (filters: any = {}) => {
-  return await db.getInspectionsList(filters);
+export const fetchInspections = async (filters: any = {}, page: number = 1, limit: number = 20) => {
+    const params = new URLSearchParams({ ...filters, page: page.toString(), limit: limit.toString() });
+    return apiFetch(`/api/inspections?${params.toString()}`);
 };
 
 export const fetchInspectionById = async (id: string) => {
-  return await db.getInspectionById(id);
+    return apiFetch(`/api/inspections/${id}`);
 };
 
 export const saveInspectionToSheet = async (inspection: Inspection) => {
-  await db.saveInspection(inspection);
-  return { success: true };
+    return apiFetch('/api/inspections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inspection)
+    });
 };
 
 export const deleteInspectionFromSheet = async (id: string) => {
-    return await db.deleteInspection(id);
+    return apiFetch(`/api/inspections/${id}`, { method: 'DELETE' });
 };
 
 export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
-    return await db.saveNcrMapped(inspection_id, ncr, createdBy);
+    return apiFetch('/api/ncrs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inspection_id, ncr, createdBy })
+    });
 };
 
-export const fetchNcrs = async (filters: any = {}) => {
-    const response = await fetch('/api/ncrs');
-    if (!response.ok) throw new Error('Failed to fetch NCRs');
-    const data = await response.json();
-    return { items: data, total: data.length };
+export const fetchNcrs = async (filters: any = {}, page: number = 1, limit: number = 20) => {
+    const params = new URLSearchParams({ ...filters, page: page.toString(), limit: limit.toString() });
+    return apiFetch(`/api/ncrs?${params.toString()}`);
 };
 
 export const fetchNcrById = async (id: string) => {
-    return await db.getNcrById(id);
+    return apiFetch(`/api/ncrs/${id}`);
 };
 
 export const fetchDefects = async (filters: any = {}) => {
-    const ncrs = await db.getNcrs(filters);
-    return { items: ncrs.items as any[], total: ncrs.total };
+    const params = new URLSearchParams(filters);
+    return apiFetch(`/api/defects?${params.toString()}`);
 };
 
-export const fetchUsers = async () => await db.getUsers();
-export const saveUser = async (user: User) => await db.saveUser(user);
-export const deleteUser = async (id: string) => await db.deleteUser(id);
+export const fetchUsers = async () => apiFetch('/api/users');
+export const saveUser = async (user: User) => apiFetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user)
+});
+export const deleteUser = async (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' });
 
 export const verifyUserCredentials = async (username: string, password: string): Promise<User | null> => {
-    try {
-        const user = await db.getUserByUsername(username);
-        if (user && user.password === password) {
-            return user;
-        }
-        return null;
-    } catch (e) {
-        console.error("ISO-AUTH: Verification failed", e);
-        throw e;
-    }
+    return apiFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
 };
 
-export const fetchWorkshops = async () => await db.getWorkshops();
-export const saveWorkshop = async (ws: Workshop) => await db.saveWorkshop(ws);
-export const deleteWorkshop = async (id: string) => await db.deleteWorkshop(id);
+export const fetchWorkshops = async () => apiFetch('/api/workshops');
+export const saveWorkshop = async (ws: Workshop) => apiFetch('/api/workshops', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ws)
+});
+export const deleteWorkshop = async (id: string) => apiFetch(`/api/workshops/${id}`, { method: 'DELETE' });
 
-export const fetchTemplates = async () => await db.getTemplates();
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => await db.saveTemplate(moduleId, items);
+export const fetchTemplates = async () => apiFetch('/api/templates');
+export const saveTemplate = async (moduleId: string, items: CheckItem[]) => apiFetch('/api/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ moduleId, items })
+});
 
-export const fetchProjects = async (search: string = '') => await db.getProjectsPaginated(search, 10);
-export const fetchProjectByCode = async (code: string) => await db.getProjectByCode(code);
-export const updateProject = async (proj: Project) => await db.updateProject(proj);
+export const fetchProjects = async (search: string = '', page: number = 1, limit: number = 20) => {
+    const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString() });
+    return apiFetch(`/api/projects?${params.toString()}`);
+};
+export const fetchProjectByCode = async (code: string) => apiFetch(`/api/projects/${code}`);
+export const updateProject = async (proj: Project) => apiFetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(proj)
+});
 
-export const fetchNotifications = async (userId: string) => await db.getNotifications(userId);
-export const markNotificationAsRead = async (id: string) => await db.markNotificationRead(id);
-export const markAllNotificationsAsRead = async (userId: string) => await db.markAllNotificationsRead(userId);
+export const fetchNotifications = async (userId: string) => apiFetch(`/api/notifications/${userId}`);
+export const markNotificationAsRead = async (id: string) => apiFetch(`/api/notifications/${id}/read`, { method: 'PUT' });
+export const markAllNotificationsAsRead = async (userId: string) => apiFetch(`/api/notifications/read-all/${userId}`, { method: 'PUT' });
 
-export const fetchRoles = async () => await db.getRoles();
-export const saveRole = async (role: Role) => await db.saveRole(role);
-export const deleteRole = async (id: string) => await db.deleteRole(id);
+export const fetchRoles = async () => apiFetch('/api/roles');
+export const saveRole = async (role: Role) => apiFetch('/api/roles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(role)
+});
+export const deleteRole = async (id: string) => apiFetch(`/api/roles/${id}`, { method: 'DELETE' });
 
-export const fetchDefectLibrary = async () => await db.getDefectLibrary();
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => await db.saveDefectLibraryItem(item);
-export const deleteDefectLibraryItem = async (id: string) => await db.deleteDefectLibraryItem(id);
+export const fetchDefectLibrary = async () => apiFetch('/api/defect-library');
+export const saveDefectLibraryItem = async (item: DefectLibraryItem) => apiFetch('/api/defect-library', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item)
+});
+export const deleteDefectLibraryItem = async (id: string) => apiFetch(`/api/defect-library/${id}`, { method: 'DELETE' });
 
 export const exportDefectLibrary = async () => {
     const response = await fetch('/api/defects/export');
@@ -208,8 +292,13 @@ export const importDefectLibraryFile = async (file: File) => {
     return await response.json();
 };
 
-export const fetchMaterials = async () => {
-    const response = await fetch('/api/materials');
+export const fetchMaterials = async (search: string = '', page: number = 1, limit: number = 50) => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (search) params.append('search', search);
+    
+    const response = await fetch(`/api/materials?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to fetch materials');
     return await response.json();
 };
@@ -254,9 +343,19 @@ export const importNcrsFile = async (file: File) => {
     return await response.json();
 };
 
-export const checkApiConnection = async () => ({ ok: await db.testConnection() });
+export const checkApiConnection = async () => {
+    try {
+        const response = await fetch('/api/health');
+        return { ok: response.ok };
+    } catch (e) {
+        return { ok: false };
+    }
+};
 
 export const createNotification = async (params: { userId: string, type: Notification['type'], title: string, message: string, link?: { view: ViewState, id: string } }) => {
-    await db.addNotification(params.userId, params.type, params.title, params.message, params.link);
-    return { success: true };
+    return apiFetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+    });
 };

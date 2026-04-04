@@ -35,7 +35,8 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   const loadSuppliers = async () => {
     setIsLoading(true);
     try {
-      const data = await fetchSuppliers();
+      const result = await fetchSuppliers();
+      const data = result.items || [];
       // Load stats for each supplier
       const dataWithStats = await Promise.all(data.map(async s => {
         const stats = await fetchSupplierStats(s.name);

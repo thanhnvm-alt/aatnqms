@@ -18,21 +18,26 @@ interface NCRListProps {
 
 export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) => {
   const [ncrs, setNcrs] = useState<NCR[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'IN_PROGRESS' | 'CLOSED'>('ALL');
   const [selectedNcr, setSelectedNcr] = useState<NCR | null>(null);
+  const limit = 20;
 
   useEffect(() => {
-    loadNcrs();
-  }, [statusFilter]);
+    loadNcrs(page);
+  }, [statusFilter, page]);
 
-  const loadNcrs = async () => {
+  const loadNcrs = async (p: number = 1) => {
     setIsLoading(true);
     try {
-        const result = await fetchNcrs({ status: statusFilter });
-        setNcrs(result.items);
+        const result = await fetchNcrs({ status: statusFilter }, p, limit);
+        setNcrs(result.items || []);
+        setTotal(result.total || 0);
+        setPage(p);
     } catch (e) {
         console.error("Load NCRs failed:", e);
     } finally {
@@ -168,7 +173,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
           ) : (
               <div className="max-w-7xl mx-auto pb-20">
                   {/* DESKTOP TABLE VIEW (>= 1024px) */}
-                  <div className="hidden lg:block bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="hidden lg:block bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden mb-6">
                       <table className="w-full text-left border-collapse">
                           <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px] sticky top-0 z-10">
                               <tr>
@@ -301,6 +306,29 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                               </div>
                           </div>
                       ))}
+                      {/* PAGINATION CONTROLS */}
+                      {total > limit && (
+                          <div className="flex items-center justify-between px-4 py-8 border-t border-slate-200 mt-8">
+                              <button 
+                                  disabled={page <= 1 || isLoading}
+                                  onClick={() => setPage(page - 1)}
+                                  className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                              >
+                                  Trang trước
+                              </button>
+                              <div className="flex flex-col items-center">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
+                                  <span className="text-[8px] font-bold text-slate-300 uppercase">Tổng {total} NCR</span>
+                              </div>
+                              <button 
+                                  disabled={page * limit >= total || isLoading}
+                                  onClick={() => setPage(page + 1)}
+                                  className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                              >
+                                  Trang sau
+                              </button>
+                          </div>
+                      )}
                   </div>
               </div>
           )}

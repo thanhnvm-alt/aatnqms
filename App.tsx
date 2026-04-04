@@ -75,7 +75,7 @@ import {
   fetchRoles
 } from './services/apiService';
 import { initDatabase } from './services/dbService';
-import { Loader2, X, FileText, ChevronRight } from 'lucide-react';
+import { Loader2, X, FileText, ChevronRight, Bell } from 'lucide-react';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
@@ -99,10 +99,15 @@ const App = () => {
   const [returnView, setReturnView] = useState<ViewState>('LIST');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
+  const [inspectionsTotal, setInspectionsTotal] = useState(0);
+  const [inspectionsPage, setInspectionsPage] = useState(1);
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
   const [activeSupplier, setActiveSupplier] = useState<Supplier | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsTotal, setProjectsTotal] = useState(0);
+  const [projectsPage, setProjectsPage] = useState(1);
+  const [projectsSearch, setProjectsSearch] = useState('');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -146,20 +151,21 @@ const App = () => {
 
   useEffect(() => {
     if (user && isDbReady) {
-        if (view === 'LIST' || view === 'DASHBOARD') loadInspections();
-        if (view === 'PROJECTS') loadProjects();
+        if (view === 'LIST' || view === 'DASHBOARD') loadInspections(inspectionsPage);
+        if (view === 'PROJECTS') loadProjects(projectsSearch, projectsPage);
     }
-  }, [user, isDbReady, view]);
+  }, [user, isDbReady, view, inspectionsPage, projectsPage, projectsSearch]);
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers(data); else setUsers(MOCK_USERS); } catch (e) { setUsers(MOCK_USERS); } };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
-  const loadInspections = async () => {
+  const loadInspections = async (page: number = 1) => {
     setIsLoadingInspections(true);
     try {
-        const result = await fetchInspections();
+        const result = await fetchInspections({}, page, 20);
         setInspections(result.items || []);
+        setInspectionsTotal(result.total || 0);
     } catch (e) {
         console.error("Load inspections failed", e);
     } finally {
@@ -167,7 +173,15 @@ const App = () => {
     }
   };
 
-  const loadProjects = async (search: string = '') => { try { const projs = await fetchProjects(search); setProjects(projs); } catch(e) {} };
+  const loadProjects = async (search: string = '', page: number = 1) => { 
+    try { 
+        const result = await fetchProjects(search, page, 20); 
+        setProjects(result.items || []); 
+        setProjectsTotal(result.total || 0);
+    } catch(e) {
+        console.error("Load projects failed", e);
+    } 
+  };
   
   const handleLogin = (loggedInUser: User, remember: boolean) => {  
     const { password, ...safeUser } = loggedInUser; 
@@ -178,6 +192,23 @@ const App = () => {
   };
   
   const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); localStorage.removeItem('aatn_saved_username'); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
+
+  const notifyUsers = async (targetRoles: string[], title: string, message: string, link?: { view: ViewState, id: string }, excludeUserId?: string) => {
+    const targets = users.filter(u => targetRoles.includes(u.role as string) && u.id !== excludeUserId);
+    for (const target of targets) {
+      try {
+        await createNotification({
+          userId: target.id,
+          type: 'INFO',
+          title,
+          message,
+          link
+        });
+      } catch (e) {
+        console.error(`Failed to notify user ${target.id}`, e);
+      }
+    }
+  };
 
   const handleSelectInspection = async (id: string) => { 
     setReturnView(view);
@@ -209,7 +240,14 @@ const App = () => {
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => { 
+      const isNew = !newInspection.id || !inspections.find(i => i.id === newInspection.id);
       await saveInspectionToSheet(newInspection); 
+      
+      if (isNew && user) {
+        // Notify Managers and Admins about new report
+        notifyUsers(['MANAGER', 'ADMIN'], 'Phiếu báo cáo mới', `QC ${user.name} vừa gửi phiếu ${newInspection.type} cho dự án ${newInspection.ten_ct}`, { view: 'DETAIL', id: newInspection.id }, user.id);
+      }
+      
       setView('LIST'); loadInspections(); 
   };
 
@@ -253,9 +291,25 @@ const App = () => {
             activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined} 
             onNavigateToRecord={handleNavigateToRecord}
         />
+        <button 
+          onClick={() => createNotification({ userId: user.id, type: 'INFO', title: 'Test Notification', message: 'This is a test notification triggered at ' + new Date().toLocaleTimeString() })}
+          className="fixed bottom-20 right-4 z-[100] bg-blue-600 text-white p-3 rounded-full shadow-lg lg:hidden"
+        >
+          <Bell className="w-6 h-6" />
+        </button>
         <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
-            {view === 'LIST' && <InspectionList inspections={inspections} onSelect={handleSelectInspection} isLoading={isLoadingInspections} workshops={workshops} />}
+            {view === 'LIST' && (
+                <InspectionList 
+                    inspections={inspections} 
+                    onSelect={handleSelectInspection} 
+                    isLoading={isLoadingInspections} 
+                    workshops={workshops} 
+                    total={inspectionsTotal}
+                    page={inspectionsPage}
+                    onPageChange={setInspectionsPage}
+                />
+            )}
             {view === 'FORM' && (
                 activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
                 activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
@@ -282,19 +336,81 @@ const App = () => {
               }, 
               onApprove: async (id: string, sig: string, extra: any) => { 
                 const updated = { ...activeInspection, ...extra };
+                const oldStatus = activeInspection.status;
                 if (sig || extra.managerSignature) {
                   updated.status = InspectionStatus.APPROVED;
                   updated.managerSignature = sig || extra.managerSignature;
                   updated.managerName = extra.managerName || user.name;
                 }
-                await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
+                await saveInspectionToSheet(updated); 
+                
+                if (updated.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
+                  // Notify the inspector
+                  const inspector = users.find(u => u.name === updated.inspectorName);
+                  if (inspector && user) {
+                    createNotification({
+                      userId: inspector.id,
+                      type: 'SUCCESS',
+                      title: 'Phiếu đã được phê duyệt',
+                      message: `Quản lý ${user.name} đã phê duyệt phiếu ${updated.type} của bạn`,
+                      link: { view: 'DETAIL', id: updated.id }
+                    });
+                  }
+                }
+                
+                setActiveInspection(updated); loadInspections();
               }, 
               onPostComment: async (id: string, cmt: any) => {
                 const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
-                await saveInspectionToSheet(updated); setActiveInspection(updated); loadInspections();
+                await saveInspectionToSheet(updated); 
+                
+                // Notify other participants
+                if (user) {
+                  // Notify inspector if commenter is not inspector
+                  if (user.name !== updated.inspectorName) {
+                    const inspector = users.find(u => u.name === updated.inspectorName);
+                    if (inspector) {
+                      createNotification({
+                        userId: inspector.id,
+                        type: 'MESSAGE',
+                        title: 'Bình luận mới',
+                        message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
+                        link: { view: 'DETAIL', id: updated.id }
+                      });
+                    }
+                  }
+                  // Notify manager if commenter is not manager
+                  if (updated.managerName && user.name !== updated.managerName) {
+                    const manager = users.find(u => u.name === updated.managerName);
+                    if (manager) {
+                      createNotification({
+                        userId: manager.id,
+                        type: 'MESSAGE',
+                        title: 'Bình luận mới',
+                        message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
+                        link: { view: 'DETAIL', id: updated.id }
+                      });
+                    }
+                  }
+                }
+                
+                setActiveInspection(updated); loadInspections();
               } 
             }) : null)}
-            {view === 'PROJECTS' && <ProjectList projects={projects} inspections={inspections} onSelectProject={maCt => { const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } }} onSearch={loadProjects} />}
+            {view === 'PROJECTS' && (
+                <ProjectList 
+                    projects={projects} 
+                    inspections={inspections} 
+                    onSelectProject={maCt => { 
+                        const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; 
+                        if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } 
+                    }} 
+                    onSearch={(term) => { setProjectsSearch(term); setProjectsPage(1); }}
+                    total={projectsTotal}
+                    page={projectsPage}
+                    onPageChange={setProjectsPage}
+                />
+            )}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
             {view === 'IPO' && <IPOPage />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}

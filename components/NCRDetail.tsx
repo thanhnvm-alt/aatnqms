@@ -10,7 +10,7 @@ import {
     Edit3, Search
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
-import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage } from '../services/apiService';
+import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage, createNotification, fetchUsers } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
 
 interface NCRDetailProps {
@@ -106,6 +106,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
       setIsSaving(true);
       try {
+          const oldStatus = ncr.status;
           let finalStatus = formData.status;
           if (finalStatus !== 'CLOSED') {
               finalStatus = (formData.imagesAfter && formData.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
@@ -114,6 +115,21 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           const dataToSave = { ...formData, status: finalStatus, inspection_id: targetId };
           await saveNcrMapped(targetId, dataToSave, ncr.createdBy || user.name);
           
+          // Notify if closed
+          if (finalStatus === 'CLOSED' && oldStatus !== 'CLOSED') {
+            const users = await fetchUsers();
+            const creator = users.find((u: any) => u.name === ncr.createdBy);
+            if (creator && creator.id !== user.id) {
+              await createNotification({
+                userId: creator.id,
+                type: 'NCR',
+                title: 'NCR đã đóng',
+                message: `NCR ${ncr.id} đã được đóng bởi ${user.name}`,
+                link: { view: 'NCR_LIST' as any, id: ncr.id }
+              });
+            }
+          }
+
           setNcr(dataToSave);
           setFormData(dataToSave);
           setIsEditing(false);
@@ -244,6 +260,31 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       const updatedNcr = { ...formData, comments: updatedComments, inspection_id: targetId };
       try {
           await saveNcrMapped(targetId, updatedNcr, ncr.createdBy || user.name);
+          
+          // Notify participants
+          const users = await fetchUsers();
+          const targets = [];
+          // Notify creator if not commenter
+          if (ncr.createdBy !== user.name) {
+            const creator = users.find((u: any) => u.name === ncr.createdBy);
+            if (creator) targets.push(creator.id);
+          }
+          // Notify responsible person if not commenter
+          if (ncr.responsiblePerson && ncr.responsiblePerson !== user.name) {
+            const resp = users.find((u: any) => u.name === ncr.responsiblePerson);
+            if (resp) targets.push(resp.id);
+          }
+
+          for (const tId of [...new Set(targets)]) {
+            await createNotification({
+              userId: tId,
+              type: 'COMMENT',
+              title: 'Bình luận NCR mới',
+              message: `${user.name} vừa bình luận trong NCR ${ncr.id}`,
+              link: { view: 'NCR_LIST' as any, id: ncr.id }
+            });
+          }
+
           setFormData(updatedNcr);
           setNcr(updatedNcr);
           setNewComment('');

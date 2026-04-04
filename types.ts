@@ -7,11 +7,15 @@ export enum CheckStatus {
 }
 
 export enum InspectionStatus {
-  DRAFT = 'DRAFT',
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FLAGGED = 'FLAGGED',
-  APPROVED = 'APPROVED'
+  DRAFT = 'draft',
+  SUBMITTED = 'submitted',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  VERIFIED = 'verified',
+  LOCKED = 'locked',
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  FLAGGED = 'flagged'
 }
 
 export enum Priority {
@@ -345,7 +349,7 @@ export interface Defect {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE';
+  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE' | 'INFO' | 'SUCCESS' | 'MESSAGE';
   title: string;
   message: string;
   isRead: boolean;

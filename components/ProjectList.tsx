@@ -14,6 +14,9 @@ interface ProjectListProps {
   inspections: Inspection[];
   onSelectProject: (maCt: string) => void;
   onSearch?: (term: string) => void;
+  total?: number;
+  page?: number;
+  onPageChange?: (page: number) => void;
 }
 
 const COLORS = {
@@ -22,7 +25,10 @@ const COLORS = {
   empty: '#e2e8f0'
 };
 
-export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections, onSelectProject, onSearch }) => {
+export const ProjectList: React.FC<ProjectListProps> = ({ 
+  projects, inspections, onSelectProject, onSearch, 
+  total = 0, page = 1, onPageChange 
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -256,6 +262,30 @@ export const ProjectList: React.FC<ProjectListProps> = ({ projects, inspections,
                     </div>
                 );
             })}
+
+            {/* PAGINATION CONTROLS */}
+            {total > 0 && onPageChange && (
+                <div className="flex items-center justify-between px-4 py-8 border-t border-slate-200 mt-8">
+                    <button 
+                        disabled={page <= 1}
+                        onClick={() => onPageChange(page - 1)}
+                        className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                    >
+                        Trang trước
+                    </button>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
+                        <span className="text-[8px] font-bold text-slate-300 uppercase">Tổng {total} dự án</span>
+                    </div>
+                    <button 
+                        disabled={page * 20 >= total}
+                        onClick={() => onPageChange(page + 1)}
+                        className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                    >
+                        Trang sau
+                    </button>
+                </div>
+            )}
         </div>
       </div>
       

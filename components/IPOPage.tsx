@@ -5,10 +5,13 @@ import { IPOItem } from '../types';
 
 export const IPOPage = () => {
   const [data, setData] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterFactoryOrder, setFilterFactoryOrder] = useState('');
   const [filterMaTender, setFilterMaTender] = useState('');
+  const limit = 50;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedIpo, setSelectedIpo] = useState<IPOItem | null>(null);
 
@@ -17,6 +20,8 @@ export const IPOPage = () => {
       setLoading(true);
       try {
         const params = new URLSearchParams();
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
         if (filterFactoryOrder) params.append('factoryOrder', filterFactoryOrder);
         if (filterMaTender) params.append('maTender', filterMaTender);
         
@@ -26,7 +31,8 @@ export const IPOPage = () => {
           throw new Error(`Failed to fetch IPO data: ${response.status} ${errorText}`);
         }
         const result = await response.json();
-        setData(result);
+        setData(result.items || []);
+        setTotal(result.total || 0);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
@@ -39,7 +45,7 @@ export const IPOPage = () => {
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [filterFactoryOrder, filterMaTender]);
+  }, [filterFactoryOrder, filterMaTender, page]);
 
   const groupedItems = useMemo(() => {
       const groups: Record<string, any[]> = {};
@@ -62,7 +68,7 @@ export const IPOPage = () => {
   const handleItemClick = (item: any) => {
       // Map IPO item to IPOItem
       const ipoItem: IPOItem = {
-          id: item.ID,
+          id: item.id || item.ID,
           ma_nha_may: item.ID_Factory_Order || '',
           ma_ct: item.Ma_Tender || '',
           ten_ct: item.Project_name || '',
@@ -116,7 +122,7 @@ export const IPOPage = () => {
                 
                 <div className="flex items-center justify-between px-2">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        TỔNG CỘNG: {data.length} KẾ HOẠCH
+                        TỔNG CỘNG: {total} KẾ HOẠCH
                     </p>
                 </div>
           </div>
@@ -159,6 +165,30 @@ export const IPOPage = () => {
                         </div>
                     );
                 })}
+
+                {/* PAGINATION */}
+                {total > limit && (
+                    <div className="flex items-center justify-between px-4 py-8 border-t border-slate-100">
+                        <button 
+                            disabled={page <= 1 || loading}
+                            onClick={() => setPage(page - 1)}
+                            className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                        >
+                            Trang trước
+                        </button>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
+                            <span className="text-[8px] font-bold text-slate-300 uppercase">Hiển thị {data.length} / {total}</span>
+                        </div>
+                        <button 
+                            disabled={page * limit >= total || loading}
+                            onClick={() => setPage(page + 1)}
+                            className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                        >
+                            Trang sau
+                        </button>
+                    </div>
+                )}
             </div>
       </div>
     </div>

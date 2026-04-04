@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Supplier, Inspection, User, InspectionStatus } from '../types';
-import { fetchSupplierStats, fetchSupplierInspections } from '../services/apiService';
+import { Supplier, Inspection, User, InspectionStatus, Material } from '../types';
+import { fetchSupplierStats, fetchSupplierInspections, fetchSupplierMaterials } from '../services/apiService';
 import { 
   ArrowLeft, Building2, Phone, Mail, MapPin, 
   Activity, Star, Clock, FileText, ChevronRight,
@@ -21,6 +21,7 @@ interface SupplierDetailProps {
 export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, onBack, onViewInspection }) => {
   const [stats, setStats] = useState(supplier.stats);
   const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,19 +31,22 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [sData, iData] = await Promise.all([
+      const [sData, iData, mData] = await Promise.all([
         fetchSupplierStats(supplier.name),
-        fetchSupplierInspections(supplier.name)
+        fetchSupplierInspections(supplier.name),
+        fetchSupplierMaterials(supplier.name)
       ]);
       setStats(sData);
       setInspections(iData);
+      setMaterials(mData);
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
   const uniqueMaterials = useMemo(() => {
-      const items = inspections.flatMap(i => i.materials || []);
-      return Array.from(new Set(items.map(m => m.name))).filter(Boolean).sort();
-  }, [inspections]);
+      const fromInspections = inspections.flatMap(i => i.materials || []).map(m => m.name);
+      const fromTable = materials.map(m => m.shortText || m.material);
+      return Array.from(new Set([...fromInspections, ...fromTable])).filter(Boolean).sort();
+  }, [inspections, materials]);
 
   const historyData = useMemo(() => {
       return inspections.slice(0, 7).reverse().map(i => ({

@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Eraser, Loader2 } from 'lucide-react';
-import { uploadQMSImage } from '../services/apiService';
+import { Eraser } from 'lucide-react';
 
 interface SignaturePadProps {
     label: string;
@@ -25,7 +24,6 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [isEmpty, setIsEmpty] = useState(!value);
-    const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -47,7 +45,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
     }, [value]);
 
     const startDrawing = (e: any) => {
-        if (readOnly || isUploading) return;
+        if (readOnly) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -67,7 +65,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
     };
 
     const draw = (e: any) => {
-        if (!isDrawing || readOnly || isUploading) return;
+        if (!isDrawing || readOnly) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -82,30 +80,39 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
     };
 
     const stopDrawing = async () => {
-        if (readOnly || isUploading) return;
+        if (readOnly) return;
         setIsDrawing(false);
-        if (canvasRef.current) {
-            const base64 = canvasRef.current.toDataURL('image/png');
-            if (uploadContext) {
-                setIsUploading(true);
-                try {
-                    const url = await uploadQMSImage(base64, uploadContext);
-                    onChange(url);
-                } catch (err) {
-                    console.error("Signature upload failed", err);
-                    // Fallback to base64 if upload fails, or handle error
-                    onChange(base64);
-                } finally {
-                    setIsUploading(false);
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const base64 = canvas.toDataURL('image/png');
+            
+            // Upload to server instead of returning base64
+            try {
+                const blob = await (await fetch(base64)).blob();
+                const formData = new FormData();
+                formData.append('image', blob, `signature_${Date.now()}.png`);
+                
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    onChange(data.url); // Return the URL from storage
+                } else {
+                    console.error("Signature upload failed");
+                    onChange(base64); // Fallback to base64 if upload fails (though not ideal)
                 }
-            } else {
+            } catch (err) {
+                console.error("Error uploading signature:", err);
                 onChange(base64);
             }
         }
     };
 
     const clearSignature = () => {
-        if (readOnly || isUploading) return;
+        if (readOnly) return;
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
@@ -119,7 +126,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
         <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center px-1">
                 <label className="text-slate-600 font-bold text-[9px] uppercase tracking-widest">{label}</label>
-                {!readOnly && !isUploading && (
+                {!readOnly && (
                     <button 
                         onClick={clearSignature} 
                         className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1 hover:underline" 
@@ -128,18 +135,13 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
                         <Eraser className="w-3 h-3" /> Xóa
                     </button>
                 )}
-                {isUploading && (
-                    <div className="flex items-center gap-1 text-[9px] font-bold text-blue-600 uppercase tracking-widest animate-pulse">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Đang tải...
-                    </div>
-                )}
             </div>
             <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-28 shadow-sm">
                 <canvas 
                     ref={canvasRef} 
                     width={400} 
                     height={112} 
-                    className={`w-full h-full touch-none ${readOnly || isUploading ? 'cursor-default' : 'cursor-crosshair'}`} 
+                    className={`w-full h-full touch-none ${readOnly ? 'cursor-default' : 'cursor-crosshair'}`} 
                     onMouseDown={startDrawing} 
                     onMouseMove={draw} 
                     onMouseUp={stopDrawing} 
@@ -148,7 +150,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
                     onTouchMove={draw} 
                     onTouchEnd={stopDrawing} 
                 />
-                {isEmpty && !isUploading && (
+                {isEmpty && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[10px] font-bold uppercase tracking-widest">
                         Ký tại đây
                     </div>
