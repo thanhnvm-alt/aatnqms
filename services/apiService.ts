@@ -188,6 +188,10 @@ export const fetchNcrById = async (id: string) => {
     return apiFetch(`/api/ncrs/${id}`);
 };
 
+export const deleteNcr = async (id: string) => {
+    return apiFetch(`/api/ncrs/${id}`, { method: 'DELETE' });
+};
+
 export const fetchDefects = async (filters: any = {}) => {
     const params = new URLSearchParams(filters);
     return apiFetch(`/api/defects?${params.toString()}`);

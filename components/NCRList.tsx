@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { NCR, User } from '../types';
-import { fetchNcrs, fetchNcrById } from '../services/apiService';
+import { fetchNcrs, fetchNcrById, deleteNcr } from '../services/apiService';
 import { 
     AlertTriangle, Search, Clock, CheckCircle2, 
     ArrowRight, Loader2, Calendar, User as UserIcon, 
     FileText, ChevronRight, ShieldAlert,
-    Hash, AlertCircle, Maximize2, Upload, Download
+    Hash, AlertCircle, Maximize2, Upload, Download, Trash2
 } from 'lucide-react';
 import { NCRDetail } from './NCRDetail';
 import { exportNcrs, importNcrsFile } from '../services/apiService';
@@ -59,6 +59,39 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         alert("Lỗi khi tải chi tiết NCR.");
     } finally {
         setIsDetailLoading(false);
+    }
+  };
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredNcrs.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredNcrs.map(n => n.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${selectedIds.size} phiếu NCR đã chọn?`)) return;
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => deleteNcr(id)));
+      setSelectedIds(new Set());
+      loadNcrs(page);
+      alert('Đã xóa thành công các phiếu NCR đã chọn.');
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      alert('Lỗi khi xóa hàng loạt: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -155,6 +188,19 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               </div>
           </div>
       </div>
+
+      {/* Bulk Action Bar */}
+      {currentUser.role === 'ADMIN' && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50 animate-in slide-in-from-bottom-10">
+          <span className="text-xs font-black uppercase tracking-widest">Đã chọn {selectedIds.size} phiếu</span>
+          <button 
+            onClick={handleBulkDelete}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-colors"
+          >
+            <Trash2 className="w-4 h-4" /> Xóa hàng loạt
+          </button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
