@@ -223,6 +223,14 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       <table className="w-full text-left border-collapse">
                           <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px] sticky top-0 z-10">
                               <tr>
+                                  <th className="px-6 py-4 w-10">
+                                      <input 
+                                          type="checkbox" 
+                                          checked={filteredNcrs.length > 0 && selectedIds.size === filteredNcrs.length}
+                                          onChange={toggleSelectAll}
+                                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                      />
+                                  </th>
                                   <th className="px-6 py-4">NCR CODE</th>
                                   <th className="px-6 py-4">MÔ TẢ LỖI</th>
                                   <th className="px-6 py-4">MỨC ĐỘ</th>
@@ -239,6 +247,14 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                       onClick={() => handleSelectNcrItem(ncr.id)}
                                       className="hover:bg-blue-50/30 transition-all cursor-pointer group"
                                   >
+                                      <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
+                                          <input 
+                                              type="checkbox" 
+                                              checked={selectedIds.has(ncr.id)}
+                                              onChange={() => toggleSelect(ncr.id)}
+                                              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                          />
+                                      </td>
                                       <td className="px-6 py-5">
                                           <div className="flex flex-col">
                                               <span className="font-black text-slate-900 text-xs tracking-tight uppercase">{ncr.id}</span>
@@ -299,6 +315,14 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                               <div className="p-4 flex-1 space-y-3">
                                   <div className="flex items-start justify-between gap-3">
                                       <div className="flex items-center gap-2">
+                                          <div onClick={(e) => e.stopPropagation()} className="mr-1">
+                                              <input 
+                                                  type="checkbox" 
+                                                  checked={selectedIds.has(ncr.id)}
+                                                  onChange={() => toggleSelect(ncr.id)}
+                                                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                              />
+                                          </div>
                                           <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all">
                                               <AlertTriangle className="w-4 h-4" />
                                           </div>

@@ -405,7 +405,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {ALL_MODULES.map((module, mIdx) => (
-                            <tr key={module.id} className={`${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'} hover:bg-blue-50/40 transition-colors group`}>
+                            <tr key={`module-${module.id}`} className={`${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'} hover:bg-blue-50/40 transition-colors group`}>
                               <td className={`p-5 sticky left-0 z-20 border-r border-slate-100 shadow-[5px_0_15px_rgba(0,0,0,0.02)] transition-colors ${mIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'} group-hover:bg-blue-50/40`}>
                                 <button 
                                     onClick={() => toggleRow(module.id)}
