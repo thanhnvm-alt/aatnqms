@@ -167,6 +167,10 @@ export const deleteInspectionFromSheet = async (id: string) => {
     return apiFetch(`/api/inspections/${id}`, { method: 'DELETE' });
 };
 
+export const deleteInspection = async (id: string) => {
+    return apiFetch(`/api/inspections/${id}`, { method: 'DELETE' });
+};
+
 export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
     return apiFetch('/api/ncrs', {
         method: 'POST',

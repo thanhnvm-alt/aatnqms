@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
-import { exportInspections } from '../services/apiService';
+import { exportInspections, deleteInspection } from '../services/apiService';
 import { 
   Search, RefreshCw, FolderOpen, Clock, 
   Loader2, X, ChevronDown, ChevronRight,
@@ -63,16 +63,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm('Bạn có chắc chắn muốn xóa các phiếu đã chọn?')) return;
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${selectedIds.size} phiếu đã chọn?`)) return;
     try {
-      // Assuming deleteInspection is available in apiService
-      // await Promise.all(Array.from(selectedIds).map(id => deleteInspection(id)));
-      // setSelectedIds(new Set());
-      // if (onRefresh) onRefresh();
-      alert('Chức năng xóa hàng loạt đang được cập nhật.');
+      await Promise.all(Array.from(selectedIds).map(id => deleteInspection(id)));
+      setSelectedIds(new Set());
+      if (onRefresh) onRefresh();
+      alert('Đã xóa thành công các phiếu đã chọn.');
     } catch (error) {
       console.error('Bulk delete failed:', error);
-      alert('Lỗi khi xóa hàng loạt');
+      alert('Lỗi khi xóa hàng loạt: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
