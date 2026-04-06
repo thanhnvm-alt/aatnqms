@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, Search, Package, Download, Upload, Loader2 } from 'lucide-react';
-import { Material } from '../types';
+import { Material, User } from '../types';
 import { fetchMaterials, saveMaterial, deleteMaterial, exportMaterials, importMaterialsFile } from '../services/apiService';
 
-export const MaterialManagement = () => {
+export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -13,6 +13,7 @@ export const MaterialManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const limit = 50;
 
@@ -29,6 +30,7 @@ export const MaterialManagement = () => {
 
   const loadMaterials = async (p: number) => {
     setIsLoading(true);
+    setSelectedIds([]);
     try {
       const data = await fetchMaterials(searchTerm, p, limit);
       setMaterials(data.items || []);
@@ -115,6 +117,35 @@ export const MaterialManagement = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (confirm(`Bạn có chắc chắn muốn xóa ${selectedIds.length} vật liệu đã chọn?`)) {
+      try {
+        await Promise.all(selectedIds.map(id => deleteMaterial(id)));
+        setSelectedIds([]);
+        loadMaterials(page);
+      } catch (error) {
+        console.error('Failed to bulk delete materials:', error);
+        alert('Lỗi khi xóa vật liệu');
+      }
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === materials.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(materials.map(m => m.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(sid => sid !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex justify-between items-center mb-6 shrink-0">
@@ -129,22 +160,26 @@ export const MaterialManagement = () => {
             accept=".xlsx, .xls" 
             className="hidden" 
           />
-          <button 
-            onClick={handleImportClick}
-            disabled={isImporting}
-            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
-          >
-            {isImporting ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
-            Nhập Excel
-          </button>
-          <button 
-            onClick={handleExport}
-            disabled={isExporting}
-            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
-          >
-            {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
-            Xuất Excel
-          </button>
+          {user.role !== 'QC' && (
+            <>
+              <button 
+                onClick={handleImportClick}
+                disabled={isImporting}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
+              >
+                {isImporting ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
+                Nhập Excel
+              </button>
+              <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
+              >
+                {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+                Xuất Excel
+              </button>
+            </>
+          )}
           <button 
             onClick={() => { setEditingMaterial(null); setIsModalOpen(true); }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700"
@@ -153,6 +188,15 @@ export const MaterialManagement = () => {
           </button>
         </div>
       </div>
+
+      {user.role === 'ADMIN' && selectedIds.length > 0 && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span className="text-sm font-medium text-red-700">Đã chọn {selectedIds.length} vật liệu</span>
+          <button onClick={handleBulkDelete} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-red-700 flex items-center gap-2">
+            <Trash2 size={14} /> Xóa đã chọn
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 relative shrink-0">
         <Search className="absolute left-3 top-3 text-slate-400" size={20} />
@@ -170,6 +214,9 @@ export const MaterialManagement = () => {
           <table className="w-full min-w-[1000px]">
             <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input type="checkbox" checked={selectedIds.length === materials.length && materials.length > 0} onChange={toggleSelectAll} className="rounded border-slate-300" />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase whitespace-nowrap">Mã Vật Tư</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tên Vật Tư</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase whitespace-nowrap">Đơn vị</th>
@@ -183,12 +230,15 @@ export const MaterialManagement = () => {
             <tbody className="divide-y divide-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                     Đang tải dữ liệu...
                   </td>
                 </tr>
               ) : materials.map(m => (
                 <tr key={m.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selectedIds.includes(m.id)} onChange={() => toggleSelect(m.id)} className="rounded border-slate-300" />
+                  </td>
                   <td className="px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap">{m.material}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate" title={m.shortText}>{m.shortText}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{m.orderUnit}</td>
@@ -204,7 +254,7 @@ export const MaterialManagement = () => {
               ))}
               {!isLoading && materials.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                     Không tìm thấy vật liệu nào.
                   </td>
                 </tr>

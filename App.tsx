@@ -308,6 +308,7 @@ const App = () => {
                     total={inspectionsTotal}
                     page={inspectionsPage}
                     onPageChange={setInspectionsPage}
+                    user={user}
                 />
             )}
             {view === 'FORM' && (
@@ -418,7 +419,7 @@ const App = () => {
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
             {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
             {view === 'SUPPLIERS' && <SupplierManagement user={user} onSelectSupplier={s => { setActiveSupplier(s); setView('SUPPLIER_DETAIL'); }} />}
-            {view === 'MATERIALS' && <MaterialManagement />}
+            {view === 'MATERIALS' && <MaterialManagement user={user} />}
             {view === 'SUPPLIER_DETAIL' && activeSupplier && <SupplierDetail supplier={activeSupplier} user={user} onBack={() => setView('SUPPLIERS')} onViewInspection={handleSelectInspection} />}
             {view === 'SETTINGS' && (
                 <Settings 

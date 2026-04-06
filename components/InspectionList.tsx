@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId } from '../types';
+import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
 import { exportInspections } from '../services/apiService';
 import { 
   Search, RefreshCw, FolderOpen, Clock, 
@@ -9,7 +9,7 @@ import {
   PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
   Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid,
   ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle,
-  CalendarDays, ArrowRight, Check, FileText, Download
+  CalendarDays, ArrowRight, Check, FileText, Download, Trash2
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -21,6 +21,7 @@ interface InspectionListProps {
   total?: number;
   page?: number;
   onPageChange?: (page: number) => void;
+  user: User;
 }
 
 const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -37,13 +38,43 @@ const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; 
 };
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange
+  inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange, user
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === inspections.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(inspections.map(i => i.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm('Bạn có chắc chắn muốn xóa các phiếu đã chọn?')) return;
+    try {
+      // Assuming deleteInspection is available in apiService
+      // await Promise.all(Array.from(selectedIds).map(id => deleteInspection(id)));
+      // setSelectedIds(new Set());
+      // if (onRefresh) onRefresh();
+      alert('Chức năng xóa hàng loạt đang được cập nhật.');
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      alert('Lỗi khi xóa hàng loạt');
+    }
+  };
 
   const [filterQC, setFilterQC] = useState<string[]>([]);
   const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
@@ -117,10 +148,31 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-[#f8fafc] no-scroll-x" style={{ fontFamily: 'Inter, sans-serif' }}>
+      {/* BULK ACTION BAR */}
+      {user.role === 'ADMIN' && selectedIds.size > 0 && (
+        <div className="fixed bottom-20 left-4 right-4 bg-white border border-slate-200 p-4 rounded-2xl shadow-xl flex items-center justify-between z-50 animate-in slide-in-from-bottom-10">
+          <span className="text-xs font-black text-slate-800 uppercase">Đã chọn {selectedIds.size} phiếu</span>
+          <button 
+            onClick={handleBulkDelete}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase hover:bg-red-700 transition-all active:scale-95"
+          >
+            <Trash2 className="w-4 h-4" /> Xóa hàng loạt
+          </button>
+        </div>
+      )}
+
       {/* COMPACT TOOLBAR */}
       <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-30 shadow-sm">
           <div className="max-w-7xl mx-auto space-y-3">
               <div className="flex gap-2">
+                  {user.role === 'ADMIN' && (
+                    <button 
+                      onClick={toggleSelectAll}
+                      className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                    >
+                      {selectedIds.size === inspections.length && inspections.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600" /> : <LayoutGrid className="w-5 h-5" />}
+                    </button>
+                  )}
                   <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input 
@@ -136,14 +188,16 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   >
                     <Filter className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={handleExport}
-                    disabled={isExporting}
-                    title="Xuất Excel"
-                    className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                  </button>
+                  {user.role !== 'QC' && (
+                    <button 
+                      onClick={handleExport}
+                      disabled={isExporting}
+                      title="Xuất Excel"
+                      className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                    </button>
+                  )}
               </div>
               
               {isFilterOpen && (
@@ -205,16 +259,27 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         return (
                                             <div 
                                                 key={item.id} 
-                                                onClick={() => onSelect(item.id)}
                                                 className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all hover:border-blue-300 group"
                                             >
+                                                {user.role === 'ADMIN' && (
+                                                  <input 
+                                                    type="checkbox"
+                                                    checked={selectedIds.has(item.id)}
+                                                    onChange={() => toggleSelect(item.id)}
+                                                    className="w-5 h-5 rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                  />
+                                                )}
+                                                
                                                 {/* Left Icon (Screenshot Style) */}
-                                                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-600 shrink-0 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                <div 
+                                                  onClick={() => onSelect(item.id)}
+                                                  className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-600 shrink-0 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors cursor-pointer"
+                                                >
                                                     <FileText className="w-6 h-6" />
                                                 </div>
 
                                                 {/* Content */}
-                                                <div className="flex-1 min-w-0">
+                                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onSelect(item.id)}>
                                                     <h4 className="font-black text-[12px] text-slate-800 uppercase tracking-tight truncate group-hover:text-blue-700">
                                                         {item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}
                                                     </h4>
@@ -226,7 +291,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                 </div>
 
                                                 {/* Status Pill */}
-                                                <div className="flex flex-col items-end gap-1">
+                                                <div className="flex flex-col items-end gap-1 cursor-pointer" onClick={() => onSelect(item.id)}>
                                                     <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border tracking-tighter ${
                                                         item.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-200' :
                                                         item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' :
