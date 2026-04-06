@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { User, UserRole, ModuleId } from '../types';
 import { ALL_MODULES } from '../constants';
 import { Button } from './Button';
@@ -52,9 +53,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const excelImportRef = useRef<HTMLInputElement>(null);
 
-  // Access global XLSX from script tag in index.html
-  const XLSX = (window as any).XLSX;
-
   const [formData, setFormData] = useState<Partial<User>>({
     name: '',
     username: '',
@@ -63,6 +61,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
     allowedModules: [],
     avatar: '',
     msnv: '',
+    email: '',
     position: '',
     workLocation: '',
     status: 'Đang làm việc',
@@ -109,7 +108,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
       setEditingUser(null);
       setFormData({
         name: '', username: '', password: '', role: 'QC', allowedModules: ['PQC'],
-        msnv: '', position: '', workLocation: '', status: 'Đang làm việc',
+        msnv: '', email: '', position: '', workLocation: '', status: 'Đang làm việc',
         joinDate: new Date().toISOString().split('T')[0], education: '', notes: ''
       });
     }
@@ -132,6 +131,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
           avatar: formData.avatar || '',
           allowedModules: formData.allowedModules || [],
           msnv: formData.msnv,
+          email: formData.email,
           position: formData.position,
           workLocation: formData.workLocation,
           status: formData.status,
@@ -154,6 +154,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
     if (!XLSX) return alert("Thư viện Excel chưa sẵn sàng.");
     const exportData = users.map(u => ({
       'MÃ NV': u.msnv || '',
+      'EMAIL': u.email || '',
       'HỌ VÀ TÊN': u.name,
       'Tên Đăng Nhập': u.username,
       'Vai Trò': u.role,
@@ -192,7 +193,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
               }
 
               // Mapping logic with flexible key finding
-              const importedUsers: User[] = json.map((row: any) => {
+              const importedUsers = json.map((row: any): User | null => {
                   const findVal = (possibleKeys: string[]) => {
                       const keys = Object.keys(row);
                       for (const pk of possibleKeys) {
@@ -214,6 +215,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                   return {
                       id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
                       msnv: String(findVal(['MÃ NV', 'MSNV', 'Mã nhân viên', 'StaffCode']) || ''),
+                      email: String(findVal(['EMAIL', 'Thư điện tử', 'Mail']) || ''),
                       name: name,
                       username: username,
                       role: finalRole,
@@ -221,9 +223,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                       status: String(findVal(['Tình Trạng', 'Trạng Thái', 'Status']) || 'Đang làm việc'),
                       password: '123', 
                       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
-                      allowedModules: ['PQC', 'IQC', 'SITE']
+                      allowedModules: ['PQC', 'IQC', 'SITE'] as ModuleId[]
                   };
-              }).filter((u: any): u is User => u !== null);
+              }).filter((u): u is User => u !== null);
 
               if (importedUsers.length > 0) {
                   await onImportUsers(importedUsers);
@@ -313,7 +315,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                                   </div>
                                   <div className="overflow-hidden">
                                       <p className="font-black text-slate-800 text-[13px] uppercase tracking-tight truncate">{u.name}</p>
-                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">@{u.username}</p>
+                                      <div className="flex flex-col">
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">@{u.username}</p>
+                                          {u.email && <p className="text-[9px] text-blue-500 font-medium lowercase truncate">{u.email}</p>}
+                                      </div>
                                   </div>
                               </div>
                           </td>
@@ -388,11 +393,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                               <div className="w-full space-y-4">
                                   <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mã nhân viên (MSNV)</label>
-                                      <input value={formData.msnv} onChange={e => setFormData({...formData, msnv: e.target.value.toUpperCase()})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100" placeholder="AA-XXXX" />
+                                      <input value={formData.msnv || ''} onChange={e => setFormData({...formData, msnv: e.target.value.toUpperCase()})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100" placeholder="AA-XXXX" />
                                   </div>
                                   <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Trạng thái</label>
-                                      <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100">
+                                      <select value={formData.status || 'Đang làm việc'} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100">
                                           <option value="Đang làm việc">Đang làm việc</option>
                                           <option value="Nghỉ phép">Nghỉ phép</option>
                                           <option value="Đã nghỉ việc">Đã nghỉ việc</option>
@@ -405,27 +410,31 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                           <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                               <div className="space-y-1 md:col-span-2">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><UserIcon className="w-3 h-3"/> Họ và tên *</label>
-                                  <input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-sm uppercase outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: NGUYỄN VĂN A" />
+                                  <input value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-sm uppercase outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: NGUYỄN VĂN A" />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Mail className="w-3 h-3"/> Tên đăng nhập *</label>
-                                  <input value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm disabled:bg-slate-50 disabled:text-slate-400" disabled={!!editingUser} placeholder="username" />
+                                  <input value={formData.username || ''} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm disabled:bg-slate-50 disabled:text-slate-400" disabled={!!editingUser} placeholder="username" />
+                              </div>
+                              <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Mail className="w-3 h-3"/> Email</label>
+                                  <input value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="email@example.com" />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Shield className="w-3 h-3"/> Mật khẩu</label>
-                                  <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder={editingUser ? "Bỏ trống để giữ nguyên" : "Mặc định: 123456"} />
+                                  <input type="password" value={formData.password || ''} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder={editingUser ? "Bỏ trống để giữ nguyên" : "Mặc định: 123456"} />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Briefcase className="w-3 h-3"/> Chức vụ</label>
-                                  <input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: QC Trưởng" />
+                                  <input value={formData.position || ''} onChange={e => setFormData({...formData, position: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: QC Trưởng" />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><MapPin className="w-3 h-3"/> Nơi làm việc</label>
-                                  <input value={formData.workLocation} onChange={e => setFormData({...formData, workLocation: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="Nhà máy / Hiện trường" />
+                                  <input value={formData.workLocation || ''} onChange={e => setFormData({...formData, workLocation: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="Nhà máy / Hiện trường" />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vai trò hệ thống</label>
-                                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-xs uppercase outline-none shadow-sm appearance-none cursor-pointer">
+                                  <select value={formData.role || 'QC'} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-xs uppercase outline-none shadow-sm appearance-none cursor-pointer">
                                       <option value="QC">QC Inspector</option>
                                       <option value="QA">QA Staff</option>
                                       <option value="MANAGER">Manager</option>
@@ -434,7 +443,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Calendar className="w-3 h-3"/> Ngày nhận việc</label>
-                                  <input type="date" value={formData.joinDate} onChange={e => setFormData({...formData, joinDate: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" />
+                                  <input type="date" value={formData.joinDate || ''} onChange={e => setFormData({...formData, joinDate: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" />
                               </div>
                           </div>
                       </div>
@@ -457,7 +466,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
 
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><StickyNote className="w-4 h-4 text-slate-300"/> Ghi chú nội bộ (Audit Logs)</label>
-                          <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-3xl font-medium text-xs outline-none h-28 focus:ring-4 ring-blue-100 shadow-inner" placeholder="Thông tin kỹ năng, đào tạo, đánh giá chuyên môn..." />
+                          <textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full px-5 py-4 bg-white border border-slate-200 rounded-3xl font-medium text-xs outline-none h-28 focus:ring-4 ring-blue-100 shadow-inner" placeholder="Thông tin kỹ năng, đào tạo, đánh giá chuyên môn..." />
                       </div>
                   </div>
 

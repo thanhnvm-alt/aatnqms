@@ -93,6 +93,7 @@ export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   { id: 'SITE', label: 'Site - Công trình', group: 'QA' },
   { id: 'PROJECTS', label: 'Danh Sách Dự Án', group: 'PM' },
   { id: 'OEM', label: 'Khách OEM', group: 'OEM' },
+  { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', group: 'QC' },
 ];
 
 export const MOCK_USERS: User[] = [

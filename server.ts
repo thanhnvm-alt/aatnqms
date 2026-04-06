@@ -13,6 +13,8 @@ import { v2 as cloudinary } from 'cloudinary';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 
+import crypto from 'crypto';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configure Google Drive
@@ -399,8 +401,9 @@ app.get("/api/health", (req, res) => {
     try {
       await db.saveUser(req.body);
       res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save user' });
+    } catch (error: any) {
+      console.error('Error saving user:', error);
+      res.status(500).json({ error: 'Failed to save user', details: error.message });
     }
   });
 
@@ -641,8 +644,8 @@ app.get("/api/health", (req, res) => {
       const schema = process.env.DB_SCHEMA || 'appQAQC';
       const { material, shortText, orderUnit, orderQuantity, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order } = req.body;
       const result = await query(
-        `INSERT INTO "${schema}"."material" ("id", "material", "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "createdAt", "updatedAt") VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING *`,
-        [material, shortText, orderUnit, orderQuantity || 0, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order]
+        `INSERT INTO "${schema}"."material" ("id", "material", "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()) RETURNING *`,
+        [crypto.randomUUID(), material, shortText, orderUnit, orderQuantity || 0, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order]
       );
       
       const user = (req as any).user;
@@ -853,6 +856,192 @@ app.get("/api/health", (req, res) => {
     }
   });
 
+  // --- DEFECT LIBRARY EXPORT/IMPORT ---
+  app.get("/api/defects/export", async (req, res) => {
+    try {
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        const result = await query(`SELECT * FROM "${schema}"."defect_library" ORDER BY "defect_code" ASC`);
+        const ws = XLSX.utils.json_to_sheet(result.rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "DefectLibrary");
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Disposition", "attachment; filename=DefectLibrary.xlsx");
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buf);
+    } catch (error) {
+        console.error('Error exporting defect library:', error);
+        res.status(500).json({ error: 'Failed to export defect library' });
+    }
+  });
+
+  app.post("/api/defects/import", memoryUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        let count = 0;
+        for (const row of data as any[]) {
+            const id = row.id || `DEF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const defect_code = row.defect_code || row['Mã lỗi'] || '';
+            const name = row.name || row['Tên lỗi'] || '';
+            if (!defect_code || !name) continue;
+
+            await query(`
+                INSERT INTO "${schema}"."defect_library" (id, defect_code, name, stage, category, description, severity, suggested_action, updated_at) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (EXTRACT(epoch FROM now()))::bigint)
+                ON CONFLICT(id) DO UPDATE SET 
+                    defect_code = EXCLUDED.defect_code, 
+                    name = EXCLUDED.name, 
+                    stage = EXCLUDED.stage,
+                    category = EXCLUDED.category,
+                    description = EXCLUDED.description,
+                    severity = EXCLUDED.severity,
+                    suggested_action = EXCLUDED.suggested_action,
+                    updated_at = EXCLUDED.updated_at
+            `, [id, defect_code, name, row.stage || row['Công đoạn'] || '', row.category || row['Phân loại'] || 'Ngoại quan', row.description || row['Mô tả'] || '', row.severity || row['Mức độ'] || 'MINOR', row.suggested_action || row['Biện pháp'] || '']);
+            count++;
+        }
+        res.json({ success: true, count });
+    } catch (error) {
+        console.error('Error importing defect library:', error);
+        res.status(500).json({ error: 'Failed to import defect library' });
+    }
+  });
+
+  // --- MATERIALS EXPORT/IMPORT ---
+  app.get("/api/materials/export", async (req, res) => {
+    try {
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        const result = await query(`SELECT * FROM "${schema}"."material" WHERE "deleted_at" IS NULL ORDER BY "material" ASC`);
+        const ws = XLSX.utils.json_to_sheet(result.rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Materials");
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Disposition", "attachment; filename=Materials.xlsx");
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buf);
+    } catch (error) {
+        console.error('Error exporting materials:', error);
+        res.status(500).json({ error: 'Failed to export materials' });
+    }
+  });
+
+  app.post("/api/materials/import", memoryUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        let count = 0;
+        for (const row of data as any[]) {
+            const id = row.id || `MAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const material = row.material || row['Mã vật tư'] || '';
+            const shortText = row.shortText || row['Tên vật tư'] || '';
+            if (!material || !shortText) continue;
+
+            await query(`
+                INSERT INTO "${schema}"."material" (id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "updatedAt") 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(epoch FROM now()))::bigint)
+                ON CONFLICT(id) DO UPDATE SET 
+                    material = EXCLUDED.material, 
+                    "shortText" = EXCLUDED."shortText", 
+                    "orderUnit" = EXCLUDED."orderUnit",
+                    "orderQuantity" = EXCLUDED."orderQuantity",
+                    "supplierName" = EXCLUDED."supplierName",
+                    "projectName" = EXCLUDED."projectName",
+                    "purchaseDocument" = EXCLUDED."purchaseDocument",
+                    "deliveryDate" = EXCLUDED."deliveryDate",
+                    "Ma_Tender" = EXCLUDED."Ma_Tender",
+                    "Factory_Order" = EXCLUDED."Factory_Order",
+                    "updatedAt" = EXCLUDED."updatedAt"
+            `, [id, material, shortText, row.orderUnit || row['Đơn vị'] || '', row.orderQuantity || row['Số lượng'] || 0, row.supplierName || row['Nhà cung cấp'] || '', row.projectName || row['Dự án'] || '', row.purchaseDocument || row['Mã PO'] || '', row.deliveryDate || row['Ngày giao'] || '', row.Ma_Tender || row['Mã Tender'] || '', row.Factory_Order || row['Factory Order'] || '']);
+            count++;
+        }
+        res.json({ success: true, count });
+    } catch (error) {
+        console.error('Error importing materials:', error);
+        res.status(500).json({ error: 'Failed to import materials' });
+    }
+  });
+
+  // --- SUPPLIERS EXPORT/IMPORT ---
+  app.get("/api/suppliers/export", async (req, res) => {
+    try {
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        const result = await query(`SELECT * FROM "${schema}"."suppliers" WHERE "deleted_at" IS NULL ORDER BY "name" ASC`);
+        const ws = XLSX.utils.json_to_sheet(result.rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Suppliers");
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Disposition", "attachment; filename=Suppliers.xlsx");
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buf);
+    } catch (error) {
+        console.error('Error exporting suppliers:', error);
+        res.status(500).json({ error: 'Failed to export suppliers' });
+    }
+  });
+
+  app.post("/api/suppliers/import", memoryUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        let count = 0;
+        for (const row of data as any[]) {
+            const id = row.id || `SUP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const code = row.code || row['Mã NCC'] || '';
+            const name = row.name || row['Tên nhà cung cấp'] || '';
+            if (!code || !name) continue;
+
+            await query(`
+                INSERT INTO "${schema}"."suppliers" (id, code, name, address, contact_person, phone, email, category, status, updated_at) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, (EXTRACT(epoch FROM now()))::bigint)
+                ON CONFLICT(id) DO UPDATE SET 
+                    code = EXCLUDED.code, 
+                    name = EXCLUDED.name, 
+                    address = EXCLUDED.address,
+                    contact_person = EXCLUDED.contact_person,
+                    phone = EXCLUDED.phone,
+                    email = EXCLUDED.email,
+                    category = EXCLUDED.category,
+                    status = EXCLUDED.status,
+                    updated_at = EXCLUDED.updated_at
+            `, [id, code, name, row.address || row['Địa chỉ'] || '', row.contact_person || row['Người liên hệ'] || '', row.phone || row['Số điện thoại'] || '', row.email || row['Email'] || '', row.category || row['Ngành hàng'] || '', row.status || row['Trạng thái'] || 'ACTIVE']);
+            count++;
+        }
+        res.json({ success: true, count });
+    } catch (error) {
+        console.error('Error importing suppliers:', error);
+        res.status(500).json({ error: 'Failed to import suppliers' });
+    }
+  });
+
+  // --- INSPECTIONS EXPORT ---
+  app.get("/api/inspections/export", async (req, res) => {
+    try {
+        const result = await db.getInspectionsList({}, 1, 10000);
+        const ws = XLSX.utils.json_to_sheet(result.items);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Inspections");
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Disposition", "attachment; filename=Inspections.xlsx");
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buf);
+    } catch (error) {
+        console.error('Error exporting inspections:', error);
+        res.status(500).json({ error: 'Failed to export inspections' });
+    }
+  });
+
   app.use((req, res, next) => {
     console.log("Received request:", req.method, req.url);
     next();
@@ -963,7 +1152,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     
     // Diagnostic logic to verify schema
     const schema = process.env.DB_SCHEMA || 'appQAQC';
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo'];
+    const tables = [
+      'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 
+      'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo',
+      'defect_library', 'floor_plans', 'layout_pins', 'workshops', 'templates', 'roles', 'audit_logs', 'status_history'
+    ];
     const results: any = {};
     
     let dbContext = {};
@@ -1044,7 +1237,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.get('/api/diag/db', async (req, res) => {
   try {
     const schema = process.env.DB_SCHEMA || 'appQAQC';
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo'];
+    const tables = [
+      'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 
+      'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo',
+      'defect_library', 'floor_plans', 'layout_pins', 'workshops', 'templates', 'roles', 'audit_logs', 'status_history'
+    ];
     
     const results: any = {};
     

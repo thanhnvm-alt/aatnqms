@@ -120,7 +120,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsLookupLoading(true);
     try {
       const response = await fetchPlans(cleanCode, 1, 10);
-      const match = (response.items || []).find(p => (p.ma_ct || '').toUpperCase() === cleanCode || (p.ma_nha_may || '').toUpperCase() === cleanCode);
+      const match = (response.items || []).find((p: any) => (p.ma_ct || '').toUpperCase() === cleanCode || (p.ma_nha_may || '').toUpperCase() === cleanCode);
       if (match) {
         setFormData(prev => {
             const nextMats = [...(prev.materials || [])];

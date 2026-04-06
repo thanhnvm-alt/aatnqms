@@ -62,8 +62,8 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
             setNcrData(initialData || { severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
             fetchDefectLibrary().then(setLibrary);
             if (initialData?.defect_code) {
-                fetchDefectLibrary().then(libs => {
-                    const match = libs.find(l => l.code === initialData.defect_code);
+                fetchDefectLibrary().then((libs: any[]) => {
+                    const match = libs.find((l: any) => l.code === initialData.defect_code);
                     if (match) setDefectName(match.name);
                 });
             } else { setDefectName(''); }
@@ -333,11 +333,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           
           let match = null;
           if (code.length === 9) {
-              match = items.find(p => String(p.ma_nha_may || '').toUpperCase() === code);
+              match = items.find((p: any) => String(p.ma_nha_may || '').toUpperCase() === code);
           } else if (code.length === 13) {
-              match = items.find(p => String(p.ma_nha_may || '').toUpperCase() === code);
+              match = items.find((p: any) => String(p.ma_nha_may || '').toUpperCase() === code);
           } else {
-              match = items.find(p => 
+              match = items.find((p: any) => 
                 String(p.ma_nha_may || '').toUpperCase() === code
               ) || items[0];
           }

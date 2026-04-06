@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
 import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil, LayoutGrid, FileUp, FileDown } from 'lucide-react';
@@ -34,7 +35,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
   const [activeStage, setActiveStage] = useState<string>('');
 
   const excelInputRef = useRef<HTMLInputElement>(null);
-  const XLSX = (window as any).XLSX;
 
   const isStandardPQC = moduleId === 'PQC';
   const isCustomStagePQC = moduleId === 'SQC_BTP';
@@ -345,7 +345,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                     <div className="flex items-center gap-2">
                                         <input 
                                             className="font-bold text-base bg-transparent border-b border-transparent focus:border-blue-500 outline-none text-slate-800 uppercase w-full transition-all hover:border-slate-300 focus:bg-white"
-                                            value={activeGroup}
+                                            value={activeGroup || ''}
                                             onChange={(e) => handleRenameGroup(activeGroup, e.target.value)}
                                             placeholder="Tên nhóm..."
                                         />
@@ -363,7 +363,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
                                         <div className="space-y-4">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nội dung kiểm tra *</label>
-                                                <input type="text" value={item.label} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                                                <input type="text" value={item.label || ''} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                                             </div>
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phương pháp</label><input type="text" value={item.method || ''} onChange={(e) => handleChange(item.id, 'method', e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400" /></div>

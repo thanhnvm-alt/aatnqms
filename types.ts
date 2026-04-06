@@ -135,6 +135,7 @@ export interface User {
   avatar: string;
   allowedModules?: ModuleId[];
   msnv?: string;
+  email?: string;
   status?: string;
   position?: string;
   workLocation?: string;

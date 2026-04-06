@@ -6,7 +6,9 @@ import {
   List, 
   AlertTriangle, 
   Settings,
-  Briefcase
+  Briefcase,
+  Truck,
+  BookOpen
 } from 'lucide-react';
 
 interface MobileBottomBarProps {
@@ -22,15 +24,18 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
   // Lọc và sắp xếp các tab quan trọng nhất cho mobile (tối đa 5 tab)
   const isQC = user.role === 'QC';
   
-  const tabs = [
+  const tabs = isQC ? [
+    { id: 'LIST', label: 'Phiếu', icon: List },
+    { id: 'NCR_LIST', label: 'Lỗi', icon: AlertTriangle },
+    { id: 'DEFECT_LIBRARY', label: 'Thư viện', icon: BookOpen },
+  ] : [
     { id: 'DASHBOARD', label: 'Home', icon: LayoutDashboard },
-    { id: isQC ? 'LIST' : 'PROJECTS', label: isQC ? 'Phiếu' : 'Dự án', icon: isQC ? List : Briefcase },
-    { id: isQC ? 'NCR_LIST' : 'PLAN', label: isQC ? 'Lỗi' : 'Kế hoạch', icon: isQC ? AlertTriangle : FileSpreadsheet },
-    { id: isQC ? 'SETTINGS' : 'LIST', label: isQC ? 'Cài đặt' : 'Phiếu', icon: isQC ? Settings : List },
-    { id: isQC ? '' : 'NCR_LIST', label: 'NCR', icon: AlertTriangle },
-  ].filter(tab => tab.id !== '');
+    { id: 'PROJECTS', label: 'Dự án', icon: Briefcase },
+    { id: 'PLAN', label: 'Kế hoạch', icon: FileSpreadsheet },
+    { id: 'LIST', label: 'Phiếu', icon: List },
+    { id: 'NCR_LIST', label: 'NCR', icon: AlertTriangle },
+  ];
 
-  // Nếu là manager/admin thì lấy 5 tab đầu, nếu là QC thì lấy 4 tab
   const visibleTabs = tabs.slice(0, 5);
 
   return (

@@ -3,14 +3,14 @@ import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notificat
 import imageCompression from 'browser-image-compression';
 
 // Helper to get auth headers from localStorage
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
     const userStr = localStorage.getItem('aatn_qms_user');
     if (!userStr) return {};
     try {
         const user = JSON.parse(userStr);
         return {
-            'x-user-id': user.id || user.username,
-            'x-user-role': user.role || 'GUEST'
+            'x-user-id': String(user.id || user.username || ''),
+            'x-user-role': String(user.role || 'GUEST')
         };
     } catch (e) {
         return {};
@@ -269,7 +269,9 @@ export const saveDefectLibraryItem = async (item: DefectLibraryItem) => apiFetch
 export const deleteDefectLibraryItem = async (id: string) => apiFetch(`/api/defect-library/${id}`, { method: 'DELETE' });
 
 export const exportDefectLibrary = async () => {
-    const response = await fetch('/api/defects/export');
+    const response = await fetch('/api/defects/export', {
+        headers: getAuthHeaders()
+    });
     if (!response.ok) throw new Error('Export failed');
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -286,6 +288,7 @@ export const importDefectLibraryFile = async (file: File) => {
     formData.append('file', file);
     const response = await fetch('/api/defects/import', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData
     });
     if (!response.ok) throw new Error('Import failed');
@@ -320,7 +323,9 @@ export const deleteMaterial = async (id: string) => {
 };
 
 export const exportNcrs = async () => {
-    const response = await fetch('/api/ncrs/export');
+    const response = await fetch('/api/ncrs/export', {
+        headers: getAuthHeaders()
+    });
     if (!response.ok) throw new Error('Export failed');
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -337,10 +342,80 @@ export const importNcrsFile = async (file: File) => {
     formData.append('file', file);
     const response = await fetch('/api/ncrs/import', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData
     });
     if (!response.ok) throw new Error('Import failed');
     return await response.json();
+};
+
+export const exportMaterials = async () => {
+    const response = await fetch('/api/materials/export', {
+        headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_Materials_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+};
+
+export const importMaterialsFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/materials/import', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
+};
+
+export const exportSuppliers = async () => {
+    const response = await fetch('/api/suppliers/export', {
+        headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_Suppliers_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+};
+
+export const importSuppliersFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/suppliers/import', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
+};
+
+export const exportInspections = async () => {
+    const response = await fetch('/api/inspections/export', {
+        headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_Inspections_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
 };
 
 export const checkApiConnection = async () => {

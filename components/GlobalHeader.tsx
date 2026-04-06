@@ -126,15 +126,17 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
     const isAdminOrManager = user.role === 'ADMIN' || user.role === 'MANAGER';
     return (
       <div className="p-2 space-y-1">
-        <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
-          <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-blue-100 transition-colors">
-            <UserCircle className="w-5 h-5 text-slate-500 group-hover:text-blue-600" />
-          </div>
-          <div className="text-left">
-            <p className="text-sm font-bold text-slate-700">Cá nhân</p>
-            <p className="text-xs text-slate-500 font-medium">Hồ sơ của tôi</p>
-          </div>
-        </button>
+        {user.role !== 'QC' && (
+          <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
+            <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-blue-100 transition-colors">
+              <UserCircle className="w-5 h-5 text-slate-500 group-hover:text-blue-600" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-bold text-slate-700">Cá nhân</p>
+              <p className="text-xs text-slate-500 font-medium">Hồ sơ của tôi</p>
+            </div>
+          </button>
+        )}
         {isAdminOrManager && (
           <>
             <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('USERS'); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">

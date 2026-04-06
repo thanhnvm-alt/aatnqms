@@ -1,5 +1,6 @@
 
 import { query } from "../lib/db.js";
+import crypto from 'crypto';
 import { NCR, Inspection, IPOItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, Material } from "../types.js";
 
 // Use environment variable for schema if available, otherwise default to "appQAQC"
@@ -34,7 +35,7 @@ const sanitizeArgs = (args: any[]): any[] => {
     });
 };
 
-const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'fsr', 'step', 'fqc', 'spr', 'site'];
+export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'fsr', 'step', 'fqc', 'spr', 'site'];
 
 /**
  * Get the table name based on inspection type
@@ -870,17 +871,19 @@ export async function markAllNotificationsRead(userId: string) {
 // --- AUDIT & HISTORY ---
 
 export async function logAudit(userId: string, action: string, entityType: string, entityId: string, oldValue: any, newValue: any) {
+    const id = crypto.randomUUID();
     await query(`
         INSERT INTO ${SCHEMA}.audit_logs (id, user_id, action, entity_type, entity_id, old_value, new_value, timestamp) 
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, EXTRACT(EPOCH FROM NOW())::BIGINT)
-    `, [userId, action, entityType, entityId, oldValue ? JSON.stringify(oldValue) : null, newValue ? JSON.stringify(newValue) : null]);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, EXTRACT(EPOCH FROM NOW())::BIGINT)
+    `, [id, userId, action, entityType, entityId, oldValue ? JSON.stringify(oldValue) : null, newValue ? JSON.stringify(newValue) : null]);
 }
 
 export async function logStatusChange(entityType: string, entityId: string, statusFrom: string | null, statusTo: string, changedBy: string, comment?: string) {
+    const id = crypto.randomUUID();
     await query(`
         INSERT INTO ${SCHEMA}.status_history (id, entity_type, entity_id, status_from, status_to, changed_by, timestamp, comment) 
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, EXTRACT(EPOCH FROM NOW())::BIGINT, $6)
-    `, [entityType, entityId, statusFrom, statusTo, changedBy, comment]);
+        VALUES ($1, $2, $3, $4, $5, $6, EXTRACT(EPOCH FROM NOW())::BIGINT, $7)
+    `, [id, entityType, entityId, statusFrom, statusTo, changedBy, comment]);
 }
 
 // --- USERS ---
@@ -895,20 +898,24 @@ export async function saveUser(u: User) {
     const oldValue = existing.rows.length > 0 ? { ...existing.rows[0], ...safeJsonParse(existing.rows[0].data, {}) } : null;
     
     await query(`
-        INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, position, work_location, status, data, updated_at) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, EXTRACT(EPOCH FROM NOW())::BIGINT) 
+        INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, email, position, work_location, status, join_date, education, notes, data, updated_at) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, EXTRACT(EPOCH FROM NOW())::BIGINT) 
         ON CONFLICT(id) DO UPDATE SET 
             username = EXCLUDED.username, 
             name = EXCLUDED.name, 
             role = EXCLUDED.role, 
             avatar = EXCLUDED.avatar, 
             msnv = EXCLUDED.msnv, 
+            email = EXCLUDED.email,
             position = EXCLUDED.position, 
             work_location = EXCLUDED.work_location, 
             status = EXCLUDED.status, 
+            join_date = EXCLUDED.join_date,
+            education = EXCLUDED.education,
+            notes = EXCLUDED.notes,
             data = EXCLUDED.data, 
             updated_at = EXCLUDED.updated_at
-    `, sanitizeArgs([u.id, u.username, u.password || '123456', u.name, u.role, u.avatar, u.msnv, u.position, u.workLocation, u.status, u]));
+    `, sanitizeArgs([u.id, u.username, u.password || '123456', u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, u]));
 
     // Log Audit
     if (u.id) {

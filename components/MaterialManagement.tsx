@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Package } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Edit2, Trash2, Search, Package, Download, Upload, Loader2 } from 'lucide-react';
 import { Material } from '../types';
-import { fetchMaterials, saveMaterial, deleteMaterial } from '../services/apiService';
+import { fetchMaterials, saveMaterial, deleteMaterial, exportMaterials, importMaterialsFile } from '../services/apiService';
 
 export const MaterialManagement = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const limit = 50;
 
   useEffect(() => {
@@ -35,6 +38,40 @@ export const MaterialManagement = () => {
       console.error('Failed to load materials:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportMaterials();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Lỗi khi xuất file Excel');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const result = await importMaterialsFile(file);
+      alert(`Nhập thành công ${result.count} vật tư`);
+      loadMaterials(1);
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Lỗi khi nhập file Excel');
+    } finally {
+      setIsImporting(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -84,12 +121,37 @@ export const MaterialManagement = () => {
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
           <Package className="text-blue-600" /> Quản lý Vật liệu
         </h1>
-        <button 
-          onClick={() => { setEditingMaterial(null); setIsModalOpen(true); }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700"
-        >
-          <Plus size={20} /> Thêm vật liệu
-        </button>
+        <div className="flex items-center gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            accept=".xlsx, .xls" 
+            className="hidden" 
+          />
+          <button 
+            onClick={handleImportClick}
+            disabled={isImporting}
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
+          >
+            {isImporting ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
+            Nhập Excel
+          </button>
+          <button 
+            onClick={handleExport}
+            disabled={isExporting}
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
+          >
+            {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+            Xuất Excel
+          </button>
+          <button 
+            onClick={() => { setEditingMaterial(null); setIsModalOpen(true); }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700"
+          >
+            <Plus size={20} /> Thêm vật liệu
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 relative shrink-0">

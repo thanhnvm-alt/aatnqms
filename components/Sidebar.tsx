@@ -42,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
   ].filter(item => {
     if (user.role === 'QC') {
-      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY', 'SETTINGS', 'SUPPLIERS'].includes(item.id);
+      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY'].includes(item.id);
     }
     return true;
   });

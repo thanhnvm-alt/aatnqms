@@ -278,8 +278,8 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
                           <div key={p.moduleId} className="px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-2 group/tag hover:bg-white hover:border-blue-200 transition-colors">
                             <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">{p.moduleId}</span>
                             <div className="flex gap-0.5">
-                               {p.actions.map(a => (
-                                   <div key={a} className="w-1 h-1 rounded-full bg-blue-500/40" title={a}></div>
+                               {p.actions.map((a, aIdx) => (
+                                   <div key={`${p.moduleId}-${a}-${aIdx}`} className="w-1 h-1 rounded-full bg-blue-500/40" title={a}></div>
                                ))}
                             </div>
                           </div>

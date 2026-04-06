@@ -123,6 +123,7 @@ export async function runMigrations() {
           "role" TEXT NOT NULL,
           "avatar" TEXT,
           "msnv" TEXT,
+          "email" TEXT,
           "position" TEXT,
           "work_location" TEXT,
           "status" TEXT DEFAULT 'ACTIVE',
@@ -133,6 +134,13 @@ export async function runMigrations() {
       );
     `);
     await addColumnIfNotExists(client, schema, 'users', 'deleted_at', 'BIGINT');
+    await addColumnIfNotExists(client, schema, 'users', 'email', 'TEXT');
+    await addColumnIfNotExists(client, schema, 'users', 'status', "TEXT DEFAULT 'ACTIVE'");
+    await addColumnIfNotExists(client, schema, 'users', 'msnv', 'TEXT');
+    await addColumnIfNotExists(client, schema, 'users', 'position', 'TEXT');
+    await addColumnIfNotExists(client, schema, 'users', 'work_location', 'TEXT');
+    await addColumnIfNotExists(client, schema, 'users', 'avatar', 'TEXT');
+    await addColumnIfNotExists(client, schema, 'users', 'data', 'TEXT');
 
     // 7. Inspection Tables (ISO Standard)
     const inspectionTables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];

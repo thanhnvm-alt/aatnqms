@@ -48,8 +48,10 @@ export async function runMigrations() {
             "user_agent" TEXT
         );
       `);
+      migrationLogs.push(`✅ Ensured table audit_logs exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create audit_logs:`, e.message);
+      migrationLogs.push(`⚠️ Could not create audit_logs: ${e.message}`);
     }
 
     // 3. Status History
@@ -66,8 +68,10 @@ export async function runMigrations() {
             "comment" TEXT
         );
       `);
+      migrationLogs.push(`✅ Ensured table status_history exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create status_history:`, e.message);
+      migrationLogs.push(`⚠️ Could not create status_history: ${e.message}`);
     }
 
     // 4. NCRs
@@ -95,10 +99,17 @@ export async function runMigrations() {
             "comments_json" TEXT DEFAULT '[]'
         );
       `);
+      migrationLogs.push(`✅ Ensured table ncrs exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create ncrs:`, e.message);
+      migrationLogs.push(`⚠️ Could not create ncrs: ${e.message}`);
     }
     await addColumn('ncrs', 'deleted_at', 'BIGINT');
+    await addColumn('ncrs', 'closed_at', 'BIGINT');
+    await addColumn('ncrs', 'closed_by', 'TEXT');
+    await addColumn('ncrs', 'closed_date', 'TEXT');
+    await addColumn('ncrs', 'data', 'TEXT');
+    await addColumn('ncrs', 'comments_json', 'TEXT');
 
     // 5. Notifications
     try {
@@ -115,8 +126,10 @@ export async function runMigrations() {
             "deleted_at" BIGINT
         );
       `);
+      migrationLogs.push(`✅ Ensured table notifications exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create notifications:`, e.message);
+      migrationLogs.push(`⚠️ Could not create notifications: ${e.message}`);
     }
     await addColumn('notifications', 'deleted_at', 'BIGINT');
 
@@ -131,6 +144,7 @@ export async function runMigrations() {
             "role" TEXT NOT NULL,
             "avatar" TEXT,
             "msnv" TEXT,
+            "email" TEXT,
             "position" TEXT,
             "work_location" TEXT,
             "status" TEXT DEFAULT 'ACTIVE',
@@ -140,10 +154,22 @@ export async function runMigrations() {
             "data" TEXT
         );
       `);
+      migrationLogs.push(`✅ Ensured table users exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create users:`, e.message);
+      migrationLogs.push(`⚠️ Could not create users: ${e.message}`);
     }
     await addColumn('users', 'deleted_at', 'BIGINT');
+    await addColumn('users', 'email', 'TEXT');
+    await addColumn('users', 'status', "TEXT DEFAULT 'ACTIVE'");
+    await addColumn('users', 'msnv', 'TEXT');
+    await addColumn('users', 'position', 'TEXT');
+    await addColumn('users', 'work_location', 'TEXT');
+    await addColumn('users', 'avatar', 'TEXT');
+    await addColumn('users', 'join_date', 'TEXT');
+    await addColumn('users', 'education', 'TEXT');
+    await addColumn('users', 'notes', 'TEXT');
+    await addColumn('users', 'data', 'TEXT');
 
     // 7. Inspection Tables
     const inspectionTables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
@@ -200,13 +226,115 @@ export async function runMigrations() {
                   "production_comment" TEXT
               );
           `);
+          migrationLogs.push(`✅ Ensured table ${table} exists in ${schema}`);
         } catch (e: any) {
           console.warn(`⚠️ Could not create ${table}:`, e.message);
+          migrationLogs.push(`⚠️ Could not create ${table}: ${e.message}`);
         }
         await addColumn(table, 'deleted_at', 'BIGINT');
     }
 
-    // 8. Other Core Tables
+    // 8. Defect Library
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."defect_library" (
+            "id" TEXT PRIMARY KEY,
+            "defect_code" TEXT UNIQUE,
+            "name" TEXT NOT NULL,
+            "stage" TEXT,
+            "category" TEXT,
+            "description" TEXT,
+            "severity" TEXT DEFAULT 'MINOR',
+            "suggested_action" TEXT,
+            "created_by" TEXT,
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table defect_library exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create defect_library:`, e.message);
+      migrationLogs.push(`⚠️ Could not create defect_library: ${e.message}`);
+    }
+
+    // 9. Floor Plans & Pins
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."floor_plans" (
+            "id" TEXT PRIMARY KEY,
+            "project_id" TEXT NOT NULL,
+            "name" TEXT NOT NULL,
+            "image_url" TEXT,
+            "version" TEXT,
+            "status" TEXT,
+            "file_name" TEXT,
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table floor_plans exists in ${schema}`);
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."layout_pins" (
+            "id" TEXT PRIMARY KEY,
+            "floor_plan_id" TEXT NOT NULL,
+            "inspection_id" TEXT,
+            "x" NUMERIC,
+            "y" NUMERIC,
+            "status" TEXT,
+            "type" TEXT,
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table layout_pins exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create floor_plans/pins:`, e.message);
+      migrationLogs.push(`⚠️ Could not create floor_plans/pins: ${e.message}`);
+    }
+
+    // 10. Workshops & Templates
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."workshops" (
+            "id" TEXT PRIMARY KEY,
+            "name" TEXT NOT NULL,
+            "location" TEXT,
+            "manager" TEXT,
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table workshops exists in ${schema}`);
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."templates" (
+            "id" TEXT PRIMARY KEY,
+            "items_json" TEXT,
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table templates exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create workshops/templates:`, e.message);
+      migrationLogs.push(`⚠️ Could not create workshops/templates: ${e.message}`);
+    }
+
+    // 11. Roles
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."roles" (
+            "id" TEXT PRIMARY KEY,
+            "name" TEXT UNIQUE NOT NULL,
+            "permissions_json" TEXT,
+            "description" TEXT,
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table roles exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create roles:`, e.message);
+      migrationLogs.push(`⚠️ Could not create roles: ${e.message}`);
+    }
+
+    // 12. Other Core Tables
     try {
       await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."material" (
@@ -226,8 +354,10 @@ export async function runMigrations() {
             "deleted_at" BIGINT
         );
       `);
+      migrationLogs.push(`✅ Ensured table material exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create material:`, e.message);
+      migrationLogs.push(`⚠️ Could not create material: ${e.message}`);
     }
     await addColumn('material', 'deleted_at', 'BIGINT');
 
@@ -248,8 +378,10 @@ export async function runMigrations() {
             "deleted_at" BIGINT
         );
       `);
+      migrationLogs.push(`✅ Ensured table suppliers exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create suppliers:`, e.message);
+      migrationLogs.push(`⚠️ Could not create suppliers: ${e.message}`);
     }
     await addColumn('suppliers', 'deleted_at', 'BIGINT');
 
@@ -275,8 +407,10 @@ export async function runMigrations() {
             "deleted_at" BIGINT
         );
       `);
+      migrationLogs.push(`✅ Ensured table projects exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create projects:`, e.message);
+      migrationLogs.push(`⚠️ Could not create projects: ${e.message}`);
     }
     await addColumn('projects', 'deleted_at', 'BIGINT');
 
@@ -302,8 +436,10 @@ export async function runMigrations() {
             "deleted_at" BIGINT
         );
       `);
+      migrationLogs.push(`✅ Ensured table ipo exists in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create ipo:`, e.message);
+      migrationLogs.push(`⚠️ Could not create ipo: ${e.message}`);
     }
     await addColumn('ipo', 'deleted_at', 'BIGINT');
 

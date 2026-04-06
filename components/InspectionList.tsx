@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId } from '../types';
+import { exportInspections } from '../services/apiService';
 import { 
   Search, RefreshCw, FolderOpen, Clock, 
   Loader2, X, ChevronDown, ChevronRight,
@@ -8,7 +9,7 @@ import {
   PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
   Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid,
   ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle,
-  CalendarDays, ArrowRight, Check, FileText
+  CalendarDays, ArrowRight, Check, FileText, Download
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -42,6 +43,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [filterQC, setFilterQC] = useState<string[]>([]);
   const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
@@ -56,6 +58,18 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   }), [inspections]);
 
   const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || startDate !== '' || endDate !== '';
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportInspections();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Lỗi khi xuất file Excel');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const groupedData = useMemo(() => {
     const projects: Record<string, { 
@@ -121,6 +135,14 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     className={`p-2.5 rounded-xl border transition-all active:scale-95 ${isFilterOpen || isFilterActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}
                   >
                     <Filter className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    title="Xuất Excel"
+                    className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                   </button>
               </div>
               

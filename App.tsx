@@ -423,10 +423,24 @@ const App = () => {
             {view === 'SETTINGS' && (
                 <Settings 
                     currentUser={user} allTemplates={templates} onSaveTemplate={async (id, items) => { await saveTemplate(id, items); loadTemplates(); }}
-                    users={users} onAddUser={async (u) => { await saveUser(u); loadUsers(); }} onUpdateUser={async (u) => { await saveUser(u); loadUsers(); }} onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
-                    workshops={workshops} onAddWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} onUpdateWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} onDeleteWorkshop={async (id) => { await deleteWorkshop(id); loadWorkshops(); }}
-                    onClose={() => setView('DASHBOARD')} onCheckConnection={async () => (await checkApiConnection()).ok} initialTab={settingsTab}
-                />
+    users={users} 
+    onAddUser={async (u) => { await saveUser(u); loadUsers(); }} 
+    onUpdateUser={async (u) => { await saveUser(u); loadUsers(); }} 
+    onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
+    onImportUsers={async (importedUsers) => {
+        for (const u of importedUsers) {
+            await saveUser(u);
+        }
+        await loadUsers();
+    }}
+    workshops={workshops} 
+    onAddWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
+    onUpdateWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
+    onDeleteWorkshop={async (id) => { await deleteWorkshop(id); loadWorkshops(); }}
+    onClose={() => setView('DASHBOARD')} 
+    onCheckConnection={async () => (await checkApiConnection()).ok} 
+    initialTab={settingsTab}
+/>
             )}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>

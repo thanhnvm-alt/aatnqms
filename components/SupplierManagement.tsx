@@ -1,13 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Supplier, User } from '../types';
-import { fetchSuppliers, saveSupplier, deleteSupplier, fetchSupplierStats } from '../services/apiService';
+import { fetchSuppliers, saveSupplier, deleteSupplier, fetchSupplierStats, exportSuppliers, importSuppliersFile } from '../services/apiService';
 import { 
   Building2, Search, Plus, Filter, 
   Loader2, Truck, ChevronRight, MapPin, 
   User as UserIcon, Phone, Mail, Activity,
   CheckCircle2, AlertTriangle, MoreVertical, X,
-  Trash2, Edit3, Save, Star
+  Trash2, Edit3, Save, Star, Download, Upload
 } from 'lucide-react';
 import { Button } from './Button';
 
@@ -19,10 +19,13 @@ interface SupplierManagementProps {
 export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, onSelectSupplier }) => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Supplier>>({
     code: '', name: '', address: '', contact_person: '', phone: '', email: '', category: 'Raw Materials', status: 'ACTIVE'
@@ -38,12 +41,46 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
       const result = await fetchSuppliers();
       const data = result.items || [];
       // Load stats for each supplier
-      const dataWithStats = await Promise.all(data.map(async s => {
+      const dataWithStats = await Promise.all(data.map(async (s: Supplier) => {
         const stats = await fetchSupplierStats(s.name);
         return { ...s, stats };
       }));
       setSuppliers(dataWithStats);
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportSuppliers();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Lỗi khi xuất file Excel');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const result = await importSuppliersFile(file);
+      alert(`Nhập thành công ${result.count} nhà cung cấp`);
+      loadSuppliers();
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Lỗi khi nhập file Excel');
+    } finally {
+      setIsImporting(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleOpenModal = (s?: Supplier) => {
@@ -108,6 +145,29 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                 />
               </div>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                accept=".xlsx, .xls" 
+                className="hidden" 
+              />
+              <button 
+                onClick={handleImportClick}
+                disabled={isImporting}
+                title="Nhập Excel"
+                className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+              </button>
+              <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                title="Xuất Excel"
+                className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              </button>
               <button onClick={() => handleOpenModal()} className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-5 h-5" /></button>
           </div>
       </div>
