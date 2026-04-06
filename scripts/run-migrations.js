@@ -202,27 +202,6 @@ export async function runMigrations() {
         await addColumnIfNotExists(client, schema, table, 'deleted_at', 'BIGINT');
     }
 
-    // 8. Other Core Tables
-    console.log('📡 ISO-DB: Ensuring material table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."material" (
-          "id" TEXT PRIMARY KEY,
-          "material" TEXT,
-          "shortText" TEXT,
-          "orderUnit" TEXT,
-          "orderQuantity" NUMERIC,
-          "supplierName" TEXT,
-          "projectName" TEXT,
-          "purchaseDocument" TEXT,
-          "deliveryDate" TEXT,
-          "Ma_Tender" TEXT,
-          "Factory_Order" TEXT,
-          "createdAt" TEXT,
-          "updatedAt" TEXT,
-          "deleted_at" BIGINT
-      );
-    `);
-    await addColumnIfNotExists(client, schema, 'material', 'deleted_at', 'BIGINT');
 
     console.log('📡 ISO-DB: Ensuring suppliers table...');
     await client.query(`
@@ -267,29 +246,6 @@ export async function runMigrations() {
     `);
     await addColumnIfNotExists(client, schema, 'projects', 'deleted_at', 'BIGINT');
 
-    console.log('📡 ISO-DB: Ensuring ipo table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."ipo" (
-          "id" TEXT PRIMARY KEY,
-          "headcode" TEXT,
-          "ma_nha_may" TEXT,
-          "ma_ct" TEXT,
-          "ten_ct" TEXT,
-          "ten_hang_muc" TEXT,
-          "so_luong_ipo" NUMERIC,
-          "dvt" TEXT,
-          "drawing_url" TEXT,
-          "description" TEXT,
-          "materials_text" TEXT,
-          "samples_json" TEXT,
-          "simulations_json" TEXT,
-          "created_at" BIGINT,
-          "Ma_Tender" TEXT,
-          "Project_name" TEXT,
-          "deleted_at" BIGINT
-      );
-    `);
-    await addColumnIfNotExists(client, schema, 'ipo', 'deleted_at', 'BIGINT');
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
   } catch (err) {

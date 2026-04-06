@@ -37,3 +37,18 @@ export const transformIPO = (row: IPOItem): IPOResponse => {
  * Hàm sleep giả lập delay (nếu cần test loading)
  */
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Upload image to server
+ */
+export const uploadImage = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Upload failed');
+    return data.url;
+};

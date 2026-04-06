@@ -69,7 +69,8 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
         where: error.where,
         query: text.substring(0, 500)
       };
-      console.error('Database query error details:', JSON.stringify(errorDetails, null, 2));
+      console.error('Database query error details:', errorDetails);
+      console.error('Full error object:', error);
       // If the connection is terminated or timed out, reset the pool so the next request starts fresh
       if (error.message.includes('terminated') || error.message.includes('timeout') || error.message.includes('Connection') || error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
         console.log('Resetting pool due to connection or SSL error');

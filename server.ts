@@ -726,6 +726,8 @@ app.get("/api/health", (req, res) => {
 
   // Image Upload API
   app.post("/api/upload", (req, res, next) => {
+    console.log("--- API UPLOAD REQUEST START ---");
+    console.log("Headers:", req.headers);
     // Use memory storage if cloud storage is configured or if on Vercel
     const useCloud = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) || drive);
     const uploader = (process.env.VERCEL || useCloud) ? memoryUpload : upload;

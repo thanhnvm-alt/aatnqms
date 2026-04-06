@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
+import { uploadFileToStorage } from '../services/apiService';
 
 interface InspectionDetailProps {
   inspection: Inspection;
@@ -22,100 +23,7 @@ interface InspectionDetailProps {
   workshops?: Workshop[];
 }
 
-const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
-      else resolve(base64Str);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas && value) {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => { 
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); 
-            };
-            img.src = value;
-        }
-    }, [value]);
-
-    const startDrawing = (e: any) => {
-        if (readOnly) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.beginPath();
-        ctx.moveTo(clientX - rect.left, clientY - rect.top);
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#000000';
-        setIsDrawing(true);
-    };
-
-    const draw = (e: any) => {
-        if (!isDrawing || readOnly) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        ctx.lineTo(clientX - rect.left, clientY - rect.top);
-        ctx.stroke();
-    };
-
-    const stopDrawing = () => {
-        if (readOnly) return;
-        setIsDrawing(false);
-        if (canvasRef.current) onChange(canvasRef.current.toDataURL());
-    };
-
-    const clear = () => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            ctx?.clearRect(0, 0, canvas.width, canvas.height);
-            onChange('');
-        }
-    };
-
-    return (
-        <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center px-1">
-                <label className="block text-slate-700 font-bold text-[9px] uppercase tracking-wide">{label}</label>
-                {!readOnly && <button onClick={clear} className="text-[9px] font-bold text-red-500 hover:text-red-600 flex items-center gap-1 hover:underline" type="button"><Eraser className="w-3 h-3"/> Xóa ký lại</button>}
-            </div>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-32 shadow-inner">
-                <canvas ref={canvasRef} width={400} height={128} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[9px] font-bold uppercase tracking-widest">Ký tại đây</div>}
-            </div>
-        </div>
-    );
-};
+import { SignaturePad } from './SignaturePad';
 
 export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({ 
   inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment, workshops = [] 
@@ -195,15 +103,16 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
-      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-          const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(f);
-          });
-          return resizeImage(base64);
-      }));
-      setCommentAttachments(prev => [...prev, ...processed]);
+      
+      try {
+        const uploadedUrls = await Promise.all(Array.from(files).map(async (f: File) => {
+            return await uploadFileToStorage(f, `qms_comment_${Date.now()}.jpg`);
+        }));
+        setCommentAttachments(prev => [...prev, ...uploadedUrls]);
+      } catch (err) {
+        console.error("Upload failed:", err);
+        alert("Lỗi khi upload ảnh.");
+      }
       e.target.value = '';
   };
 

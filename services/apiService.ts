@@ -81,24 +81,7 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
         fileToUpload = file;
     }
 
-    // ISO-Compliant: Compress image if it's too large for Vercel (Limit 4.5MB)
-    // We target 1MB for safety and performance
-    if (fileToUpload.type.startsWith('image/') && fileToUpload.size > 1024 * 1024) {
-        console.log(`ISO-STORAGE: Compressing image from ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB...`);
-        try {
-            const options = {
-                maxSizeMB: 1,
-                maxWidthOrHeight: 1920,
-                useWebWorker: true
-            };
-            const compressedFile = await imageCompression(fileToUpload as File, options);
-            console.log(`ISO-STORAGE: Compressed to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-            fileToUpload = compressedFile;
-        } catch (error) {
-            console.warn("ISO-STORAGE: Compression failed, attempting original upload", error);
-        }
-    }
-    
+    // ISO-Compliant: Upload original file
     const formData = new FormData();
     formData.append('image', fileToUpload, fileName);
     

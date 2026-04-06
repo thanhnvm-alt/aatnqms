@@ -337,32 +337,6 @@ export async function runMigrations() {
     // 12. Other Core Tables
     try {
       await query(`
-        CREATE TABLE IF NOT EXISTS "${schema}"."material" (
-            "id" TEXT PRIMARY KEY,
-            "material" TEXT,
-            "shortText" TEXT,
-            "orderUnit" TEXT,
-            "orderQuantity" NUMERIC,
-            "supplierName" TEXT,
-            "projectName" TEXT,
-            "purchaseDocument" TEXT,
-            "deliveryDate" TEXT,
-            "Ma_Tender" TEXT,
-            "Factory_Order" TEXT,
-            "createdAt" TEXT,
-            "updatedAt" TEXT,
-            "deleted_at" BIGINT
-        );
-      `);
-      migrationLogs.push(`✅ Ensured table material exists in ${schema}`);
-    } catch (e: any) {
-      console.warn(`⚠️ Could not create material:`, e.message);
-      migrationLogs.push(`⚠️ Could not create material: ${e.message}`);
-    }
-    await addColumn('material', 'deleted_at', 'BIGINT');
-
-    try {
-      await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."suppliers" (
             "id" TEXT PRIMARY KEY,
             "code" TEXT UNIQUE,
@@ -413,35 +387,6 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create projects: ${e.message}`);
     }
     await addColumn('projects', 'deleted_at', 'BIGINT');
-
-    try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS "${schema}"."ipo" (
-            "id" TEXT PRIMARY KEY,
-            "headcode" TEXT,
-            "ma_nha_may" TEXT,
-            "ma_ct" TEXT,
-            "ten_ct" TEXT,
-            "ten_hang_muc" TEXT,
-            "so_luong_ipo" NUMERIC,
-            "dvt" TEXT,
-            "drawing_url" TEXT,
-            "description" TEXT,
-            "materials_text" TEXT,
-            "samples_json" TEXT,
-            "simulations_json" TEXT,
-            "created_at" BIGINT,
-            "Ma_Tender" TEXT,
-            "Project_name" TEXT,
-            "deleted_at" BIGINT
-        );
-      `);
-      migrationLogs.push(`✅ Ensured table ipo exists in ${schema}`);
-    } catch (e: any) {
-      console.warn(`⚠️ Could not create ipo:`, e.message);
-      migrationLogs.push(`⚠️ Could not create ipo: ${e.message}`);
-    }
-    await addColumn('ipo', 'deleted_at', 'BIGINT');
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
     try {

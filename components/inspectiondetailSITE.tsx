@@ -22,34 +22,7 @@ interface InspectionDetailProps {
   onPostComment?: (id: string, comment: NCRComment) => Promise<void>;
 }
 
-const SignaturePad = ({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (base64: string) => void; readOnly?: boolean; }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas && value) {
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            img.onload = () => { 
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); 
-            };
-            img.src = value;
-        }
-    }, [value]);
-    const startDrawing = (e: any) => { if (readOnly) return; const canvas = canvasRef.current; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.beginPath(); ctx.moveTo(clientX - rect.left, clientY - rect.top); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000000'; setIsDrawing(true); };
-    const draw = (e: any) => { if (!isDrawing || readOnly) return; const canvas = canvasRef.current; if (canvas) { const ctx = canvas.getContext('2d'); if (!ctx) return; const rect = canvas.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; ctx.lineTo(clientX - rect.left, clientY - rect.top); ctx.stroke(); } };
-    const stopDrawing = () => { if (readOnly) return; setIsDrawing(false); if (canvasRef.current) onChange(canvasRef.current.toDataURL()); };
-    return (
-        <div className="flex flex-col gap-1.5">
-            <label className="block text-slate-700 font-bold text-[9px] uppercase tracking-wide">{label}</label>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-32 shadow-inner">
-                <canvas ref={canvasRef} width={400} height={128} className={`w-full h-full ${readOnly ? 'cursor-default' : 'cursor-crosshair touch-none'}`} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} />
-                {!value && !readOnly && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 text-[9px] font-bold uppercase tracking-widest italic">Ký tại đây</div>}
-            </div>
-        </div>
-    );
-};
+import { SignaturePad } from './SignaturePad';
 
 export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [showManagerModal, setShowManagerModal] = useState(false);

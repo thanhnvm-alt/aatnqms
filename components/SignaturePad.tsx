@@ -97,15 +97,19 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
                     body: formData
                 });
                 
+                console.log("Upload response status:", response.status);
+                
                 if (response.ok) {
                     const data = await response.json();
+                    console.log("Upload response data:", data);
                     onChange(data.url); // Return the URL from storage
                 } else {
-                    console.error("Signature upload failed");
+                    const errorText = await response.text();
+                    console.error("Signature upload failed. Status:", response.status, "Error:", errorText);
                     onChange(base64); // Fallback to base64 if upload fails (though not ideal)
                 }
             } catch (err) {
-                console.error("Error uploading signature:", err);
+                console.error("Error uploading signature (catch block):", err);
                 onChange(base64);
             }
         }
