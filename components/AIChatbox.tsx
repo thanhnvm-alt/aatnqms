@@ -182,13 +182,20 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
       }]);
     } catch (error: any) {
       console.error("AI Chat Error:", error);
-      let errorMsg = "Lỗi kết nối AI. Vui lòng thử lại sau.";
       
-      const errorStr = JSON.stringify(error);
-      if (errorStr.includes("token count exceeds") || errorStr.includes("400")) {
-          errorMsg = "Dữ liệu tra soát quá lớn. Vui lòng hỏi cụ thể hơn về một mã dự án hoặc mã nhà máy duy nhất.";
-      } else if (errorStr.includes("toUpperCase")) {
-          errorMsg = "Lỗi định dạng dữ liệu (String Error). Vui lòng báo cáo kỹ thuật.";
+      // Extract a meaningful error message
+      let errorMsg = "Lỗi kết nối AI: ";
+      if (error instanceof Error) {
+        errorMsg += error.message;
+      } else {
+        errorMsg += String(error);
+      }
+      
+      // Add context for common issues
+      if (errorMsg.includes("API_KEY")) {
+        errorMsg = "Lỗi cấu hình: API Key không hợp lệ hoặc bị thiếu.";
+      } else if (errorMsg.includes("Failed to fetch")) {
+        errorMsg = "Lỗi mạng: Không thể kết nối tới dịch vụ AI.";
       }
       
       setMessages(prev => [...prev, { 
