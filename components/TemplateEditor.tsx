@@ -3,18 +3,20 @@ import * as XLSX from 'xlsx';
 import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
 import { Button } from './Button';
 import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil, LayoutGrid, FileUp, FileDown } from 'lucide-react';
-import { ALL_MODULES } from '../constants';
+import { ALL_MODULES, SITE_TEMPLATES } from '../constants';
 import { fetchWorkshops, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 
 interface TemplateEditorProps {
   currentTemplate: CheckItem[];
-  onSave: (newTemplate: CheckItem[]) => void;
+  onSave: (newTemplate: CheckItem[], subModuleId?: string) => void;
   onCancel: () => void;
   moduleId?: string;
+  allTemplates?: Record<string, CheckItem[]>;
 }
 
-export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate, onSave, onCancel, moduleId }) => {
+export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate, onSave, onCancel, moduleId, allTemplates }) => {
   const [items, setItems] = useState<CheckItem[]>(JSON.parse(JSON.stringify(currentTemplate)));
+  const [selectedSiteGroup, setSelectedSiteGroup] = useState<string>('BAN');
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   const [openDefectSelector, setOpenDefectSelector] = useState<string | null>(null); 
@@ -287,7 +289,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
              </button>
              <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
              <Button variant="ghost" size="sm" onClick={onCancel} className="hidden md:flex">Hủy</Button>
-             <Button onClick={() => onSave(items)} icon={<Save className="w-4 h-4"/>} size="sm">Lưu</Button>
+             <Button onClick={() => onSave(items, moduleId === 'SITE' ? `SITE_${selectedSiteGroup}` : undefined)} icon={<Save className="w-4 h-4"/>} size="sm">Lưu</Button>
          </div>
       </div>
 
@@ -405,7 +407,86 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
           </div>
         )}
 
-        {!isPQC && !isIQC && (
+        {moduleId === 'SITE' && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 items-start">
+              <Package className="w-5 h-5 text-blue-500 mt-1" />
+              <div className="text-xs text-blue-900">
+                <p className="font-black uppercase tracking-tight mb-1">Cấu hình Checklist Site - Công trình</p>
+                <p>Chọn nhóm sản phẩm để cấu hình checklist riêng biệt. Mỗi nhóm sẽ có một bảng tiêu chí riêng.</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center gap-4">
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                  <LayoutGrid className="w-3 h-3 text-blue-500" /> Chọn nhóm sản phẩm cần cấu hình
+                </label>
+                <div className="relative">
+                  <select 
+                    value={selectedSiteGroup} 
+                    onChange={e => {
+                      const group = e.target.value;
+                      setSelectedSiteGroup(group);
+                      // Load template for this group
+                      const subModuleId = `SITE_${group}`;
+                      const templateItems = allTemplates?.[subModuleId] || (SITE_TEMPLATES as any)[group] || [];
+                      setItems(JSON.parse(JSON.stringify(templateItems)));
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 text-sm uppercase outline-none focus:ring-4 focus:ring-blue-100 appearance-none transition-all cursor-pointer shadow-sm"
+                  >
+                    <option value="BAN">Bàn</option>
+                    <option value="GHE">Ghế</option>
+                    <option value="TU">Tủ</option>
+                    <option value="GIUONG">Giường</option>
+                    <option value="GUONG">Khung gương</option>
+                    <option value="TU_AO">Tủ áo & Tủ liền tường</option>
+                    <option value="TRAN">Trần</option>
+                    <option value="TUONG">Tường, vách & đồ liền tường</option>
+                    <option value="SAN">Sàn</option>
+                    <option value="CUA">Cửa</option>
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-blue-500" /> Tiêu chí: {selectedSiteGroup}
+                  <span className="text-[10px] font-bold text-slate-400 px-2 py-0.5 bg-slate-100 rounded-full">{items.length}</span>
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {items.map((item) => (
+                  <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4 group transition-all hover:border-blue-300">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nhóm (Category)</label>
+                            <input type="text" value={item.category} onChange={(e) => handleChange(item.id, 'category', e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-blue-600 focus:bg-white outline-none transition-all" />
+                          </div>
+                          <div className="md:col-span-2 space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục kiểm tra *</label>
+                            <input type="text" value={item.label} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:bg-white outline-none transition-all" />
+                          </div>
+                        </div>
+                      </div>
+                      <button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50"><Trash2 className="w-4.5 h-4.5" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => handleAddItem()} className="w-full py-4 border-2 border-dashed border-blue-200 rounded-2xl text-blue-500 font-bold text-xs uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-2 group">
+                <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> Thêm tiêu chí vào {selectedSiteGroup}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!isPQC && !isIQC && moduleId !== 'SITE' && (
           <div className="space-y-3"><div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 mb-4 flex items-center gap-2"><Info className="w-4 h-4" /> Mẫu này được áp dụng cho {moduleLabel} mới.</div>{items.map((item) => (<div key={item.id} className="flex gap-2 items-start bg-white p-3 rounded-xl border border-slate-200 shadow-sm"><div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2"><input type="text" value={item.category} onChange={(e) => handleChange(item.id, 'category', e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-blue-600 outline-none bg-slate-50"/><input type="text" value={item.label} onChange={(e) => handleChange(item.id, 'label', e.target.value)} className="md:col-span-2 px-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-900 outline-none"/></div><button onClick={() => handleRemoveItem(item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button></div>))}<button onClick={() => handleAddItem()} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center font-bold text-xs uppercase tracking-widest"><Plus className="w-4 h-4 mr-2" /> Thêm hạng mục</button></div>
         )}
       </div>

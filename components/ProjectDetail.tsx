@@ -80,8 +80,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   
   const [projectSpecificPlans, setProjectSpecificPlans] = useState<IPOItem[]>([]);
   const [isPlansLoading, setIsPlansLoading] = useState(false);
+  const [selectedIpoId, setSelectedIpoId] = useState<string | null>(null);
 
   // Pagination states for UI
+  const [ipoLimit, setIpoLimit] = useState(10);
   const [inspectionsLimit, setInspectionsLimit] = useState(10);
   const [ncrLimit, setNcrLimit] = useState(10);
   const [layoutLimit, setLayoutLimit] = useState(10);
@@ -107,7 +109,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   useEffect(() => {
       loadFloorPlans();
+      loadProjectPlans();
   }, [project.ma_ct]);
+
+  const loadProjectPlans = async () => {
+      setIsPlansLoading(true);
+      try {
+          const data = await fetchPlansByProject(project.ma_ct);
+          setProjectSpecificPlans(data);
+      } catch (e) { console.error("Failed to load project plans", e); }
+      finally { setIsPlansLoading(false); }
+  };
 
   const loadFloorPlans = async () => {
       setIsLoadingPlans(true);
@@ -127,9 +139,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         if (!i) return false;
         const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
-        return matchesProject && matchesSearch;
+        const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId;
+        return matchesProject && matchesSearch && matchesIpo;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, project, searchInList]);
+  }, [inspections, project, searchInList, selectedIpoId]);
 
   const projectNcrs = useMemo(() => {
       return filteredInspections.filter(i => i.status === InspectionStatus.FLAGGED);
@@ -422,6 +435,42 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     {/* --- 4-COLUMN DATA REPOSITORY --- */}
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[600px]">
                         
+                        {/* 1. IPO COLUMN */}
+                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
+                            <div className="p-5 border-b border-slate-100 bg-blue-50/30 flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><ClipboardList className="w-4 h-4" /></div>
+                                    <span className="font-black text-[11px] uppercase tracking-wider text-blue-900">Danh sách IPO</span>
+                                </div>
+                                <span className="bg-white text-blue-600 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-black">{projectSpecificPlans.length}</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
+                                {isPlansLoading ? (
+                                    <div className="py-20 flex justify-center"><Loader2 className="w-6 h-6 text-blue-300 animate-spin" /></div>
+                                ) : projectSpecificPlans.length > 0 ? (
+                                    <>
+                                        {projectSpecificPlans.slice(0, ipoLimit).map((ipo, idx) => (
+                                            <div key={`${ipo.id}-${idx}`} onClick={() => setSelectedIpoId(prev => prev === ipo.ma_nha_may ? null : ipo.ma_nha_may)} className={`p-4 bg-white border ${selectedIpoId === ipo.ma_nha_may ? 'border-blue-500 shadow-md bg-blue-50/30' : 'border-slate-100'} rounded-2xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3`}>
+                                                <div className={`p-2 rounded-xl shrink-0 ${selectedIpoId === ipo.ma_nha_may ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}><ClipboardList className="w-4 h-4"/></div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{ipo.ten_hang_muc}</h4>
+                                                    <div className="flex justify-between items-center"><p className="text-[8px] font-bold text-slate-400 uppercase">{ipo.ma_nha_may}</p><span className="text-[10px] font-black text-slate-900">{ipo.so_luong_ipo} {ipo.dvt}</span></div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {projectSpecificPlans.length > ipoLimit && (
+                                            <button 
+                                                onClick={() => setIpoLimit(Infinity)}
+                                                className="w-full py-3 mt-2 bg-blue-50 text-blue-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-blue-100 hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({projectSpecificPlans.length})
+                                            </button>
+                                        )}
+                                    </>
+                                ) : <div className="py-20 text-center text-[9px] font-black text-slate-300 uppercase italic tracking-widest">Trống</div>}
+                            </div>
+                        </div>
+
                         {/* 2. INSPECTIONS COLUMN */}
                         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
                             <div className="p-5 border-b border-slate-100 bg-indigo-50/30 flex items-center justify-between shrink-0">
@@ -434,8 +483,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {filteredInspections.length > 0 ? (
                                     <>
-                                        {filteredInspections.slice(0, inspectionsLimit).map(ins => (
-                                            <div key={ins.id} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
+                                        {filteredInspections.slice(0, inspectionsLimit).map((ins, idx) => (
+                                            <div key={`${ins.id}-${idx}`} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
                                                 <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
                                                 <div className="flex-1 min-w-0">
                                                     <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{ins.ten_hang_muc}</h4>
@@ -468,8 +517,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {projectNcrs.length > 0 ? (
                                     <>
-                                        {projectNcrs.slice(0, ncrLimit).map(ncr => (
-                                            <div key={ncr.id} onClick={() => handleOpenFullDetail(ncr.id)} className="p-4 bg-white border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
+                                        {projectNcrs.slice(0, ncrLimit).map((ncr, idx) => (
+                                            <div key={`${ncr.id}-${idx}`} onClick={() => handleOpenFullDetail(ncr.id)} className="p-4 bg-white border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
                                                 <div className="flex justify-between items-center"><span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span><span className="text-[9px] font-mono font-bold text-slate-400">#{ncr.id.split('-').pop()}</span></div>
                                                 <h4 className="text-[11px] font-black text-slate-800 uppercase line-clamp-2 leading-tight italic">"{ncr.ten_hang_muc}"</h4>
                                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Reported by: {ncr.inspectorName}</p>
@@ -500,8 +549,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {filteredLayouts.length > 0 ? (
                                     <>
-                                        {filteredLayouts.slice(0, layoutLimit).map(fp => (
-                                            <div key={fp.id} onClick={() => handleSelectPlan(fp)} className="p-3 bg-white border border-slate-100 rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group flex items-center gap-4">
+                                        {filteredLayouts.slice(0, layoutLimit).map((fp, idx) => (
+                                            <div key={`${fp.id}-${idx}`} onClick={() => handleSelectPlan(fp)} className="p-3 bg-white border border-slate-100 rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group flex items-center gap-4">
                                                 <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm"><img src={fp.image_url} className="w-full h-full object-cover" alt=""/></div>
                                                 <div className="flex-1 min-w-0">
                                                     <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{fp.name}</h4>

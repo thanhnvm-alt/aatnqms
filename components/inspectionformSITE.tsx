@@ -11,6 +11,7 @@ import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 // Added missing QRScannerModal import
 import { QRScannerModal } from './QRScannerModal';
+import { SITE_TEMPLATES } from '../constants';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -70,6 +71,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<keyof typeof SITE_TEMPLATES>('BAN');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -168,7 +170,34 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
         
         {/* III. CHECKLIST LẮP ĐẶT */}
         <section className="space-y-3">
-            <h3 className="font-black text-slate-700 uppercase tracking-[0.2em] flex items-center gap-2 border-b border-slate-300 pb-2 px-1 text-xs"><LayoutList className="w-4 h-4 text-amber-700"/> III. TIÊU CHÍ THẨM ĐỊNH LẮP ĐẶT ({formData.items?.length || 0})</h3>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-300 pb-2 px-1">
+              <h3 className="font-black text-slate-700 uppercase tracking-[0.2em] flex items-center gap-2 text-xs"><LayoutList className="w-4 h-4 text-amber-700"/> III. TIÊU CHÍ THẨM ĐỊNH LẮP ĐẶT ({formData.items?.length || 0})</h3>
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nhóm sản phẩm:</label>
+                <select 
+                  value={selectedGroup}
+                  className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 outline-none focus:ring-1 ring-amber-500"
+                  onChange={(e) => {
+                    const group = e.target.value as keyof typeof SITE_TEMPLATES;
+                    setSelectedGroup(group);
+                    const subModuleId = `SITE_${group}`;
+                    const templateItems = templates?.[subModuleId] || SITE_TEMPLATES[group];
+                    setFormData(prev => ({ ...prev, items: JSON.parse(JSON.stringify(templateItems)) }));
+                  }}
+                >
+                  <option value="BAN">Bàn</option>
+                  <option value="GHE">Ghế</option>
+                  <option value="TU">Tủ</option>
+                  <option value="GIUONG">Giường</option>
+                  <option value="GUONG">Khung gương</option>
+                  <option value="TU_AO">Tủ áo & Tủ liền tường</option>
+                  <option value="TRAN">Trần</option>
+                  <option value="TUONG">Tường, vách & đồ liền tường</option>
+                  <option value="SAN">Sàn</option>
+                  <option value="CUA">Cửa</option>
+                </select>
+              </div>
+            </div>
             <div className="space-y-3">
                 {Array.isArray(formData.items) && formData.items.map((item, idx) => (
                     <div key={item.id} className={`bg-white rounded-2xl p-4 border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50/10' : 'border-slate-200'}`}>

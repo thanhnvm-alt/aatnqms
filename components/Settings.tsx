@@ -195,7 +195,7 @@ export const Settings: React.FC<SettingsProps> = ({
                 {activeTab === 'TEMPLATE' && isAdminOrManager && (
                     <div className="space-y-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'}`}>{m.label}</button>))}</div></div>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items) => onSaveTemplate(selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate}/></div>
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/></div>
                     </div>
                 )}
                 {activeTab === 'USERS' && isAdminOrManager && (
@@ -295,10 +295,10 @@ export const Settings: React.FC<SettingsProps> = ({
                                         <div>
                                             <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Quyền truy cập</label>
                                             <div className="flex flex-wrap gap-1.5 mt-1">
-                                                {(profileData.allowedModules || []).map(m => (
-                                                    <span key={m} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100 uppercase">{m}</span>
+                                                {(profileData?.allowedModules || []).map((m, mIdx) => (
+                                                    <span key={`${m}-${mIdx}`} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100 uppercase">{m}</span>
                                                 ))}
-                                                {(!profileData.allowedModules || profileData.allowedModules.length === 0) && (
+                                                {(!profileData?.allowedModules || profileData.allowedModules.length === 0) && (
                                                     <span className="text-xs italic text-slate-400">Không có modules</span>
                                                 )}
                                             </div>

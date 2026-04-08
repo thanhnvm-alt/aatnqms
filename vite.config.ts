@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
       target: 'es2020', // Explicit target for better iOS compatibility
       rollupOptions: {
-        external: ['pg'],
+        external: ['pg', 'bcrypt'],
       },
     },
     define: {

@@ -22,6 +22,8 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -32,14 +34,18 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   });
 
   useEffect(() => {
-    loadSuppliers();
-  }, []);
+    const delayDebounce = setTimeout(() => {
+        loadSuppliers(searchTerm, page);
+    }, 500);
+    return () => clearTimeout(delayDebounce);
+  }, [searchTerm, page]);
 
-  const loadSuppliers = async () => {
+  const loadSuppliers = async (search = '', currentPage = 1) => {
     setIsLoading(true);
     try {
-      const result = await fetchSuppliers();
+      const result = await fetchSuppliers(search, currentPage, 20);
       const data = result.items || [];
+      setTotal(result.total || 0);
       // Load stats for each supplier
       const dataWithStats = await Promise.all(data.map(async (s: Supplier) => {
         const stats = await fetchSupplierStats(s.name);
@@ -73,7 +79,7 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
     try {
       const result = await importSuppliersFile(file);
       alert(`Nhập thành công ${result.count} nhà cung cấp`);
-      loadSuppliers();
+      loadSuppliers(searchTerm, page);
     } catch (error) {
       console.error('Import failed:', error);
       alert('Lỗi khi nhập file Excel');
@@ -103,7 +109,7 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
     setIsSaving(true);
     try {
       await saveSupplier(formData as Supplier);
-      await loadSuppliers();
+      await loadSuppliers(searchTerm, page);
       setIsModalOpen(false);
     } catch (e) { alert("Lỗi khi lưu nhà cung cấp."); } finally { setIsSaving(false); }
   };
@@ -111,18 +117,9 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   const handleDelete = async (id: string) => {
     if (window.confirm("Xóa nhà cung cấp này?")) {
       await deleteSupplier(id);
-      await loadSuppliers();
+      await loadSuppliers(searchTerm, page);
     }
   };
-
-  const filtered = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    return suppliers.filter(s => 
-      s.name.toLowerCase().includes(term) || 
-      s.code.toLowerCase().includes(term) ||
-      (s.category && s.category.toLowerCase().includes(term))
-    );
-  }, [suppliers, searchTerm]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
@@ -175,54 +172,79 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
       <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">
         {isLoading ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" /><p className="font-black uppercase tracking-widest text-[9px]">Đang tải dữ liệu nhà cung cấp...</p></div>
-        ) : filtered.length === 0 ? (
+        ) : suppliers.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300"><Building2 className="w-16 h-16 opacity-10 mb-4" /><p className="font-black uppercase tracking-[0.2em] text-[10px]">Trống</p></div>
         ) : (
-          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map(s => (
-              <div key={s.id} onClick={() => onSelectSupplier(s)} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden relative">
-                <div className="p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm"><Building2 className="w-6 h-6" /></div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-[10px] font-mono font-bold text-slate-400">#{s.code}</span>
-                      <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border ${s.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{s.status}</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight line-clamp-1 group-hover:text-blue-600 transition-colors">{s.name}</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">{s.category || 'Vật tư tổng hợp'}</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 py-4 border-y border-slate-50">
-                    <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Pass Rate</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-black text-green-600">{Math.round(s.stats?.pass_rate || 0)}%</span>
+          <div className="flex flex-col gap-6">
+            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+              {suppliers.map(s => (
+                <div key={s.id} onClick={() => onSelectSupplier(s)} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col overflow-hidden relative">
+                  <div className="p-6 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm"><Building2 className="w-6 h-6" /></div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] font-mono font-bold text-slate-400">#{s.code}</span>
+                        <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border ${s.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{s.status}</span>
                       </div>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total POs</span>
-                      <span className="text-xl font-black text-slate-800">{s.stats?.total_pos || 0}</span>
+
+                    <div>
+                      <h3 className="text-base font-black text-slate-800 uppercase tracking-tight line-clamp-1 group-hover:text-blue-600 transition-colors">{s.name}</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">{s.category || 'Vật tư tổng hợp'}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 py-4 border-y border-slate-50">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Pass Rate</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xl font-black text-green-600">{Math.round(s.stats?.pass_rate || 0)}%</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total POs</span>
+                        <span className="text-xl font-black text-slate-800">{s.stats?.total_pos || 0}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-slate-500"><MapPin className="w-3.5 h-3.5" /><span className="text-[10px] font-medium truncate">{s.address || 'Chưa cập nhật địa chỉ'}</span></div>
+                      <div className="flex items-center gap-2 text-slate-500"><UserIcon className="w-3.5 h-3.5" /><span className="text-[10px] font-bold uppercase">{s.contact_person || '---'}</span></div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-slate-500"><MapPin className="w-3.5 h-3.5" /><span className="text-[10px] font-medium truncate">{s.address || 'Chưa cập nhật địa chỉ'}</span></div>
-                    <div className="flex items-center gap-2 text-slate-500"><UserIcon className="w-3.5 h-3.5" /><span className="text-[10px] font-bold uppercase">{s.contact_person || '---'}</span></div>
+                  <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <div className="flex gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); handleOpenModal(s); }} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:underline group-hover:translate-x-1 transition-all">Hồ sơ chi tiết <ChevronRight className="w-4 h-4" /></div>
                   </div>
                 </div>
-
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                  <div className="flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); handleOpenModal(s); }} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Edit3 className="w-4 h-4" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-blue-600 font-black text-[10px] uppercase tracking-widest hover:underline group-hover:translate-x-1 transition-all">Hồ sơ chi tiết <ChevronRight className="w-4 h-4" /></div>
+              ))}
+            </div>
+            
+            {total > 20 && (
+                <div className="flex justify-center items-center gap-4 py-6">
+                    <button 
+                        disabled={page <= 1}
+                        onClick={() => setPage(page - 1)}
+                        className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                    >
+                        Trang trước
+                    </button>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
+                        <span className="text-[8px] font-bold text-slate-300 uppercase">Tổng {total} nhà cung cấp</span>
+                    </div>
+                    <button 
+                        disabled={page * 20 >= total}
+                        onClick={() => setPage(page + 1)}
+                        className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                    >
+                        Trang sau
+                    </button>
                 </div>
-              </div>
-            ))}
+            )}
           </div>
         )}
       </div>

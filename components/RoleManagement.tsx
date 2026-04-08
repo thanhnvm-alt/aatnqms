@@ -240,8 +240,8 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredRoles.map(role => (
-          <div key={role.id} className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:shadow-xl transition-all group animate-in zoom-in duration-300">
+        {filteredRoles.map((role, idx) => (
+          <div key={role.id || `role-${idx}`} className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:shadow-xl transition-all group animate-in zoom-in duration-300">
             <div className="p-6 flex-1">
               <div className="flex justify-between items-start mb-4">
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
@@ -272,10 +272,10 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
                       <span className="text-blue-600">{role.permissions?.length || 0}</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto no-scrollbar scroll-smooth">
-                      {(role.permissions || []).map(p => {
+                      {(role.permissions || []).map((p, pIdx) => {
                         if (p.actions.length === 0) return null;
                         return (
-                          <div key={p.moduleId} className="px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-2 group/tag hover:bg-white hover:border-blue-200 transition-colors">
+                          <div key={`${p.moduleId}-${pIdx}`} className="px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-xl flex items-center gap-2 group/tag hover:bg-white hover:border-blue-200 transition-colors">
                             <span className="text-[9px] font-black text-slate-600 uppercase tracking-tighter">{p.moduleId}</span>
                             <div className="flex gap-0.5">
                                {p.actions.map((a, aIdx) => (
@@ -418,7 +418,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
                               {ACTIONS.map(action => {
                                 const isSet = checkStatus(module.id, action.key);
                                 return (
-                                  <td key={action.key} className="p-3 text-center">
+                                  <td key={`${module.id}-${action.key}`} className="p-3 text-center">
                                     <div className="flex items-center justify-center">
                                         <ToggleSwitch 
                                             enabled={isSet} 

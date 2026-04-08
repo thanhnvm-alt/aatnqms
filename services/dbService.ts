@@ -1,7 +1,10 @@
 
 import { query } from "../lib/db.js";
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import { NCR, Inspection, IPOItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, Material } from "../types.js";
+
+const SALT_ROUNDS = 10;
 
 // Use environment variable for schema if available, otherwise default to "appQAQC"
 // Note: In client-side, process.env.DB_SCHEMA might not be available unless prefixed with VITE_
@@ -462,13 +465,13 @@ export async function getSuppliersPaginated(search: string = '', page: number = 
     
     const args: any[] = [];
     if (search) {
-        sql += ` AND (m."supplierName" LIKE $1 OR s.code LIKE $1 OR s.category LIKE $1)`;
+        sql += ` AND (m."supplierName" ILIKE $1 OR m."purchaseDocument" ILIKE $1 OR s.code ILIKE $1 OR s.category ILIKE $1)`;
         args.push(`%${search}%`);
     }
     
     sql += ` GROUP BY m."supplierName"`;
     
-    const countSql = `SELECT COUNT(DISTINCT "supplierName") as total FROM ${SCHEMA}.material m LEFT JOIN ${SCHEMA}.suppliers s ON m."supplierName" = s.name WHERE m."supplierName" IS NOT NULL AND m."supplierName" != '' ${search ? 'AND (m."supplierName" LIKE $1 OR s.code LIKE $1 OR s.category LIKE $1)' : ''}`;
+    const countSql = `SELECT COUNT(DISTINCT m."supplierName") as total FROM ${SCHEMA}.material m LEFT JOIN ${SCHEMA}.suppliers s ON m."supplierName" = s.name WHERE m."supplierName" IS NOT NULL AND m."supplierName" != '' ${search ? 'AND (m."supplierName" ILIKE $1 OR m."purchaseDocument" ILIKE $1 OR s.code ILIKE $1 OR s.category ILIKE $1)' : ''}`;
     
     const [res, countRes] = await Promise.all([
         query(sql + ` ORDER BY name ASC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
@@ -753,13 +756,13 @@ export async function getProjectsPaginated(search: string = '', page: number = 1
     
     const args: any[] = [];
     if (search) {
-        sql += ` AND (i."Ma_Tender" LIKE $1 OR i."Project_name" LIKE $1)`;
+        sql += ` AND (i."Ma_Tender" ILIKE $1 OR i."Project_name" ILIKE $1)`;
         args.push(`%${search}%`);
     }
     
     sql += ` GROUP BY i."Ma_Tender"`;
     
-    const countSql = `SELECT COUNT(DISTINCT "Ma_Tender") as total FROM ${SCHEMA}.ipo WHERE "Ma_Tender" IS NOT NULL AND "Ma_Tender" != '' ${search ? 'AND ("Ma_Tender" LIKE $1 OR "Project_name" LIKE $1)' : ''}`;
+    const countSql = `SELECT COUNT(DISTINCT "Ma_Tender") as total FROM ${SCHEMA}.ipo WHERE "Ma_Tender" IS NOT NULL AND "Ma_Tender" != '' ${search ? 'AND ("Ma_Tender" ILIKE $1 OR "Project_name" ILIKE $1)' : ''}`;
     
     const [res, countRes] = await Promise.all([
         query(sql + ` ORDER BY updated_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
@@ -897,11 +900,18 @@ export async function saveUser(u: User) {
     const existing = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1`, [u.id]);
     const oldValue = existing.rows.length > 0 ? { ...existing.rows[0], ...safeJsonParse(existing.rows[0].data, {}) } : null;
     
+    let password = u.password || '123456';
+    // Only hash if it's not already a bcrypt hash (starts with $2b$)
+    if (!password.startsWith('$2b$')) {
+        password = await bcrypt.hash(password, SALT_ROUNDS);
+    }
+
     await query(`
         INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, email, position, work_location, status, join_date, education, notes, data, updated_at) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, EXTRACT(EPOCH FROM NOW())::BIGINT) 
         ON CONFLICT(id) DO UPDATE SET 
             username = EXCLUDED.username, 
+            password = EXCLUDED.password,
             name = EXCLUDED.name, 
             role = EXCLUDED.role, 
             avatar = EXCLUDED.avatar, 
@@ -915,7 +925,7 @@ export async function saveUser(u: User) {
             notes = EXCLUDED.notes,
             data = EXCLUDED.data, 
             updated_at = EXCLUDED.updated_at
-    `, sanitizeArgs([u.id, u.username, u.password || '123456', u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, u]));
+    `, sanitizeArgs([u.id, u.username, password, u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, u]));
 
     // Log Audit
     if (u.id) {

@@ -4,17 +4,11 @@ import imageCompression from 'browser-image-compression';
 
 // Helper to get auth headers from localStorage
 const getAuthHeaders = (): Record<string, string> => {
-    const userStr = localStorage.getItem('aatn_qms_user');
-    if (!userStr) return {};
-    try {
-        const user = JSON.parse(userStr);
-        return {
-            'x-user-id': String(user.id || user.username || ''),
-            'x-user-role': String(user.role || 'GUEST')
-        };
-    } catch (e) {
-        return {};
-    }
+    const token = localStorage.getItem('aatn_qms_token');
+    if (!token) return {};
+    return {
+        'Authorization': `Bearer ${token}`
+    };
 };
 
 const apiFetch = async (url: string, options: RequestInit = {}) => {
@@ -205,7 +199,7 @@ export const saveUser = async (user: User) => apiFetch('/api/users', {
 });
 export const deleteUser = async (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' });
 
-export const verifyUserCredentials = async (username: string, password: string): Promise<User | null> => {
+export const verifyUserCredentials = async (username: string, password: string): Promise<{ user: User, token: string } | null> => {
     return apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

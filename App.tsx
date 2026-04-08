@@ -13,7 +13,7 @@ import {
   STEP_CHECKLIST_TEMPLATE,
   FQC_CHECKLIST_TEMPLATE,
   SPR_CHECKLIST_TEMPLATE,
-  SITE_CHECKLIST_TEMPLATE,
+  SITE_TEMPLATES,
   ALL_MODULES
 } from './constants';
 import { Dashboard } from './components/Dashboard';
@@ -74,7 +74,6 @@ import {
   createNotification,
   fetchRoles
 } from './services/apiService';
-import { initDatabase } from './services/dbService';
 import { Loader2, X, FileText, ChevronRight, Bell } from 'lucide-react';
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
@@ -115,7 +114,18 @@ const App = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [templates, setTemplates] = useState<Record<string, CheckItem[]>>({
-      'SITE': SITE_CHECKLIST_TEMPLATE, 'PQC': PQC_CHECKLIST_TEMPLATE, 'IQC': IQC_CHECKLIST_TEMPLATE,
+      'SITE': SITE_TEMPLATES.BAN, 
+      'SITE_BAN': SITE_TEMPLATES.BAN,
+      'SITE_GHE': SITE_TEMPLATES.GHE,
+      'SITE_TU': SITE_TEMPLATES.TU,
+      'SITE_GIUONG': SITE_TEMPLATES.GIUONG,
+      'SITE_GUONG': SITE_TEMPLATES.GUONG,
+      'SITE_TU_AO': SITE_TEMPLATES.TU_AO,
+      'SITE_TRAN': SITE_TEMPLATES.TRAN,
+      'SITE_TUONG': SITE_TEMPLATES.TUONG,
+      'SITE_SAN': SITE_TEMPLATES.SAN,
+      'SITE_CUA': SITE_TEMPLATES.CUA,
+      'PQC': PQC_CHECKLIST_TEMPLATE, 'IQC': IQC_CHECKLIST_TEMPLATE,
       'SQC_MAT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_VT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_BTP': SQC_BTP_CHECKLIST_TEMPLATE, 
       'FSR': FSR_CHECKLIST_TEMPLATE, 'STEP': STEP_CHECKLIST_TEMPLATE, 'FQC': FQC_CHECKLIST_TEMPLATE, 'SPR': SPR_CHECKLIST_TEMPLATE
   });
@@ -132,6 +142,7 @@ const App = () => {
         try { 
             const parsedUser = JSON.parse(localData); 
             if (parsedUser?.role) {
+                console.log('User:', parsedUser);
                 setUser(parsedUser); 
                 setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
             }
@@ -139,7 +150,6 @@ const App = () => {
     }
     const startup = async () => {
         try {
-            await initDatabase(); 
             setIsDbReady(true);
             loadUsers();
             loadWorkshops();
@@ -191,7 +201,14 @@ const App = () => {
     setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
   };
   
-  const handleLogout = () => { setUser(null); setView('DASHBOARD'); localStorage.removeItem(AUTH_STORAGE_KEY); localStorage.removeItem('aatn_saved_username'); sessionStorage.removeItem(AUTH_STORAGE_KEY); };
+  const handleLogout = () => { 
+    setUser(null); 
+    setView('DASHBOARD'); 
+    localStorage.removeItem(AUTH_STORAGE_KEY); 
+    localStorage.removeItem('aatn_qms_token');
+    localStorage.removeItem('aatn_saved_username'); 
+    sessionStorage.removeItem(AUTH_STORAGE_KEY); 
+  };
 
   const notifyUsers = async (targetRoles: string[], title: string, message: string, link?: { view: ViewState, id: string }, excludeUserId?: string) => {
     const targets = users.filter(u => targetRoles.includes(u.role as string) && u.id !== excludeUserId);
@@ -461,8 +478,8 @@ const App = () => {
                     </header>
                     
                     <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50/30">
-                        {ALL_MODULES
-                            .filter(m => (m.group === 'QC' || m.group === 'QA') && (user.role === 'ADMIN' || user.allowedModules?.includes(m.id)))
+                        {(ALL_MODULES || [])
+                            .filter(m => (m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.role === 'ADMIN' || user.allowedModules?.includes(m.id)))
                             .map(mod => (
                                 <button 
                                     key={mod.id} 

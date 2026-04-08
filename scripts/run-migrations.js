@@ -266,3 +266,12 @@ async function addColumnIfNotExists(client, schema, table, column, type) {
     console.warn(`⚠️ Could not add column ${column} to ${schema}.${table} (it might already exist):`, err.message);
   }
 }
+
+// Run migrations if this script is executed directly
+import { fileURLToPath } from 'url';
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  runMigrations().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}

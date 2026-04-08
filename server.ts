@@ -12,9 +12,11 @@ import * as XLSX from 'xlsx';
 import { v2 as cloudinary } from 'cloudinary';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
-
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
+const JWT_SECRET = process.env.JWT_SECRET || 'aatn_qms_secret_key_2026';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configure Google Drive
@@ -96,12 +98,21 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// RBAC Middleware (Placeholder - should be replaced with JWT verification)
+// RBAC Middleware (JWT Verification)
 const authenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const userId = req.headers['x-user-id'] as string || 'SYSTEM';
-  const userRole = req.headers['x-user-role'] as string || 'GUEST';
-  (req as any).user = { id: userId, role: userRole };
-  next();
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    (req as any).user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
 };
 
 const schema = process.env.DB_SCHEMA || 'appQAQC';
@@ -114,7 +125,7 @@ app.get("/api/health", (req, res) => {
 // API routes
   app.get("/api/ipo", async (req, res) => {
     try {
-      const schema = process.env.DB_SCHEMA || 'appqaqc';
+      const schema = process.env.DB_SCHEMA || 'appQAQC';
       const { factoryOrder, maTender, page = 1, limit = 50 } = req.query;
       const p = parseInt(page as string, 10);
       const l = parseInt(limit as string, 10);
@@ -156,12 +167,33 @@ app.get("/api/health", (req, res) => {
     try {
       const { username, password } = req.body;
       const user = await db.getUserByUsername(username);
-      if (user && user.password === password) {
-        res.json(user);
+      
+      let isMatch = false;
+      if (user && user.password) {
+        if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
+          isMatch = await bcrypt.compare(password, user.password);
+        } else {
+          // Fallback for plain text passwords in DB
+          isMatch = password === user.password;
+        }
+      }
+
+      if (isMatch) {
+        // Create JWT
+        const token = jwt.sign(
+          { id: user.id, username: user.username, role: user.role, name: user.name },
+          JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+        
+        // Don't send password back
+        const { password: _, ...userWithoutPassword } = user;
+        res.json({ user: userWithoutPassword, token });
       } else {
         res.status(401).json({ error: 'Invalid credentials' });
       }
     } catch (error) {
+      console.error('Login error:', error);
       res.status(500).json({ error: 'Authentication failed' });
     }
   });
@@ -783,20 +815,9 @@ app.get("/api/health", (req, res) => {
         const fileId = driveResponse.data.id;
         console.log("File uploaded to Drive. ID:", fileId);
         
-        // Make file publicly readable
-        try {
-          await drive.permissions.create({
-            fileId: fileId,
-            requestBody: {
-              role: 'reader',
-              type: 'anyone',
-            },
-            supportsAllDrives: true,
-          });
-        } catch (permErr) {
-          console.warn("Could not set public permissions on Drive file:", permErr);
-        }
-
+        // REMOVED: Public permission for security (NC-04)
+        // Only authorized users via server proxy should access these files
+        
         // Google Drive direct link format
         fileUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
         filename = fileId;
@@ -1147,93 +1168,12 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   next(err);
 });
 
-// Run migrations before starting the server
-(async () => {
-  try {
-    await runMigrations();
-    
-    // Diagnostic logic to verify schema
-    const schema = process.env.DB_SCHEMA || 'appQAQC';
-    const tables = [
-      'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 
-      'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo',
-      'defect_library', 'floor_plans', 'layout_pins', 'workshops', 'templates', 'roles', 'audit_logs', 'status_history'
-    ];
-    const results: any = {};
-    
-    let dbContext = {};
-    try {
-      const [schemaRes, userRes, dbRes] = await Promise.all([
-        query('SELECT current_schema()'),
-        query('SELECT current_user'),
-        query('SELECT current_database()')
-      ]);
-      dbContext = {
-        current_schema: schemaRes.rows[0].current_schema,
-        current_user: userRes.rows[0].current_user,
-        current_database: dbRes.rows[0].current_database
-      };
-    } catch (e: any) {
-      dbContext = { error: e.message };
-    }
-
-    const tablesForCheck = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
-    let unionTest = {};
-    try {
-      const SCHEMA_QUOTED = `"${schema}"`;
-      const tableQueries = tablesForCheck.map(table => {
-        return `SELECT id::text, '${table}'::text as table_name FROM ${SCHEMA_QUOTED}."${table}" WHERE "deleted_at" IS NULL`;
-      });
-      const unionQuery = `(${tableQueries.join(') UNION ALL (')}) LIMIT 1`;
-      const res = await query(unionQuery);
-      unionTest = { success: true, rowCount: res.rowCount };
-      
-      // Trigger dbService.getInspectionsList
-      try {
-        await db.getInspectionsList();
-      } catch (e) {}
-    } catch (e: any) {
-      unionTest = { success: false, error: e.message };
-      
-      // If union fails, test each table individually to find the culprit
-      const individualTests: any = {};
-      const SCHEMA_QUOTED = `"${schema}"`;
-      for (const table of tablesForCheck) {
-        try {
-          await query(`SELECT "deleted_at" FROM ${SCHEMA_QUOTED}."${table}" LIMIT 1`);
-          individualTests[table] = "OK";
-        } catch (err: any) {
-          individualTests[table] = err.message;
-        }
-      }
-      unionTest = { ...unionTest, individualTests };
-    }
-
-    for (const table of tables) {
-      try {
-        const colCheck = await query(`
-          SELECT column_name, data_type 
-          FROM information_schema.columns 
-          WHERE LOWER(table_schema) = LOWER($1) AND LOWER(table_name) = LOWER($2)
-        `, [schema, table]);
-        results[table] = {
-          exists: colCheck.rowCount > 0,
-          columns: colCheck.rows.map((r: any) => `${r.column_name} (${r.data_type})`),
-          has_deleted_at: colCheck.rows.some((r: any) => r.column_name === 'deleted_at')
-        };
-      } catch (e: any) {
-        results[table] = { error: e.message };
-      }
-    }
-    fs.writeFileSync(path.join(__dirname, 'diag_db.json'), JSON.stringify({ schema, dbContext, unionTest, timestamp: new Date().toISOString(), tables: results }, null, 2));
-    console.log("✅ Diagnostic info written to diag_db.json");
-  } catch (err: any) {
-    console.error("❌ Failed to run migrations or diagnostics:", err.message);
-    try {
-      fs.writeFileSync(path.join(__dirname, 'diag_error.json'), JSON.stringify({ error: err.message, stack: err.stack, timestamp: new Date().toISOString() }, null, 2));
-    } catch (e) {}
-  }
-})();
+// Run migrations before starting the server (disabled, run manually via script)
+// (async () => {
+//   try {
+//     await runMigrations();
+// ...
+// })();
 
 // Diagnostic endpoint for database schema
 app.get('/api/diag/db', async (req, res) => {
@@ -1286,10 +1226,6 @@ if (process.env.NODE_ENV !== "production") {
       console.warn("Vite dev server failed to load (expected in production):", e);
     }
   })();
-  
-  app.listen(3000, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:3000`);
-  });
 } else {
   const distPath = path.join(__dirname, 'dist');
   app.use(express.static(distPath));
@@ -1297,6 +1233,11 @@ if (process.env.NODE_ENV !== "production") {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
+
+const PORT = 3000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
 
 export default app;
 

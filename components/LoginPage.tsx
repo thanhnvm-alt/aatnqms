@@ -35,24 +35,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbR
 
     try {
         // ISO-DB: Kiểm tra trực tiếp với Database cho tính bảo mật và cập nhật mới nhất
-        const foundUser = await verifyUserCredentials(username, password);
+        const loginData = await verifyUserCredentials(username, password);
         
-        if (foundUser) {
+        if (loginData && loginData.user) {
             if (rememberMe) {
                 localStorage.setItem('aatn_saved_username', username);
             } else {
                 localStorage.removeItem('aatn_saved_username');
             }
 
-            onLoginSuccess(foundUser, rememberMe);
-        } else {
-            // Fallback sang mock data nếu DB chưa được seed nhưng thông tin khớp (cho dev)
-            const mockUser = users.find(u => u.username === username && u.password === password);
-            if (mockUser) {
-                onLoginSuccess(mockUser, rememberMe);
-            } else {
-                setError('Tên đăng nhập hoặc mật khẩu không đúng');
+            // Save token to localStorage for apiService to use
+            if (loginData.token) {
+                localStorage.setItem('aatn_qms_token', loginData.token);
             }
+
+            onLoginSuccess(loginData.user, rememberMe);
+        } else {
+            setError('Tên đăng nhập hoặc mật khẩu không đúng');
         }
     } catch (err: any) {
         console.error("Login attempt failed", err);
