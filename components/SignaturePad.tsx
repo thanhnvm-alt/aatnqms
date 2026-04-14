@@ -35,7 +35,11 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
                 ctx?.clearRect(0, 0, canvas.width, canvas.height);
                 ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
             };
-            img.src = value;
+            if (value.startsWith('http')) {
+                img.src = `/api/proxy-image?url=${encodeURIComponent(value)}`;
+            } else {
+                img.src = value;
+            }
             setIsEmpty(false);
         } else if (canvas && !value) {
             const ctx = canvas.getContext('2d');
@@ -85,32 +89,22 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
         const canvas = canvasRef.current;
         if (canvas) {
             const base64 = canvas.toDataURL('image/png');
+            onChange(base64); // Update immediately to prevent empty signature on quick save
             
-            // Upload to server instead of returning base64
+            // Upload to server in background
             try {
                 const blob = await (await fetch(base64)).blob();
-                const formData = new FormData();
-                formData.append('image', blob, `signature_${Date.now()}.png`);
+                const file = new File([blob], `signature_${Date.now()}.png`, { type: 'image/png' });
                 
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
+                // Use the standardized upload function
+                const { uploadFileToStorage } = await import('../services/apiService');
+                const url = await uploadFileToStorage(file, `signature_${Date.now()}.png`);
                 
-                console.log("Upload response status:", response.status);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log("Upload response data:", data);
-                    onChange(data.url); // Return the URL from storage
-                } else {
-                    const errorText = await response.text();
-                    console.error("Signature upload failed. Status:", response.status, "Error:", errorText);
-                    onChange(base64); // Fallback to base64 if upload fails (though not ideal)
-                }
+                console.log("Signature uploaded successfully:", url);
+                onChange(url); // Update with URL when done
             } catch (err) {
                 console.error("Error uploading signature (catch block):", err);
-                onChange(base64);
+                // Already fell back to base64
             }
         }
     };

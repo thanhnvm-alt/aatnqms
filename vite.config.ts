@@ -24,6 +24,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    server: {
+      hmr: false,
+    },
     // Override resolve to remove the alias causing the build issue
     resolve: {
       alias: {}

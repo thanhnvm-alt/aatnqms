@@ -87,7 +87,11 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                                 onClick={() => onSelectPlan(plan)}
                                 className="aspect-[16/10] sm:aspect-[4/3] bg-slate-100 relative cursor-pointer overflow-hidden border-b border-slate-50"
                             >
-                                <img src={plan.image_url} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" />
+                                <img 
+                                    src={plan.image_url} 
+                                    className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" 
+                                    alt={plan.name}
+                                />
                                 <div className="absolute top-3 left-3 md:top-4 md:left-4">
                                     <span className={`px-2 md:px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-lg text-[8px] font-black uppercase tracking-widest border border-blue-100 shadow-sm ${plan.status === 'ACTIVE' ? 'text-blue-600' : 'text-slate-400'}`}>
                                         V{plan.version} • {plan.status}

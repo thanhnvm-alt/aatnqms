@@ -134,26 +134,39 @@ export async function saveInspection(inspection: Inspection) {
       INSERT INTO ${SCHEMA}.forms_pqc (
         id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, 
         inspector, status, data, updated_at, items_json, images_json, headcode, date, score, summary, type, 
-        production_comment, floor_plan_id, coord_x, coord_y, responsible_person
+        production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
+        signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
         updated_at = EXCLUDED.updated_at, 
         score = EXCLUDED.score, 
+        items_json = EXCLUDED.items_json,
+        images_json = EXCLUDED.images_json,
+        summary = EXCLUDED.summary,
+        data = EXCLUDED.data,
         floor_plan_id = EXCLUDED.floor_plan_id, 
         coord_x = EXCLUDED.coord_x, 
         coord_y = EXCLUDED.coord_y, 
-        responsible_person = EXCLUDED.responsible_person
+        responsible_person = EXCLUDED.responsible_person,
+        signature_qc = EXCLUDED.signature_qc,
+        signature_manager = EXCLUDED.signature_manager,
+        name_manager = EXCLUDED.name_manager,
+        signature_production = EXCLUDED.signature_production,
+        name_production = EXCLUDED.name_production,
+        comment_production = EXCLUDED.comment_production
     `, sanitizeArgs([
         inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
         inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
         inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
-        inspection.inspectorName, inspection.status, inspection, new Date().toISOString(),
+        inspection.inspectorName, inspection.status, inspection, Date.now(),
         inspection.items, inspection.images, inspection.headcode, inspection.date, inspection.score, 
         inspection.summary, inspection.type, inspection.productionComment,
         inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
-        inspection.responsiblePerson
+        inspection.responsiblePerson,
+        inspection.signature, inspection.managerSignature, inspection.managerName,
+        inspection.productionSignature, inspection.productionName, inspection.productionComment
       ]));
   } else {
     // ISO Standard mapping cho các module: SITE, IQC, SQC, FQC...
@@ -180,6 +193,9 @@ export async function saveInspection(inspection: Inspection) {
         signature_qc = EXCLUDED.signature_qc,
         signature_manager = EXCLUDED.signature_manager,
         name_manager = EXCLUDED.name_manager,
+        signature_production = EXCLUDED.signature_production,
+        name_production = EXCLUDED.name_production,
+        comment_production = EXCLUDED.comment_production,
         location = EXCLUDED.location,
         comments_json = EXCLUDED.comments_json,
         responsible_person = EXCLUDED.responsible_person
@@ -191,7 +207,7 @@ export async function saveInspection(inspection: Inspection) {
         inspection.productionSignature, inspection.productionName, inspection.productionComment,
         inspection.images, inspection.deliveryNoteImages, inspection.reportImages, inspection.comments,
         inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
-        inspection.dvt, new Date().toISOString(), 
+        inspection.dvt, Date.now(), 
         inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
         inspection.location, inspection.supplierAddress, inspection.supportingDocs,
         inspection.responsiblePerson

@@ -98,6 +98,14 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Request logging for debugging
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/_vite') && !req.url.startsWith('/@')) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  }
+  next();
+});
+
 // RBAC Middleware (JWT Verification)
 const authenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -116,6 +124,9 @@ const authenticate = (req: express.Request, res: express.Response, next: express
 };
 
 const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+// Serve uploads directory statically if not using cloud storage
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Health check route
 app.get("/api/health", (req, res) => {
@@ -164,6 +175,7 @@ app.get("/api/health", (req, res) => {
 
   // --- AUTH ---
   app.post("/api/auth/login", async (req, res) => {
+    console.log("Login attempt for username:", req.body?.username);
     try {
       const { username, password } = req.body;
       const user = await db.getUserByUsername(username);
@@ -178,7 +190,7 @@ app.get("/api/health", (req, res) => {
         }
       }
 
-      if (isMatch) {
+      if (user && isMatch) {
         // Create JWT
         const token = jwt.sign(
           { id: user.id, username: user.username, role: user.role, name: user.name },
@@ -756,6 +768,45 @@ app.get("/api/health", (req, res) => {
     }
   });
 
+  // Image Proxy API
+  app.get("/api/proxy-image", async (req, res) => {
+    try {
+      const imageUrl = req.query.url as string;
+      if (!imageUrl) return res.status(400).send('Missing url');
+      
+      if (imageUrl.includes('lh3.googleusercontent.com/u/0/d/')) {
+          // Extract fileId
+          const fileId = imageUrl.split('/d/')[1];
+          if (!fileId) throw new Error('Invalid Google Drive URL');
+          
+          if (!drive) throw new Error('Google Drive not configured');
+
+          const response = await drive.files.get({
+              fileId: fileId,
+              alt: 'media'
+          }, { responseType: 'stream' });
+          
+          res.set('Content-Type', 'image/jpeg');
+          res.set('Access-Control-Allow-Origin', '*');
+          res.set('Cache-Control', 'public, max-age=31536000');
+          response.data.pipe(res);
+          return;
+      }
+
+      const response = await fetch(imageUrl);
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+      
+      const buffer = await response.arrayBuffer();
+      res.set('Content-Type', response.headers.get('content-type') || 'image/jpeg');
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Cache-Control', 'public, max-age=31536000');
+      res.send(Buffer.from(buffer));
+    } catch (error) {
+      console.error('Proxy error:', error);
+      res.status(500).send('Error proxying image');
+    }
+  });
+
   // Image Upload API
   app.post("/api/upload", (req, res, next) => {
     console.log("--- API UPLOAD REQUEST START ---");
@@ -1211,6 +1262,17 @@ app.get('/api/diag/db', async (req, res) => {
   }
 });
 
+// API Catch-all for debugging
+app.all("/api/*all", (req, res) => {
+  console.warn(`API Route not found: ${req.method} ${req.url}`);
+  res.status(404).json({ 
+    error: "API Route not found", 
+    method: req.method, 
+    url: req.url,
+    hint: "Check if the route is defined in server.ts and if the request path is correct."
+  });
+});
+
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
   (async () => {
@@ -1218,7 +1280,10 @@ if (process.env.NODE_ENV !== "production") {
       const vitePkg = "vite";
       const { createServer: createViteServer } = await import(vitePkg);
       const vite = await createViteServer({
-        server: { middlewareMode: true },
+        server: { 
+          middlewareMode: true,
+          hmr: false
+        },
         appType: "spa",
       });
       app.use(vite.middlewares);
@@ -1228,10 +1293,33 @@ if (process.env.NODE_ENV !== "production") {
   })();
 } else {
   const distPath = path.join(__dirname, 'dist');
-  app.use(express.static(distPath));
-  app.get('*all', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
+  
+  if (!fs.existsSync(distPath)) {
+    console.error("CRITICAL ERROR: 'dist' directory not found!");
+    console.error("Please run 'npm run build' before starting the server in production mode.");
+    
+    app.get("*all", (req, res) => {
+      if (req.url.startsWith('/api/')) return;
+      res.status(500).send(`
+        <div style="font-family: sans-serif; padding: 40px; text-align: center;">
+          <h1 style="color: #e11d48;">Production Build Missing</h1>
+          <p>The <code>dist</code> directory was not found on the server.</p>
+          <p>Please run <code>npm run build</code> to generate the frontend assets before starting the server.</p>
+          <hr style="margin: 20px auto; width: 100px; border: 0; border-top: 1px solid #e2e8f0;">
+          <p style="color: #64748b; font-size: 0.875rem;">Domain: ${req.hostname}</p>
+        </div>
+      `);
+    });
+  } else {
+    console.log("Serving static files from:", distPath);
+    app.use(express.static(distPath));
+    
+    // Standard SPA fallback for Express 5
+    app.get("*all", (req, res) => {
+      if (req.url.startsWith('/api/')) return; // Should have been caught by API catch-all
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
 }
 
 const PORT = 3000;

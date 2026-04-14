@@ -20,6 +20,7 @@
     "bcrypt": "^6.0.0",
     "browser-image-compression": "^2.0.2",
     "cloudinary": "^2.9.0",
+    "dotenv": "^17.4.1",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "firebase": "^10.13.1",

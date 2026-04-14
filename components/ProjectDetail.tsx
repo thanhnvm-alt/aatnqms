@@ -46,25 +46,6 @@ const DETAIL_MAP: Record<string, any> = {
 
 const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#94a3b8'];
 
-const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
-      else resolve(base64Str);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ 
     project: initialProject, 
     inspections, 
@@ -220,15 +201,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       } catch (error) { alert("Lỗi khi lưu thông tin dự án."); } finally { setIsSaving(false); }
   };
 
-  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-          const resized = await resizeImage(reader.result as string);
-          setEditForm(prev => ({ ...prev, thumbnail: resized }));
-      };
-      reader.readAsDataURL(file);
+      try {
+          const { uploadFileToStorage } = await import('../services/apiService');
+          const url = await uploadFileToStorage(file, `project_thumb_${Date.now()}_${file.name}`);
+          setEditForm(prev => ({ ...prev, thumbnail: url }));
+      } catch (err) {
+          alert("Lỗi tải ảnh lên.");
+      }
   };
 
   const handleGetLocation = () => {
@@ -404,7 +386,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </div>
                             <div className="flex-1 flex flex-col items-center justify-center w-full">
                                 <div className="relative w-36 h-36">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                         <PieChart>
                                             <Pie data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1}]} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value" stroke="none">
                                                 {pieData.length > 0 ? pieData.map((entry, index) => (

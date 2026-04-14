@@ -4,7 +4,7 @@ import {
   X, ChevronLeft, ChevronRight, PenTool, Undo2, 
   Check, ZoomIn, ZoomOut, Download, Loader2, 
   Move, AlertCircle, Maximize2, RotateCw, 
-  RotateCcw, Sliders, Trash2
+  RotateCcw, Sliders, Trash2, Type
 } from 'lucide-react';
 
 interface ImageEditorModalProps {
@@ -24,16 +24,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isEditing, setIsEditing] = useState(false);
+  const [mode, setMode] = useState<'draw' | 'text'>('draw');
   
-  // View Mode State
   const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const startPan = useRef({ x: 0, y: 0 });
-
+  
   // Edit Mode State
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#ef4444'); 
   const [brushSize, setBrushSize] = useState(5);
@@ -50,7 +50,21 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
     if (isEditing) {
         if (isLoadingImage || loadError) return;
-        startDrawing(e);
+        
+        // If zooming/panning is enabled in edit mode, handle it here
+        if (zoom > 1) {
+            setIsPanning(true);
+            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+            startPan.current = { x: clientX - pan.x, y: clientY - pan.y };
+            return;
+        }
+
+        if (mode === 'text') {
+            handleTextClick(e);
+        } else {
+            startDrawing(e);
+        }
     } else if (zoom > 1) {
         setIsPanning(true);
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
@@ -62,6 +76,18 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (isEditing) {
         if (isLoadingImage || loadError) return;
+
+        if (isPanning && zoom > 1) {
+            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+            setPan({
+                x: clientX - startPan.current.x,
+                y: clientY - startPan.current.y
+            });
+            return;
+        }
+
+        if (mode === 'text') return;
         draw(e);
     } else if (isPanning && zoom > 1) {
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
@@ -75,17 +101,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   const handlePointerUp = () => {
     if (isEditing) {
-        stopDrawing();
+        if (isPanning) setIsPanning(false);
+        else if (mode === 'draw') stopDrawing();
     } else {
         setIsPanning(false);
     }
   };
-
-  const handleRotate = (dir: 'cw' | 'ccw') => {
-      setRotation(prev => prev + (dir === 'cw' ? 90 : -90));
-  };
-
-  // --- EDIT MODE LOGIC ---
 
   const initCanvas = useCallback(() => {
     if (isEditing && canvasRef.current) {
@@ -106,20 +127,15 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       
       img.onload = () => {
         try {
-            const container = canvas.parentElement;
-            const maxWidth = (container?.clientWidth || window.innerWidth) - 40;
-            const maxHeight = (container?.clientHeight || window.innerHeight) - 200; 
-            
-            let width = img.width;
-            let height = img.height;
-
-            const scaleFactor = Math.min(maxWidth / width, maxHeight / height);
+            const canvas = canvasRef.current;
+            if (!canvas) return;
             
             const dpr = window.devicePixelRatio || 1;
-            canvas.width = Math.max(width * scaleFactor, 100) * dpr;
-            canvas.height = Math.max(height * scaleFactor, 100) * dpr;
-            canvas.style.width = `${Math.max(width * scaleFactor, 100)}px`;
-            canvas.style.height = `${Math.max(height * scaleFactor, 100)}px`;
+            // Use original image dimensions
+            canvas.width = img.width * dpr;
+            canvas.height = img.height * dpr;
+            canvas.style.width = `${img.width}px`;
+            canvas.style.height = `${img.height}px`;
             
             ctx.scale(dpr, dpr);
             ctx.imageSmoothingEnabled = true;
@@ -127,9 +143,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.drawImage(img, 0, 0, Math.max(width * scaleFactor, 100), Math.max(height * scaleFactor, 100));
+            ctx.drawImage(img, 0, 0);
             
-            setHistory([canvas.toDataURL('image/jpeg', 0.8)]);
+            setHistory([canvas.toDataURL('image/jpeg', 1.0)]); // Use 1.0 quality for no compression
             setIsDirty(false);
         } catch (err: any) {
             setLoadError("Lỗi xử lý HD: " + (err.message || "Unknown error"));
@@ -143,7 +159,13 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           setIsLoadingImage(false);
       };
 
-      img.src = images[currentIndex];
+      // Use proxy to bypass CORS issues
+      const imageUrl = images[currentIndex];
+      if (imageUrl.startsWith('http')) {
+          img.src = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
+      } else {
+          img.src = imageUrl;
+      }
     }
   }, [isEditing, currentIndex, images]);
 
@@ -152,7 +174,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     if (isEditing) {
         setZoom(1);
         setPan({ x: 0, y: 0 });
-        setRotation(0);
     }
   }, [initCanvas, isEditing]);
 
@@ -184,13 +205,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     if (canvasRef.current && onSave && isDirty && !loadError) {
       try {
           setIsProcessing(true);
-          let quality = 0.8;
-          let updatedImage = canvasRef.current.toDataURL('image/jpeg', quality);
-          // ISO Limit: nén xuống dưới ~130KB nếu cần
-          while (updatedImage.length > 150000 && quality > 0.1) {
-            quality -= 0.1;
-            updatedImage = canvasRef.current.toDataURL('image/jpeg', quality);
-          }
+          // Do not compress the image aggressively, keep high quality
+          const updatedImage = canvasRef.current.toDataURL('image/jpeg', 0.95);
           await onSave(currentIndex, updatedImage);
           setIsEditing(false);
           setIsDirty(false);
@@ -202,6 +218,28 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       }
     } else {
         setIsEditing(false);
+    }
+  };
+
+  const handleTextClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isEditing || !canvasRef.current || isLoadingImage || loadError) return;
+    const text = prompt("Nhập nội dung:");
+    if (text) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const rect = canvas.getBoundingClientRect();
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+      
+      const dpr = window.devicePixelRatio || 1;
+      const x = (clientX - rect.left) * (canvas.width / rect.width);
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
+      
+      ctx.font = `bold ${brushSize * 4 * dpr}px Inter, sans-serif`;
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+      saveToHistory();
     }
   };
 
@@ -254,12 +292,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleNext = () => {
-      setZoom(1); setPan({x:0,y:0}); setRotation(0);
+      setZoom(1); setPan({x:0,y:0});
       setCurrentIndex(prev => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
   const handlePrev = () => {
-      setZoom(1); setPan({x:0,y:0}); setRotation(0);
+      setZoom(1); setPan({x:0,y:0});
       setCurrentIndex(prev => (prev === 0 ? images.length - 1 : prev - 1));
   };
 
@@ -279,12 +317,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {!isEditing && (
-              <div className="hidden sm:flex items-center bg-white/5 rounded-xl border border-white/10 mr-2 p-0.5">
-                  <button onClick={() => handleRotate('ccw')} className="p-1.5 hover:bg-white/5 rounded-lg" title="Xoay trái"><RotateCcw className="w-4 h-4 opacity-60"/></button>
-                  <button onClick={() => handleRotate('cw')} className="p-1.5 hover:bg-white/5 rounded-lg" title="Xoay phải"><RotateCw className="w-4 h-4 opacity-60"/></button>
-              </div>
-          )}
           
           {!isEditing && <button onClick={handleDownload} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5" title="Tải xuống HD"><Download className="w-4 h-4 opacity-70" /></button>}
           
@@ -321,7 +353,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             <div 
                 className="relative transition-transform duration-75 ease-out" 
                 style={{ 
-                    transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px) rotate(${rotation}deg)`, 
+                    transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, 
                     cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' 
                 }}
             >
@@ -378,8 +410,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                       <button onClick={onClose} className="mt-8 px-8 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest">THOÁT CHẾ ĐỘ EDITOR</button>
                   </div>
               ) : (
-                  <div className="relative group/canvas">
-                      <canvas ref={canvasRef} className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-4 border-white/5" />
+                  <div className="relative group/canvas overflow-hidden" ref={canvasContainerRef}>
+                      <canvas 
+                        ref={canvasRef} 
+                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-4 border-white/5"
+                        style={{
+                            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                            transformOrigin: 'center',
+                            transition: isPanning ? 'none' : 'transform 100ms ease-out',
+                        }}
+                      />
                       <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover/canvas:opacity-100 transition-opacity bg-blue-600 text-white text-[8px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] pointer-events-none shadow-xl border border-blue-400">
                           ISO HD EDIT LAYER ACTIVE
                       </div>
@@ -392,23 +432,36 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       {/* FOOTER: Professional Editing Tools */}
       {isEditing && !loadError && (
         <div className="p-8 bg-[#0f172a]/95 backdrop-blur-3xl border-t border-white/10 flex flex-col items-center gap-8 shrink-0 z-50 animate-in slide-in-from-bottom duration-300">
-          <div className="flex items-center justify-between w-full max-w-2xl gap-10">
-            <div className="flex gap-4 bg-white/5 p-2 rounded-[1.5rem] border border-white/5 shadow-inner">
+          <div className="flex items-center justify-between w-full max-w-3xl gap-6">
+            <div className="flex gap-2 bg-white/5 p-1.5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                <button onClick={() => setMode('draw')} className={`p-3 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/50 hover:bg-white/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-5 h-5" /></button>
+                <button onClick={() => setMode('text')} className={`p-3 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/50 hover:bg-white/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-5 h-5" /></button>
+            </div>
+
+            <div className="w-px h-10 bg-white/10 hidden md:block"></div>
+
+            <div className="flex gap-3 bg-white/5 p-2 rounded-[1.5rem] border border-white/5 shadow-inner">
                 {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff', '#000000'].map(c => (
                     <button 
                         key={c} 
                         onClick={() => setColor(c)} 
-                        className={`w-10 h-10 rounded-xl border-2 transition-all active:scale-90 ${color === c ? 'scale-110 border-white shadow-xl shadow-white/10' : 'border-transparent opacity-30 hover:opacity-100 hover:scale-105'}`} 
+                        className={`w-8 h-8 rounded-xl border-2 transition-all active:scale-90 ${color === c ? 'scale-110 border-white shadow-xl shadow-white/10' : 'border-transparent opacity-30 hover:opacity-100 hover:scale-105'}`} 
                         style={{ backgroundColor: c }} 
                     />
                 ))}
             </div>
             
+            <div className="flex gap-2 bg-white/5 p-1.5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-3 text-white/50 hover:text-white transition-all"><ZoomOut className="w-5 h-5"/></button>
+                <button onClick={() => setZoom(1)} className="text-[10px] font-black text-white/30 px-2">{Math.round(zoom * 100)}%</button>
+                <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-3 text-white/50 hover:text-white transition-all"><ZoomIn className="w-5 h-5"/></button>
+            </div>
+            
             <div className="w-px h-10 bg-white/10 hidden md:block"></div>
             
-            <div className="flex items-center gap-6 flex-1">
+            <div className="flex items-center gap-4 flex-1">
               <div className="flex flex-col gap-1 shrink-0">
-                  <span className="text-[9px] font-black text-white/30 uppercase tracking-widest leading-none">Brush Size</span>
+                  <span className="text-[9px] font-black text-white/30 uppercase tracking-widest leading-none">Size</span>
                   <span className="text-[12px] font-mono font-black text-blue-400 text-center">{brushSize}px</span>
               </div>
               <input 
@@ -421,7 +474,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           </div>
           
           <div className="flex gap-10 text-white/20 text-[9px] font-black uppercase tracking-[0.4em] select-none">
-              <span className="flex items-center gap-2.5"><Move className="w-4 h-4 opacity-50"/> Touch to Draw</span>
+              <span className="flex items-center gap-2.5"><Move className="w-4 h-4 opacity-50"/> Touch to {mode === 'draw' ? 'Draw' : 'Add Text'}</span>
               <span className="flex items-center gap-2.5"><Sliders className="w-4 h-4 opacity-50"/> Change size & color</span>
           </div>
         </div>

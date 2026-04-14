@@ -22,33 +22,6 @@ interface InspectionFormProps {
   templates: Record<string, CheckItem[]>;
 }
 
-const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(base64Str); return; }
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
-      
-      let quality = 0.7;
-      let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 133333 && quality > 0.1) {
-        quality -= 0.1;
-        dataUrl = canvas.toDataURL('image/jpeg', quality);
-      }
-      resolve(dataUrl);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
 import { SignaturePad } from './SignaturePad';
 
 export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, user, templates }) => {

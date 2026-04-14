@@ -23,25 +23,6 @@ interface InspectionDetailProps {
   workshops?: Workshop[];
 }
 
-const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
-      else resolve(base64Str);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
 
 export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -146,15 +127,15 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files) return;
-      const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-          const base64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(f);
-          });
-          return resizeImage(base64);
-      }));
-      setCommentAttachments(prev => [...prev, ...processed]);
+      try {
+          const { uploadQMSImage } = await import('../services/apiService');
+          const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+              return await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+          }));
+          setCommentAttachments(prev => [...prev, ...processed]);
+      } catch (err) {
+          alert("Lỗi tải ảnh lên.");
+      }
       e.target.value = '';
   };
 

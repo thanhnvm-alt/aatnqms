@@ -30,32 +30,6 @@ interface LayoutManagerProps {
     currentUser: User;
 }
 
-const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(base64Str); return; }
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
-      let quality = 0.7;
-      let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 133333 && quality > 0.1) {
-        quality -= 0.1;
-        dataUrl = canvas.toDataURL('image/jpeg', quality);
-      }
-      resolve(dataUrl);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
 // Custom Pin Icon SVG based on the user's image
 const CustomPinIcon = ({ color, isSelected }: { color: string, isSelected?: boolean }) => (
     <div className={`relative transition-transform duration-300 ${isSelected ? 'scale-125 z-50' : 'scale-100 z-40'}`}>
@@ -187,14 +161,10 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         if (!quickDetail || !e.target.files?.length) return;
         setIsUpdating(true);
         try {
-            const files = Array.from(e.target.files) as any[];
+            const files = Array.from(e.target.files) as File[];
+            const { uploadQMSImage } = await import('../services/apiService');
             const processed = await Promise.all(files.map(async (file) => {
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.readAsDataURL(file);
-                });
-                return resizeImage(base64);
+                return await uploadQMSImage(file, { entityId: quickDetail.id || 'new', type: 'INSPECTION', role: 'LAYOUT' });
             }));
 
             const updated: Inspection = {
@@ -534,7 +504,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                         })}
                     </div>
                     
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white text-[8px] md:text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 pointer-events-none opacity-60">
+                    <div className="absolute bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white text-[8px] md:text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 pointer-events-none opacity-60">
                         <Info className="w-3 h-3 md:w-3.5 md:h-3.5 text-blue-400" />
                         <span>{isAddingMode ? 'TAP TO ADD' : 'HOLD TO DROP PIN'}</span>
                     </div>

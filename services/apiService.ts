@@ -16,7 +16,11 @@ const apiFetch = async (url: string, options: RequestInit = {}) => {
         ...getAuthHeaders(),
         ...(options.headers || {})
     };
-    const response = await fetch(url, { ...options, headers: headers as HeadersInit });
+    
+    // Ensure URL is relative or absolute correctly
+    const fetchUrl = url.startsWith('http') ? url : url;
+    
+    const response = await fetch(fetchUrl, { ...options, headers: headers as HeadersInit });
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         throw new Error(errorData.error || `Request failed with status ${response.status}`);

@@ -33,32 +33,6 @@ const SUPPORTING_DOC_TEMPLATES = [
 
 const UNIT_OPTIONS = ["PCS", "M2", "M3", "MÉT", "CHAI", "LỌ", "THÙNG", "PHUY", "FIT", "TUÝP", "BỘ", "CẶP", "KG", "LÍT"];
 
-const resizeImage = (base64Str: string, maxWidth = 1000): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(base64Str); return; }
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
-      let quality = 0.7;
-      let dataUrl = canvas.toDataURL('image/jpeg', quality);
-      while (dataUrl.length > 133333 && quality > 0.1) {
-        quality -= 0.1;
-        dataUrl = canvas.toDataURL('image/jpeg', quality);
-      }
-      resolve(dataUrl);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
 import { SignaturePad } from './SignaturePad';
 
 export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user, templates }) => {
@@ -247,7 +221,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">{isSaving ? "Đang lưu báo cáo..." : "Đang nén hình ảnh ISO..."}</p>
+                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">{isSaving ? "Đang lưu báo cáo..." : "Đang tải hình ảnh lên..."}</p>
               </div>
           </div>
       )}

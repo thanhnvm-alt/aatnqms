@@ -13,25 +13,6 @@ interface DefectLibraryProps {
   currentUser: User;
 }
 
-const resizeImage = (base64Str: string, maxWidth = 800): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > height) { if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; } }
-      else { if (height > maxWidth) { width = Math.round((width * maxWidth) / height); height = maxWidth; } }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); resolve(canvas.toDataURL('image/jpeg', 0.7)); }
-      else resolve(base64Str);
-    };
-    img.onerror = () => resolve(base64Str);
-  });
-};
-
 export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => {
   const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
@@ -173,15 +154,16 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'correct' | 'incorrect') => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-        const resized = await resizeImage(reader.result as string);
+    try {
+        const { uploadFileToStorage } = await import('../services/apiService');
+        const url = await uploadFileToStorage(file, `defect_${type}_${Date.now()}_${file.name}`);
         setFormData(prev => ({
             ...prev,
-            [type === 'correct' ? 'correctImage' : 'incorrectImage']: resized
+            [type === 'correct' ? 'correctImage' : 'incorrectImage']: url
         }));
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+        alert("Lỗi tải ảnh lên.");
+    }
   };
 
   const handleSave = async () => {
