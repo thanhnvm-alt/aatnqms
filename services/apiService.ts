@@ -69,28 +69,42 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     let fileToUpload: File | Blob;
     
     if (typeof file === 'string') {
-        // If it's already a remote URL, return it
         if (file.startsWith('http') || file.startsWith('/uploads/')) return file;
-        
-        // If it's a data URL or blob URL, convert to Blob for upload
         const res = await fetch(file);
         fileToUpload = await res.blob();
     } else {
-        fileToUpload = file;
+        try {
+            const options = {
+                maxSizeMB: 1,
+                maxWidthOrHeight: 1920,
+                useWebWorker: true,
+                fileType: 'image/jpeg'
+            };
+            fileToUpload = await imageCompression(file, options);
+        } catch (error) {
+            console.warn("Image compression failed, using original file", error);
+            fileToUpload = file;
+        }
     }
 
-    // ISO-Compliant: Upload original file
     const formData = new FormData();
     formData.append('image', fileToUpload, fileName);
     
     const response = await fetch('/api/upload', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData
     });
     
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+        let errorMsg = `Upload failed with status ${response.status}`;
+        if (response.status === 413) {
+            errorMsg = "File is too large, even after compression.";
+        } else {
+            const errorData = await response.json().catch(() => null);
+            if (errorData && errorData.error) errorMsg = errorData.error;
+        }
+        throw new Error(errorMsg);
     }
     const data = await response.json();
     return data.url;

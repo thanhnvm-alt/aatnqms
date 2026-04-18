@@ -1,6 +1,7 @@
 
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig(({ mode }) => {
   // Cast process to any to avoid TS error: Property 'cwd' does not exist on type 'Process'
@@ -27,9 +28,11 @@ export default defineConfig(({ mode }) => {
     server: {
       hmr: false,
     },
-    // Override resolve to remove the alias causing the build issue
     resolve: {
-      alias: {}
+      alias: {
+        'react': path.resolve(__dirname, './node_modules/react'),
+        'react-dom': path.resolve(__dirname, './node_modules/react-dom')
+      }
     },
     build: {
       outDir: 'dist',

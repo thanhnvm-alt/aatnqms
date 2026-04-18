@@ -69,16 +69,14 @@ if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.
   });
 }
 
-// Ensure upload directory exists (only if not on Vercel)
-const uploadDir = path.join(__dirname, 'public', 'uploads');
-if (!process.env.VERCEL) {
-  try {
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-  } catch (err) {
-    console.warn("Could not create upload directory:", err);
+// Update upload directory to use /tmp which is writable on Google Cloud Run and Vercel environments
+const uploadDir = path.join('/tmp', 'qms_uploads');
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
   }
+} catch (err) {
+  console.warn("Could not create upload directory:", err);
 }
 
 const storage = multer.diskStorage({
@@ -126,7 +124,7 @@ const authenticate = (req: express.Request, res: express.Response, next: express
 const schema = process.env.DB_SCHEMA || 'appQAQC';
 
 // Serve uploads directory statically if not using cloud storage
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+app.use('/uploads', express.static('/tmp/qms_uploads'));
 
 // Health check route
 app.get("/api/health", (req, res) => {

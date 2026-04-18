@@ -10,7 +10,7 @@ interface LoginPageProps {
   dbReady?: boolean; 
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, users, dbReady = false }) => {
+export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
