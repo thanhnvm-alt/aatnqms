@@ -218,7 +218,7 @@ app.get("/api/health", (req, res) => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
+            model: 'gemini-3.1-flash-lite-preview',
             contents: message,
             config: {
                 systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
