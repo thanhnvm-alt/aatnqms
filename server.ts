@@ -15,6 +15,7 @@ import { Readable } from 'stream';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { GoogleGenAI } from "@google/genai";
 
 const JWT_SECRET = process.env.JWT_SECRET || 'aatn_qms_secret_key_2026';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -205,6 +206,38 @@ app.get("/api/health", (req, res) => {
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Authentication failed' });
+    }
+  });
+
+  app.post("/api/chat", express.json(), async (req, res) => {
+    const { message, context } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "Server API Key not configured" });
+    }
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.1-pro-preview',
+            contents: message,
+            config: {
+                systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
+                
+                NGỮ CẢNH DỮ LIỆU:
+                ${context}
+
+                HƯỚNG DẪN TRẢ LỜI:
+                1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU.
+                2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
+                3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
+                4. Nếu không thấy, hãy trả lời tổng quát.`,
+                temperature: 0.1,
+            },
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        console.error("AI Proxy Error:", error);
+        res.status(500).json({ error: "AI Service Error" });
     }
   });
 

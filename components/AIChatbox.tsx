@@ -1,11 +1,10 @@
 
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { Inspection, InspectionStatus } from '../types';
 import { 
   Send, X, MessageSquare, Sparkles, Bot, Loader2, 
-  Eraser, ShieldCheck, Move, Minimize2, GripVertical, AlertCircle
+  Eraser, ShieldCheck, AlertCircle
 } from 'lucide-react';
 
 interface AIChatboxProps {
@@ -125,12 +124,8 @@ ${summaryLines.join('\n')}`;
     setIsLoading(true);
 
     try {
-      // Fixed: Initializing GoogleGenAI as per guidelines
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      // LOGIC LỌC DỮ LIỆU AN TOÀN (Safe String Handling)
+      // LOGIC LỌC DỮ LIỆU AN TOÀN
       const keywords = text.toUpperCase().split(/\s+/).filter(k => k.length > 1);
-      
       let relevantInspections = inspections;
 
       if (keywords.length > 0) {
@@ -138,46 +133,32 @@ ${summaryLines.join('\n')}`;
               keywords.some(k => 
                   (i.ma_ct && String(i.ma_ct).toUpperCase().includes(k)) || 
                   (i.ma_nha_may && String(i.ma_nha_may).toUpperCase().includes(k)) ||
-                  // Fixed: Safely check headcode property from updated Inspection interface
                   (i.headcode && String(i.headcode).toUpperCase().includes(k)) ||
                   (i.ten_hang_muc && String(i.ten_hang_muc).toUpperCase().includes(k))
               )
           );
       }
 
-      // Giới hạn Token khắt khe hơn (Safe Limits: ~1000 records total)
-      // Nếu có từ khóa, ưu tiên kết quả lọc. Nếu không, lấy 100 bản ghi mới nhất.
       const finalInspections = keywords.length > 0 ? relevantInspections.slice(0, 200) : inspections.slice(0, 50);
-
       const dynamicContext = `
 DỮ LIỆU CHI TIẾT (Lọc theo yêu cầu):
 ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i.score}%|${i.status}`).join('\n')}
       `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
-        contents: text,
-        config: {
-          systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
-          
-          NGỮ CẢNH DỮ LIỆU:
-          ${dataSummary}
-          
-          ${dynamicContext}
-
-          HƯỚNG DẪN TRẢ LỜI:
-          1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU CHI TIẾT.
-          2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
-          3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
-          4. Nếu không thấy trong danh sách lọc, hãy dùng TÓM TẮT HỆ THỐNG để trả lời tổng quát.`,
-          temperature: 0.1,
-        },
+      const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, context: dynamicContext })
       });
-
+      
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.error || 'Failed to get AI response');
+      
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response.text || "Tôi không tìm thấy thông tin phù hợp.",
+        text: data.text || "Tôi không tìm thấy thông tin phù hợp.",
         timestamp: new Date()
       }]);
     } catch (error: any) {
