@@ -213,7 +213,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                                         >
                                             <div className="aspect-[16/10] relative overflow-hidden bg-slate-100 border-b border-slate-50">
                                                 {p.thumbnail ? (
-                                                    <img src={p.thumbnail} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" />
+                                                    <img src={p.thumbnail} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" referrerPolicy="no-referrer" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-slate-300">
                                                         <Building2 className="w-12 h-12 opacity-20" />

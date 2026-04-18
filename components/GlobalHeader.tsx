@@ -249,7 +249,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 <p className="text-[10px] font-medium text-slate-400">{user.role}</p>
             </div>
             <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-slate-100 shadow-sm overflow-hidden relative">
-              <img src={user.avatar} alt={user.name} className="w-full h-full object-cover bg-slate-100" />
+              <img src={user.avatar} alt={user.name} className="w-full h-full object-cover bg-slate-100" referrerPolicy="no-referrer" />
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
             </div>
           </button>

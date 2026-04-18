@@ -126,7 +126,7 @@ const authenticate = (req: express.Request, res: express.Response, next: express
 const schema = process.env.DB_SCHEMA || 'appQAQC';
 
 // Serve uploads directory statically if not using cloud storage
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // Health check route
 app.get("/api/health", (req, res) => {

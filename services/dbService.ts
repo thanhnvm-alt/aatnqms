@@ -26,6 +26,18 @@ const safeJsonParse = <T>(jsonString: any, defaultValue: T): T => {
   }
 };
 
+// --- HELPERS ---
+
+const parseTS = (val: any): number => {
+    if (!val) return Math.floor(Date.now() / 1000);
+    const parsed = typeof val === 'string' ? Date.parse(val) : val;
+    // If it's milliseconds (length > 11), convert to seconds
+    if (!isNaN(parsed) && parsed > 100000000000) {
+        return Math.floor(parsed / 1000);
+    }
+    return isNaN(parsed) ? Math.floor(Date.now() / 1000) : parsed;
+};
+
 /**
  * Helper to sanitize database arguments
  */
@@ -128,47 +140,60 @@ export async function saveInspection(inspection: Inspection) {
   const table = getTableName(inspection.type);
   const existing = await getInspectionById(inspection.id);
   const oldValue = existing ? { ...existing } : null;
-  
-  if (inspection.type === 'PQC') {
-    await query(`
-      INSERT INTO ${SCHEMA}.forms_pqc (
-        id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, 
-        inspector, status, data, updated_at, items_json, images_json, headcode, date, score, summary, type, 
-        production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
-        signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
-      ON CONFLICT(id) DO UPDATE SET 
-        status = EXCLUDED.status, 
-        updated_at = EXCLUDED.updated_at, 
-        score = EXCLUDED.score, 
-        items_json = EXCLUDED.items_json,
-        images_json = EXCLUDED.images_json,
-        summary = EXCLUDED.summary,
-        data = EXCLUDED.data,
-        floor_plan_id = EXCLUDED.floor_plan_id, 
-        coord_x = EXCLUDED.coord_x, 
-        coord_y = EXCLUDED.coord_y, 
-        responsible_person = EXCLUDED.responsible_person,
-        signature_qc = EXCLUDED.signature_qc,
-        signature_manager = EXCLUDED.signature_manager,
-        name_manager = EXCLUDED.name_manager,
-        signature_production = EXCLUDED.signature_production,
-        name_production = EXCLUDED.name_production,
-        comment_production = EXCLUDED.comment_production
-    `, sanitizeArgs([
-        inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
-        inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
-        inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
-        inspection.inspectorName, inspection.status, inspection, Date.now(),
-        inspection.items, inspection.images, inspection.headcode, inspection.date, inspection.score, 
-        inspection.summary, inspection.type, inspection.productionComment,
-        inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
-        inspection.responsiblePerson,
-        inspection.signature, inspection.managerSignature, inspection.managerName,
-        inspection.productionSignature, inspection.productionName, inspection.productionComment
+
+  // Ensure dates are parsed as BIGINT epochs for DB (seconds)
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const inspection_date = parseTS(inspection.date);
+
+    if (inspection.type === 'PQC') {
+      await query(`
+        INSERT INTO ${SCHEMA}.forms_pqc (
+          id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, 
+          inspector, status, data, updated_at, items_json, images_json, headcode, date, score, summary, type, 
+          production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
+          signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
+          comments_json
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+        ON CONFLICT(id) DO UPDATE SET 
+          status = EXCLUDED.status, 
+          updated_at = EXCLUDED.updated_at, 
+          score = EXCLUDED.score, 
+          items_json = EXCLUDED.items_json,
+          images_json = EXCLUDED.images_json,
+          summary = EXCLUDED.summary,
+          data = EXCLUDED.data,
+          floor_plan_id = EXCLUDED.floor_plan_id, 
+          coord_x = EXCLUDED.coord_x, 
+          coord_y = EXCLUDED.coord_y, 
+          responsible_person = EXCLUDED.responsible_person,
+          signature_qc = EXCLUDED.signature_qc,
+          signature_manager = EXCLUDED.signature_manager,
+          name_manager = EXCLUDED.name_manager,
+          signature_production = EXCLUDED.signature_production,
+          name_production = EXCLUDED.name_production,
+          comment_production = EXCLUDED.comment_production,
+          comments_json = EXCLUDED.comments_json,
+          sl_ipo = EXCLUDED.sl_ipo,
+          qty_total = EXCLUDED.qty_total,
+          qty_pass = EXCLUDED.qty_pass,
+          qty_fail = EXCLUDED.qty_fail,
+          workshop = EXCLUDED.workshop,
+          stage = EXCLUDED.stage
+      `, sanitizeArgs([
+          inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
+          inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
+          inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
+          inspection.inspectorName, inspection.status, inspection, updatedAt,
+          inspection.items, inspection.images, inspection.headcode, inspection_date, inspection.score, 
+          inspection.summary, inspection.type, inspection.productionComment,
+          inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
+          inspection.responsiblePerson,
+          inspection.signature, inspection.managerSignature, inspection.managerName,
+          inspection.productionSignature, inspection.productionName, inspection.productionComment,
+          inspection.comments
       ]));
-  } else {
+    } else {
     // ISO Standard mapping cho các module: SITE, IQC, SQC, FQC...
     await query(`
       INSERT INTO ${table} (
@@ -198,7 +223,11 @@ export async function saveInspection(inspection: Inspection) {
         comment_production = EXCLUDED.comment_production,
         location = EXCLUDED.location,
         comments_json = EXCLUDED.comments_json,
-        responsible_person = EXCLUDED.responsible_person
+        responsible_person = EXCLUDED.responsible_person,
+        so_luong_ipo = EXCLUDED.so_luong_ipo,
+        inspected_qty = EXCLUDED.inspected_qty,
+        passed_qty = EXCLUDED.passed_qty,
+        failed_qty = EXCLUDED.failed_qty
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
         inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection.date,
@@ -207,12 +236,12 @@ export async function saveInspection(inspection: Inspection) {
         inspection.productionSignature, inspection.productionName, inspection.productionComment,
         inspection.images, inspection.deliveryNoteImages, inspection.reportImages, inspection.comments,
         inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
-        inspection.dvt, Date.now(), 
+        inspection.dvt, updatedAt, 
         inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
         inspection.location, inspection.supplierAddress, inspection.supportingDocs,
         inspection.responsiblePerson
       ]));
-  }
+    }
 
   // Log Audit & Status Change
   await logAudit(inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection);
@@ -265,9 +294,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     `;
 
     const tableQueries = tables.map(table => {
-        // Explicitly cast all columns to text to avoid UNION type mismatch (e.g. text vs bigint)
-        const workshopCol = table.includes('pqc') ? 'workshop::text' : 'NULL::text';
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol} as workshop, updated_at::text, "responsible_person"::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        const workshopCol = table === 'forms_pqc' ? 'workshop::text' : 'NULL::text as workshop';
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -287,9 +315,9 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     }
 
     const finalQuery = `
-        SELECT * FROM (${unionQuery}) as combined 
+        SELECT ${selectFields} FROM (${unionQuery}) as combined 
         ${whereClause} 
-        ORDER BY updated_at DESC 
+        ORDER BY (CASE WHEN updated_at ~ '^[0-9]+$' THEN CAST(updated_at AS BIGINT) ELSE 0 END) DESC 
         LIMIT $${args.length + 1} OFFSET $${args.length + 2}
     `;
 
@@ -341,22 +369,22 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     summary: row.summary as string,
                     items: safeJsonParse(row.items_json, []),
                     images: safeJsonParse(row.images_json, []),
+                    comments: safeJsonParse(row.comments_json, []),
                     po_number: row.po_number as string,
                     supplier: row.supplier as string,
                     workshop: row.workshop as string,
                     inspectionStage: row.stage as string,
                     dvt: row.dvt as string,
-                    so_luong_ipo: row.so_luong_ipo as number,
-                    inspectedQuantity: row.inspected_qty as number,
-                    passedQuantity: row.passed_qty as number,
-                    failedQuantity: row.failed_qty as number,
+                    so_luong_ipo: Number(row.so_luong_ipo ?? row.sl_ipo ?? 0),
+                    inspectedQuantity: Number(row.inspected_qty ?? row.qty_total ?? 0),
+                    passedQuantity: Number(row.passed_qty ?? row.qty_pass ?? 0),
+                    failedQuantity: Number(row.failed_qty ?? row.qty_fail ?? 0),
                     signature: row.signature_qc as string,
                     managerSignature: row.signature_manager as string,
                     managerName: row.name_manager as string,
                     productionSignature: row.signature_production as string,
                     productionName: row.name_production as string,
                     productionComment: row.comment_production as string,
-                    comments: safeJsonParse(row.comments_json, []),
                     floor_plan_id: row.floor_plan_id as string,
                     coord_x: row.coord_x as number,
                     coord_y: row.coord_y as number,
@@ -846,9 +874,18 @@ export async function updateProject(p: Project, userId: string = 'SYSTEM') {
             pc = EXCLUDED.pc, 
             qa = EXCLUDED.qa, 
             progress = EXCLUDED.progress, 
+            start_date = EXCLUDED.start_date,
+            end_date = EXCLUDED.end_date,
+            location = EXCLUDED.location,
+            description = EXCLUDED.description,
+            thumbnail = EXCLUDED.thumbnail,
             updated_at = EXCLUDED.updated_at, 
             data = EXCLUDED.data
-    `, sanitizeArgs([p.ma_ct, p.name, p.status, p.pm, p.pc, p.qa, p.progress, p.startDate, p.endDate, p.location, p.description, p.thumbnail, p]));
+    `, sanitizeArgs([
+        p.ma_ct, p.name, p.status, p.pm, p.pc, p.qa, p.progress, 
+        parseTS(p.startDate), parseTS(p.endDate), 
+        p.location, p.description, p.thumbnail, p
+    ]));
 
     await logAudit(userId, oldValue ? 'UPDATE_PROJECT' : 'CREATE_PROJECT', 'project', p.ma_ct, oldValue, p);
     if (oldValue && oldValue.status !== p.status) {
@@ -986,6 +1023,7 @@ export async function getDefectLibrary(): Promise<DefectLibraryItem[]> {
 }
 
 export async function saveDefectLibraryItem(item: DefectLibraryItem) {
+    const created_at = typeof item.createdAt === 'string' ? Date.parse(item.createdAt) : (item.createdAt || Math.floor(Date.now() / 1000));
     await query(`
         INSERT INTO ${SCHEMA}.defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, created_by, created_at, updated_at, data) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, EXTRACT(EPOCH FROM NOW())::BIGINT, $11) 
@@ -994,7 +1032,7 @@ export async function saveDefectLibraryItem(item: DefectLibraryItem) {
             name = EXCLUDED.name, 
             data = EXCLUDED.data, 
             updated_at = EXCLUDED.updated_at
-    `, sanitizeArgs([item.id, item.code, item.name, item.stage, item.category, item.description, item.severity, item.suggestedAction, item.createdBy, item.createdAt, item]));
+    `, sanitizeArgs([item.id, item.code, item.name, item.stage, item.category, item.description, item.severity, item.suggestedAction, item.createdBy, created_at, item]));
 }
 
 export async function deleteDefectLibraryItem(id: string) {

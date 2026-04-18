@@ -232,6 +232,16 @@ export async function runMigrations() {
           migrationLogs.push(`⚠️ Could not create ${table}: ${e.message}`);
         }
         await addColumn(table, 'deleted_at', 'BIGINT');
+        await addColumn(table, 'data', 'TEXT');
+        await addColumn(table, 'workshop', 'TEXT');
+        await addColumn(table, 'stage', 'TEXT');
+        await addColumn(table, 'ma_nha_may', 'TEXT');
+        await addColumn(table, 'qty_total', 'NUMERIC');
+        await addColumn(table, 'qty_pass', 'NUMERIC');
+        await addColumn(table, 'qty_fail', 'NUMERIC');
+        await addColumn(table, 'headcode', 'TEXT');
+        await addColumn(table, 'production_comment', 'TEXT');
+        await addColumn(table, 'responsible_person', 'TEXT');
     }
 
     // 8. Defect Library

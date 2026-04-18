@@ -177,7 +177,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
               ...formData,
               id: formData.id || formData.code,
               createdBy: currentUser.name,
-              createdAt: editingItem?.createdAt || Math.floor(Date.now() / 1000)
+              createdAt: typeof editingItem?.createdAt === 'string' ? Math.floor(Date.parse(editingItem.createdAt) / 1000) : (editingItem?.createdAt || Math.floor(Date.now() / 1000))
           } as DefectLibraryItem;
 
           await saveDefectLibraryItem(itemToSave);

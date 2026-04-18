@@ -369,7 +369,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     }, [systemUsers, userSearchTerm]);
 
     return (
-        <div className="absolute inset-0 z-40 bg-[#f1f5f9] flex flex-col animate-in fade-in duration-300 overflow-hidden">
+        <div className="absolute inset-0 z-40 bg-[#f1f5f9] flex flex-col animate-in fade-in duration-300 overflow-hidden pb-[80px] lg:pb-0">
             <header className="h-14 bg-white border-b border-slate-200 px-3 md:px-4 flex items-center justify-between shrink-0 shadow-sm z-50">
                 <div className="flex items-center gap-2 md:gap-3">
                     <button onClick={onBack} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"><ArrowLeft className="w-4 h-4" /></button>
@@ -459,7 +459,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                             willChange: 'transform'
                         }}
                     >
-                        <img ref={imgRef} src={floorPlan.image_url} alt="Drawing" className={`max-w-[95vw] sm:max-w-[85vw] max-h-[85vh] sm:max-h-[80vh] object-contain pointer-events-none transition-opacity ${isAddingMode ? 'opacity-50' : 'opacity-100'}`} />
+                        <img ref={imgRef} src={floorPlan.image_url} alt="Drawing" referrerPolicy="no-referrer" className={`max-w-[95vw] sm:max-w-[85vw] max-h-[85vh] sm:max-h-[80vh] object-contain pointer-events-none transition-opacity ${isAddingMode ? 'opacity-50' : 'opacity-100'}`} />
 
                         {isAddingMode && hoverCoord && (
                             <div 

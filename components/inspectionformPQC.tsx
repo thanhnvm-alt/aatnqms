@@ -157,7 +157,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesBefore?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')}/><button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
                                 ))}
                             </div>
                         </div>
@@ -171,7 +171,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesAfter?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')}/><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
                                 ))}
                             </div>
                         </div>
@@ -570,7 +570,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
-                        <img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} />
+                        <img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} referrerPolicy="no-referrer" />
                         <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
@@ -597,41 +597,47 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
             
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-3">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
                     <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block leading-none">SL Kiểm tra</label>
+                        <label className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block leading-none truncate">SL Kiểm tra</label>
                         <input 
                             type="number" 
                             step="any" 
                             value={formData.inspectedQuantity || ''} 
                             onChange={e => handleInputChange('inspectedQuantity', e.target.value)} 
-                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'}`} 
+                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'}`} 
                         />
                         {parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) && (
                             <p className="text-[7px] text-red-500 font-bold uppercase text-center mt-0.5">Vượt SL IPO</p>
                         )}
                         {parseFloat(String(formData.inspectedQuantity)) <= 0 && (
-                            <p className="text-[7px] text-orange-500 font-bold uppercase text-center mt-0.5">Phải &gt; 0</p>
+                            <p className="text-[7px] text-orange-500 font-bold uppercase text-center mt-0.5 whitespace-nowrap overflow-hidden">Phải &gt; 0</p>
                         )}
                     </div>
                     <div className="space-y-1">
-                        <div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span></div>
+                        <div className="flex justify-between items-center px-1">
+                            <label className="text-[8px] sm:text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label>
+                            <span className="text-[7px] sm:text-[8px] font-bold text-green-700 bg-green-50 px-0.5 sm:px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span>
+                        </div>
                         <input 
                             type="number" 
                             step="any" 
                             value={formData.passedQuantity || ''} 
                             onChange={e => handleInputChange('passedQuantity', e.target.value)} 
-                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm border-green-200 bg-white`} 
+                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-green-200 bg-white`} 
                         />
                     </div>
                     <div className="space-y-1">
-                        <div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700 bg-red-50 px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span></div>
+                        <div className="flex justify-between items-center px-1">
+                            <label className="text-[8px] sm:text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label>
+                            <span className="text-[7px] sm:text-[8px] font-bold text-red-700 bg-red-50 px-0.5 sm:px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span>
+                        </div>
                         <input 
                             type="number" 
                             step="any" 
                             value={formData.failedQuantity || ''} 
                             onChange={e => handleInputChange('failedQuantity', e.target.value)} 
-                            className={`w-full px-2 py-1.5 border rounded-md font-bold text-[11px] text-center shadow-sm border-red-200 bg-white`} 
+                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-red-200 bg-white`} 
                         />
                     </div>
                 </div>
@@ -840,6 +846,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                                       src={img} 
                                                                       className="w-16 h-16 rounded-xl object-cover border border-slate-100 shadow-sm transition-transform hover:scale-105" 
                                                                       onClick={() => setLightboxState({ images: it.images!, index: iIdx })}
+                                                                      referrerPolicy="no-referrer"
                                                                   />
                                                               ))}
                                                           </div>

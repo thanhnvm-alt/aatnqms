@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
       <div className="p-4 border-t border-slate-800 space-y-2">
         <div className={`flex items-center gap-3 p-2 rounded-xl bg-slate-800/50 border border-slate-800 ${collapsed ? 'justify-center p-0 bg-transparent border-0' : ''}`}>
             <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-slate-700 shrink-0">
-                <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
             {!collapsed && (
                 <div className="min-w-0 flex-1">

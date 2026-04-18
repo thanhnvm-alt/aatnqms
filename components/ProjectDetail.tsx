@@ -533,7 +533,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <>
                                         {filteredLayouts.slice(0, layoutLimit).map((fp, idx) => (
                                             <div key={`${fp.id}-${idx}`} onClick={() => handleSelectPlan(fp)} className="p-3 bg-white border border-slate-100 rounded-2xl hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm"><img src={fp.image_url} className="w-full h-full object-cover" alt=""/></div>
+                                                <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm"><img src={fp.image_url} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" /></div>
                                                 <div className="flex-1 min-w-0">
                                                     <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{fp.name}</h4>
                                                     <p className="text-[8px] font-bold text-slate-400 uppercase">REV {fp.version} • {fp.status}</p>
@@ -607,7 +607,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           <div className="relative group shrink-0">
                               <div className="w-40 h-40 md:w-56 md:h-56 bg-slate-200 rounded-[2.5rem] border-4 border-white shadow-xl overflow-hidden relative">
                                   {editForm.thumbnail ? (
-                                      <img src={editForm.thumbnail} className="w-full h-full object-cover" />
+                                      <img src={editForm.thumbnail} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                   ) : (
                                       <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-2">
                                           <ImageIcon className="w-10 h-10 opacity-30" />

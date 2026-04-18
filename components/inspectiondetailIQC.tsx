@@ -52,6 +52,33 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
     catch (e) { alert("Lỗi khi phê duyệt."); } finally { setIsProcessing(false); }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+      try {
+          const { uploadQMSImage } = await import('../services/apiService');
+          const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+              return await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+          }));
+          setCommentAttachments(prev => [...prev, ...processed]);
+      } catch (err) {
+          alert("Lỗi tải ảnh lên.");
+      }
+      e.target.value = '';
+  };
+
+  const updateCommentImage = (idx: number, newImg: string) => {
+      setCommentAttachments(prev => {
+          const next = [...prev];
+          next[idx] = newImg;
+          return next;
+      });
+  };
+
+  const handleEditCommentImage = (idx: number) => {
+      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
+  };
+
   const handlePostComment = async () => {
       if (!newComment.trim() && commentAttachments.length === 0) return;
       if (!onPostComment) return;
@@ -163,7 +190,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                             {item.notes && <p className="text-[9px] text-slate-500 italic mt-1">"{item.notes}"</p>}
                                             {item.images && item.images.length > 0 && (
                                                 <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar">
-                                                    {item.images.map((img, i) => (<img key={i} src={img} className="w-12 h-12 rounded border border-white shadow-sm object-cover cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })} />))}
+                                                    {item.images.map((img, i) => (<img key={i} src={img} className="w-12 h-12 rounded border border-white shadow-sm object-cover cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })} referrerPolicy="no-referrer" />))}
                                                 </div>
                                             )}
                                         </div>
@@ -182,14 +209,14 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="space-y-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">QC Inspector</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
-                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <div className="text-[9px] text-slate-300">N/A</div>}
+                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" referrerPolicy="no-referrer" /> : <div className="text-[9px] text-slate-300">N/A</div>}
                     </div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.inspectorName}</div>
                 </div>
                 <div className="space-y-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Manager</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center border border-slate-100 shadow-inner">
-                        {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" /> : <div className="text-[9px] text-orange-400 animate-pulse font-black">CHỜ DUYỆT</div>}
+                        {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" referrerPolicy="no-referrer" /> : <div className="text-[9px] text-orange-400 animate-pulse font-black">CHỜ DUYỆT</div>}
                     </div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || 'Manager Approval'}</div>
                 </div>
@@ -204,7 +231,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
             <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" />
+                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
                         <div className="flex-1 space-y-2">
                             <div className="flex justify-between items-center px-1">
                                 <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
@@ -215,7 +242,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <div className="flex gap-3 flex-wrap pt-2">
                                     {comment.attachments.map((img, i) => (
                                         <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
-                                            <img src={img} className="w-full h-full object-cover" alt=""/>
+                                            <img src={img} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                                         </div>
                                     ))}
                                 </div>
@@ -225,9 +252,37 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 ))}
             </div>
             <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-4">
+                {commentAttachments.length > 0 && (
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                        {commentAttachments.map((img, idx) => (
+                            <div key={idx} className="relative w-20 h-20 shrink-0 group">
+                                <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
+                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <div className="flex gap-3 items-end">
                     <div className="flex-1 relative">
-                        <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" />
+                        <textarea 
+                            value={newComment} 
+                            onChange={(e) => setNewComment(e.target.value)} 
+                            onPaste={(e) => {
+                                const items = e.clipboardData.items;
+                                for (let i = 0; i < items.length; i++) {
+                                    if (items[i].type.indexOf("image") !== -1) {
+                                        const file = items[i].getAsFile();
+                                        if (file) {
+                                            e.preventDefault();
+                                            const event = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                                            handleImageUpload(event);
+                                        }
+                                    }
+                                }
+                            }}
+                            placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." 
+                            className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
+                        />
                         <div className="absolute right-3 bottom-3 flex items-center gap-2">
                             <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
                             <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
@@ -278,6 +333,8 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
               readOnly={true} 
           />
       )}
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
     </div>
   );
 };

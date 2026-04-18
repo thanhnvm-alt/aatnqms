@@ -154,8 +154,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         }
       };
 
-      img.onerror = () => {
-          setLoadError("Lỗi tải ảnh.");
+      img.onerror = (e) => {
+          console.error("Lỗi tải ảnh:", e, "Source:", img.src);
+          setLoadError("Lỗi tải ảnh: không thể truy cập tài nguyên.");
           setIsLoadingImage(false);
       };
 

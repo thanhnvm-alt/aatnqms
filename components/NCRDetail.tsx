@@ -437,7 +437,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <div className="p-5 grid grid-cols-2 gap-3">
                         {formData.imagesBefore?.map((img, idx) => (
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-red-400 transition-all" onClick={() => openGallery(formData.imagesBefore!, idx)}>
-                                <img src={img} className="w-full h-full object-cover" />
+                                <img src={img} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 {isEditing && !isLocked && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
                                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
@@ -460,7 +460,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <div className="p-5 grid grid-cols-2 gap-3">
                         {formData.imagesAfter?.map((img, idx) => (
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-green-400 transition-all" onClick={() => openGallery(formData.imagesAfter!, idx)}>
-                                <img src={img} className="w-full h-full object-cover" />
+                                <img src={img} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 {!isLocked && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
                                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
@@ -478,7 +478,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                     {formData.comments?.map((comment) => (
                         <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" />
+                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
                             <div className="flex-1 space-y-2">
                                 <div className="flex justify-between items-center px-1">
                                     <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
@@ -488,7 +488,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                 {comment.attachments && comment.attachments.length > 0 && (
                                     <div className="flex gap-3 flex-wrap pt-2">
                                         {comment.attachments.map((att, idx) => (
-                                            <img key={idx} src={att} onClick={() => openGallery(comment.attachments!, idx)} className="w-20 h-20 object-cover rounded-2xl border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-110 shrink-0" />
+                                            <img key={idx} src={att} onClick={() => openGallery(comment.attachments!, idx)} className="w-20 h-20 object-cover rounded-2xl border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-110 shrink-0" referrerPolicy="no-referrer" />
                                         ))}
                                     </div>
                                 )}
@@ -503,7 +503,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                                 {commentAttachments.map((img, idx) => (
                                     <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                        <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)}/>
+                                        <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
                                         <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                                     </div>
                                 ))}
@@ -511,7 +511,25 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         )}
                         <div className="flex gap-3 items-end">
                             <div className="flex-1 relative">
-                                <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Nhập ý kiến phản hồi hoặc tiến độ xử lý..." className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" />
+                                <textarea 
+                                    value={newComment} 
+                                    onChange={(e) => setNewComment(e.target.value)} 
+                                    onPaste={(e) => {
+                                        const items = e.clipboardData.items;
+                                        for (let i = 0; i < items.length; i++) {
+                                            if (items[i].type.indexOf("image") !== -1) {
+                                                const file = items[i].getAsFile();
+                                                if (file) {
+                                                    e.preventDefault();
+                                                    const event = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                                                    handleAddImage(event, 'COMMENT');
+                                                }
+                                            }
+                                        }
+                                    }}
+                                    placeholder="Nhập ý kiến phản hồi hoặc tiến độ xử lý..." 
+                                    className="w-full pl-5 pr-28 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
+                                />
                                 <div className="absolute right-3 bottom-3 flex items-center gap-2">
                                     <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
                                     <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-transparent hover:border-blue-100 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
