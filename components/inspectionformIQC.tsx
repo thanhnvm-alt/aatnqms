@@ -8,7 +8,7 @@ import {
   ChevronUp, MessageCircle, History, FileCheck, Search, AlertCircle, Maximize2,
   Layers, Briefcase, Hash, CheckSquare, Square, Info, ShieldCheck, CheckCircle, AlertTriangle
 } from 'lucide-react';
-import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans, uploadQMSImage } from '../services/apiService';
+import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans, uploadQMSImage, fetchMaterials } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -76,6 +76,52 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       const iqcTpl = templates['IQC'] || [];
       return Array.from(new Set(iqcTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
+
+  const handlePoBlur = async () => {
+    if (!formData.po_number || formData.po_number.length < 3) return;
+    setIsLookupLoading(true);
+    try {
+      const result = await fetchMaterials(formData.po_number);
+      if (result && result.items && result.items.length > 0) {
+        const materials = result.items as Material[];
+        const matIqc: MaterialIQC[] = materials.map(m => ({
+          id: m.id,
+          name: m.shortText || m.material,
+          category: 'Vật tư',
+          inspectType: 'AQL',
+          scope: 'COMMON',
+          projectCode: m.Ma_Tender,
+          projectName: m.projectName,
+          orderQty: m.orderQuantity,
+          deliveryQty: m.orderQuantity,
+          unit: m.orderUnit,
+          criteria: [],
+          items: [],
+          inspectQty: m.orderQuantity,
+          passQty: 0,
+          failQty: 0,
+          images: [],
+          type: 'Material',
+          date: new Date().toISOString()
+        }));
+
+        const supplier = materials[0].supplierName;
+        // Also update ma_ct using the first material's projectCode
+        const firstMat = materials[0];
+        setFormData(prev => ({ 
+            ...prev, 
+            supplier: supplier || prev.supplier, 
+            ma_ct: firstMat.Ma_Tender || prev.ma_ct,
+            materials: matIqc 
+        }));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Không tìm thấy thông tin PO.");
+    } finally {
+      setIsLookupLoading(false);
+    }
+  };
 
   const handleInputChange = (field: keyof Inspection, value: any) => { 
     setFormData(prev => ({ ...prev, [field]: value })); 
@@ -267,7 +313,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1 shadow-sm" type="button"><History className="w-3 h-3" /> Lịch sử ({inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number).length})</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label><div className="relative flex items-center"><input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] h-9" placeholder="Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label><div className="relative flex items-center"><input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] h-9" placeholder="Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button></div></div>
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nhà Cung Cấp *</label><div className="relative flex items-center"><input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] h-9 uppercase" placeholder="Tên NCC..."/><Building2 className="absolute left-2 w-4 h-4 text-slate-400" /></div></div>
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Ngày kiểm tra</label><div className="relative flex items-center"><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9"/><Calendar className="absolute left-2 w-4 h-4 text-slate-400" /></div></div>
             </div>

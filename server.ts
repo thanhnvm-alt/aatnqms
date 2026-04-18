@@ -17,7 +17,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { GoogleGenAI } from "@google/genai";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'aatn_qms_secret_key_2026';
+const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configure Google Drive
@@ -213,31 +213,45 @@ app.get("/api/health", (req, res) => {
     const { message, context } = req.body;
     
     if (!process.env.GEMINI_API_KEY) {
+        console.error("DEBUG: GEMINI_API_KEY is not defined in process.env");
         return res.status(500).json({ error: "Server API Key not configured" });
     }
+    console.log("DEBUG: GEMINI_API_KEY is defined, length:", process.env.GEMINI_API_KEY.length);
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-            model: 'gemini-3.1-flash-lite-preview',
-            contents: message,
-            config: {
-                systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
-                
-                NGỮ CẢNH DỮ LIỆU:
-                ${context}
+        
+        // Define fallback models
+        const models = ['gemini-3.1-flash-lite-preview', 'gemini-1.5-flash'];
+        let response;
+        
+        for (const model of models) {
+            try {
+                response = await ai.models.generateContent({
+                    model: model,
+                    contents: message,
+                    config: {
+                        systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
+                        NGỮ CẢNH DỮ LIỆU:
+                        ${context}
 
-                HƯỚNG DẪN TRẢ LỜI:
-                1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU.
-                2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
-                3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
-                4. Nếu không thấy, hãy trả lời tổng quát.`,
-                temperature: 0.1,
-            },
-        });
-        res.json({ text: response.text });
+                        HƯỚNG DẪN TRẢ LỜI:
+                        1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU.
+                        2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
+                        3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
+                        4. Nếu không thấy, hãy trả lời tổng quát.`,
+                        temperature: 0.1,
+                    },
+                });
+                break; // If successful, break the loop
+            } catch (err: any) {
+                console.warn(`Model ${model} failed, trying next...`, err.message);
+                if (model === models[models.length - 1]) throw err; // If last model failed, throw
+            }
+        }
+        res.json({ text: response!.text });
     } catch (error) {
         console.error("AI Proxy Error:", error);
-        res.status(500).json({ error: "AI Service Error" });
+        res.status(500).json({ error: "AI Service Error, please try again in a few moments." });
     }
   });
 
@@ -691,7 +705,7 @@ app.get("/api/health", (req, res) => {
       const params: any[] = [];
       let where = '';
       if (search) {
-        where = ` AND (material LIKE $1 OR "shortText" LIKE $1 OR "projectName" LIKE $1 OR "Ma_Tender" LIKE $1)`;
+        where = ` AND (material LIKE $1 OR "shortText" LIKE $1 OR "projectName" LIKE $1 OR "Ma_Tender" LIKE $1 OR "purchaseDocument" LIKE $1)`;
         params.push(`%${search}%`);
       }
 
