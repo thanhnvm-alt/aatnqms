@@ -15,6 +15,8 @@ import { Readable } from 'stream';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import multer from 'multer';
+import * as pdfParse from 'pdf-parse';
 import { GoogleGenAI } from "@google/genai";
 
 const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
@@ -118,6 +120,7 @@ const authenticate = (req: express.Request, res: express.Response, next: express
     (req as any).user = decoded;
     next();
   } catch (err) {
+    console.error('JWT Verification Error:', err);
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
 };
@@ -130,6 +133,28 @@ app.use('/uploads', express.static('/tmp/qms_uploads'));
 // Health check route
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV });
+});
+
+// --- PDF Upload for Procedures ---
+app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file || req.file.mimetype !== 'application/pdf') {
+            return res.status(400).json({ error: 'Please upload a PDF file' });
+        }
+        
+        // pdfParse is the default export if imported as `import pdfParse from 'pdf-parse'`, 
+        // but if imported as `import * as pdfParse`, it might be `pdfParse.default`
+        const data = await pdfParse.default(req.file.buffer);
+        const title = req.file.originalname.replace('.pdf', '');
+        
+        await query(`INSERT INTO "${process.env.DB_SCHEMA || 'appQAQC'}"."procedures" (title, content, category, version) VALUES ($1, $2, 'ISO', '1.0')`, 
+            [title, data.text]);
+        
+        res.json({ message: 'Procedural document uploaded and indexed successfully' });
+    } catch (error) {
+        console.error("PDF upload error:", error);
+        res.status(500).json({ error: 'Failed to process PDF' });
+    }
 });
 
 // API routes
@@ -220,6 +245,31 @@ app.get("/api/health", (req, res) => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         
+        // --- RAG: Fetch relevant history (NCRs) and Procedures (ISO) ---
+        let ragContext = "";
+        try {
+            // Basic extraction of ID/Code from message for lookup
+            const match = message.match(/[A-Z0-9-]{3,}/i);
+            
+            // Fetch NCRs
+            if (match) {
+                const results = await db.getNcrs({ search: match[0] }, 1, 3);
+                if (results.items && results.items.length > 0) {
+                    ragContext += "\nLỊCH SỬ XỬ LÝ SỰ CỐ (NCRs) LIÊN QUAN:\n" + 
+                        results.items.map((ncr: any) => `- ID: ${ncr.id}, Mô tả: ${ncr.issueDescription}, Trạng thái: ${ncr.status}`).join('\n');
+                }
+            }
+
+            // Fetch Procedures
+            const procResults = await query(`SELECT title, content FROM "${process.env.DB_SCHEMA || 'appQAQC'}"."procedures" LIMIT 5`);
+            if (procResults.rows && procResults.rows.length > 0) {
+                ragContext += "\nQUY TRÌNH & QUY CHUẨN ISO LIEN QUAN:\n" + 
+                    procResults.rows.map((p: any) => `- ${p.title}: ${p.content.substring(0, 200)}...`).join('\n');
+            }
+        } catch (e) {
+            console.error("RAG Context fetch failed:", e);
+        }
+
         // Define fallback models
         const models = ['gemini-3.1-flash-lite-preview', 'gemini-1.5-flash'];
         let response;
@@ -231,14 +281,17 @@ app.get("/api/health", (req, res) => {
                     contents: message,
                     config: {
                         systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
+                        
                         NGỮ CẢNH DỮ LIỆU:
                         ${context}
+                        ${ragContext}
 
                         HƯỚNG DẪN TRẢ LỜI:
-                        1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU.
+                        1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU và LỊCH SỬ SỰ CỐ.
                         2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
                         3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
-                        4. Nếu không thấy, hãy trả lời tổng quát.`,
+                        4. Dựa vào LỊCH SỬ SỰ CỐ (NCR) để đưa ra lời khuyên xử lý nếu có.
+                        5. Nếu không thấy, hãy trả lời tổng quát.`,
                         temperature: 0.1,
                     },
                 });

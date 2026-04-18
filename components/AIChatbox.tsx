@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, InspectionStatus } from '../types';
 import { 
   Send, X, MessageSquare, Sparkles, Bot, Loader2, 
-  Eraser, ShieldCheck, AlertCircle
+  Eraser, ShieldCheck, AlertCircle, Upload
 } from 'lucide-react';
 
 interface AIChatboxProps {
@@ -43,9 +43,32 @@ export const AIChatbox: React.FC<AIChatboxProps> = ({ inspections }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [btnPos, setBtnPos] = useState({ x: window.innerWidth - 60, y: window.innerHeight - 130 });
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      setIsLoading(true);
+      try {
+          const response = await fetch('/api/procedures/upload', {
+              method: 'POST',
+              body: formData,
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error);
+          alert('Tải lên thành công: ' + data.message);
+      } catch (err) {
+          alert('Lỗi khi tải file: ' + err);
+      } finally {
+          setIsLoading(false);
+      }
+  };
   const [isDragging, setIsDragging] = useState(false);
+  const [btnPos, setBtnPos] = useState({ x: window.innerWidth - 60, y: window.innerHeight - 130 });
   const dragStartOffset = useRef({ x: 0, y: 0 });
   
   const [messages, setMessages] = useState<Message[]>([
@@ -253,6 +276,14 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
 
           <div className="p-4 bg-white border-t border-slate-100">
             <div className="flex gap-2 items-end">
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf" className="hidden" />
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3.5 bg-slate-100 text-slate-600 rounded-2xl shadow-inner hover:bg-slate-200 transition-all active:scale-90 shrink-0"
+                    title="Tải lên quy trình PDF"
+                >
+                    <Upload className="w-5 h-5" />
+                </button>
                 <textarea 
                     value={input} 
                     onChange={e => setInput(e.target.value)} 

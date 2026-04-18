@@ -463,7 +463,7 @@ const App = () => {
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
-        <AIChatbox inspections={inspections} />
+        {/* <AIChatbox inspections={inspections} /> */}
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         
         {showModuleSelector && (

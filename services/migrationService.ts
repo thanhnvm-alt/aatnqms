@@ -344,7 +344,25 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create roles: ${e.message}`);
     }
 
-    // 12. Other Core Tables
+    // 12. Procedures (ISO)
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."procedures" (
+            "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "title" TEXT NOT NULL,
+            "content" TEXT,
+            "category" TEXT,
+            "version" TEXT,
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table procedures exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create procedures:`, e.message);
+      migrationLogs.push(`⚠️ Could not create procedures: ${e.message}`);
+    }
+
+    // 13. Other Core Tables
     try {
       await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."suppliers" (
