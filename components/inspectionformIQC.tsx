@@ -216,32 +216,33 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsProcessingImages(true);
     const { type, matIdx, itemIdx } = activeUploadContext;
     try {
-        const uploadedUrls = await Promise.all(
-            Array.from(files).map(async (file: File) => {
-                return await uploadQMSImage(file, { 
-                    entityId: formData.id || 'new', 
-                    type: 'IQC', 
-                    role: type 
+        const base64Images = await Promise.all(
+            Array.from(files).map((file: File) => {
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
                 });
             })
         );
         
         setFormData(prev => {
-            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...uploadedUrls] };
-            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...uploadedUrls] };
-            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...uploadedUrls] };
+            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...base64Images] };
+            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...base64Images] };
+            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...base64Images] };
             if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
                 const nextMats = [...(prev.materials || [])];
                 const items = [...nextMats[matIdx].items];
-                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...uploadedUrls] };
+                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...base64Images] };
                 nextMats[matIdx] = { ...nextMats[matIdx], items };
                 return { ...prev, materials: nextMats };
             }
             return prev;
         });
     } catch (err) { 
-        console.error("ISO-UPLOAD: Failed", err); 
-        alert("Lỗi tải ảnh lên.");
+        console.error("ISO-LOCAL-STORAGE: Failed", err); 
+        alert("Lỗi xử lý ảnh.");
     } finally { 
         setIsProcessingImages(false); 
         e.target.value = ''; 
@@ -252,38 +253,22 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       if (!editorState) return;
       const { type, matIdx, itemIdx } = editorState.context;
       
-      setIsProcessingImages(true);
-      try {
-          const res = await fetch(updatedImg);
-          const blob = await res.blob();
-          const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
-          
-          const uploadedUrl = await uploadQMSImage(file, { 
-              entityId: formData.id || 'new', 
-              type: 'IQC', 
-              role: type 
-          });
-
-          setFormData(prev => {
-              if (type === 'MAIN') { const newImgs = [...(prev.images || [])]; newImgs[idx] = uploadedUrl; return { ...prev, images: newImgs }; }
-              if (type === 'DELIVERY') { const newImgs = [...(prev.deliveryNoteImages || [])]; newImgs[idx] = uploadedUrl; return { ...prev, deliveryNoteImages: newImgs }; }
-              if (type === 'REPORT') { const newImgs = [...(prev.reportImages || [])]; newImgs[idx] = uploadedUrl; return { ...prev, reportImages: newImgs }; }
-              if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-                  const nextMats = [...(prev.materials || [])];
-                  const items = [...nextMats[matIdx].items];
-                  const imgs = [...(items[itemIdx].images || [])];
-                  imgs[idx] = uploadedUrl;
-                  items[itemIdx] = { ...items[itemIdx], images: imgs };
-                  nextMats[matIdx] = { ...nextMats[matIdx], items };
-                  return { ...prev, materials: nextMats };
-              }
-              return prev;
-          });
-      } catch (err) {
-          alert("Lỗi lưu ảnh chỉnh sửa.");
-      } finally {
-          setIsProcessingImages(false);
-      }
+      // Store the edited data URL directly in local state
+      setFormData(prev => {
+          if (type === 'MAIN') { const newImgs = [...(prev.images || [])]; newImgs[idx] = updatedImg; return { ...prev, images: newImgs }; }
+          if (type === 'DELIVERY') { const newImgs = [...(prev.deliveryNoteImages || [])]; newImgs[idx] = updatedImg; return { ...prev, deliveryNoteImages: newImgs }; }
+          if (type === 'REPORT') { const newImgs = [...(prev.reportImages || [])]; newImgs[idx] = updatedImg; return { ...prev, reportImages: newImgs }; }
+          if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+              const nextMats = [...(prev.materials || [])];
+              const items = [...nextMats[matIdx].items];
+              const imgs = [...(items[itemIdx].images || [])];
+              imgs[idx] = updatedImg;
+              items[itemIdx] = { ...items[itemIdx], images: imgs };
+              nextMats[matIdx] = { ...nextMats[matIdx], items };
+              return { ...prev, materials: nextMats };
+          }
+          return prev;
+      });
   };
 
   const handleSubmit = async () => {
@@ -291,8 +276,53 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (!formData.signature) { alert("QC bắt buộc ký tên xác nhận báo cáo."); return; }
     const invalidMat = formData.materials?.find(m => m.inspectQty <= 0 || m.inspectQty > m.deliveryQty);
     if (invalidMat) { alert(`Vật tư "${invalidMat.name}" có số lượng kiểm tra không hợp lệ (phải > 0 và <= SL Giao).`); return; }
+    
     setIsSaving(true);
-    try { await onSave({ ...formData, status: InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection); } catch (e: any) { alert("Lỗi lưu báo cáo IQC."); } finally { setIsSaving(false); }
+    try {
+        const entityId = formData.id || 'new';
+        
+        // Helper to upload if it's base64
+        const uploadIfBase64 = async (url: string, role: string) => {
+            if (url.startsWith('data:')) {
+                return await uploadQMSImage(url, { entityId, type: 'IQC', role });
+            }
+            return url;
+        };
+
+        // 1. Process Main Images
+        const processedImages = await Promise.all((formData.images || []).map(img => uploadIfBase64(img, 'MAIN')));
+        const processedDelivery = await Promise.all((formData.deliveryNoteImages || []).map(img => uploadIfBase64(img, 'DELIVERY')));
+        const processedReport = await Promise.all((formData.reportImages || []).map(img => uploadIfBase64(img, 'REPORT')));
+        const processedSignature = await uploadIfBase64(formData.signature || '', 'SIGNATURE_QC');
+
+        // 2. Process Material Item Images
+        const processedMaterials = await Promise.all((formData.materials || []).map(async (mat) => {
+            const nextItems = await Promise.all((mat.items || []).map(async (item) => {
+                const itemImages = await Promise.all((item.images || []).map(img => uploadIfBase64(img, 'ITEM')));
+                return { ...item, images: itemImages };
+            }));
+            const matImages = await Promise.all((mat.images || []).map(img => uploadIfBase64(img, 'MATERIAL')));
+            return { ...mat, items: nextItems, images: matImages };
+        }));
+
+        const finalData = { 
+            ...formData, 
+            status: InspectionStatus.PENDING, 
+            updatedAt: new Date().toISOString(),
+            images: processedImages,
+            deliveryNoteImages: processedDelivery,
+            reportImages: processedReport,
+            signature: processedSignature,
+            materials: processedMaterials
+        };
+
+        await onSave(finalData as Inspection);
+    } catch (e: any) { 
+        console.error("ISO-SAVE: Error uploading images or saving", e);
+        alert("Lỗi lưu báo cáo IQC (có thể do lỗi tải ảnh lên)."); 
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   return (

@@ -90,22 +90,6 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
         if (canvas) {
             const base64 = canvas.toDataURL('image/png');
             onChange(base64); // Update immediately to prevent empty signature on quick save
-            
-            // Upload to server in background
-            try {
-                const blob = await (await fetch(base64)).blob();
-                const file = new File([blob], `signature_${Date.now()}.png`, { type: 'image/png' });
-                
-                // Use the standardized upload function
-                const { uploadFileToStorage } = await import('../services/apiService');
-                const url = await uploadFileToStorage(file, `signature_${Date.now()}.png`);
-                
-                console.log("Signature uploaded successfully:", url);
-                onChange(url); // Update with URL when done
-            } catch (err) {
-                console.error("Error uploading signature (catch block):", err);
-                // Already fell back to base64
-            }
         }
     };
 

@@ -88,13 +88,32 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
       setIsSaving(true);
       try {
+          const entityId = formData.id || 'new';
+          
+          // Helper to upload if it's base64
+          const uploadIfBase64 = async (url: string, role: string) => {
+              if (url.startsWith('data:')) {
+                  return await uploadQMSImage(url, { entityId, type: 'NCR', role });
+              }
+              return url;
+          };
+
+          const processedBefore = await Promise.all((formData.imagesBefore || []).map(img => uploadIfBase64(img, 'BEFORE')));
+          const processedAfter = await Promise.all((formData.imagesAfter || []).map(img => uploadIfBase64(img, 'AFTER')));
+
           const oldStatus = ncr.status;
           let finalStatus = formData.status;
           if (finalStatus !== 'CLOSED') {
-              finalStatus = (formData.imagesAfter && formData.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
+              finalStatus = (processedAfter && processedAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
           }
           
-          const dataToSave = { ...formData, status: finalStatus, inspection_id: targetId };
+          const dataToSave = { 
+              ...formData, 
+              status: finalStatus, 
+              inspection_id: targetId,
+              imagesBefore: processedBefore,
+              imagesAfter: processedAfter
+          };
           await saveNcrMapped(targetId, dataToSave, ncr.createdBy || user.name);
           
           // Notify if closed
@@ -116,9 +135,10 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           setFormData(dataToSave);
           setIsEditing(false);
           if (onUpdate) onUpdate();
+          alert("Đã lưu thay đổi thành công.");
       } catch (error: any) { 
           console.error("Save Error:", error);
-          alert("Lỗi khi lưu NCR: Cơ sở dữ liệu từ chối yêu cầu (Kiểm tra lại kết nối)."); 
+          alert("Lỗi khi lưu NCR: Cơ sở dữ liệu từ chối yêu cầu (Kiểm tra lại kết nối hoặc ảnh tải lên)."); 
       } finally { setIsSaving(false); }
   };
 
@@ -176,24 +196,24 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       const files = e.target.files;
       if (!files || files.length === 0) return;
       
-      setIsSaving(true);
       try {
-          const uploadedUrls = await Promise.all(
-              Array.from(files).map(async (file: File) => {
-                  return await uploadQMSImage(file, { 
-                      entityId: formData.id || 'new', 
-                      type: 'NCR', 
-                      role: type 
+          const base64Images = await Promise.all(
+              Array.from(files).map((file: File) => {
+                  return new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(reader.result as string);
+                      reader.onerror = reject;
+                      reader.readAsDataURL(file);
                   });
               })
           );
           
           if (type === 'COMMENT') {
-              setCommentAttachments(prev => [...prev, ...uploadedUrls]);
+              setCommentAttachments(prev => [...prev, ...base64Images]);
           } else {
               setFormData(prev => {
                   const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-                  const newImages = [...(prev[field] as string[] || []), ...uploadedUrls];
+                  const newImages = [...(prev[field] as string[] || []), ...base64Images];
                   let newStatus = prev.status;
                   if (newStatus !== 'CLOSED' && type === 'AFTER') {
                       newStatus = newImages.length > 0 ? 'IN_PROGRESS' : 'OPEN';
@@ -203,10 +223,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               setIsEditing(true);
           }
       } catch (err) {
-          console.error("ISO-NCR-UPLOAD: Failed", err);
-          alert("Lỗi tải ảnh lên.");
+          console.error("ISO-NCR-LOCAL: Failed", err);
+          alert("Lỗi xử lý ảnh.");
       } finally {
-          setIsSaving(false);
           e.target.value = '';
       }
   };
@@ -229,31 +248,42 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       if (!newComment.trim() && commentAttachments.length === 0) return;
       const targetId = formData.inspection_id || ncr.inspection_id || '';
       setIsSubmitting(true);
-      const newCommentObj: NCRComment = {
-          id: `cmt_${Date.now()}`,
-          userId: user.id,
-          userName: user.name,
-          userAvatar: user.avatar,
-          content: newComment,
-          createdAt: new Date().toISOString(),
-          attachments: commentAttachments
-      };
-      const updatedComments = [...(formData.comments || []), newCommentObj];
-      const updatedNcr = { ...formData, comments: updatedComments, inspection_id: targetId };
       try {
+          const entityId = formData.id || 'new';
+          const uploadIfBase64 = async (url: string, role: string) => {
+              if (url.startsWith('data:')) {
+                  return await uploadQMSImage(url, { entityId, type: 'NCR', role });
+              }
+              return url;
+          };
+
+          const processedAttachments = await Promise.all(commentAttachments.map(img => uploadIfBase64(img, 'COMMENT')));
+
+          const newCommentObj: NCRComment = {
+              id: `cmt_${Date.now()}`,
+              userId: user.id,
+              userName: user.name,
+              userAvatar: user.avatar,
+              content: newComment,
+              createdAt: new Date().toISOString(),
+              attachments: processedAttachments
+          };
+          const updatedComments = [...(formData.comments || []), newCommentObj];
+          const updatedNcr = { ...formData, comments: updatedComments, inspection_id: targetId };
+          
           await saveNcrMapped(targetId, updatedNcr, ncr.createdBy || user.name);
           
           // Notify participants
-          const users = await fetchUsers();
+          const allUsers = await fetchUsers();
           const targets = [];
           // Notify creator if not commenter
           if (ncr.createdBy !== user.name) {
-            const creator = users.find((u: any) => u.name === ncr.createdBy);
+            const creator = allUsers.find((u: any) => u.name === ncr.createdBy);
             if (creator) targets.push(creator.id);
           }
           // Notify responsible person if not commenter
           if (ncr.responsiblePerson && ncr.responsiblePerson !== user.name) {
-            const resp = users.find((u: any) => u.name === ncr.responsiblePerson);
+            const resp = allUsers.find((u: any) => u.name === ncr.responsiblePerson);
             if (resp) targets.push(resp.id);
           }
 
@@ -271,7 +301,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           setNcr(updatedNcr);
           setNewComment('');
           setCommentAttachments([]);
-      } catch (e) { alert("Lỗi khi gửi bình luận."); } finally { setIsSubmitting(false); }
+      } catch (e) { 
+          console.error("ISO-COMMENT: Error", e);
+          alert("Lỗi khi gửi bình luận (Lỗi tải ảnh)."); 
+      } finally { 
+          setIsSubmitting(false); 
+      }
   };
 
   const openGallery = (images: string[], index: number, context?: string) => {
@@ -283,20 +318,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   };
 
   const updateCommentImage = async (index: number, updatedImage: string) => {
-      try {
-          const uploadedUrl = await uploadQMSImage(updatedImage, {
-              entityId: formData.id || 'new',
-              type: 'NCR',
-              role: 'COMMENT_EDIT'
-          });
-          setCommentAttachments(prev => {
-              const next = [...prev];
-              next[index] = uploadedUrl;
-              return next;
-          });
-      } catch (err) {
-          alert("Lỗi lưu ảnh chỉnh sửa.");
-      }
+    // Just store edited data URL locally for comment attachments
+    setCommentAttachments(prev => {
+        const next = [...prev];
+        next[index] = updatedImage;
+        return next;
+    });
   };
 
   return (

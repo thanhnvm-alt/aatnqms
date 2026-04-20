@@ -205,27 +205,33 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     setIsProcessingImages(true);
     const { type, matIdx, itemIdx } = activeUploadContext;
     try {
-        const uploadPromises = Array.from(files).map(file => 
-            uploadQMSImage(file, formData.id || 'temp', 'SQC_VT', user.role)
+        const base64Images = await Promise.all(
+            Array.from(files).map((file: File) => {
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            })
         );
-        const uploadedUrls = await Promise.all(uploadPromises);
 
         setFormData(prev => {
-            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...uploadedUrls] };
-            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...uploadedUrls] };
-            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...uploadedUrls] };
+            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...base64Images] };
+            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...base64Images] };
+            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...base64Images] };
             if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
                 const nextMats = [...(prev.materials || [])];
                 const items = [...nextMats[matIdx].items];
-                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...uploadedUrls] };
+                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...base64Images] };
                 nextMats[matIdx] = { ...nextMats[matIdx], items };
                 return { ...prev, materials: nextMats };
             }
             return prev;
         });
     } catch (err) { 
-        console.error(err); 
-        alert("Lỗi khi tải ảnh lên máy chủ.");
+        console.error("ISO-LOCAL-STORAGE: Failed", err); 
+        alert("Lỗi xử lý ảnh.");
     } finally { 
         setIsProcessingImages(false); 
         e.target.value = ''; 
@@ -238,27 +244,18 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       if (!editorState) return;
       const { type, matIdx, itemIdx } = editorState.context;
       
-      setIsProcessingImages(true);
-      try {
-          const uploadedUrl = await uploadQMSImage(updatedImg, formData.id || 'temp', 'SQC_VT', user.role);
-          
-          setFormData(prev => {
-              if (type === 'MAIN') { const next = [...(prev.images || [])]; next[idx] = uploadedUrl; return { ...prev, images: next }; }
-              if (type === 'DELIVERY') { const next = [...(prev.deliveryNoteImages || [])]; next[idx] = uploadedUrl; return { ...prev, deliveryNoteImages: next }; }
-              if (type === 'REPORT') { const next = [...(prev.reportImages || [])]; next[idx] = uploadedUrl; return { ...prev, reportImages: next }; }
-              if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-                  const nextMats = [...(prev.materials || [])];
-                  nextMats[matIdx].items[itemIdx].images![idx] = uploadedUrl;
-                  return { ...prev, materials: nextMats };
-              }
-              return prev;
-          });
-      } catch (err) {
-          console.error(err);
-          alert("Lỗi khi lưu ảnh đã chỉnh sửa.");
-      } finally {
-          setIsProcessingImages(false);
-      }
+      // Store edited data URL locally
+      setFormData(prev => {
+          if (type === 'MAIN') { const next = [...(prev.images || [])]; next[idx] = updatedImg; return { ...prev, images: next }; }
+          if (type === 'DELIVERY') { const next = [...(prev.deliveryNoteImages || [])]; next[idx] = updatedImg; return { ...prev, deliveryNoteImages: next }; }
+          if (type === 'REPORT') { const next = [...(prev.reportImages || [])]; next[idx] = updatedImg; return { ...prev, reportImages: next }; }
+          if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+              const nextMats = [...(prev.materials || [])];
+              nextMats[matIdx].items[itemIdx].images![idx] = updatedImg;
+              return { ...prev, materials: nextMats };
+          }
+          return prev;
+      });
   };
 
   const toggleDoc = (id: string) => {
@@ -274,10 +271,53 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const handleSubmit = async () => {
     if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã PO và Nhà cung cấp."); return; }
     if (!formData.signature) { alert("QC bắt buộc phải ký tên xác nhận báo cáo."); return; }
+    
     setIsSaving(true);
     try {
-        await onSave({ ...formData, status: InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection);
-    } catch (e: any) { alert("Lỗi hệ thống: Không thể lưu báo cáo."); } finally { setIsSaving(false); }
+        const entityId = formData.id || 'new';
+        
+        // Helper to upload if it's base64
+        const uploadIfBase64 = async (url: string, role: string) => {
+            if (url.startsWith('data:')) {
+                return await uploadQMSImage(url, { entityId, type: 'SQC_VT', role });
+            }
+            return url;
+        };
+
+        // 1. Process Main Images
+        const processedImages = await Promise.all((formData.images || []).map(img => uploadIfBase64(img, 'MAIN')));
+        const processedDelivery = await Promise.all((formData.deliveryNoteImages || []).map(img => uploadIfBase64(img, 'DELIVERY')));
+        const processedReport = await Promise.all((formData.reportImages || []).map(img => uploadIfBase64(img, 'REPORT')));
+        const processedSignature = await uploadIfBase64(formData.signature || '', 'SIGNATURE_QC');
+
+        // 2. Process Material Item Images
+        const processedMaterials = await Promise.all((formData.materials || []).map(async (mat) => {
+            const nextItems = await Promise.all((mat.items || []).map(async (item) => {
+                const itemImages = await Promise.all((item.images || []).map(img => uploadIfBase64(img, 'ITEM')));
+                return { ...item, images: itemImages };
+            }));
+            const matImages = await Promise.all((mat.images || []).map(img => uploadIfBase64(img, 'MATERIAL')));
+            return { ...mat, items: nextItems, images: matImages };
+        }));
+
+        const finalData = { 
+            ...formData, 
+            status: InspectionStatus.PENDING, 
+            updatedAt: new Date().toISOString(),
+            images: processedImages,
+            deliveryNoteImages: processedDelivery,
+            reportImages: processedReport,
+            signature: processedSignature,
+            materials: processedMaterials
+        };
+
+        await onSave(finalData as Inspection);
+    } catch (e: any) { 
+        console.error("ISO-SAVE: Error uploading images or saving", e);
+        alert("Lỗi hệ thống: Không thể lưu báo cáo (Lỗi tải ảnh)."); 
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   return (
