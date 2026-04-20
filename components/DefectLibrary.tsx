@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DefectLibraryItem, User, Workshop } from '../types';
 import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, exportDefectLibrary, importDefectLibraryFile } from '../services/apiService';
@@ -449,7 +450,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                 className="aspect-video bg-green-50/50 border-2 border-dashed border-green-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-100/50 transition-all overflow-hidden relative group shadow-sm"
                               >
                                   {formData.correctImage ? (
-                                      <img src={formData.correctImage} className="w-full h-full object-cover" />
+                                      <img src={getProxyImageUrl(formData.correctImage)} className="w-full h-full object-cover" />
                                   ) : (
                                       <div className="flex flex-col items-center text-green-300">
                                           <Camera className="w-8 h-8" />
@@ -466,7 +467,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                 className="aspect-video bg-red-50/50 border-2 border-dashed border-red-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-red-100/50 transition-all overflow-hidden relative group shadow-sm"
                               >
                                   {formData.incorrectImage ? (
-                                      <img src={formData.incorrectImage} className="w-full h-full object-cover" />
+                                      <img src={getProxyImageUrl(formData.incorrectImage)} className="w-full h-full object-cover" />
                                   ) : (
                                       <div className="flex flex-col items-center text-red-300">
                                           <Camera className="w-8 h-8" />

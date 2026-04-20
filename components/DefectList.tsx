@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Defect, User } from '../types';
@@ -139,7 +140,7 @@ export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDef
                               <div className="flex gap-3">
                                   {defect.images && defect.images.length > 0 ? (
                                       <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-100 shrink-0 shadow-sm">
-                                          <img src={defect.images[0]} className="w-full h-full object-cover" />
+                                          <img src={getProxyImageUrl(defect.images[0])} className="w-full h-full object-cover" />
                                       </div>
                                   ) : (
                                       <div className="w-16 h-16 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200 shrink-0 border border-slate-100">

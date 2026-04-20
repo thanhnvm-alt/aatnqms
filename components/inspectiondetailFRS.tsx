@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR } from '../types';
@@ -98,8 +99,8 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="text-blue-700 border-b border-blue-50 pb-2 font-bold text-[11px] uppercase tracking-wide flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-green-500"/> Phê duyệt FSR</h3>
             <div className="grid grid-cols-2 gap-4 mt-2">
-                <div className="text-center"><p className="text-[9px] font-bold text-slate-500 uppercase mb-1">QC Thực hiện</p><div className="bg-slate-50 p-2 rounded-xl h-20 flex items-center justify-center">{inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <span className="text-[9px]">Chưa ký</span>}</div></div>
-                <div className="text-center"><p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Manager Duyệt</p><div className="bg-slate-50 p-2 rounded-xl h-20 flex items-center justify-center">{inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" /> : <span className="text-[9px] text-orange-400">Chờ duyệt</span>}</div></div>
+                <div className="text-center"><p className="text-[9px] font-bold text-slate-500 uppercase mb-1">QC Thực hiện</p><div className="bg-slate-50 p-2 rounded-xl h-20 flex items-center justify-center">{inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain" /> : <span className="text-[9px]">Chưa ký</span>}</div></div>
+                <div className="text-center"><p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Manager Duyệt</p><div className="bg-slate-50 p-2 rounded-xl h-20 flex items-center justify-center">{inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain" /> : <span className="text-[9px] text-orange-400">Chờ duyệt</span>}</div></div>
             </div>
         </section>
       </div>

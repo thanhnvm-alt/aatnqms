@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { User, ModuleId } from '../types';
@@ -157,7 +158,7 @@ export const HomeMenu: React.FC<HomeMenuProps> = ({ onNavigate, currentUser, onL
                   >
                       <div className={`absolute -inset-1.5 bg-blue-500/10 rounded-full blur transition-all ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
                       <div className={`relative w-20 h-20 md:w-24 md:h-24 rounded-full border-4 shadow-xl overflow-hidden transition-all active:scale-95 ${isMenuOpen ? 'border-blue-500' : 'border-white'}`}>
-                          <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover bg-slate-100" referrerPolicy="no-referrer" />
+                          <img src={getProxyImageUrl(currentUser.avatar)} alt={currentUser.name} className="w-full h-full object-cover bg-slate-100" referrerPolicy="no-referrer" />
                           <div className="absolute bottom-0 right-0 left-0 bg-black/40 backdrop-blur-sm h-6 flex items-center justify-center">
                               <ChevronDown className={`w-3 h-3 text-white transition-transform duration-300 ${isMenuOpen ? 'rotate-180' : ''}`} />
                           </div>

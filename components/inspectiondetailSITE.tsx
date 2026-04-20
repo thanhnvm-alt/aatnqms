@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
@@ -130,7 +131,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         {inspection.images?.map((img, i) => (
                             <div key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-amber-400 transition-all cursor-zoom-in relative group">
-                                <img src={img} className="w-full h-full object-cover" alt="" />
+                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" />
                                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <Maximize2 className="text-white w-6 h-6" />
                                 </div>
@@ -163,7 +164,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                             <div className="flex gap-3 overflow-x-auto no-scrollbar py-1 mt-3">
                                 {item.images.map((img, i) => (
                                     <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-20 h-20 shrink-0 rounded-2xl overflow-hidden border border-slate-200 cursor-zoom-in relative group shadow-sm transition-transform hover:scale-105">
-                                        <img src={img} className="w-full h-full object-cover" alt=""/>
+                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt=""/>
                                     </div>
                                 ))}
                             </div>
@@ -179,7 +180,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                     <div className="text-center space-y-3">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">QC Hiện Trường</p>
                         <div className="bg-slate-50 p-4 rounded-[2rem] border border-slate-100 h-32 flex items-center justify-center overflow-hidden shadow-inner">
-                            {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" /> : <div className="text-[10px] font-black text-slate-300 uppercase italic">Chưa ký</div>}
+                            {inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain" /> : <div className="text-[10px] font-black text-slate-300 uppercase italic">Chưa ký</div>}
                         </div>
                         <p className="text-[12px] font-black text-slate-800 uppercase tracking-tight">{inspection.inspectorName}</p>
                     </div>
@@ -188,7 +189,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Quản lý phê duyệt</p>
                         <div className="bg-slate-50 p-4 rounded-[2rem] border border-slate-100 h-32 flex items-center justify-center overflow-hidden shadow-inner">
                             {inspection.managerSignature ? (
-                                <img src={inspection.managerSignature} className="h-full object-contain" />
+                                <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain" />
                             ) : <div className="text-[10px] text-orange-400 font-black uppercase tracking-[0.2em] animate-pulse">Waiting for Approval</div>}
                         </div>
                         <p className="text-[12px] font-black text-slate-800 uppercase tracking-tight">{inspection.managerName || 'QA Manager'}</p>
@@ -205,7 +206,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                 <div className="p-6 space-y-4">
                     {inspection.comments?.map((comment) => (
                         <div key={comment.id} className="flex gap-4">
-                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0" alt="" />
+                            <img src={getProxyImageUrl(comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`)} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0" alt="" />
                             <div className="flex-1">
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="font-black text-slate-800 text-[11px] uppercase">{comment.userName}</span>

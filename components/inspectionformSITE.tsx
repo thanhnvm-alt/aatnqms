@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, ModuleId } from '../types';
@@ -134,7 +135,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-20 h-20 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-6 h-6 mb-1"/><span className="font-black text-[8px] uppercase">Tải tệp</span></button>
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shrink-0 group shadow-sm">
-                        <img src={img} className="w-full h-full object-cover" />
+                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
                         <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
@@ -208,7 +209,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar py-1">
                                 {item.images.map((img, i) => (
-                                    <div key={i} className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-slate-200 shadow-sm"><img src={img} className="w-full h-full object-cover" /></div>
+                                    <div key={i} className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-slate-200 shadow-sm"><img src={getProxyImageUrl(img)} className="w-full h-full object-cover" /></div>
                                 ))}
                             </div>
                         )}

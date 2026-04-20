@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState } from 'react';
 import { FloorPlan, Project } from '../types';
@@ -88,7 +89,7 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                                 className="aspect-[16/10] sm:aspect-[4/3] bg-slate-100 relative cursor-pointer overflow-hidden border-b border-slate-50"
                             >
                                 <img 
-                                    src={plan.image_url} 
+                                    src={getProxyImageUrl(plan.image_url)} 
                                     className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" 
                                     alt={plan.name}
                                 />

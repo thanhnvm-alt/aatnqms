@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './Button';
 import { generate3DFrom2D, GenerationMode } from '../services/geminiService';
@@ -156,7 +157,7 @@ export const ThreeDConverter: React.FC = () => {
                              <p className="text-slate-400 text-sm mt-1 uppercase">PDF Document</p>
                          </div>
                     ) : (
-                        <img src={inputData} alt="Input" className="w-full h-full object-contain p-2" />
+                        <img src={getProxyImageUrl(inputData)} alt="Input" className="w-full h-full object-contain p-2" />
                     )}
                     
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -290,7 +291,7 @@ export const ThreeDConverter: React.FC = () => {
                         />
                     ) : (
                         // Standard & Exploded View
-                        <img src={outputImage} alt="3D Output" className="w-full h-full object-contain pointer-events-none" />
+                        <img src={getProxyImageUrl(outputImage)} alt="3D Output" className="w-full h-full object-contain pointer-events-none" />
                     )
                 ) : (
                   <div className="text-center text-slate-500 p-8 opacity-50">

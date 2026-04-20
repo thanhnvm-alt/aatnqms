@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CheckItem, User, Workshop, Role } from '../types';
@@ -217,7 +218,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                     <div className="relative">
                                         <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white/20 shadow-2xl overflow-hidden mb-3 md:mb-4 bg-slate-800 flex items-center justify-center">
                                             <img 
-                                                src={profileData.avatar} 
+                                                src={getProxyImageUrl(profileData.avatar)} 
                                                 alt={profileData.name} 
                                                 className="w-full h-full object-cover" 
                                                 onError={(e) => {

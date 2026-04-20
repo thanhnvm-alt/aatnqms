@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR } from '../types';
@@ -251,7 +252,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-2">
                         {inspection.images.map((img, i) => (
                             <div key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="w-24 h-24 rounded-2xl overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-400 transition-all">
-                                <img src={img} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                             </div>
                         ))}
                     </div>
@@ -289,7 +290,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 mt-2">
                                 {item.images.map((img, i) => (
                                     <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-400 transition-all">
-                                        <img src={img} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                                     </div>
                                 ))}
                             </div>
@@ -351,21 +352,21 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="text-center space-y-3">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QC Inspector</p>
                         <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
-                            {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" alt="" referrerPolicy="no-referrer" /> : <span className="text-[10px] text-slate-300 font-bold uppercase italic">Chưa ký</span>}
+                            {inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain" alt="" referrerPolicy="no-referrer" /> : <span className="text-[10px] text-slate-300 font-bold uppercase italic">Chưa ký</span>}
                         </div>
                         <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.inspectorName}</p>
                     </div>
                     <div className="text-center space-y-3">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Production / Workshop</p>
                         <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                            {inspection.productionSignature ? <img src={inspection.productionSignature} className="h-full object-contain" alt="" referrerPolicy="no-referrer" /> : <div className="text-[10px] text-slate-300 font-bold uppercase italic">N/A</div>}
+                            {inspection.productionSignature ? <img src={getProxyImageUrl(inspection.productionSignature)} className="h-full object-contain" alt="" referrerPolicy="no-referrer" /> : <div className="text-[10px] text-slate-300 font-bold uppercase italic">N/A</div>}
                         </div>
                         <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.productionName || '---'}</p>
                     </div>
                     <div className="text-center space-y-3">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">QA Manager Approval</p>
                         <div className="bg-slate-50 h-32 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                            {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" alt="" referrerPolicy="no-referrer" /> : <span className="text-orange-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Đang chờ duyệt</span>}
+                            {inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain" alt="" referrerPolicy="no-referrer" /> : <span className="text-orange-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Đang chờ duyệt</span>}
                         </div>
                         <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{inspection.managerName || '---'}</p>
                     </div>
@@ -381,7 +382,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                     {inspection.comments?.map((comment) => (
                         <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
+                            <img src={getProxyImageUrl(comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`)} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
                             <div className="flex-1 space-y-2">
                                 <div className="flex justify-between items-center px-1">
                                     <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
@@ -392,7 +393,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                     <div className="flex gap-3 flex-wrap pt-2">
                                         {comment.attachments.map((img, i) => (
                                             <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
-                                                <img src={img} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                                             </div>
                                         ))}
                                     </div>
@@ -406,7 +407,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                         <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                             {commentAttachments.map((img, idx) => (
                                 <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                    <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
+                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
                                     <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                                 </div>
                             ))}

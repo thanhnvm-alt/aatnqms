@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, User, Workshop, CheckStatus } from '../types';
@@ -54,7 +55,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                     {inspection.images.map((img, idx) => (
                         <div key={idx} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in">
-                            <img src={img} className="w-full h-full object-cover" alt=""/>
+                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt=""/>
                         </div>
                     ))}
                 </div>
@@ -79,7 +80,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
                                     {item.images.map((img, imgIdx) => (
                                         <div key={imgIdx} onClick={() => setLightboxState({ images: item.images!, index: imgIdx })} className="w-12 h-12 rounded-lg overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm">
-                                            <img src={img} className="w-full h-full object-cover" alt=""/>
+                                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt=""/>
                                         </div>
                                     ))}
                                 </div>
@@ -95,14 +96,14 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
             <div className="grid grid-cols-2 gap-4">
                 <div className="text-center space-y-1">
                     <div className="bg-slate-50 h-24 rounded-xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain"/> : <span className="text-[9px] text-slate-300">N/A</span>}
+                        {inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain"/> : <span className="text-[9px] text-slate-300">N/A</span>}
                     </div>
                     <span className="text-[9px] font-bold uppercase text-slate-800">{inspection.inspectorName}</span>
                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">QC Inspector</p>
                 </div>
                 <div className="text-center space-y-1">
                     <div className="bg-slate-50 h-24 rounded-xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                        {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain"/> : <span className="text-[9px] text-orange-400 font-black animate-pulse">CHỜ DUYỆT</span>}
+                        {inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain"/> : <span className="text-[9px] text-orange-400 font-black animate-pulse">CHỜ DUYỆT</span>}
                     </div>
                     <span className="text-[9px] font-bold uppercase text-slate-800">Manager Approval</span>
                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">QA/QC Manager</p>

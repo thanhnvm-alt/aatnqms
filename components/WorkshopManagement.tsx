@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Workshop } from '../types';
@@ -241,7 +242,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200">
                         {ws.image ? (
-                            <img src={ws.image} alt="" className="w-full h-full object-cover" />
+                            <img src={getProxyImageUrl(ws.image)} alt="" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-slate-400">
                                 <Factory className="w-6 h-6" />
@@ -326,7 +327,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                 <div className="flex gap-3">
                     <div className="w-14 h-14 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200">
                         {ws.image ? (
-                            <img src={ws.image} alt="" className="w-full h-full object-cover" />
+                            <img src={getProxyImageUrl(ws.image)} alt="" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-slate-400">
                                 <Factory className="w-6 h-6" />
@@ -416,7 +417,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                     >
                         {formData.image ? (
                             <>
-                                <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                                <img src={getProxyImageUrl(formData.image)} alt="Preview" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Camera className="w-8 h-8 text-white" />
                                 </div>

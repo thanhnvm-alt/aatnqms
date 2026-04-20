@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
@@ -66,7 +67,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
       {/* Background decoration */}
       <div className="absolute inset-0 z-0">
           <img 
-            src="https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1920" 
+            src={getProxyImageUrl("https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1920")} 
             alt="Background" 
             className="w-full h-full object-cover"
           />

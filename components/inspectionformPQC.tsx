@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, NCR, DefectLibraryItem } from '../types';
@@ -157,7 +158,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesBefore?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={getProxyImageUrl(img)} className="w-full h-full object-cover cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
                                 ))}
                             </div>
                         </div>
@@ -171,7 +172,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesAfter?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={img} className="w-full h-full object-cover" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={getProxyImageUrl(img)} className="w-full h-full object-cover" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
                                 ))}
                             </div>
                         </div>
@@ -570,7 +571,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
-                        <img src={img} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} referrerPolicy="no-referrer" />
+                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} referrerPolicy="no-referrer" />
                         <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
@@ -679,7 +680,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 {item.images && item.images.length > 0 && (
                                     <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
                                         {item.images.map((im, i) => (
-                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group"><img src={im} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)} /><button onClick={() => { const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button></div>
+                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group"><img src={getProxyImageUrl(im)} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)} /><button onClick={() => { const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button></div>
                                         ))}
                                     </div>
                                 )}
@@ -843,7 +844,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                               {it.images.map((img, iIdx) => (
                                                                   <img 
                                                                       key={iIdx} 
-                                                                      src={img} 
+                                                                      src={getProxyImageUrl(img)} 
                                                                       className="w-16 h-16 rounded-xl object-cover border border-slate-100 shadow-sm transition-transform hover:scale-105" 
                                                                       onClick={() => setLightboxState({ images: it.images!, index: iIdx })}
                                                                       referrerPolicy="no-referrer"
@@ -860,7 +861,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
                                               <div className="flex items-center justify-center gap-2 mb-3 text-slate-400"><ShieldCheck className="w-4 h-4" /> <span className="text-[9px] font-black uppercase tracking-widest">Chữ ký điện tử QC</span></div>
                                               <div className="bg-white h-24 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 mx-auto w-full">
-                                                  <img src={previewData.signature} className="h-full object-contain" alt="" />
+                                                  <img src={getProxyImageUrl(previewData.signature)} className="h-full object-contain" alt="" />
                                               </div>
                                           </div>
                                       )}

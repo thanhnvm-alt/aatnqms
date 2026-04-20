@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, ImageIcon, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -121,7 +122,7 @@ export const FloorPlanUploadModal: React.FC<FloorPlanUploadModalProps> = ({ proj
                         <div className="space-y-6">
                             <div className="aspect-[16/10] bg-white rounded-3xl border border-slate-200 overflow-hidden relative shadow-inner group">
                                 {previewUrl ? (
-                                    <img src={previewUrl} className="w-full h-full object-contain" alt="Preview" />
+                                    <img src={getProxyImageUrl(previewUrl)} className="w-full h-full object-contain" alt="Preview" />
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                         <Loader2 className="w-8 h-8 animate-spin" />

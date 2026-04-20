@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { FloorPlan, LayoutPin, InspectionStatus, CheckStatus, Inspection, NCRComment, User } from '../types';
@@ -459,7 +460,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                             willChange: 'transform'
                         }}
                     >
-                        <img ref={imgRef} src={floorPlan.image_url} alt="Drawing" referrerPolicy="no-referrer" className={`max-w-[95vw] sm:max-w-[85vw] max-h-[85vh] sm:max-h-[80vh] object-contain pointer-events-none transition-opacity ${isAddingMode ? 'opacity-50' : 'opacity-100'}`} />
+                        <img ref={imgRef} src={getProxyImageUrl(floorPlan.image_url)} alt="Drawing" referrerPolicy="no-referrer" className={`max-w-[95vw] sm:max-w-[85vw] max-h-[85vh] sm:max-h-[80vh] object-contain pointer-events-none transition-opacity ${isAddingMode ? 'opacity-50' : 'opacity-100'}`} />
 
                         {isAddingMode && hoverCoord && (
                             <div 
@@ -569,7 +570,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                                 className="aspect-square bg-white rounded-[2rem] border border-slate-200 overflow-hidden cursor-zoom-in group shadow-sm hover:border-blue-400 hover:shadow-xl transition-all relative"
                                             >
                                                 <img 
-                                                    src={img} 
+                                                    src={getProxyImageUrl(img)} 
                                                     onClick={() => setLightbox({ images: quickDetail.images!, index: idx })} 
                                                     className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" 
                                                 />
@@ -626,7 +627,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                     <div className="space-y-5 px-1 pb-4">
                                         {(quickDetail.comments || []).slice(-4).map((cmt, idx) => (
                                             <div key={idx} className="flex gap-4 animate-in slide-in-from-bottom-1">
-                                                <img src={cmt.userAvatar} className="w-9 h-9 rounded-xl bg-white shrink-0 border border-slate-200 shadow-sm object-cover" />
+                                                <img src={getProxyImageUrl(cmt.userAvatar)} className="w-9 h-9 rounded-xl bg-white shrink-0 border border-slate-200 shadow-sm object-cover" />
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex justify-between items-center mb-1">
                                                         <span className="text-[10px] font-black text-slate-800 uppercase truncate pr-1">{cmt.userName}</span>
@@ -704,7 +705,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                             {filteredUsers.map(u => (
                                 <button key={u.id} onClick={() => handleAssignUser(u)} className="w-full flex items-center gap-4 p-4 rounded-[1.5rem] hover:bg-blue-50 transition-all border border-transparent active:scale-95 text-left group">
                                     <div className="relative">
-                                        <img src={u.avatar} className="w-11 h-11 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-sm" />
+                                        <img src={getProxyImageUrl(u.avatar)} className="w-11 h-11 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-sm" />
                                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
                                     </div>
                                     <div className="flex-1 min-w-0">

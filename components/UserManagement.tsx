@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
@@ -311,7 +312,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                           <td className="px-8 py-5">
                               <div className="flex items-center gap-4">
                                   <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg shrink-0 ${getAvatarBg(u.role as string)}`}>
-                                      {u.avatar ? <img src={u.avatar} className="w-full h-full object-cover rounded-full" alt=""/> : getInitials(u.name)}
+                                      {u.avatar ? <img src={getProxyImageUrl(u.avatar)} className="w-full h-full object-cover rounded-full" alt=""/> : getInitials(u.name)}
                                   </div>
                                   <div className="overflow-hidden">
                                       <p className="font-black text-slate-800 text-[13px] uppercase tracking-tight truncate">{u.name}</p>
@@ -387,7 +388,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                           {/* Avatar & Basic */}
                           <div className="space-y-6 flex flex-col items-center">
                               <div className="w-32 h-32 rounded-[2rem] border-4 border-white shadow-2xl overflow-hidden relative group bg-slate-200">
-                                  <img src={formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'New')}&background=random&color=fff`} className="w-full h-full object-cover" alt="" />
+                                  <img src={getProxyImageUrl(formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'New')}&background=random&color=fff`)} className="w-full h-full object-cover" alt="" />
                                   <button onClick={() => avatarInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="w-8 h-8"/></button>
                               </div>
                               <div className="w-full space-y-4">

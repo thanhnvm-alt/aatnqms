@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR } from '../types';
 import { ArrowLeft, Calendar, User as UserIcon, Box, Edit3, Trash2, ShieldCheck, Palette, Layers, CheckCircle2, AlertOctagon, X, Loader2, Eraser } from 'lucide-react';
@@ -59,8 +60,8 @@ export const InspectionDetailStepVecni: React.FC<InspectionDetailProps> = ({ ins
         <div className="bg-white p-4 rounded-xl border border-slate-200 mt-2">
             <h3 className="text-[10px] font-bold uppercase text-slate-500 border-l-4 border-purple-500 pl-2 mb-2">Nhật ký phê duyệt</h3>
             <div className="grid grid-cols-2 gap-4">
-                <div className="text-center"><div className="bg-slate-50 h-20 rounded-lg flex items-center justify-center border">{inspection.signature ? <img src={inspection.signature} className="h-full object-contain"/> : 'N/A'}</div><span className="text-[9px] font-bold uppercase mt-1 block">{inspection.inspectorName}</span></div>
-                <div className="text-center"><div className="bg-slate-50 h-20 rounded-lg flex items-center justify-center border">{inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain"/> : <span className="text-[9px] text-orange-400">Chờ duyệt</span>}</div><span className="text-[9px] font-bold uppercase mt-1 block">Manager</span></div>
+                <div className="text-center"><div className="bg-slate-50 h-20 rounded-lg flex items-center justify-center border">{inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain"/> : 'N/A'}</div><span className="text-[9px] font-bold uppercase mt-1 block">{inspection.inspectorName}</span></div>
+                <div className="text-center"><div className="bg-slate-50 h-20 rounded-lg flex items-center justify-center border">{inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain"/> : <span className="text-[9px] text-orange-400">Chờ duyệt</span>}</div><span className="text-[9px] font-bold uppercase mt-1 block">Manager</span></div>
             </div>
         </div>
       </div>

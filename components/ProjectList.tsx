@@ -1,3 +1,4 @@
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Inspection, InspectionStatus } from '../types';
@@ -237,7 +238,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                                                 <div className="flex items-center gap-4 min-w-0">
                                                     <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-50">
                                                         {p.thumbnail ? (
-                                                            <img src={p.thumbnail} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                                            <img src={getProxyImageUrl(p.thumbnail)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center text-slate-300">
                                                                 <Building2 className="w-6 h-6 opacity-30" />
@@ -286,7 +287,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                                         >
                                             <div className="aspect-[16/10] relative overflow-hidden bg-slate-100 border-b border-slate-50">
                                                 {p.thumbnail ? (
-                                                    <img src={p.thumbnail} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" referrerPolicy="no-referrer" />
+                                                    <img src={getProxyImageUrl(p.thumbnail)} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" referrerPolicy="no-referrer" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-slate-300">
                                                         <Building2 className="w-12 h-12 opacity-20" />
