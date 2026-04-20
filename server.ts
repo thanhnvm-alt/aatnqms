@@ -144,6 +144,52 @@ app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res)
 });
 
 // --- Google Drive Image Proxy ---
+app.get("/display-image/:fileId", async (req, res) => {
+  const { fileId } = req.params;
+  
+  if (!drive) {
+    return res.status(503).json({ error: "Google Drive service not configured" });
+  }
+
+  try {
+    // 1. Get file metadata to determine content type
+    const metadata = await drive.files.get({
+      fileId: fileId,
+      fields: 'mimeType, name'
+    });
+
+    const mimeType = metadata.data.mimeType || 'image/jpeg';
+    
+    // 2. Fetch the file content as a stream
+    const response = await drive.files.get(
+      { fileId: fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+
+    // 3. Set headers and pipe the stream to the response
+    res.setHeader('Content-Type', mimeType);
+    // Cache for 7 days to optimize mobile performance
+    res.setHeader('Cache-Control', 'public, max-age=604800'); 
+    
+    response.data
+      .on('error', (err: any) => {
+        console.error('Stream error:', err);
+        if (!res.headersSent) {
+          res.status(500).send('Error streaming image');
+        }
+      })
+      .pipe(res);
+
+  } catch (error: any) {
+    console.error('Google Drive Proxy Error:', error.message);
+    if (error.code === 404) {
+      res.status(404).send('Image not found on Google Drive');
+    } else {
+      res.status(500).send('Internal Server Error while fetching image');
+    }
+  }
+});
+
 app.get("/api/image/:fileId", async (req, res) => {
   const { fileId } = req.params;
   
