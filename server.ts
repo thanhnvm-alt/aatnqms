@@ -28,14 +28,24 @@ const driveConfig = {
   clientId: process.env.GOOGLE_DRIVE_CLIENT_ID || '',
   clientSecret: process.env.GOOGLE_DRIVE_CLIENT_SECRET || '',
   refreshToken: process.env.GOOGLE_DRIVE_REFRESH_TOKEN || '',
-  clientEmail: process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '',
-  privateKey: process.env.GOOGLE_DRIVE_PRIVATE_KEY || ''
 };
 
 if (driveConfig.clientId && driveConfig.clientSecret && driveConfig.refreshToken) {
-    // ... logic ...
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      driveConfig.clientId,
+      driveConfig.clientSecret,
+      'https://developers.google.com/oauthplayground'
+    );
+    oauth2Client.setCredentials({ refresh_token: driveConfig.refreshToken });
+    drive = google.drive({ version: 'v3', auth: oauth2Client });
+    console.log("Google Drive storage configured via OAuth2 Proxy.");
+  } catch (err) {
+    console.error("Error configuring Google Drive OAuth2:", err);
+  }
+} else {
+  console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
 }
-// ... rest of logic check ...
 
 // Configure Cloudinary safely
 if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
@@ -132,6 +142,52 @@ app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res)
         console.error("PDF upload error:", error);
         res.status(500).json({ error: 'Failed to process PDF' });
     }
+});
+
+// --- Google Drive Image Proxy ---
+app.get("/api/image/:fileId", async (req, res) => {
+  const { fileId } = req.params;
+  
+  if (!drive) {
+    return res.status(503).json({ error: "Google Drive service not configured" });
+  }
+
+  try {
+    // 1. Get file metadata to determine content type
+    const metadata = await drive.files.get({
+      fileId: fileId,
+      fields: 'mimeType, name'
+    });
+
+    const mimeType = metadata.data.mimeType || 'image/jpeg';
+    
+    // 2. Fetch the file content as a stream
+    const response = await drive.files.get(
+      { fileId: fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+
+    // 3. Set headers and pipe the stream to the response
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    
+    response.data
+      .on('error', (err: any) => {
+        console.error('Stream error:', err);
+        if (!res.headersSent) {
+          res.status(500).send('Error streaming image');
+        }
+      })
+      .pipe(res);
+
+  } catch (error: any) {
+    console.error('Google Drive Proxy Error:', error.message);
+    if (error.code === 404) {
+      res.status(404).send('Image not found on Google Drive');
+    } else {
+      res.status(500).send('Internal Server Error while fetching image');
+    }
+  }
 });
 
 // API routes
