@@ -12,39 +12,46 @@ import fs from 'fs';
 import * as XLSX from 'xlsx';
 import { v2 as cloudinary } from 'cloudinary';
 import { google } from 'googleapis';
-import { Readable } from 'stream';
+import { Readable, pipeline } from 'stream';
+import { promisify } from 'util';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import * as pdfParse from 'pdf-parse';
 import { GoogleGenAI } from "@google/genai";
 
+const pipelineAsync = promisify(pipeline);
 const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configure Google Drive safely
 let drive: any = null;
-const driveConfig = {
-  clientId: process.env.GOOGLE_DRIVE_CLIENT_ID || '',
-  clientSecret: process.env.GOOGLE_DRIVE_CLIENT_SECRET || '',
-  refreshToken: process.env.GOOGLE_DRIVE_REFRESH_TOKEN || '',
-};
 
-if (driveConfig.clientId && driveConfig.clientSecret && driveConfig.refreshToken) {
-  try {
+try {
+  if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_CLIENT_SECRET && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
     const oauth2Client = new google.auth.OAuth2(
-      driveConfig.clientId,
-      driveConfig.clientSecret,
-      'https://developers.google.com/oauthplayground'
+      process.env.GOOGLE_DRIVE_CLIENT_ID,
+      process.env.GOOGLE_DRIVE_CLIENT_SECRET,
+      process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://developers.google.com/oauthplayground'
     );
-    oauth2Client.setCredentials({ refresh_token: driveConfig.refreshToken });
+    oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_DRIVE_REFRESH_TOKEN });
+    
+    // Log new tokens to potentially update in DB or environment
+    oauth2Client.on('tokens', (tokens) => {
+      console.log('Google OAuth2 emitted new tokens.');
+      if (tokens.refresh_token) {
+        console.log('NEW REFRESH TOKEN (Please save this securely):', tokens.refresh_token);
+      }
+      console.log('NEW ACCESS TOKEN (Expires in ms):', tokens.expiry_date);
+    });
+
     drive = google.drive({ version: 'v3', auth: oauth2Client });
-    console.log("Google Drive storage configured via OAuth2 Proxy.");
-  } catch (err) {
-    console.error("Error configuring Google Drive OAuth2:", err);
+    console.log("Google Drive storage configured via OAuth2 User Proxy.");
+  } else {
+    console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
   }
-} else {
-  console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
+} catch (err) {
+  console.error("Error configuring Google Drive:", err);
 }
 
 // Configure Cloudinary safely
@@ -154,15 +161,8 @@ app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res)
     }
 });
 
-// --- Google Drive Image Proxy (Secure RBAC) ---
-/**
- * Proxies Google Drive images through the backend.
- * Requirements:
- * 1. Valid System JWT (RBAC) via 'authenticate' middleware.
- * 2. OAuth2 credentials configured in environment.
- * 3. Fetches'media' alt from Drive API and pipes to response.
- */
-app.get("/api/media/image/:fileId", authenticate, async (req, res) => {
+// --- Optimized Google Drive Image Streaming Handler ---
+const streamGoogleDriveImage = async (req: express.Request, res: express.Response) => {
   const { fileId } = req.params;
   
   if (!drive) {
@@ -170,137 +170,47 @@ app.get("/api/media/image/:fileId", authenticate, async (req, res) => {
   }
 
   try {
-    // 1. Get file metadata to determine content type
-    const metadata = await drive.files.get({
-      fileId: fileId,
-      fields: 'mimeType, name'
-    });
-
-    const mimeType = metadata.data.mimeType || 'image/jpeg';
-    
-    // 2. Fetch the file content as a stream from Google Drive
+    // Single API call: Fetch the file content as a stream directly
     const response = await drive.files.get(
-      { fileId: fileId, alt: 'media' },
+      { fileId, alt: 'media' },
       { responseType: 'stream' }
     );
 
-    // 3. Set standard image headers
-    res.setHeader('Content-Type', mimeType);
-    // Cache control to help mobile performance while maintaining security
-    res.setHeader('Cache-Control', 'private, max-age=3600'); 
+    // Forward the Content-Type precisely natively from Google API
+    const contentType = response.headers['content-type'] || 'image/jpeg';
+    
+    // Set headers (NO redirects, NO google locations)
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*'); 
+    res.setHeader('Cache-Control', 'private, max-age=604800'); // 7 Days Cache 
     res.setHeader('X-Content-Type-Options', 'nosniff');
     
-    // 4. Pipe stream to response
-    response.data
-      .on('error', (err: any) => {
-        console.error('Drive Stream error:', err);
-        if (!res.headersSent) {
-          res.status(502).send('Error streaming media');
-        }
-      })
-      .pipe(res);
+    // Efficiently pipe using native Node.js stream pipeline (prevents memory leaks on interrupt)
+    await pipelineAsync(response.data, res);
 
   } catch (error: any) {
-    console.error('Secure Media Proxy Error:', error.message);
-    if (error.code === 404) {
-      res.status(404).json({ error: 'Media not found on remote storage' });
-    } else {
-      res.status(500).json({ error: 'Internal storage error' });
+    // If it's a stream error post-header, pipeline destroys it safely.
+    if (!res.headersSent) {
+      const status = error.response?.status || error.code || 500;
+      console.warn(`[Drive Stream Proxy Error] File ${fileId}: ${status} - ${error.message}`);
+      
+      if (status === 404) {
+        res.status(404).json({ error: 'Image not found' });
+      } else if (status === 401 || status === 403) {
+        // Token revoked or expired
+        res.status(401).json({ error: 'Upstream OAuth access denied' });
+      } else {
+        res.status(500).json({ error: 'Error streaming image from upstream' });
+      }
     }
   }
-});
+};
 
-// --- Google Drive Image Proxy ---
-app.get("/display-image/:fileId", authenticate, async (req, res) => {
-  const { fileId } = req.params;
-  
-  if (!drive) {
-    return res.status(503).json({ error: "Google Drive service not configured" });
-  }
-
-  try {
-    // 1. Get file metadata to determine content type
-    const metadata = await drive.files.get({
-      fileId: fileId,
-      fields: 'mimeType, name'
-    });
-
-    const mimeType = metadata.data.mimeType || 'image/jpeg';
-    
-    // 2. Fetch the file content as a stream
-    const response = await drive.files.get(
-      { fileId: fileId, alt: 'media' },
-      { responseType: 'stream' }
-    );
-
-    // 3. Set headers and pipe the stream to the response
-    res.setHeader('Content-Type', mimeType);
-    // Cache for 7 days to optimize mobile performance
-    res.setHeader('Cache-Control', 'public, max-age=604800'); 
-    
-    response.data
-      .on('error', (err: any) => {
-        console.error('Stream error:', err);
-        if (!res.headersSent) {
-          res.status(500).send('Error streaming image');
-        }
-      })
-      .pipe(res);
-
-  } catch (error: any) {
-    console.error('Google Drive Proxy Error:', error.message);
-    if (error.code === 404) {
-      res.status(404).send('Image not found on Google Drive');
-    } else {
-      res.status(500).send('Internal Server Error while fetching image');
-    }
-  }
-});
-
-app.get("/api/image/:fileId", async (req, res) => {
-  const { fileId } = req.params;
-  
-  if (!drive) {
-    return res.status(503).json({ error: "Google Drive service not configured" });
-  }
-
-  try {
-    // 1. Get file metadata to determine content type
-    const metadata = await drive.files.get({
-      fileId: fileId,
-      fields: 'mimeType, name'
-    });
-
-    const mimeType = metadata.data.mimeType || 'image/jpeg';
-    
-    // 2. Fetch the file content as a stream
-    const response = await drive.files.get(
-      { fileId: fileId, alt: 'media' },
-      { responseType: 'stream' }
-    );
-
-    // 3. Set headers and pipe the stream to the response
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
-    
-    response.data
-      .on('error', (err: any) => {
-        console.error('Stream error:', err);
-        if (!res.headersSent) {
-          res.status(500).send('Error streaming image');
-        }
-      })
-      .pipe(res);
-
-  } catch (error: any) {
-    console.error('Google Drive Proxy Error:', error.message);
-    if (error.code === 404) {
-      res.status(404).send('Image not found on Google Drive');
-    } else {
-      res.status(500).send('Internal Server Error while fetching image');
-    }
-  }
-});
+// Map all secure proxy endpoints to the optimized streaming handler
+app.get("/api/media/image/:fileId", authenticate, streamGoogleDriveImage);
+app.get("/media/stream/:fileId", authenticate, streamGoogleDriveImage);
+app.get("/display-image/:fileId", authenticate, streamGoogleDriveImage);
+app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
 // API routes
   app.get("/api/ipo", async (req, res) => {
@@ -1042,35 +952,55 @@ app.get("/api/image/:fileId", async (req, res) => {
       }
 
       if (fileId && fileId.length > 20) {
-          if (!drive) throw new Error('Google Drive not configured');
+          if (!drive) {
+            return res.status(503).json({ error: 'Google Drive not configured' });
+          }
 
-          const metadata = await drive.files.get({ fileId, fields: 'mimeType' });
-          const mimeType = metadata.data.mimeType || 'image/jpeg';
-
-          const response = await drive.files.get({
-              fileId: fileId,
-              alt: 'media'
-          }, { responseType: 'stream' });
-          
-          res.set('Content-Type', mimeType);
-          res.set('Access-Control-Allow-Origin', '*');
-          res.set('Cache-Control', 'public, max-age=31536000');
-          response.data.pipe(res);
-          return;
+          try {
+            const response = await drive.files.get({
+                fileId: fileId,
+                alt: 'media'
+            }, { responseType: 'stream' });
+            
+            const contentType = response.headers['content-type'] || 'image/jpeg';
+            res.set('Content-Type', contentType);
+            res.set('Access-Control-Allow-Origin', '*');
+            res.set('Cache-Control', 'public, max-age=31536000');
+            res.set('X-Content-Type-Options', 'nosniff');
+            
+            await pipelineAsync(response.data, res);
+            return;
+          } catch (driveErr: any) {
+            if (!res.headersSent) {
+              const status = driveErr.response?.status || driveErr.code || 500;
+              const msg = driveErr.message || 'Upstream Error';
+              console.warn(`[Drive Proxy] Failed to fetch file ${fileId}: ${status} - ${msg}`);
+              
+              if (status === 404) {
+                 return res.status(404).send('Image not found or not shared with Service Account');
+              } else if (status === 401 || status === 403) {
+                 return res.status(status).send('Access denied by upstream');
+              }
+              return res.status(500).send('Error streaming image from upstream');
+            }
+            return; // Headers sent, pipeline already handled it
+          }
       }
 
       // Fallback for non-drive URLs
       const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+      if (!response.ok) throw new Error(`Failed to fetch fallback: ${response.status} - ${response.statusText}`);
       
       const buffer = await response.arrayBuffer();
       res.set('Content-Type', response.headers.get('content-type') || 'image/jpeg');
       res.set('Access-Control-Allow-Origin', '*');
       res.set('Cache-Control', 'public, max-age=31536000');
       res.send(Buffer.from(buffer));
-    } catch (error) {
-      console.error('Proxy error:', error);
-      res.status(500).send('Error proxying image');
+    } catch (error: any) {
+      if (!res.headersSent) {
+        console.error('Proxy error:', error.message || error);
+        res.status(500).send('Error proxying image');
+      }
     }
   });
 
