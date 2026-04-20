@@ -24,6 +24,7 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "firebase": "^10.13.1",
+    "framer-motion": "^12.38.0",
     "googleapis": "^171.4.0",
     "jsonwebtoken": "^9.0.3",
     "jsqr": "^1.4.0",

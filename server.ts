@@ -15,7 +15,6 @@ import { Readable } from 'stream';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import multer from 'multer';
 import * as pdfParse from 'pdf-parse';
 import { GoogleGenAI } from "@google/genai";
 
@@ -131,7 +130,7 @@ app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res)
         
         // pdfParse is the default export if imported as `import pdfParse from 'pdf-parse'`, 
         // but if imported as `import * as pdfParse`, it might be `pdfParse.default`
-        const data = await pdfParse.default(req.file.buffer);
+        const data = await (pdfParse as any).default(req.file.buffer);
         const title = req.file.originalname.replace('.pdf', '');
         
         await query(`INSERT INTO "${process.env.DB_SCHEMA || 'appQAQC'}"."procedures" (title, content, category, version) VALUES ($1, $2, 'ISO', '1.0')`, 

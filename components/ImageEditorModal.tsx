@@ -1,10 +1,12 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ChevronLeft, ChevronRight, PenTool, Undo2, 
   Check, ZoomIn, ZoomOut, Download, Loader2, 
   Move, AlertCircle, Maximize2, RotateCw, 
-  RotateCcw, Sliders, Trash2, Type
+  RotateCcw, Sliders, Trash2, Type,
+  MessageSquare, History, Palette, Layers
 } from 'lucide-react';
 
 interface ImageEditorModalProps {
@@ -24,11 +26,13 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isEditing, setIsEditing] = useState(false);
-  const [mode, setMode] = useState<'draw' | 'text'>('draw');
+  const [mode, setMode] = useState<'draw' | 'text' | 'pan'>('draw');
   
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [initialDistance, setInitialDistance] = useState<number | null>(null);
+  const [initialZoom, setInitialZoom] = useState<number>(1);
   const startPan = useRef({ x: 0, y: 0 });
   
   // Edit Mode State
@@ -38,8 +42,22 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [color, setColor] = useState('#ef4444'); 
   const [brushSize, setBrushSize] = useState(5);
   const [history, setHistory] = useState<string[]>([]);
+  const lastTap = useRef<number>(0);
   const [isDirty, setIsDirty] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeText, setActiveText] = useState<{ x: number, y: number, logicX: number, logicY: number, value: string } | null>(null);
+  const [showQuickLibrary, setShowQuickLibrary] = useState(false);
+  
+  const quickTexts = [
+      "LỖI BỀ MẶT - SURFACE DEFECT",
+      "KÍCH THƯỚC SAI - WRONG DIMENSION",
+      "THIẾU CHI TIẾT - MISSING PARTS",
+      "MÓP MÉO - DEFORMATION",
+      "SAI MÀU SẮC - COLOR MISMATCH",
+      "CẦN SỬA CHỮA - REPAIR NEEDED",
+      "ĐÃ KIỂM TRA - CHECKED",
+      "KHÔNG ĐẠT - NG"
+  ];
   
   // Loading & Error State
   const [isLoadingImage, setIsLoadingImage] = useState(false);
@@ -47,17 +65,31 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   // --- VIEW MODE LOGIC ---
 
+  const getDistance = (touches: React.TouchList) => {
+    if (touches.length < 2) return 0;
+    return Math.sqrt(
+      Math.pow(touches[0].clientX - touches[1].clientX, 2) +
+      Math.pow(touches[0].clientY - touches[1].clientY, 2)
+    );
+  };
+
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if ('touches' in e && e.touches.length === 2) {
+        setIsPanning(false);
+        setInitialDistance(getDistance(e.touches));
+        setInitialZoom(zoom);
+        return;
+    }
+
     if (isEditing) {
         if (isLoadingImage || loadError) return;
         
-        // If zooming/panning is enabled in edit mode, handle it here
-        if (zoom > 1) {
-            setIsPanning(true);
-            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-            startPan.current = { x: clientX - pan.x, y: clientY - pan.y };
-            return;
+        if (mode === 'pan') {
+          setIsPanning(true);
+          const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+          const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+          startPan.current = { x: clientX - pan.x, y: clientY - pan.y };
+          return;
         }
 
         if (mode === 'text') {
@@ -74,6 +106,18 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if ('touches' in e && e.touches.length === 2 && initialDistance !== null) {
+        const dist = getDistance(e.touches);
+        if (dist > 0) {
+            const scale = dist / initialDistance;
+            const newZoom = Math.min(8, Math.max(1, initialZoom * scale));
+            setZoom(newZoom);
+            // If we zoom back to 1, reset pan
+            if (newZoom <= 1.01) setPan({ x: 0, y: 0 });
+        }
+        return;
+    }
+
     if (isEditing) {
         if (isLoadingImage || loadError) return;
 
@@ -100,6 +144,20 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handlePointerUp = () => {
+    setInitialDistance(null);
+    
+    // Double tap to zoom
+    const now = Date.now();
+    if (now - lastTap.current < 300 && !isEditing) {
+      if (zoom > 1) {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      } else {
+        setZoom(2.5);
+      }
+    }
+    lastTap.current = now;
+
     if (isEditing) {
         if (isPanning) setIsPanning(false);
         else if (mode === 'draw') stopDrawing();
@@ -223,25 +281,42 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleTextClick = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isEditing || !canvasRef.current || isLoadingImage || loadError) return;
-    const text = prompt("Nhập nội dung:");
-    if (text) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const rect = canvas.getBoundingClientRect();
-      const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-      
-      const dpr = window.devicePixelRatio || 1;
-      const x = (clientX - rect.left) * (canvas.width / rect.width);
-      const y = (clientY - rect.top) * (canvas.height / rect.height);
-      
-      ctx.font = `bold ${brushSize * 4 * dpr}px Inter, sans-serif`;
-      ctx.fillStyle = color;
-      ctx.fillText(text, x, y);
-      saveToHistory();
+    if (!isEditing || !canvasRef.current || isLoadingImage || loadError || activeText) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const logicX = (clientX - rect.left) * ((canvas.width / dpr) / rect.width);
+    const logicY = (clientY - rect.top) * ((canvas.height / dpr) / rect.height);
+
+    setActiveText({
+      x: clientX,
+      y: clientY,
+      logicX,
+      logicY,
+      value: ''
+    });
+  };
+
+  const commitTextToCanvas = (textValue: string) => {
+    if (!activeText || !textValue.trim() || !canvasRef.current) {
+        setActiveText(null);
+        return;
     }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    ctx.font = `bold ${brushSize * 4}px Inter, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.fillText(textValue, activeText.logicX, activeText.logicY);
+    saveToHistory();
+    setActiveText(null);
   };
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
@@ -252,8 +327,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     const rect = canvas.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const x = (clientX - rect.left) * ( (canvas.width / dpr) / rect.width);
+    const y = (clientY - rect.top) * ( (canvas.height / dpr) / rect.height);
+    
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.strokeStyle = color;
@@ -269,8 +347,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     const rect = canvas.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const x = (clientX - rect.left) * ( (canvas.width / dpr) / rect.width);
+    const y = (clientY - rect.top) * ( (canvas.height / dpr) / rect.height);
+    
     ctx.lineTo(x, y);
     ctx.stroke();
   };
@@ -303,11 +384,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 z-[120] bg-[#0c1421] flex flex-col animate-in fade-in duration-300 overflow-hidden touch-none" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="fixed inset-0 z-[120] bg-[#0c1421] flex flex-col animate-in fade-in duration-300 overflow-hidden touch-none" style={{ fontFamily: 'Inter, sans-serif' }}>
       {/* HEADER: Clean & Professional Dark Style */}
-      <div className="h-14 flex items-center justify-between px-4 text-white bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 shrink-0 z-50">
+      <div className="h-14 pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 text-white bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 shrink-0 z-50">
         <div className="flex items-center gap-3">
-          <button onClick={() => { if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) handleCommitEdit(); else onClose(); }} className="p-2 hover:bg-white/10 rounded-full transition-all active:scale-90"><X className="w-5 h-5" /></button>
+          <button onClick={() => { if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) handleCommitEdit(); else onClose(); }} className="p-3 hover:bg-white/10 rounded-full transition-all active:scale-90"><X className="w-6 h-6" /></button>
           <div className="h-6 w-px bg-white/10 mx-1"></div>
           <div>
             <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-white/90 leading-none">
@@ -361,7 +442,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               <img 
                 src={images[currentIndex]} 
                 alt="HD Preview" 
-                className="max-w-[95vw] max-h-[85vh] object-contain shadow-[0_50px_100px_rgba(0,0,0,0.6)] rounded-sm" 
+                className="max-w-[98vw] max-h-[98%] object-contain shadow-[0_50px_100px_rgba(0,0,0,0.6)] rounded-sm" 
                 style={{ imageRendering: 'auto' }} 
                 onError={() => setLoadError("Lỗi tải tệp tin HD.")}
               />
@@ -383,13 +464,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
             {/* Bottom Floating Stats / Zoom */}
             {!loadError && (
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-[#0f172a]/90 backdrop-blur-2xl px-8 py-3 rounded-full border border-white/10 z-40 shadow-2xl ring-1 ring-white/5">
-                    <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-1.5 text-white/40 hover:text-white transition-colors active:scale-90"><ZoomOut className="w-5 h-5"/></button>
-                    <div className="flex flex-col items-center min-w-[50px]">
-                        <span className="text-[11px] font-black text-white leading-none">{Math.round(zoom * 100)}%</span>
-                        <span className="text-[6px] font-black text-blue-400 uppercase tracking-widest mt-1">Scale</span>
-                    </div>
-                    <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-1.5 text-white/40 hover:text-white transition-colors active:scale-90"><ZoomIn className="w-5 h-5"/></button>
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-[#0f172a]/95 backdrop-blur-2xl px-6 py-3 rounded-full border border-white/10 z-40 shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-4">
+                    <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-2 text-white/40 hover:text-white transition-colors active:scale-90"><ZoomOut className="w-5 h-5"/></button>
+                    <button 
+                        onClick={() => { setZoom(1); setPan({x:0,y:0}); }}
+                        className="flex flex-col items-center min-w-[60px] hover:bg-white/5 px-2 py-1 rounded-xl transition-colors"
+                    >
+                        <span className="text-[12px] font-black text-white leading-none">{Math.round(zoom * 100)}%</span>
+                        <span className="text-[6px] font-black text-blue-400 uppercase tracking-widest mt-1">Reset</span>
+                    </button>
+                    <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-2 text-white/40 hover:text-white transition-colors active:scale-90"><ZoomIn className="w-5 h-5"/></button>
                 </div>
             )}
           </>
@@ -414,69 +498,156 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <div className="relative group/canvas overflow-hidden" ref={canvasContainerRef}>
                       <canvas 
                         ref={canvasRef} 
-                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-4 border-white/5"
+                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-4 border-white/5 max-w-[95vw] max-h-[70vh] w-auto h-auto object-contain"
                         style={{
                             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                             transformOrigin: 'center',
                             transition: isPanning ? 'none' : 'transform 100ms ease-out',
+                            cursor: mode === 'pan' ? (isPanning ? 'grabbing' : 'grab') : 'crosshair'
                         }}
                       />
                       <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover/canvas:opacity-100 transition-opacity bg-blue-600 text-white text-[8px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] pointer-events-none shadow-xl border border-blue-400">
                           ISO HD EDIT LAYER ACTIVE
                       </div>
+
+                      {/* Floating Text Input */}
+                      <AnimatePresence>
+                        {activeText && (
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                className="fixed z-[200] pointer-events-auto"
+                                style={{ left: activeText.x, top: activeText.y }}
+                            >
+                                <div className="bg-[#0f172a] p-3 rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl flex flex-col gap-2 min-w-[200px]">
+                                    <div className="flex items-center justify-between text-[10px] font-black uppercase text-blue-400 tracking-widest px-1">
+                                        <span>Typing Annotation</span>
+                                        <button onClick={() => setActiveText(null)}><X className="w-4 p-0.5" /></button>
+                                    </div>
+                                    <input 
+                                        autoFocus
+                                        className="w-full bg-white/10 text-white px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                                        value={activeText.value}
+                                        onChange={e => setActiveText({ ...activeText, value: e.target.value })}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') commitTextToCanvas(activeText.value);
+                                            if (e.key === 'Escape') setActiveText(null);
+                                        }}
+                                        placeholder="Nhập nội dung..."
+                                    />
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => commitTextToCanvas(activeText.value)}
+                                            className="flex-1 py-2 bg-blue-600 text-white text-[9px] font-black uppercase rounded-lg shadow-lg"
+                                        >
+                                            Chèn
+                                        </button>
+                                        <button 
+                                            onClick={() => setShowQuickLibrary(!showQuickLibrary)}
+                                            className="p-2 bg-white/5 text-white/50 hover:text-white rounded-lg"
+                                            title="Thư viện chữ mẫu"
+                                        >
+                                            <MessageSquare className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    {showQuickLibrary && (
+                                        <div className="mt-2 flex flex-col gap-1 max-h-[150px] overflow-y-auto no-scrollbar border-t border-white/5 pt-2">
+                                            {quickTexts.map(t => (
+                                                <button 
+                                                    key={t}
+                                                    onClick={() => commitTextToCanvas(t)}
+                                                    className="text-left px-2.5 py-2 text-[8px] font-bold text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors uppercase truncate"
+                                                >
+                                                    {t}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </motion.div>
+                        )}
+                      </AnimatePresence>
                   </div>
               )}
           </div>
         )}
       </div>
 
-      {/* FOOTER: Professional Editing Tools */}
+      {/* FOOTER: Professional Editing Tools - Optimized for Mobile Interaction */}
       {isEditing && !loadError && (
-        <div className="p-8 bg-[#0f172a]/95 backdrop-blur-3xl border-t border-white/10 flex flex-col items-center gap-8 shrink-0 z-50 animate-in slide-in-from-bottom duration-300">
-          <div className="flex items-center justify-between w-full max-w-3xl gap-6">
-            <div className="flex gap-2 bg-white/5 p-1.5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                <button onClick={() => setMode('draw')} className={`p-3 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/50 hover:bg-white/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-5 h-5" /></button>
-                <button onClick={() => setMode('text')} className={`p-3 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/50 hover:bg-white/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-5 h-5" /></button>
-            </div>
+        <div className="p-4 md:p-8 bg-[#0f172a]/95 backdrop-blur-3xl border-t border-white/10 shrink-0 z-50 animate-in slide-in-from-bottom duration-300">
+          <div className="max-w-5xl mx-auto flex flex-col gap-6">
+            
+            {/* Tool Groups Bar: Scrollable on Small Screens */}
+            <div className="w-full overflow-x-auto no-scrollbar pb-1">
+              <div className="flex items-center justify-start md:justify-between min-w-max md:min-w-0 gap-4 md:gap-8">
+                
+                {/* 1. Mode Selector */}
+                <div className="group/tools">
+                  <div className="flex gap-1.5 bg-white/5 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
+                      <button onClick={() => setMode('draw')} className={`p-2.5 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('text')} className={`p-2.5 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('pan')} className={`p-2.5 rounded-xl transition-all ${mode === 'pan' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Di chuyển"><Move className="w-4.5 h-4.5" /></button>
+                  </div>
+                </div>
 
-            <div className="w-px h-10 bg-white/10 hidden md:block"></div>
+                <div className="w-px h-8 bg-white/10"></div>
 
-            <div className="flex gap-3 bg-white/5 p-2 rounded-[1.5rem] border border-white/5 shadow-inner">
-                {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff', '#000000'].map(c => (
-                    <button 
-                        key={c} 
-                        onClick={() => setColor(c)} 
-                        className={`w-8 h-8 rounded-xl border-2 transition-all active:scale-90 ${color === c ? 'scale-110 border-white shadow-xl shadow-white/10' : 'border-transparent opacity-30 hover:opacity-100 hover:scale-105'}`} 
-                        style={{ backgroundColor: c }} 
+                {/* 2. Color Palette */}
+                <div className="group/colors">
+                  <div className="flex gap-2.5 bg-white/5 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
+                      {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff', '#000000'].map(c => (
+                          <button 
+                              key={c} 
+                              onClick={() => setColor(c)} 
+                              className={`w-7 h-7 rounded-lg border-2 transition-all active:scale-90 ${color === c ? 'scale-110 border-white shadow-lg' : 'border-transparent opacity-30 hover:opacity-100 hover:scale-105'}`} 
+                              style={{ backgroundColor: c }} 
+                          />
+                      ))}
+                  </div>
+                </div>
+
+                <div className="w-px h-8 bg-white/10"></div>
+
+                {/* 3. Controls & Size */}
+                <div className="flex items-center gap-6 flex-1 bg-white/5 p-2 rounded-[1.25rem] border border-white/5 min-w-[240px]">
+                  <div className="flex items-center gap-2 px-1">
+                      <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-2 text-white/30 hover:text-blue-400 transition-colors"><ZoomOut className="w-4 h-4"/></button>
+                      <button onClick={() => { setZoom(1); setPan({x:0,y:0}); }} className="text-[10px] font-black text-white px-2 w-12 text-center bg-white/5 rounded-lg py-1">{Math.round(zoom * 100)}%</button>
+                      <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-2 text-white/30 hover:text-blue-400 transition-colors"><ZoomIn className="w-4 h-4"/></button>
+                  </div>
+                  
+                  <div className="w-px h-6 bg-white/10"></div>
+
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                        <span className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] leading-none">Size</span>
+                        <span className="text-[10px] font-mono font-black text-blue-400">{brushSize}px</span>
+                    </div>
+                    <input 
+                      type="range" min="2" max="40" 
+                      value={brushSize} 
+                      onChange={e => setBrushSize(parseInt(e.target.value))} 
+                      className="flex-1 h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500 cursor-pointer overflow-hidden" 
                     />
-                ))}
-            </div>
-            
-            <div className="flex gap-2 bg-white/5 p-1.5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-3 text-white/50 hover:text-white transition-all"><ZoomOut className="w-5 h-5"/></button>
-                <button onClick={() => setZoom(1)} className="text-[10px] font-black text-white/30 px-2">{Math.round(zoom * 100)}%</button>
-                <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-3 text-white/50 hover:text-white transition-all"><ZoomIn className="w-5 h-5"/></button>
-            </div>
-            
-            <div className="w-px h-10 bg-white/10 hidden md:block"></div>
-            
-            <div className="flex items-center gap-4 flex-1">
-              <div className="flex flex-col gap-1 shrink-0">
-                  <span className="text-[9px] font-black text-white/30 uppercase tracking-widest leading-none">Size</span>
-                  <span className="text-[12px] font-mono font-black text-blue-400 text-center">{brushSize}px</span>
+                  </div>
+                </div>
               </div>
-              <input 
-                type="range" min="2" max="40" 
-                value={brushSize} 
-                onChange={e => setBrushSize(parseInt(e.target.value))} 
-                className="flex-1 h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500 cursor-pointer hover:bg-white/20 transition-all" 
-              />
             </div>
-          </div>
-          
-          <div className="flex gap-10 text-white/20 text-[9px] font-black uppercase tracking-[0.4em] select-none">
-              <span className="flex items-center gap-2.5"><Move className="w-4 h-4 opacity-50"/> Touch to {mode === 'draw' ? 'Draw' : 'Add Text'}</span>
-              <span className="flex items-center gap-2.5"><Sliders className="w-4 h-4 opacity-50"/> Change size & color</span>
+            
+            {/* Status Info */}
+            <div className="flex items-center justify-between text-white/30 text-[9px] font-black uppercase tracking-[0.3em] select-none border-t border-white/5 pt-4">
+              <div className="flex gap-6">
+                <span className="flex items-center gap-2"><History className="w-3 h-3 text-blue-500/50" /> {history.length - 1} States Saved</span>
+                <span className="flex items-center gap-2"><Palette className="w-3 h-3 text-emerald-500/50" /> {color} Active</span>
+              </div>
+              <div className="flex gap-4">
+                <span>{mode === 'draw' ? 'Touch to Draw' : mode === 'text' ? 'Click image to type' : 'Pinch to zoom / Drag to pan'}</span>
+                <span className="text-white/60 text-blue-400">100% Quality Output</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc, Material } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, 
   Calendar, PenTool, Eraser, Plus, Trash2, 

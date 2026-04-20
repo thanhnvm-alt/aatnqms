@@ -31,7 +31,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
   ] : [
     { id: 'DASHBOARD', label: 'Home', icon: LayoutDashboard },
     { id: 'PROJECTS', label: 'Dự án', icon: Briefcase },
-    { id: 'PLAN', label: 'Kế hoạch', icon: FileSpreadsheet },
+    { id: 'IPO', label: 'IPO', icon: FileSpreadsheet },
     { id: 'LIST', label: 'Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'NCR', icon: AlertTriangle },
   ];
