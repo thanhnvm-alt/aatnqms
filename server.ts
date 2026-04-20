@@ -143,6 +143,61 @@ app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res)
     }
 });
 
+// --- Google Drive Image Proxy (Secure RBAC) ---
+/**
+ * Proxies Google Drive images through the backend.
+ * Requirements:
+ * 1. Valid System JWT (RBAC) via 'authenticate' middleware.
+ * 2. OAuth2 credentials configured in environment.
+ * 3. Fetches'media' alt from Drive API and pipes to response.
+ */
+app.get("/api/media/image/:fileId", authenticate, async (req, res) => {
+  const { fileId } = req.params;
+  
+  if (!drive) {
+    return res.status(503).json({ error: "Google Drive service not configured" });
+  }
+
+  try {
+    // 1. Get file metadata to determine content type
+    const metadata = await drive.files.get({
+      fileId: fileId,
+      fields: 'mimeType, name'
+    });
+
+    const mimeType = metadata.data.mimeType || 'image/jpeg';
+    
+    // 2. Fetch the file content as a stream from Google Drive
+    const response = await drive.files.get(
+      { fileId: fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+
+    // 3. Set standard image headers
+    res.setHeader('Content-Type', mimeType);
+    // Cache control to help mobile performance while maintaining security
+    res.setHeader('Cache-Control', 'private, max-age=3600'); 
+    
+    // 4. Pipe stream to response
+    response.data
+      .on('error', (err: any) => {
+        console.error('Drive Stream error:', err);
+        if (!res.headersSent) {
+          res.status(500).send('Error streaming media');
+        }
+      })
+      .pipe(res);
+
+  } catch (error: any) {
+    console.error('Secure Media Proxy Error:', error.message);
+    if (error.code === 404) {
+      res.status(404).json({ error: 'Media not found on remote storage' });
+    } else {
+      res.status(500).json({ error: 'Internal storage error' });
+    }
+  }
+});
+
 // --- Google Drive Image Proxy ---
 app.get("/display-image/:fileId", async (req, res) => {
   const { fileId } = req.params;
