@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getProxyImageUrl } from '../src/utils';
 import { 
   X, ChevronLeft, ChevronRight, PenTool, Undo2, 
   Check, ZoomIn, ZoomOut, Download, Loader2, 
@@ -218,13 +219,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           setIsLoadingImage(false);
       };
 
-      // Use proxy to bypass CORS issues
+      // Use proxy to bypass CORS and Authentication issues
       const imageUrl = images[currentIndex];
-      if (imageUrl.startsWith('http')) {
-          img.src = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
-      } else {
-          img.src = imageUrl;
-      }
+      img.src = getProxyImageUrl(imageUrl);
     }
   }, [isEditing, currentIndex, images]);
 
@@ -440,7 +437,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 }}
             >
               <img 
-                src={images[currentIndex]} 
+                src={getProxyImageUrl(images[currentIndex])} 
                 alt="HD Preview" 
                 className="max-w-[98vw] max-h-[98%] object-contain shadow-[0_50px_100px_rgba(0,0,0,0.6)] rounded-sm" 
                 style={{ imageRendering: 'auto' }} 

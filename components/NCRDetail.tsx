@@ -12,6 +12,7 @@ import {
 import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage, createNotification, fetchUsers } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
+import { getProxyImageUrl } from '../src/utils';
 
 interface NCRDetailProps {
   ncr: NCR;
@@ -437,7 +438,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <div className="p-5 grid grid-cols-2 gap-3">
                         {formData.imagesBefore?.map((img, idx) => (
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-red-400 transition-all" onClick={() => openGallery(formData.imagesBefore!, idx)}>
-                                <img src={img} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 {isEditing && !isLocked && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
                                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
@@ -460,7 +461,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <div className="p-5 grid grid-cols-2 gap-3">
                         {formData.imagesAfter?.map((img, idx) => (
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-green-400 transition-all" onClick={() => openGallery(formData.imagesAfter!, idx)}>
-                                <img src={img} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 {!isLocked && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
                                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
@@ -478,7 +479,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                     {formData.comments?.map((comment) => (
                         <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                            <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
+                            <img src={comment.userAvatar ? getProxyImageUrl(comment.userAvatar) : `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
                             <div className="flex-1 space-y-2">
                                 <div className="flex justify-between items-center px-1">
                                     <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
@@ -488,7 +489,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                 {comment.attachments && comment.attachments.length > 0 && (
                                     <div className="flex gap-3 flex-wrap pt-2">
                                         {comment.attachments.map((att, idx) => (
-                                            <img key={idx} src={att} onClick={() => openGallery(comment.attachments!, idx)} className="w-20 h-20 object-cover rounded-2xl border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-110 shrink-0" referrerPolicy="no-referrer" />
+                                            <img key={idx} src={getProxyImageUrl(att)} onClick={() => openGallery(comment.attachments!, idx)} className="w-20 h-20 object-cover rounded-2xl border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-110 shrink-0" referrerPolicy="no-referrer" />
                                         ))}
                                     </div>
                                 )}
@@ -503,7 +504,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                                 {commentAttachments.map((img, idx) => (
                                     <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                        <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
+                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
                                         <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                                     </div>
                                 ))}

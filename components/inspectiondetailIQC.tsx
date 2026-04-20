@@ -22,6 +22,7 @@ interface InspectionDetailProps {
 }
 
 import { SignaturePad } from './SignaturePad';
+import { getProxyImageUrl } from '../src/utils';
 
 export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
@@ -134,7 +135,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="space-y-2">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ImageIcon className="w-3 h-3" /> Bằng chứng hiện trường</p>
                         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                            {inspection.images?.map((img, idx) => (<img key={idx} src={img} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm cursor-zoom-in" />))}
+                            {inspection.images?.map((img, idx) => (<img key={idx} src={getProxyImageUrl(img)} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm cursor-zoom-in" />))}
                         </div>
                     </div>
                 )}
@@ -190,7 +191,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                             {item.notes && <p className="text-[9px] text-slate-500 italic mt-1">"{item.notes}"</p>}
                                             {item.images && item.images.length > 0 && (
                                                 <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar">
-                                                    {item.images.map((img, i) => (<img key={i} src={img} className="w-12 h-12 rounded border border-white shadow-sm object-cover cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })} referrerPolicy="no-referrer" />))}
+                                                    {item.images.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-12 h-12 rounded border border-white shadow-sm object-cover cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })} referrerPolicy="no-referrer" />))}
                                                 </div>
                                             )}
                                         </div>
@@ -209,14 +210,14 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="space-y-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">QC Inspector</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 shadow-inner">
-                        {inspection.signature ? <img src={inspection.signature} className="h-full object-contain" referrerPolicy="no-referrer" /> : <div className="text-[9px] text-slate-300">N/A</div>}
+                        {inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain" referrerPolicy="no-referrer" /> : <div className="text-[9px] text-slate-300">N/A</div>}
                     </div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.inspectorName}</div>
                 </div>
                 <div className="space-y-3">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Manager</p>
                     <div className="bg-slate-50 p-3 rounded-xl h-24 flex items-center justify-center border border-slate-100 shadow-inner">
-                        {inspection.managerSignature ? <img src={inspection.managerSignature} className="h-full object-contain" referrerPolicy="no-referrer" /> : <div className="text-[9px] text-orange-400 animate-pulse font-black">CHỜ DUYỆT</div>}
+                        {inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain" referrerPolicy="no-referrer" /> : <div className="text-[9px] text-orange-400 animate-pulse font-black">CHỜ DUYỆT</div>}
                     </div>
                     <div className="text-center font-bold uppercase text-xs text-slate-800">{inspection.managerName || 'Manager Approval'}</div>
                 </div>
@@ -231,7 +232,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
             <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
                 {inspection.comments?.map((comment) => (
                     <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
-                        <img src={comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
+                        <img src={comment.userAvatar ? getProxyImageUrl(comment.userAvatar) : `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`} className="w-10 h-10 rounded-xl border border-slate-200 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
                         <div className="flex-1 space-y-2">
                             <div className="flex justify-between items-center px-1">
                                 <span className="font-black text-slate-800 text-[11px] uppercase tracking-tight">{comment.userName}</span>
@@ -242,7 +243,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <div className="flex gap-3 flex-wrap pt-2">
                                     {comment.attachments.map((img, i) => (
                                         <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
-                                            <img src={img} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                                         </div>
                                     ))}
                                 </div>
@@ -256,7 +257,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                         {commentAttachments.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                <img src={img} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
                                 <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                             </div>
                         ))}

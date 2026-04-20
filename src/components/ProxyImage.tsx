@@ -1,4 +1,5 @@
 import React from 'react';
+import { getProxyImageUrl } from '../utils';
 
 interface ProxyImageProps {
   src: string;
@@ -25,10 +26,12 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({
     setError(true);
   };
 
+  const proxiedSrc = React.useMemo(() => getProxyImageUrl(src), [src]);
+
   return (
     <div className={`relative overflow-hidden bg-slate-100 rounded-xl ${className}`}>
       <img
-        src={error ? fallbackSrc : src}
+        src={error ? fallbackSrc : proxiedSrc}
         alt={alt}
         loading="lazy"
         onError={handleError}

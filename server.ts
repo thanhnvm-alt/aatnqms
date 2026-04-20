@@ -1005,25 +1005,41 @@ app.get("/api/image/:fileId", async (req, res) => {
       const imageUrl = req.query.url as string;
       if (!imageUrl) return res.status(400).send('Missing url');
       
-      if (imageUrl.includes('lh3.googleusercontent.com/u/0/d/')) {
-          // Extract fileId
-          const fileId = imageUrl.split('/d/')[1];
-          if (!fileId) throw new Error('Invalid Google Drive URL');
-          
+      let fileId = '';
+
+      // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID
+      if (imageUrl.includes('googleusercontent.com/u/0/d/')) {
+          fileId = imageUrl.split('/d/')[1]?.split('=')[0];
+      } 
+      // Pattern 2: drive.google.com/file/d/FILE_ID/view
+      else if (imageUrl.includes('drive.google.com/file/d/')) {
+          fileId = imageUrl.split('/d/')[1]?.split('/')[0];
+      }
+      // Pattern 3: drive.google.com/open?id=FILE_ID or uc?id=FILE_ID
+      else if (imageUrl.includes('id=')) {
+          const urlParams = new URLSearchParams(imageUrl.split('?')[1]);
+          fileId = urlParams.get('id') || '';
+      }
+
+      if (fileId && fileId.length > 20) {
           if (!drive) throw new Error('Google Drive not configured');
+
+          const metadata = await drive.files.get({ fileId, fields: 'mimeType' });
+          const mimeType = metadata.data.mimeType || 'image/jpeg';
 
           const response = await drive.files.get({
               fileId: fileId,
               alt: 'media'
           }, { responseType: 'stream' });
           
-          res.set('Content-Type', 'image/jpeg');
+          res.set('Content-Type', mimeType);
           res.set('Access-Control-Allow-Origin', '*');
           res.set('Cache-Control', 'public, max-age=31536000');
           response.data.pipe(res);
           return;
       }
 
+      // Fallback for non-drive URLs
       const response = await fetch(imageUrl);
       if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
       
