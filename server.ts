@@ -95,12 +95,19 @@ app.use((req, res, next) => {
 
 // RBAC Middleware (JWT Verification)
 const authenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  let token = '';
+
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token as string;
+  }
+
+  if (!token) {
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
 
-  const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     (req as any).user = decoded;
@@ -177,13 +184,14 @@ app.get("/api/media/image/:fileId", authenticate, async (req, res) => {
     res.setHeader('Content-Type', mimeType);
     // Cache control to help mobile performance while maintaining security
     res.setHeader('Cache-Control', 'private, max-age=3600'); 
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     
     // 4. Pipe stream to response
     response.data
       .on('error', (err: any) => {
         console.error('Drive Stream error:', err);
         if (!res.headersSent) {
-          res.status(500).send('Error streaming media');
+          res.status(502).send('Error streaming media');
         }
       })
       .pipe(res);
@@ -199,7 +207,7 @@ app.get("/api/media/image/:fileId", authenticate, async (req, res) => {
 });
 
 // --- Google Drive Image Proxy ---
-app.get("/display-image/:fileId", async (req, res) => {
+app.get("/display-image/:fileId", authenticate, async (req, res) => {
   const { fileId } = req.params;
   
   if (!drive) {
@@ -1000,7 +1008,7 @@ app.get("/api/image/:fileId", async (req, res) => {
   });
 
   // Image Proxy API
-  app.get("/api/proxy-image", async (req, res) => {
+  app.get("/api/proxy-image", authenticate, async (req, res) => {
     try {
       const imageUrl = req.query.url as string;
       if (!imageUrl) return res.status(400).send('Missing url');
