@@ -5,7 +5,7 @@ import {
   Search, ChevronDown, Filter, Briefcase, 
   Building2, SlidersHorizontal, Check, X, 
   ArrowRight, Clock, AlertCircle, LayoutGrid, CheckCircle2,
-  User, UserCheck, Users, RotateCcw
+  User, UserCheck, Users, RotateCcw, List
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
@@ -32,6 +32,13 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>(() => {
+    return (localStorage.getItem('PROJECT_VIEW_MODE') as 'GRID' | 'LIST') || 'GRID';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('PROJECT_VIEW_MODE', viewMode);
+  }, [viewMode]);
   
   // States cho bộ lọc
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -154,6 +161,22 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                 />
               </div>
               <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <div className="flex bg-white/50 p-0.5 rounded-lg border border-slate-200 mr-2">
+                    <button 
+                      onClick={() => setViewMode('GRID')}
+                      className={`p-1.5 rounded-md transition-all ${viewMode === 'GRID' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                      title="Chế độ lưới"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => setViewMode('LIST')}
+                      className={`p-1.5 rounded-md transition-all ${viewMode === 'LIST' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                      title="Chế độ danh sách"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                   <button 
                     onClick={() => setShowFilterModal(true)}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-lg shadow-sm font-black text-[10px] uppercase tracking-widest transition-all relative ${isFilterActive ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
@@ -196,9 +219,59 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                         </div>
 
                         {isExpanded && (
-                            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 bg-slate-50/30 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className={`p-6 bg-slate-50/30 animate-in fade-in slide-in-from-top-2 duration-300 ${
+                                viewMode === 'GRID' 
+                                ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' 
+                                : 'flex flex-col gap-3'
+                            }`}>
                                 {groupItems.map(p => {
                                     const pStats = getStats(p.ma_ct);
+                                    
+                                    if (viewMode === 'LIST') {
+                                        return (
+                                            <div 
+                                                key={p.id}
+                                                onClick={() => onSelectProject(p.ma_ct)}
+                                                className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group"
+                                            >
+                                                <div className="flex items-center gap-4 min-w-0">
+                                                    <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-50">
+                                                        {p.thumbnail ? (
+                                                            <img src={p.thumbnail} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                                <Building2 className="w-6 h-6 opacity-30" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-black text-xs text-slate-800 uppercase truncate group-hover:text-blue-600 transition-colors">
+                                                            {p.name}
+                                                        </h3>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-[8px] font-mono font-bold text-blue-600">#{p.ma_ct}</span>
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">{p.location || 'Hồ Chí Minh'}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-6 shrink-0 ml-4">
+                                                    <div className="hidden sm:flex flex-col items-end">
+                                                        <span className="text-[7px] font-black text-slate-400 uppercase">Tiến độ QC</span>
+                                                        <span className="text-xs font-black text-slate-800">{pStats.total} <span className="text-[8px] font-bold text-slate-400 uppercase">Phiếu</span></span>
+                                                    </div>
+                                                    <div className="flex flex-col items-end min-w-[70px]">
+                                                        <span className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest ${p.status === 'Completed' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                            {p.status}
+                                                        </span>
+                                                        <span className="text-[7px] font-bold text-slate-400 uppercase mt-0.5">{p.progress}% Complete</span>
+                                                    </div>
+                                                    <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
                                     const chartData = [
                                         { name: 'OK', value: pStats.closed, color: COLORS.resolved },
                                         { name: 'NG', value: pStats.open, color: COLORS.open },

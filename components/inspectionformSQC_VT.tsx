@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, SupportingDoc, Material } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, 
   Calendar, PenTool, Eraser, Plus, Trash2, 
@@ -8,7 +8,7 @@ import {
   ChevronUp, History, FileCheck, Search, AlertCircle, MapPin, Locate,
   CheckSquare, Square, Info, ShieldCheck, CheckCircle, AlertTriangle, AlertOctagon
 } from 'lucide-react';
-import { fetchPlans, uploadQMSImage } from '../services/apiService';
+import { fetchPlans, uploadQMSImage, fetchMaterials } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 
@@ -45,6 +45,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     supportingDocs: initialData?.supportingDocs || SUPPORTING_DOC_TEMPLATES.map(name => ({ id: `doc_${Math.random()}`, name, verified: false })),
     inspectorName: user.name,
     po_number: initialData?.po_number || '', 
+    ma_ct: initialData?.ma_ct || '',
     supplier: initialData?.supplier || '',
     supplierAddress: initialData?.supplierAddress || '',
     location: initialData?.location || '',
@@ -72,6 +73,68 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       const sqcTpl = templates['SQC_MAT'] || templates['SQC_VT'] || templates['IQC'] || [];
       return Array.from(new Set(sqcTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
+
+  const handlePoBlur = async () => {
+    if (!formData.po_number || formData.po_number.length < 3) return;
+    setIsLookupLoading(true);
+    try {
+      const result = await fetchMaterials(formData.po_number);
+      if (result && result.items && result.items.length > 0) {
+        const materials = result.items as Material[];
+        const matIqc: MaterialIQC[] = materials.map(m => ({
+          id: m.id,
+          name: m.shortText || m.material,
+          category: 'Vật tư',
+          inspectType: 'AQL',
+          scope: m.Ma_Tender ? 'PROJECT' : 'COMMON',
+          projectCode: m.Ma_Tender || 'DÙNG CHUNG',
+          projectName: m.projectName || 'VẬT TƯ KHO DÙNG CHUNG',
+          orderQty: m.orderQuantity,
+          deliveryQty: m.orderQuantity,
+          unit: m.orderUnit,
+          criteria: [],
+          items: [],
+          inspectQty: m.orderQuantity,
+          passQty: 0,
+          failQty: 0,
+          images: [],
+          type: 'Material',
+          date: new Date().toISOString()
+        }));
+
+        const supplier = materials[0].supplierName;
+        const firstMat = materials[0];
+        setFormData(prev => ({ 
+            ...prev, 
+            supplier: supplier || prev.supplier, 
+            ma_ct: firstMat.Ma_Tender || prev.ma_ct,
+            materials: matIqc 
+        }));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Không tìm thấy thông tin PO.");
+    } finally {
+      setIsLookupLoading(false);
+    }
+  };
+
+  const lookupMaterialProject = async (code: string, matIdx: number) => {
+    const cleanCode = (code || '').trim().toUpperCase();
+    if (!cleanCode || cleanCode.length < 3) return;
+    setIsLookupLoading(true);
+    try {
+      const response = await fetchPlans(cleanCode, 1, 10);
+      const match = (response.items || []).find((p: any) => (p.ma_ct || '').toUpperCase() === cleanCode || (p.ma_nha_may || '').toUpperCase() === cleanCode);
+      if (match) {
+        setFormData(prev => {
+            const nextMats = [...(prev.materials || [])];
+            if (nextMats[matIdx]) { nextMats[matIdx].projectName = match.ten_ct; nextMats[matIdx].projectCode = match.ma_ct; }
+            return { ...prev, materials: nextMats, ma_ct: prev.ma_ct || match.ma_ct };
+        });
+      }
+    } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
+  };
 
   const handleInputChange = (field: keyof Inspection, value: any) => { 
     setFormData(prev => ({ ...prev, [field]: value })); 
@@ -118,6 +181,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         if (field === 'inspectQty') { mat.passQty = val; mat.failQty = 0; }
         else if (field === 'passQty') { mat.failQty = Number((mat.inspectQty - val).toFixed(2)); }
         else if (field === 'failQty') { mat.passQty = Number((mat.inspectQty - val).toFixed(2)); }
+
+        if (field === 'scope') { if (value === 'COMMON') { mat.projectCode = 'DÙNG CHUNG'; mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG'; } else { mat.projectCode = ''; mat.projectName = ''; } }
 
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
@@ -239,7 +304,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                 <div className="space-y-1">
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-teal-500 outline-none font-bold text-[11px] h-9 shadow-inner" placeholder="Mã PO..."/>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-teal-500 outline-none font-bold text-[11px] h-9 shadow-inner" placeholder="Mã PO..."/>
                         <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
@@ -326,6 +391,55 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                         </div>
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white border-t border-slate-50">
+                                {/* CLASSIFICATION MATRIX */}
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-12 gap-4 shadow-inner">
+                                    <div className="md:col-span-3 space-y-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                            PHÂN LOẠI
+                                        </label>
+                                        <div className="relative">
+                                            <select 
+                                                value={mat.scope} 
+                                                onChange={e => updateMaterial(matIdx, 'scope', e.target.value)}
+                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-black text-[11px] h-10 uppercase outline-none focus:ring-2 ring-teal-100 transition-all appearance-none"
+                                            >
+                                                <option value="COMMON">Dùng chung</option>
+                                                <option value="PROJECT">Công trình</option>
+                                            </select>
+                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-3 space-y-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                            MÃ DỰ ÁN
+                                        </label>
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                value={mat.projectCode} 
+                                                onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
+                                                onBlur={() => mat.scope === 'PROJECT' && lookupMaterialProject(mat.projectCode || '', matIdx)}
+                                                disabled={mat.scope === 'COMMON'}
+                                                className={`w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-[11px] h-10 outline-none transition-all shadow-sm ${mat.scope === 'COMMON' ? 'bg-slate-100 text-slate-400' : 'bg-white focus:ring-2 ring-teal-100'}`} 
+                                                placeholder="Mã CT..."
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-6 space-y-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                            TÊN CÔNG TRÌNH
+                                        </label>
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                value={mat.projectName} 
+                                                readOnly 
+                                                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-bold text-[11px] h-10 text-slate-500 uppercase truncate" 
+                                                placeholder="..."
+                                            />
+                                            {isLookupLoading && mat.scope === 'PROJECT' && <Loader2 className="absolute right-3 w-4 h-4 animate-spin text-teal-500" />}
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                                   <div className="md:col-span-3">
                                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
