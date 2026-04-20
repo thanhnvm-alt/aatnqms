@@ -1,4 +1,5 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
 import { query } from "./lib/db.js";
@@ -84,6 +85,7 @@ const memoryUpload = multer({ storage: multer.memoryStorage() });
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(cookieParser());
 
 // Request logging for debugging
 app.use((req, res, next) => {
@@ -102,6 +104,8 @@ const authenticate = (req: express.Request, res: express.Response, next: express
     token = authHeader.split(' ')[1];
   } else if (req.query.token) {
     token = req.query.token as string;
+  } else if (req.cookies && req.cookies['aatn_qms_token']) {
+    token = req.cookies['aatn_qms_token'];
   }
 
   if (!token) {
@@ -363,6 +367,14 @@ app.get("/api/image/:fileId", async (req, res) => {
           { expiresIn: '24h' }
         );
         
+        // Set secure HTTP cookie for images and API streaming
+        res.cookie('aatn_qms_token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
+
         // Don't send password back
         const { password: _, ...userWithoutPassword } = user;
         res.json({ user: userWithoutPassword, token });
@@ -1121,11 +1133,9 @@ app.get("/api/image/:fileId", async (req, res) => {
         const fileId = driveResponse.data.id;
         console.log("File uploaded to Drive. ID:", fileId);
         
-        // REMOVED: Public permission for security (NC-04)
-        // Only authorized users via server proxy should access these files
-        
-        // Google Drive direct link format
-        fileUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
+        // Native proxy URL from the backend
+        const driveUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
+        fileUrl = `/api/proxy-image?url=${encodeURIComponent(driveUrl)}`;
         filename = fileId;
       } else if (process.env.VERCEL) {
         // Fallback if on Vercel but no cloud keys: return a data URI (warning: limited size)
