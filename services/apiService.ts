@@ -23,6 +23,19 @@ const apiFetch = async (url: string, options: RequestInit = {}) => {
     const response = await fetch(fetchUrl, { ...options, headers: headers as HeadersInit });
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        
+        // Handle token expiration or unauthorized access
+        if (response.status === 401) {
+            console.warn('Session expired or unauthorized. Logging out.');
+            localStorage.removeItem('aatn_qms_token');
+            localStorage.removeItem('aatn_auth_storage');
+            sessionStorage.removeItem('aatn_auth_storage');
+            // Avoid infinite loops if we are already on the login page
+            if (!window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+                window.location.reload();
+            }
+        }
+        
         throw new Error(errorData.error || `Request failed with status ${response.status}`);
     }
     return await response.json();

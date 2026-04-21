@@ -270,11 +270,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       }
 
       if (user && isMatch) {
-        // Create JWT
+        // Create JWT - Increased to 30 days for better UX
         const token = jwt.sign(
           { id: user.id, username: user.username, role: user.role, name: user.name },
           JWT_SECRET,
-          { expiresIn: '24h' }
+          { expiresIn: '30d' }
         );
         
         // Set secure HTTP cookie for images and API streaming
@@ -282,7 +282,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: 24 * 60 * 60 * 1000 // 24 hours
+          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
         });
 
         // Don't send password back

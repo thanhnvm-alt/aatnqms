@@ -12,6 +12,7 @@ import { SignaturePad } from './SignaturePad';
 import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
+import { formatDisplayDate } from '../lib/utils';
 
 interface InspectionDetailProps {
   inspection: Inspection;
@@ -188,9 +189,15 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">
                     <div>
+                        <p className="mb-1 flex items-center gap-1.5"><Hash className="w-3 h-3"/> MÃ ĐỊNH DANH (MÃ NM)</p>
+                        <p className="text-[11px] font-bold text-slate-800 tracking-tight uppercase">
+                            {inspection.headcode || inspection.ma_nha_may || '---'}
+                        </p>
+                    </div>
+                    <div>
                         <p className="mb-1 flex items-center gap-1.5"><Box className="w-3 h-3"/> MÃ DỰ ÁN</p>
                         <p className="text-[11px] font-bold text-slate-800 tracking-tight uppercase">
-                            {inspection.ma_ct || '---'} {inspection.ma_nha_may && `• ${inspection.ma_nha_may}`}
+                            {inspection.ma_ct || '---'}
                         </p>
                     </div>
                     <div>
@@ -208,7 +215,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <div>
                         <p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> NGÀY THỰC HIỆN</p>
                         <p className="text-[11px] font-bold text-slate-800 tracking-tight font-mono">
-                            {inspection.date}
+                            {formatDisplayDate(inspection.date)}
                         </p>
                     </div>
                 </div>

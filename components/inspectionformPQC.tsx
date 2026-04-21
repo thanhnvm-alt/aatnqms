@@ -12,7 +12,7 @@ import {
   Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck, CheckCircle
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, fetchPlans } from '../services/apiService';
+import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, fetchPlans, saveDefectLibraryItem } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 
@@ -25,6 +25,8 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     const [libSearch, setLibSearch] = useState('');
     const [defectName, setDefectName] = useState('');
     const [isAiLoading, setIsAiLoading] = useState(false);
+    const [saveToLibrary, setSaveToLibrary] = useState(false);
+    const [newDefectName, setNewDefectName] = useState('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +92,35 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     };
 
     const handleViewImage = (images: string[], index: number, type: 'BEFORE' | 'AFTER') => { setEditorState({ images, index, type }); };
+    
+    const handleFinalSave = async () => {
+        let currentNcrData = { ...ncrData };
+        
+        if (saveToLibrary && !currentNcrData.defect_code) {
+            try {
+                const libCode = `DEF-${Math.floor(1000 + Math.random() * 9000)}`;
+                const newItem: DefectLibraryItem = {
+                    id: `DEF-LIB-${Date.now()}`,
+                    code: libCode,
+                    name: newDefectName || defectName || currentNcrData.issueDescription?.substring(0, 50) || 'Lỗi mới',
+                    description: currentNcrData.issueDescription || '',
+                    stage: inspectionStage || 'PQC',
+                    category: itemName || 'Kiểm tra',
+                    severity: currentNcrData.severity || 'MINOR',
+                    suggestedAction: currentNcrData.solution || ''
+                };
+                await saveDefectLibraryItem(newItem);
+                currentNcrData.defect_code = libCode;
+                alert("Đã lưu lỗi vào thư viện chuẩn.");
+            } catch (e) {
+                console.error("Lỗi khi lưu vào thư viện:", e);
+                alert("Lỗi khi lưu thông tin lỗi vào thư viện.");
+            }
+        }
+        
+        onSave(currentNcrData as NCR);
+    };
+
     const handleImageSave = (index: number, newImage: string) => {
         if (!editorState) return;
         const { type } = editorState;
@@ -138,8 +169,37 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                     </div>
                     <div className="space-y-0.5">
                         <div className="flex justify-between items-center"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mô tả lỗi chi tiết *</label><button onClick={handleAiAnalysis} disabled={isAiLoading || !ncrData.issueDescription} className="text-[9px] font-bold text-purple-600 uppercase flex items-center gap-1 hover:underline disabled:opacity-30">{isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>} AI Phân tích</button></div>
-                        <textarea className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:ring-1 ring-red-200 bg-white text-[11px]" rows={2} value={ncrData.issueDescription || ''} onChange={e => setNcrData({...ncrData, issueDescription: e.target.value})} placeholder="Mô tả cụ thể hiện trạng lỗi tại hiện trường..." />
+                        <textarea className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:ring-1 ring-red-200 bg-white text-[11px]" rows={2} value={ncrData.issueDescription || ''} onChange={e => {
+                            setNcrData({...ncrData, issueDescription: e.target.value});
+                            if (!defectName && !newDefectName) setNewDefectName(e.target.value.substring(0, 50));
+                        }} placeholder="Mô tả cụ thể hiện trạng lỗi tại hiện trường..." />
                     </div>
+
+                    {!ncrData.defect_code && (
+                        <div className="bg-blue-50/50 p-2 rounded-xl border border-blue-100 space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500" 
+                                    checked={saveToLibrary} 
+                                    onChange={e => setSaveToLibrary(e.target.checked)} 
+                                />
+                                <span className="text-[10px] font-bold text-blue-800 uppercase tracking-tight group-hover:text-blue-900 transition-colors">Lưu thông tin lỗi này vào thư viện chuẩn</span>
+                            </label>
+                            
+                            {saveToLibrary && (
+                                <div className="space-y-1 animate-in zoom-in-95 duration-200">
+                                    <label className="text-[8px] font-black text-blue-400 uppercase tracking-widest ml-1">Tên lỗi sẽ hiển thị trong thư viện</label>
+                                    <input 
+                                        className="w-full px-2 py-1.5 bg-white border border-blue-200 rounded-lg text-blue-700 font-bold text-[10px]" 
+                                        value={newDefectName} 
+                                        onChange={e => setNewDefectName(e.target.value)}
+                                        placeholder="Ví dụ: Trầy xước bề mặt sơn, Cong vênh khung..."
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-[11px]" value={ncrData.severity} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
                         <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Người phụ trách</label><input className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-[11px]" value={ncrData.responsiblePerson || ''} onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})} placeholder="Tên / Bộ phận..." /></div>
@@ -182,7 +242,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                 <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
                 <div className="p-3 border-t border-slate-100 bg-white flex justify-end gap-2 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
                     <button onClick={onClose} className="px-4 py-2 text-slate-600 font-bold hover:text-slate-900 uppercase text-[10px] tracking-widest">Hủy bỏ</button>
-                    <button onClick={() => onSave(ncrData as NCR)} disabled={!ncrData.issueDescription} className="px-6 py-2 bg-red-600 text-white rounded-lg shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all font-black uppercase text-[10px] tracking-widest disabled:opacity-50">Lưu NCR</button>
+                    <button onClick={handleFinalSave} disabled={!ncrData.issueDescription} className="px-6 py-2 bg-red-600 text-white rounded-lg shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all font-black uppercase text-[10px] tracking-widest disabled:opacity-50">Lưu NCR</button>
                 </div>
             </div>
             {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onSave={handleImageSave} onClose={() => setEditorState(null)} readOnly={false} />}
@@ -325,6 +385,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 dvt: match.dvt, 
                 so_luong_ipo: match.so_luong_ipo, 
                 ma_nha_may: match.ma_nha_may, 
+                headcode: match.ma_nha_may,
                 workshop: match.ma_nha_may,
                 inspectedQuantity: 0,
                 passedQuantity: 0,
@@ -541,7 +602,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <div className="relative flex items-center">
                         <input 
                             value={searchCode} 
-                            onChange={e => setSearchCode(e.target.value)} 
+                            onChange={e => {
+                                const val = e.target.value;
+                                setSearchCode(val);
+                                setFormData(prev => ({ ...prev, ma_nha_may: val, headcode: val }));
+                            }} 
                             onBlur={() => lookupPlanInfo(searchCode)} 
                             onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode)}
                             className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" 
@@ -888,7 +953,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       {activeNcrItemIndex !== null && formData.items && formData.items[activeNcrItemIndex] && (
           <NCRModal isOpen={isNcrModalOpen} onClose={() => setIsNcrModalOpen(false)} onSave={ncr => { setFormData(prev => { const newItems = [...(prev.items || [])]; newItems[activeNcrItemIndex] = { ...newItems[activeNcrItemIndex], status: CheckStatus.FAIL, ncr: { ...ncr, id: newItems[activeNcrItemIndex].ncr?.id || `NCR-${Date.now()}`, inspection_id: formData.id, itemId: newItems[activeNcrItemIndex].id, createdDate: new Date().toISOString() } }; return { ...prev, items: newItems }; }); setIsNcrModalOpen(false); }} initialData={formData.items[activeNcrItemIndex].ncr} itemName={formData.items[activeNcrItemIndex].label} inspectionStage={formData.inspectionStage} />
       )}
-      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); lookupPlanInfo(data); setShowScanner(false); }} />}
+      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { setSearchCode(data); setFormData(prev => ({...prev, ma_nha_may: data, headcode: data})); lookupPlanInfo(data); setShowScanner(false); }} />}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onSave={onImageSave} onClose={() => setEditorState(null)} readOnly={false} />}
       
       {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}

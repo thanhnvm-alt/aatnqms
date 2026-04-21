@@ -2,11 +2,34 @@
 import { IPOItem, IPOResponse } from '../types';
 
 /**
+ * Chuyển đổi mixed date (chuỗi dd/mm/yyyy, YYYY-MM-DD, hoặc Unix timestamp seconds) thành YYYY-MM-DD hoặc DD/MM/YYYY
+ */
+export const formatDisplayDate = (dateVal: string | number | undefined | null): string => {
+    if (!dateVal) return '---';
+    const strVal = String(dateVal);
+    // Nếu là chuỗi số có 10 chữ số -> Unix timestamp (seconds)
+    if (/^\d{10}$/.test(strVal)) {
+        const date = new Date(parseInt(strVal, 10) * 1000);
+        return new Intl.DateTimeFormat('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        }).format(date);
+    }
+    // Nếu đã có format YYYY-MM-DD, thử chuyển sang DD/MM/YYYY
+    if (/^\d{4}-\d{2}-\d{2}$/.test(strVal)) {
+        const [y, m, d] = strVal.split('-');
+        return `${d}/${m}/${y}`;
+    }
+    // Những TH khác thì return y xì
+    return strVal;
+};
+
+/**
  * Chuyển đổi Unix timestamp sang định dạng ngày Việt Nam (dd/MM/yyyy)
  */
 export const formatUnixDate = (timestamp: number): string => {
   if (!timestamp) return '';
-  // Unix epoch trong DB thường là seconds, JS dùng milliseconds
   const date = new Date(timestamp * 1000); 
   return new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',

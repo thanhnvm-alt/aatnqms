@@ -290,12 +290,16 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         summary, 
         workshop, 
         updated_at,
-        responsible_person as "responsiblePerson"
+        responsible_person as "responsiblePerson",
+        ma_nha_may,
+        headcode
     `;
 
     const tableQueries = tables.map(table => {
         const workshopCol = table === 'forms_pqc' ? 'workshop::text' : 'NULL::text as workshop';
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        const maNhaMayCol = table === 'forms_pqc' ? 'ma_nha_may::text' : 'NULL::text as ma_nha_may';
+        const headcodeCol = table === 'forms_pqc' ? 'headcode::text' : 'NULL::text as headcode';
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -393,7 +397,9 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     supportingDocs: safeJsonParse(row.supporting_docs_json, []),
                     deliveryNoteImages: safeJsonParse(row.delivery_images_json, []),
                     reportImages: safeJsonParse(row.report_images_json, []),
-                    responsiblePerson: row.responsible_person as string
+                    responsiblePerson: row.responsible_person as string,
+                    ma_nha_may: row.ma_nha_may as string,
+                    headcode: row.headcode as string
                 } as Inspection;
             }
         } catch (e) {
