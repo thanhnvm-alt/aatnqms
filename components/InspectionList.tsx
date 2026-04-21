@@ -255,7 +255,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <p className="font-black uppercase tracking-widest text-[10px]">Không tìm thấy dữ liệu</p>
                 </div>
             ) : (
-                Object.keys(groupedData).map(dateKey => {
+                Object.keys(groupedData).sort((a, b) => {
+                    if (a === 'KHÔNG RÕ NGÀY') return 1;
+                    if (b === 'KHÔNG RÕ NGÀY') return -1;
+                    const [da, ma, ya] = a.split('/');
+                    const [db, mb, yb] = b.split('/');
+                    const dateA = new Date(`${ya}-${ma}-${da}`);
+                    const dateB = new Date(`${yb}-${mb}-${db}`);
+                    return dateB.getTime() - dateA.getTime();
+                }).map(dateKey => {
                     const dateGroup = groupedData[dateKey];
                     return (
                         <div key={dateKey} className="space-y-4 mb-8">
