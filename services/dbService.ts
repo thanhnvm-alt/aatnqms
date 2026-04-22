@@ -255,6 +255,30 @@ export async function saveInspection(inspection: Inspection) {
     }
 
   // Log Audit & Status Change
+  const inspectorName = inspection.inspectorName || 'SYSTEM';
+
+  // --- SAVE NCRs FROM INSPECTION ITEMS ---
+  if (Array.isArray(inspection.items)) {
+    for (const item of inspection.items) {
+      if (item.ncr && typeof item.ncr === 'object' && item.ncr.id) {
+        await saveNcrMapped(inspection.id, item.ncr, inspectorName);
+      }
+    }
+  }
+
+  // --- SAVE NCRs FROM MATERIAL ITEMS (IQC/SQC-VT) ---
+  if (Array.isArray(inspection.materials)) {
+    for (const mat of inspection.materials) {
+      if (Array.isArray(mat.items)) {
+        for (const item of mat.items) {
+          if (item.ncr && typeof item.ncr === 'object' && item.ncr.id) {
+            await saveNcrMapped(inspection.id, item.ncr, inspectorName);
+          }
+        }
+      }
+    }
+  }
+
   await logAudit(inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection);
   if (oldValue && oldValue.status !== inspection.status) {
     await logStatusChange('inspection', inspection.id, oldValue.status, inspection.status, inspection.inspectorName || 'SYSTEM');
@@ -303,14 +327,21 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         updated_at,
         responsible_person as "responsiblePerson",
         ma_nha_may,
-        headcode
+        headcode,
+        stage as "inspectionStage",
+        po_number,
+        materials_json as "materials"
     `;
 
     const tableQueries = tables.map(table => {
         const workshopCol = table === 'forms_pqc' ? 'workshop::text' : 'NULL::text as workshop';
         const maNhaMayCol = table === 'forms_pqc' ? 'ma_nha_may::text' : 'NULL::text as ma_nha_may';
         const headcodeCol = table === 'forms_pqc' ? 'headcode::text' : 'NULL::text as headcode';
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        const stageCol = table === 'forms_pqc' ? 'stage::text' : 'NULL::text as stage';
+        const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
+        const matCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'materials_json::text' : 'NULL::text as materials_json';
+        
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -344,12 +375,19 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             query(countQuery, args)
         ]);
 
-        const items = res.rows.map((row: any) => ({
-            ...row,
-            isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
-            hasNcr: row.status === 'FLAGGED',
-            isCond: row.status === 'CONDITIONAL'
-        })) as unknown as Inspection[];
+        const items = res.rows.map((row: any) => {
+            let parsedMaterials = row.materials;
+            if (typeof parsedMaterials === 'string') {
+                try { parsedMaterials = JSON.parse(parsedMaterials); } catch(e) {}
+            }
+            return {
+                ...row,
+                materials: parsedMaterials,
+                isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
+                hasNcr: row.status === 'FLAGGED',
+                isCond: row.status === 'CONDITIONAL'
+            };
+        }) as unknown as Inspection[];
 
         return { 
             items, 
@@ -404,6 +442,7 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     coord_x: row.coord_x as number,
                     coord_y: row.coord_y as number,
                     location: row.location as string,
+                    materials: safeJsonParse(row.materials_json, []),
                     supplierAddress: row.supplier_address as string,
                     supportingDocs: safeJsonParse(row.supporting_docs_json, []),
                     deliveryNoteImages: safeJsonParse(row.delivery_images_json, []),
@@ -639,8 +678,15 @@ export async function saveNcrMapped(inspection_id: string, ncr: NCR, createdBy: 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, EXTRACT(EPOCH FROM NOW())::BIGINT, EXTRACT(EPOCH FROM NOW())::BIGINT, $16) 
         ON CONFLICT(id) DO UPDATE SET 
             status = EXCLUDED.status, 
+            severity = EXCLUDED.severity,
+            description = EXCLUDED.description,
             root_cause = EXCLUDED.root_cause, 
             corrective_action = EXCLUDED.corrective_action, 
+            preventive_action = EXCLUDED.preventive_action,
+            responsible_person = EXCLUDED.responsible_person,
+            deadline = EXCLUDED.deadline,
+            images_before_json = EXCLUDED.images_before_json,
+            images_after_json = EXCLUDED.images_after_json,
             updated_at = EXCLUDED.updated_at, 
             comments_json = EXCLUDED.comments_json
     `, sanitizeArgs([ncr.id, inspection_id, ncr.itemId, ncr.defect_code, ncr.severity, ncr.status, ncr.issueDescription, ncr.rootCause, ncr.solution, ncr.preventiveAction, ncr.responsiblePerson, ncr.deadline, ncr.imagesBefore, ncr.imagesAfter, createdBy, ncr.comments]));
@@ -679,32 +725,57 @@ export async function saveNcrMapped(inspection_id: string, ncr: NCR, createdBy: 
 
 export async function getNcrs(filters: any = {}, page: number = 1, limit: number = 20): Promise<{ items: NCR[], total: number }> {
     const offset = (page - 1) * limit;
-    let sql = `SELECT id, inspection_id, item_id, defect_code, severity, status, description, responsible_person, deadline, created_by, created_at FROM ${SCHEMA}.ncrs WHERE deleted_at IS NULL`;
+    
+    // Union of all inspection tables to get project info
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const inspectionUnion = tables.map(t => `SELECT id, ma_ct, ten_ct, ten_hang_muc FROM ${SCHEMA}."${t}"`).join(' UNION ALL ');
+
+    let sql = `
+        SELECT 
+            n.id, n.inspection_id, n.item_id, n.defect_code, n.severity, n.status, n.description, 
+            n.responsible_person, n.deadline, n.created_by, n.created_at,
+            i.ma_ct as "maCt", i.ten_ct as "tenCt", i.ten_hang_muc as "tenHangMuc"
+        FROM ${SCHEMA}.ncrs n
+        LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id
+        WHERE n.deleted_at IS NULL
+    `;
+    
     let args: any[] = [];
     let where = '';
     
     if (filters.status && filters.status !== 'ALL') { 
-        where = " AND status = $1"; 
+        where += " AND n.status = $" + (args.length + 1); 
         args.push(filters.status); 
     }
     
     if (filters.search) {
         const p = `%${filters.search}%`;
-        where += ` AND (description LIKE $${args.length + 1} OR defect_code LIKE $${args.length + 1} OR responsible_person LIKE $${args.length + 1})`;
+        const searchIndex = args.length + 1;
+        where += ` AND (n.description LIKE $${searchIndex} OR n.defect_code LIKE $${searchIndex} OR n.responsible_person LIKE $${searchIndex} OR i.ma_ct LIKE $${searchIndex})`;
         args.push(p);
     }
 
     const [res, countRes] = await Promise.all([
-        query(sql + where + ` ORDER BY created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
-        query(`SELECT COUNT(*) as total FROM ${SCHEMA}.ncrs WHERE deleted_at IS NULL` + where, args)
+        query(sql + where + ` ORDER BY n.created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
+        query(`SELECT COUNT(*) as total FROM ${SCHEMA}.ncrs n LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id WHERE n.deleted_at IS NULL` + where, args)
     ]);
 
     return { 
         items: res.rows.map((r: any) => ({
-            id: r.id, inspection_id: r.inspection_id, itemId: r.item_id, defect_code: r.defect_code,
-            severity: r.severity, status: r.status, issueDescription: r.description,
-            responsiblePerson: r.responsible_person, deadline: r.deadline,
-            createdBy: r.created_by, createdAt: r.created_at
+            id: r.id, 
+            inspection_id: r.inspection_id, 
+            itemId: r.item_id, 
+            defect_code: r.defect_code,
+            severity: r.severity, 
+            status: r.status, 
+            issueDescription: r.description,
+            responsiblePerson: r.responsible_person, 
+            deadline: r.deadline,
+            createdBy: r.created_by, 
+            createdAt: r.created_at,
+            ma_ct: r.maCt,
+            ten_ct: r.tenCt,
+            ten_hang_muc: r.tenHangMuc
         })) as unknown as NCR[], 
         total: parseInt(countRes.rows[0].total, 10) 
     };

@@ -66,7 +66,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
     } finally { setIsSubmittingComment(false); }
   };
 
-  if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => {}} />;
+  if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => setViewingNcr(null)} />;
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>

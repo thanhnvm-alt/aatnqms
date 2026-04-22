@@ -165,7 +165,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
             ncr={viewingNcr} 
             user={user} 
             onBack={() => setViewingNcr(null)} 
-            onViewInspection={() => {}} 
+            onViewInspection={() => setViewingNcr(null)} 
           />
       );
   }

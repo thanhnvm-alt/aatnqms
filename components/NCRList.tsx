@@ -231,6 +231,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                       />
                                   </th>
+                                  <th className="px-6 py-4">DỰ ÁN / HẠNG MỤC</th>
                                   <th className="px-6 py-4">NCR CODE</th>
                                   <th className="px-6 py-4">MÔ TẢ LỖI</th>
                                   <th className="px-6 py-4">MỨC ĐỘ</th>
@@ -254,6 +255,12 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                               onChange={() => toggleSelect(ncr.id)}
                                               className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                           />
+                                      </td>
+                                      <td className="px-6 py-5">
+                                          <div className="flex flex-col">
+                                              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{ncr.ma_ct || '---'}</span>
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase truncate max-w-[150px]">{ncr.ten_hang_muc || '---'}</span>
+                                          </div>
                                       </td>
                                       <td className="px-6 py-5">
                                           <div className="flex flex-col">

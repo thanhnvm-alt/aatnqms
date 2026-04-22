@@ -170,6 +170,9 @@ export interface NCR {
   deadline?: string;
   status: string;
   severity?: 'MINOR' | 'MAJOR' | 'CRITICAL';
+  ma_ct?: string;
+  ten_ct?: string;
+  ten_hang_muc?: string;
   image_refs_before: string[]; 
   image_refs_after: string[];  
   imagesBefore?: string[];

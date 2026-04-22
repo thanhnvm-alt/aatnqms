@@ -153,7 +153,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
   };
 
-  if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => {}} />;
+  if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => setViewingNcr(null)} />;
 
   return (
     <div className="flex flex-col bg-slate-50 relative pb-24" style={{ fontFamily: '"Times New Roman", Times, serif' }}>

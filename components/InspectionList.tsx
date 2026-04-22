@@ -42,6 +42,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange, user
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -180,6 +181,14 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     return groups;
   }, [inspections, searchTerm, filterQC, filterWorkshop, filterProject, filterStatus, startDate, endDate]);
 
+  const toggleDate = (dateKey: string) => {
+    setExpandedDates(prev => {
+        const next = new Set(prev);
+        if (next.has(dateKey)) next.delete(dateKey); else next.add(dateKey);
+        return next;
+    });
+  };
+
   const toggleProject = (dateKey: string, pKey: string) => {
     const key = `${dateKey}_${pKey}`;
     setExpandedProjects(prev => {
@@ -315,20 +324,31 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     return dateB.getTime() - dateA.getTime();
                 }).map(dateKey => {
                     const dateGroup = groupedData[dateKey];
+                    const isDateExpanded = expandedDates.has(dateKey) || searchTerm.length > 0;
                     return (
                         <div key={dateKey} className="space-y-4 mb-8">
-                            <div className="flex items-center gap-2 px-2 pb-1 border-b-2 border-slate-200 inline-flex">
-                                <CalendarDays className="w-4 h-4 text-blue-600" />
-                                <h2 className="font-black text-slate-700 text-[13px] uppercase tracking-widest">{dateKey}</h2>
+                            <div 
+                                onClick={() => toggleDate(dateKey)}
+                                className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors rounded-xl"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <CalendarDays className="w-4 h-4 text-blue-600" />
+                                    <h2 className="font-black text-slate-700 text-[13px] uppercase tracking-widest">{dateKey}</h2>
+                                    <span className="ml-2 bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                        {Object.values(dateGroup).reduce((acc, project) => acc + project.items.length, 0)} phiếu
+                                    </span>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 transition-transform ${isDateExpanded ? 'rotate-180 text-blue-600' : 'text-slate-300'}`} />
                             </div>
                             
-                            <div className="space-y-4">
-                                {Object.keys(dateGroup).map(pKey => {
-                                    const project = dateGroup[pKey];
-                                    const expKey = `${dateKey}_${pKey}`;
-                                    const isExpanded = expandedProjects.has(expKey) || searchTerm.length > 0;
-                                    
-                                    return (
+                            {isDateExpanded && (
+                                <div className="space-y-4 mt-2">
+                                    {Object.keys(dateGroup).map(pKey => {
+                                        const project = dateGroup[pKey];
+                                        const expKey = `${dateKey}_${pKey}`;
+                                        const isExpanded = searchTerm.length > 0 ? true : expandedProjects.has(expKey);
+                                        
+                                        return (
                                         <div key={expKey} className="space-y-1">
                                             {/* PROJECT HEADER */}
                                             <div 
@@ -339,8 +359,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     <div className={`p-2 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
                                                         <Building2 className="w-4 h-4" />
                                                     </div>
-                                                    <div className="min-w-0">
-                                                        <h3 className="font-black text-[11px] uppercase tracking-tight truncate text-slate-800">{pKey}</h3>
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center gap-2">
+                                                            <h3 className="font-black text-[11px] uppercase tracking-tight truncate text-slate-800">{pKey}</h3>
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${isExpanded ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{project.items.length} phiếu</span>
+                                                        </div>
                                                         <p className={`text-[8px] font-bold uppercase truncate ${isExpanded ? 'text-blue-500' : 'text-slate-400'}`}>{project.projectName}</p>
                                                     </div>
                                                 </div>
@@ -390,14 +413,30 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                             <td className="p-3 border-r border-slate-100">
                                                                                 <div className="flex flex-col gap-1 inline-flex">
                                                                                     <span className={`px-2 py-0.5 rounded text-[9px] font-black ${cfg.bg} ${cfg.color} inline-block uppercase text-center border shadow-sm`}>{cfg.label}</span>
-                                                                                    <span className="text-[8px] font-mono text-slate-400">#{item.id.split('-').pop()}</span>
+                                                                                    <span className="text-[8px] font-mono text-slate-400">
+                                                                                        {
+                                                                                            (item.type === 'PQC') ? (item.inspectionStage || `---`) :
+                                                                                            (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
+                                                                                            `#${item.id.split('-').pop()}`
+                                                                                        }
+                                                                                    </span>
                                                                                 </div>
                                                                             </td>
-                                                                            <td className="p-3 border-r border-slate-100 text-[10px] font-bold text-slate-700">
-                                                                                {item.ma_nha_may || item.headcode || '---'}
+                                                                            <td className="p-3 border-r border-slate-100 text-[10px] font-bold text-slate-700 uppercase">
+                                                                                {
+                                                                                    (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
+                                                                                    (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number ? `PO: ${item.po_number}` : (item.ma_ct || item.ma_nha_may || '---')) :
+                                                                                    (item.ma_nha_may || item.headcode || '---')
+                                                                                }
                                                                             </td>
                                                                             <td className="p-3 border-r border-slate-100">
-                                                                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-700 transition-colors">{item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}</p>
+                                                                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-700 transition-colors">
+                                                                                    {
+                                                                                        (item.type === 'IQC' || item.type === 'SQC_VT') 
+                                                                                            ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                                            : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                                    }
+                                                                                </p>
                                                                             </td>
                                                                             <td className="p-3 border-r border-slate-100">
                                                                                 <div className="flex items-center gap-1.5 whitespace-nowrap">
@@ -430,33 +469,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         </div>
                                     );
                                 })}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     );
                 })
             )}
 
             {/* PAGINATION CONTROLS */}
-            {total > 0 && onPageChange && (
-                <div className="flex items-center justify-between px-2 py-6 border-t border-slate-100 mt-4">
-                    <button 
-                        disabled={page <= 1 || isLoading}
-                        onClick={() => onPageChange(page - 1)}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all"
-                    >
-                        Trang trước
-                    </button>
+            {total > 0 && (
+                <div className="flex items-center justify-center px-2 py-6 border-t border-slate-100 mt-4">
                     <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
-                        <span className="text-[8px] font-bold text-slate-300 uppercase">Tổng {total} phiếu</span>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tổng {total} phiếu</span>
                     </div>
-                    <button 
-                        disabled={page * 20 >= total || isLoading}
-                        onClick={() => onPageChange(page + 1)}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all"
-                    >
-                        Trang sau
-                    </button>
                 </div>
             )}
         </div>

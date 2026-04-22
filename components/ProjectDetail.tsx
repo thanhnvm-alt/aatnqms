@@ -470,7 +470,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                             <div key={`${ins.id}-${idx}`} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
                                                 <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
                                                 <div className="flex-1 min-w-0">
-                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">{ins.ten_hang_muc}</h4>
+                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase truncate leading-none mb-1.5">
+                                                        {
+                                                            (ins.type === 'IQC' || ins.type === 'SQC_VT') 
+                                                                ? (ins.materials?.[0]?.name || ins.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                : (ins.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                        }
+                                                    </h4>
                                                     <div className="flex justify-between items-center"><p className="text-[8px] font-bold text-slate-400 uppercase">{ins.date}</p><span className="text-[10px] font-black text-slate-900">{ins.score}%</span></div>
                                                 </div>
                                             </div>
