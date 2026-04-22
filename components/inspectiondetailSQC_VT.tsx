@@ -7,7 +7,7 @@ import {
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   LayoutList, MessageSquare, Loader2, Eraser, Send, 
   UserPlus, AlertOctagon, ChevronRight, Camera, Image as ImageIcon, PenTool,
-  Factory, Activity, Save, Check
+  Factory, Activity, Save, Check, ClipboardList, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -40,6 +40,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [viewingNcr, setViewingNcr] = useState<NCR | null>(null);
+  const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; context?: string } | null>(null);
 
   // Signatures
@@ -284,8 +285,48 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
             </div>
         </section>
 
+        {inspection.materials && inspection.materials.length > 0 && (
+            <div className="space-y-3">
+                <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-teal-500" /> IV. Vật tư gia công</h3>
+                {inspection.materials.map((mat, idx) => {
+                    const isExp = expandedMaterial === mat.id;
+                    return (
+                        <div key={mat.id} className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden shadow-sm">
+                            <div onClick={() => setExpandedMaterial(isExp ? null : mat.id)} className={`p-5 flex items-center justify-between cursor-pointer ${isExp ? 'bg-teal-50/30' : 'hover:bg-slate-50'}`}>
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${isExp ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</div>
+                                    <div>
+                                        <h4 className="font-black text-slate-800 text-sm uppercase tracking-tight leading-none mb-1">{mat.name || 'VẬT TƯ MỚI'}</h4>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">Quy cách: {mat.deliveryQty} {mat.unit}</p>
+                                    </div>
+                                </div>
+                                {isExp ? <ChevronUp className="w-5 h-5 text-teal-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
+                            </div>
+                            {isExp && (
+                                <div className="p-5 border-t border-slate-50 bg-slate-50/50">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm mb-4">
+                                        <div className="col-span-2 md:col-span-1">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kết quả đánh giá</p>
+                                            <p className={`text-xs font-bold uppercase mt-1 ${mat.items?.[0]?.status === CheckStatus.PASS ? 'text-green-600' : mat.items?.[0]?.status === CheckStatus.FAIL ? 'text-red-600' : 'text-amber-600'}`}>{mat.items?.[0]?.status || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    {mat.items?.[0]?.notes && <p className="text-[11px] text-slate-600 italic bg-white p-3 rounded-xl border border-slate-100 border-l-4 border-l-teal-500">"{mat.items[0].notes}"</p>}
+                                    {mat.items?.[0]?.images && mat.items[0].images.length > 0 && (
+                                        <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
+                                            {mat.items[0].images.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 rounded-xl border border-white shadow-sm object-cover cursor-zoom-in hover:scale-105 transition-all" onClick={() => setLightboxState({ images: mat.items![0].images!, index: i })} />))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        )}
+
         <div className="space-y-3">
-            <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><LayoutList className="w-4 h-4 text-indigo-500" /> IV. Nội dung thẩm định chi tiết</h3>
+            <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><LayoutList className="w-4 h-4 text-indigo-500" /> V. Nội dung thẩm định chi tiết</h3>
+
             {inspection.items.map((item, idx) => (
                 <div key={idx} className={`bg-white p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 ring-1 ring-red-50/50' : 'border-slate-200'}`}>
                     <div className="flex items-start justify-between gap-4 mb-3 border-b border-slate-50 pb-3">

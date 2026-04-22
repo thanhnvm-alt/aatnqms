@@ -181,6 +181,46 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                         </div>
                         {isExp && (
                             <div className="p-5 space-y-4 border-t border-slate-50">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Phân loại</p>
+                                        <p className="text-xs font-bold text-slate-800 uppercase mt-1">{mat.scope === 'COMMON' ? 'Dùng chung' : 'Công trình'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Mã dự án</p>
+                                        <p className="text-xs font-bold text-slate-800 uppercase mt-1">{mat.projectCode || 'N/A'}</p>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tên công trình</p>
+                                        <p className="text-xs font-bold text-slate-800 uppercase mt-1 truncate">{mat.projectName || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Chủng loại</p>
+                                        <p className="text-xs font-bold text-slate-800 uppercase mt-1">{mat.category || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loạt kiểm</p>
+                                        <p className="text-xs font-bold text-slate-800 uppercase mt-1">{mat.inspectType || '100%'}</p>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Giao (DN) / DVT</p>
+                                        <p className="text-xs font-bold text-slate-800 uppercase mt-1">{mat.deliveryQty || 0} {mat.unit || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Kiểm tra</p>
+                                        <p className="text-xs font-bold text-blue-600 mt-1">{mat.inspectQty || 0}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-green-400 uppercase tracking-widest">Đạt</p>
+                                        <p className="text-xs font-bold text-green-600 mt-1">{mat.passQty || 0}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Hỏng</p>
+                                        <p className="text-xs font-bold text-red-600 mt-1">{mat.failQty || 0}</p>
+                                    </div>
+                                </div>
+
+                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pt-2">Chi tiết kiểm tra</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {mat.items?.map(item => (
                                         <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">

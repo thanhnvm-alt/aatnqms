@@ -227,7 +227,18 @@ export async function saveInspection(inspection: Inspection) {
         so_luong_ipo = EXCLUDED.so_luong_ipo,
         inspected_qty = EXCLUDED.inspected_qty,
         passed_qty = EXCLUDED.passed_qty,
-        failed_qty = EXCLUDED.failed_qty
+        failed_qty = EXCLUDED.failed_qty,
+        materials_json = EXCLUDED.materials_json,
+        delivery_images_json = EXCLUDED.delivery_images_json,
+        report_images_json = EXCLUDED.report_images_json,
+        supplier_address = EXCLUDED.supplier_address,
+        supporting_docs_json = EXCLUDED.supporting_docs_json,
+        po_number = EXCLUDED.po_number,
+        supplier = EXCLUDED.supplier,
+        ma_ct = EXCLUDED.ma_ct,
+        ten_ct = EXCLUDED.ten_ct,
+        ten_hang_muc = EXCLUDED.ten_hang_muc,
+        dvt = EXCLUDED.dvt
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
         inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection.date,
