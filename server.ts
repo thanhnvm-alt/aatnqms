@@ -915,12 +915,39 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.get("/api/ncrs/export", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`SELECT * FROM "${schema}"."ncrs" ORDER BY "created_at" DESC`);
-        const ws = XLSX.utils.json_to_sheet(result.rows);
+        // Get full details including project info if possible
+        const result = await query(`
+            SELECT 
+                n.id, n.inspection_id, n.defect_code, n.severity, n.status, n.description, 
+                n.responsible_person, n.deadline, n.created_by, n.created_at,
+                i.ma_ct, i.ten_ct
+            FROM "${schema}"."ncrs" n
+            LEFT JOIN "${schema}"."forms_pqc" i ON n.inspection_id = i.id
+            WHERE n.deleted_at IS NULL
+            ORDER BY n.created_at DESC
+        `);
+
+        const exportData = result.rows.map((r: any) => ({
+            'Mã NCR': r.id,
+            'Mã hồ sơ gốc': r.inspection_id,
+            'Mã dự án': r.ma_ct,
+            'Tên dự án': r.ten_ct,
+            'Mã lỗi': r.defect_code,
+            'Mức độ': r.severity,
+            'Trạng thái': r.status,
+            'Mô tả lỗi': r.description,
+            'Người phụ trách': r.responsible_person,
+            'Hạn xử lý': r.deadline,
+            'Người tạo': r.created_by,
+            'Ngày tạo': r.created_at ? new Date(Number(r.created_at) * 1000).toLocaleDateString('vi-VN') : ''
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "NCRs");
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        res.setHeader("Content-Disposition", "attachment; filename=NCRs.xlsx");
+        const filename = `AATN_NCR_List_${Date.now()}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buf);
     } catch (error) {
@@ -1130,11 +1157,24 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."defect_library" ORDER BY "defect_code" ASC`);
-        const ws = XLSX.utils.json_to_sheet(result.rows);
+        
+        const exportData = result.rows.map((r: any) => ({
+            'ID': r.id,
+            'Mã lỗi': r.defect_code,
+            'Tên lỗi (VN)': r.name,
+            'Tên lỗi (EN)': r.name_en,
+            'Công đoạn': r.stage,
+            'Phân loại': r.category,
+            'Mức độ mặc định': r.severity,
+            'Mô tả chi tiết': r.description
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DefectLibrary");
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        res.setHeader("Content-Disposition", "attachment; filename=DefectLibrary.xlsx");
+        const filename = `AATN_Defect_Library_${Date.now()}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buf);
     } catch (error) {
@@ -1185,11 +1225,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."material" WHERE "deleted_at" IS NULL ORDER BY "material" ASC`);
-        const ws = XLSX.utils.json_to_sheet(result.rows);
+        
+        const exportData = result.rows.map((r: any) => ({
+            'Mã vật tư': r.material,
+            'Tên vật tư': r.shortText,
+            'Đơn vị tính': r.orderUnit,
+            'Số lượng': r.orderQuantity,
+            'Nhà cung cấp': r.supplierName,
+            'Tên dự án': r.projectName,
+            'Chứng từ mua hàng': r.purchaseDocument,
+            'Ngày giao hàng': r.deliveryDate,
+            'Mã Tender': r.Ma_Tender,
+            'Mã nhà máy (Factory Order)': r.Factory_Order,
+            'ID': r.id
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Materials");
+        XLSX.utils.book_append_sheet(wb, ws, "Danh sách vật tư");
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        res.setHeader("Content-Disposition", "attachment; filename=Materials.xlsx");
+        const filename = `AATN_Materials_${Date.now()}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buf);
     } catch (error) {
@@ -1243,11 +1299,25 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."suppliers" WHERE "deleted_at" IS NULL ORDER BY "name" ASC`);
-        const ws = XLSX.utils.json_to_sheet(result.rows);
+        
+        const exportData = result.rows.map((r: any) => ({
+            'ID': r.id,
+            'Mã NCC': r.code,
+            'Tên nhà cung cấp': r.name,
+            'Địa chỉ': r.address,
+            'Người liên hệ': r.contact_person,
+            'SĐT': r.phone,
+            'Email': r.email,
+            'Phân loại': r.category,
+            'Trạng thái': r.status
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Suppliers");
+        XLSX.utils.book_append_sheet(wb, ws, "Danh sách NCC");
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        res.setHeader("Content-Disposition", "attachment; filename=Suppliers.xlsx");
+        const filename = `AATN_Suppliers_${Date.now()}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buf);
     } catch (error) {
@@ -1294,20 +1364,127 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  // --- INSPECTIONS EXPORT ---
+  // --- IPO EXPORT ---
+  app.get("/api/ipo/export", async (req, res) => {
+    try {
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        const result = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "ID" ASC LIMIT 50000`);
+        
+        const exportData = result.rows.map((r: any) => ({
+            'ID Factory Order': r.ID_Factory_Order,
+            'Mã Tender': r.Ma_Tender,
+            'Tên dự án': r.Project_name,
+            'Mô tả vật tư': r.Material_description,
+            'Số lượng IPO': r.Quantity_IPO,
+            'Đơn vị tính': r.Base_Unit,
+            'Drawing URL': r.drawing_url,
+            'Mô tả': r.description
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "IPO_Data");
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        const filename = `AATN_IPO_Data_${Date.now()}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.send(buf);
+    } catch (error) {
+        console.error('Error exporting IPO data:', error);
+        res.status(500).json({ error: 'Failed to export IPO data' });
+    }
+  });
   app.get("/api/inspections/export", async (req, res) => {
     try {
-        const result = await db.getInspectionsList({}, 1, 10000);
-        const ws = XLSX.utils.json_to_sheet(result.items);
+        const filters = {
+            status: req.query.status as string,
+            search: req.query.search as string,
+            qc: req.query.qc as string,
+            workshop: req.query.workshop as string,
+            project: req.query.project as string,
+            startDate: req.query.startDate as string,
+            endDate: req.query.endDate as string
+        };
+
+        // Get all items if no limit specified
+        const result = await db.getInspectionsList(filters, 1, 50000);
+        
+        // Map to Vietnamese headers for user friendly export
+        const exportData = result.items.map((item: any) => ({
+            'Mã hồ sơ': item.id,
+            'Loại phiếu': item.type,
+            'Mã dự án': item.ma_ct,
+            'Tên dự án': item.ten_ct,
+            'Hạng mục/Mô tả': item.ten_hang_muc,
+            'Mã nhà máy': item.ma_nha_may,
+            'Headcode': item.headcode,
+            'QC kiểm tra': item.inspectorName,
+            'Xưởng/Công đoạn': item.workshop,
+            'Ngày thực hiện': item.date,
+            'Trạng thái': item.status,
+            'Điểm số': item.score,
+            'Kết luận/Ghi chú': item.summary,
+            'Phụ trách': item.responsiblePerson,
+            'Cập nhật lần cuối': item.updated_at
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Inspections");
+        XLSX.utils.book_append_sheet(wb, ws, "Danh sách kiểm tra");
+        
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-        res.setHeader("Content-Disposition", "attachment; filename=Inspections.xlsx");
+        
+        const filename = `AATN_Inspections_${Date.now()}.xlsx`;
+        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.send(buf);
     } catch (error) {
         console.error('Error exporting inspections:', error);
         res.status(500).json({ error: 'Failed to export inspections' });
+    }
+  });
+
+  // --- INSPECTIONS IMPORT ---
+  app.post("/api/inspections/import", authenticate, memoryUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = wb.SheetNames[0];
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+      
+      let count = 0;
+      for (const row of data as any[]) {
+        // Map Vietnamese headers back to Inspection object
+        const inspection: any = {
+          id: row['Mã hồ sơ'] || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          type: row['Loại phiếu'] || 'PQC',
+          ma_ct: row['Mã dự án'],
+          ten_ct: row['Tên dự án'],
+          ten_hang_muc: row['Hạng mục/Mô tả'] || row['Category'],
+          ma_nha_may: row['Mã nhà máy'],
+          headcode: row['Headcode'],
+          inspectorName: row['QC kiểm tra'] || (req as any).user?.name,
+          workshop: row['Xưởng/Công đoạn'],
+          date: row['Ngày thực hiện'] || row['Ngày'],
+          status: row['Trạng thái'] || 'DRAFT',
+          score: Number(row['Điểm số'] || row['Score'] || 0),
+          summary: row['Kết luận/Ghi chú'] || row['Summary'],
+          responsiblePerson: row['Phụ trách'],
+          items: [],
+          images: [],
+          comments: []
+        };
+
+        if (inspection.ma_ct) {
+          await db.saveInspection(inspection);
+          count++;
+        }
+      }
+      
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error('Error importing inspections:', error);
+      res.status(500).json({ error: 'Failed to import inspections' });
     }
   });
 

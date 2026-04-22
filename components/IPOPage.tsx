@@ -1,16 +1,33 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Loader2, Building2, ChevronDown } from 'lucide-react';
+import { Loader2, Building2, ChevronDown, Download } from 'lucide-react';
 import { IPODetail } from './IPODetail';
 import { IPOItem } from '../types';
+import { exportIpoData } from '../services/apiService';
 
 export const IPOPage = () => {
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterFactoryOrder, setFilterFactoryOrder] = useState('');
   const [filterMaTender, setFilterMaTender] = useState('');
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportIpoData({
+        factoryOrder: filterFactoryOrder,
+        maTender: filterMaTender
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Lỗi khi xuất file Excel');
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const limit = 50;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedIpo, setSelectedIpo] = useState<IPOItem | null>(null);
@@ -124,6 +141,14 @@ export const IPOPage = () => {
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         TỔNG CỘNG: {total} KẾ HOẠCH
                     </p>
+                    <button 
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-500/30 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Xuất Excel
+                    </button>
                 </div>
           </div>
       </div>

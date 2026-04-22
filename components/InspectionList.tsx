@@ -1,16 +1,16 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
-import { exportInspections, deleteInspection } from '../services/apiService';
+import { exportInspections, deleteInspection, importInspectionsFile } from '../services/apiService';
 import { formatDisplayDate } from '../lib/utils';
 import { 
-  Search, RefreshCw, FolderOpen, Clock, 
+  Search, RefreshCw, FolderOpen, Clock, Upload,
   Loader2, X, ChevronDown, ChevronRight,
   Filter, Building2, SlidersHorizontal,
   PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
   Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid,
   ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle,
-  CalendarDays, ArrowRight, Check, FileText, Download, Trash2
+  CalendarDays, ArrowRight, Check, FileText, Download, Trash2, Edit, Eye
 } from 'lucide-react';
 
 interface InspectionListProps {
@@ -46,6 +46,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -95,12 +97,43 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      await exportInspections();
+      const filters = {
+        qc: filterQC[0],
+        workshop: filterWorkshop[0],
+        project: filterProject[0],
+        status: filterStatus[0],
+        search: searchTerm,
+        startDate,
+        endDate
+      };
+      await exportInspections(filters);
     } catch (error) {
       console.error('Export failed:', error);
       alert('Lỗi khi xuất file Excel');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const result = await importInspectionsFile(file);
+      alert(`Nhập thành công ${result.count} phiếu kiểm tra`);
+      if (onPageChange) onPageChange(1);
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Lỗi khi nhập file Excel');
+    } finally {
+      setIsImporting(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -199,14 +232,31 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <Filter className="w-5 h-5" />
                   </button>
                   {user.role !== 'QC' && (
-                    <button 
-                      onClick={handleExport}
-                      disabled={isExporting}
-                      title="Xuất Excel"
-                      className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        accept=".xlsx, .xls" 
+                        className="hidden" 
+                      />
+                      <button 
+                        onClick={handleImportClick}
+                        disabled={isImporting}
+                        title="Nhập Excel"
+                        className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                      </button>
+                      <button 
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        title="Xuất Excel"
+                        className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                      </button>
+                    </div>
                   )}
               </div>
               

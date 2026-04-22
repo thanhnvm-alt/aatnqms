@@ -419,8 +419,9 @@ export const importSuppliersFile = async (file: File) => {
     return await response.json();
 };
 
-export const exportInspections = async () => {
-    const response = await fetch('/api/inspections/export', {
+export const exportInspections = async (filters: any = {}) => {
+    const params = new URLSearchParams(filters);
+    const response = await fetch(`/api/inspections/export?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -429,6 +430,34 @@ export const exportInspections = async () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `AATN_Inspections_${Date.now()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+};
+
+export const importInspectionsFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/inspections/import', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
+};
+
+export const exportIpoData = async (filters: any = {}) => {
+    const params = new URLSearchParams(filters);
+    const response = await fetch(`/api/ipo/export?${params.toString()}`, {
+        headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AATN_IPO_Data_${Date.now()}.xlsx`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
