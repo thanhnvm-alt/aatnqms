@@ -40,7 +40,6 @@ import { InspectionDetailSITE } from './components/inspectiondetailSITE';
 
 import { Settings } from './components/Settings';
 import { IPOPage } from './components/IPOPage';
-import { AIChatbox } from './components/AIChatbox';
 import { LoginPage } from './components/LoginPage';
 import { ThreeDConverter } from './components/ThreeDConverter';
 import { ProjectList } from './components/ProjectList';
@@ -55,6 +54,7 @@ import { SupplierManagement } from './components/SupplierManagement';
 import { SupplierDetail } from './components/SupplierDetail';
 import { MaterialManagement } from './components/MaterialManagement';
 import { Trash } from './components/Trash';
+import { ChatAI } from './components/ChatAI';
 import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
@@ -309,12 +309,6 @@ const App = () => {
             activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined} 
             onNavigateToRecord={handleNavigateToRecord}
         />
-        <button 
-          onClick={() => createNotification({ userId: user.id, type: 'INFO', title: 'Test Notification', message: 'This is a test notification triggered at ' + new Date().toLocaleTimeString() })}
-          className="fixed bottom-20 right-4 z-[100] bg-blue-600 text-white p-3 rounded-full shadow-lg lg:hidden"
-        >
-          <Bell className="w-6 h-6" />
-        </button>
         <main className="flex-1 flex flex-col min-h-0 relative overflow-x-hidden overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0 px-2 md:px-6 safe-pb no-scrollbar" id="main-scroll-container">
             {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
             {view === 'LIST' && (
@@ -465,7 +459,7 @@ const App = () => {
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />
-        {/* <AIChatbox inspections={inspections} /> */}
+        <ChatAI user={user} />
         {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         
         {showModuleSelector && (
