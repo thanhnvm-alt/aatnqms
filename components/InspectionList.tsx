@@ -38,6 +38,92 @@ const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; 
     'FSR': { label: 'FSR', color: 'text-orange-600', bg: 'bg-orange-50', icon: FolderOpen }
 };
 
+interface SearchableSelectProps {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, options, onChange, placeholder = '- TẤT CẢ -', className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filteredOptions = useMemo(() => {
+    if (!search) return options;
+    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className={`space-y-1 relative ${className}`} ref={containerRef}>
+      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-all border-slate-200 h-[38px]"
+      >
+        <span className={`truncate ${value && value !== 'ALL' ? 'text-slate-900' : 'text-slate-400'}`}>
+          {value && value !== 'ALL' ? value : placeholder}
+        </span>
+        <ChevronDown className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] max-h-64 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="p-2 border-b border-slate-100 bg-slate-50">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+              <input 
+                autoFocus
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm nhanh..."
+                className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+          <div className="overflow-y-auto flex-1 no-scrollbar p-1">
+            <div 
+              onClick={(e) => { e.stopPropagation(); onChange('ALL'); setIsOpen(false); setSearch(''); }}
+              className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all mb-1 ${!value || value === 'ALL' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+            >
+              - TẤT CẢ -
+            </div>
+            <div className="h-px bg-slate-100 mb-1" />
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map(opt => (
+                <div 
+                  key={opt}
+                  onClick={(e) => { e.stopPropagation(); onChange(opt); setIsOpen(false); setSearch(''); }}
+                  className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all ${value === opt ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                >
+                  {opt}
+                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">Không tìm thấy</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const InspectionList: React.FC<InspectionListProps> = ({ 
   inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange, user
 }) => {
@@ -87,9 +173,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [endDate, setEndDate] = useState('');
 
   const filterOptions = useMemo(() => ({
-      inspectors: Array.from(new Set(inspections.map(i => i.inspectorName).filter(Boolean))).sort(),
-      workshops: Array.from(new Set(inspections.map(i => i.workshop).filter(Boolean))).sort(),
-      projects: Array.from(new Set(inspections.map(i => i.ma_ct).filter(Boolean))).sort(),
+      inspectors: Array.from(new Set(inspections.map(i => i.inspectorName).filter((s): s is string => !!s))).sort(),
+      workshops: Array.from(new Set(inspections.map(i => i.workshop).filter((s): s is string => !!s))).sort(),
+      projects: Array.from(new Set(inspections.map(i => i.ma_ct).filter((s): s is string => !!s))).sort(),
       statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
   }), [inspections]);
 
@@ -270,30 +356,27 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               </div>
               
               {isFilterOpen && (
-                  <div className="bg-white rounded-2xl p-4 border border-slate-200 animate-in slide-in-from-top duration-200 grid grid-cols-1 md:grid-cols-4 gap-3 mt-3 shadow-sm">
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">QC KIỂM TRA</label>
-                          <select value={filterQC[0] || 'ALL'} onChange={e => setFilterQC(e.target.value === 'ALL' ? [] : [e.target.value])} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase">
-                              <option value="ALL">- TẤT CẢ -</option>
-                              {filterOptions.inspectors.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">XƯỞNG SẢN XUẤT</label>
-                          <select value={filterWorkshop[0] || 'ALL'} onChange={e => setFilterWorkshop(e.target.value === 'ALL' ? [] : [e.target.value])} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase">
-                              <option value="ALL">- TẤT CẢ -</option>
-                              {filterOptions.workshops.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">MÃ DỰ ÁN</label>
-                          <select value={filterProject[0] || 'ALL'} onChange={e => setFilterProject(e.target.value === 'ALL' ? [] : [e.target.value])} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase">
-                              <option value="ALL">- TẤT CẢ -</option>
-                              {filterOptions.projects.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                      </div>
+                  <div className="bg-white rounded-2xl p-4 border border-slate-200 animate-in slide-in-from-top duration-200 grid grid-cols-1 md:grid-cols-4 gap-3 mt-3 shadow-sm relative">
+                      <SearchableSelect 
+                        label="QC KIỂM TRA" 
+                        value={filterQC[0] || 'ALL'} 
+                        options={filterOptions.inspectors} 
+                        onChange={val => setFilterQC(val === 'ALL' ? [] : [val])} 
+                      />
+                      <SearchableSelect 
+                        label="XƯỞNG SẢN XUẤT" 
+                        value={filterWorkshop[0] || 'ALL'} 
+                        options={filterOptions.workshops} 
+                        onChange={val => setFilterWorkshop(val === 'ALL' ? [] : [val])} 
+                      />
+                      <SearchableSelect 
+                        label="MÃ DỰ ÁN" 
+                        value={filterProject[0] || 'ALL'} 
+                        options={filterOptions.projects} 
+                        onChange={val => setFilterProject(val === 'ALL' ? [] : [val])} 
+                      />
                       <div className="flex items-end">
-                          <button onClick={() => { setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200">XÓA BỘ LỌC</button>
+                          <button onClick={() => { setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]">XÓA BỘ LỌC</button>
                       </div>
                   </div>
               )}

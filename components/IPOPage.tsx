@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Loader2, Building2, ChevronDown, Download } from 'lucide-react';
+import { Loader2, Building2, ChevronDown, Download, Upload } from 'lucide-react';
 import { IPODetail } from './IPODetail';
-import { IPOItem } from '../types';
-import { exportIpoData } from '../services/apiService';
+import { IPOItem, User } from '../types';
+import { exportIpoData, importIpoFile } from '../services/apiService';
 
-export const IPOPage = () => {
+export const IPOPage = ({ user }: { user: User }) => {
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -26,6 +26,22 @@ export const IPOPage = () => {
       alert('Lỗi khi xuất file Excel');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    try {
+      setLoading(true);
+      const result = await importIpoFile(file);
+      alert(`Đã nhập thành công ${result.count} kế hoạch. Có ${result.errors?.length || 0} lỗi.`);
+      window.location.reload();
+    } catch (error) {
+      console.error('Import failed:', error);
+      alert('Lỗi khi nhập file Excel');
+    } finally {
+      setLoading(false);
     }
   };
   const limit = 50;
@@ -141,14 +157,32 @@ export const IPOPage = () => {
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         TỔNG CỘNG: {total} KẾ HOẠCH
                     </p>
-                    <button 
-                        onClick={handleExport}
-                        disabled={isExporting}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-500/30 active:scale-95 transition-all disabled:opacity-50"
-                    >
-                        {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        Xuất Excel
-                    </button>
+                    {user?.role !== 'QC' && (
+                        <div className="flex gap-2">
+                           <button 
+                                onClick={handleExport}
+                                disabled={isExporting}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-green-500/30 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                Xuất Excel
+                            </button>
+                            <input 
+                                type="file" 
+                                id="ipo-import" 
+                                className="hidden" 
+                                onChange={handleImport}
+                                accept=".xlsx, .xls"
+                            />
+                            <label 
+                                htmlFor="ipo-import"
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+                            >
+                                <Upload className="w-4 h-4" />
+                                Nhập Excel
+                            </label>
+                        </div>
+                    )}
                 </div>
           </div>
       </div>

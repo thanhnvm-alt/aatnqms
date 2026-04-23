@@ -24,7 +24,7 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH';
 
 export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS';
 
@@ -173,6 +173,8 @@ export interface NCR {
   ma_ct?: string;
   ten_ct?: string;
   ten_hang_muc?: string;
+  workshop?: string;
+  inspectorName?: string;
   image_refs_before: string[]; 
   image_refs_after: string[];  
   imagesBefore?: string[];

@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 
 interface UserManagementProps {
+  currentUser: User;
   users: User[];
   onAddUser: (user: User) => Promise<void>;
   onUpdateUser: (user: User) => Promise<void>;
@@ -41,7 +42,7 @@ interface UserManagementProps {
   onImportUsers?: (users: User[]) => Promise<void>;
 }
 
-export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onUpdateUser, onDeleteUser, onImportUsers }) => {
+export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onAddUser, onUpdateUser, onDeleteUser, onImportUsers }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -270,23 +271,25 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input type="text" placeholder="Tìm tên, mã, username..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" />
             </div>
-            <div className="flex items-center gap-2">
-                <button 
-                    onClick={() => excelImportRef.current?.click()} 
-                    disabled={isImporting}
-                    className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isImporting ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 active:scale-95'}`}
-                    title="Nhập từ Excel"
-                >
-                    {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
-                </button>
-                <button 
-                    onClick={handleExportExcel} 
-                    className="p-2.5 bg-white text-slate-500 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
-                    title="Xuất ra Excel"
-                >
-                    <FileDown className="w-5 h-5" />
-                </button>
-            </div>
+            {currentUser.role !== 'QC' && (
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => excelImportRef.current?.click()} 
+                        disabled={isImporting}
+                        className={`p-2.5 rounded-xl border transition-all shadow-sm flex items-center justify-center ${isImporting ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 active:scale-95'}`}
+                        title="Nhập từ Excel"
+                    >
+                        {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
+                    </button>
+                    <button 
+                        onClick={handleExportExcel} 
+                        className="p-2.5 bg-white text-slate-500 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
+                        title="Xuất ra Excel"
+                    >
+                        <FileDown className="w-5 h-5" />
+                    </button>
+                </div>
+            )}
             <Button onClick={() => handleOpenModal()} icon={<UserPlus className="w-4 h-4" />} className="bg-blue-600 shadow-lg shadow-blue-200 font-black px-6 text-xs flex-1 lg:flex-none">THÊM MỚI</Button>
         </div>
       </div>

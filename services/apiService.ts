@@ -196,6 +196,10 @@ export const deleteInspection = async (id: string) => {
     return apiFetch(`/api/inspections/${id}`, { method: 'DELETE' });
 };
 
+export const fetchDeletedInspections = async () => apiFetch('/api/admin/deleted-inspections');
+export const restoreInspection = async (id: string) => apiFetch(`/api/admin/restore-inspection/${id}`, { method: 'POST' });
+export const permanentDeleteInspection = async (id: string) => apiFetch(`/api/admin/permanent-delete/${id}`, { method: 'DELETE' });
+
 export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
     return apiFetch('/api/ncrs', {
         method: 'POST',
@@ -461,6 +465,18 @@ export const exportIpoData = async (filters: any = {}) => {
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
+};
+
+export const importIpoFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/ipo/import', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData
+    });
+    if (!response.ok) throw new Error('Import failed');
+    return await response.json();
 };
 
 export const checkApiConnection = async () => {

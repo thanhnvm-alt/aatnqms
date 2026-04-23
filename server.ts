@@ -10,6 +10,7 @@ const { logAudit, logStatusChange } = db;
 import multer from 'multer';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { v2 as cloudinary } from 'cloudinary';
 import { google } from 'googleapis';
 import { Readable, pipeline } from 'stream';
@@ -602,6 +603,48 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  // --- ADMIN / TRASH ---
+  app.get("/api/admin/deleted-inspections", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+      }
+      const result = await db.getDeletedInspections();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch deleted inspections' });
+    }
+  });
+
+  app.post("/api/admin/restore-inspection/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+      }
+      await db.restoreInspection(String(req.params.id));
+      await logAudit(user.id, 'RESTORE_INSPECTION', 'inspection', String(req.params.id), null, { restoredBy: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to restore inspection' });
+    }
+  });
+
+  app.delete("/api/admin/permanent-delete/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+      }
+      await db.hardDeleteInspection(String(req.params.id));
+      await logAudit(user.id, 'PERMANENT_DELETE', 'inspection', String(req.params.id), null, { deletedBy: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to permanently delete inspection' });
+    }
+  });
+
   app.post("/api/users", authenticate, async (req, res) => {
     try {
       await db.saveUser(req.body);
@@ -915,7 +958,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.get("/api/ncrs/export", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
-        // Get full details including project info if possible
         const result = await query(`
             SELECT 
                 n.id, n.inspection_id, n.defect_code, n.severity, n.status, n.description, 
@@ -927,32 +969,95 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             ORDER BY n.created_at DESC
         `);
 
-        const exportData = result.rows.map((r: any) => ({
-            'Mã NCR': r.id,
-            'Mã hồ sơ gốc': r.inspection_id,
-            'Mã dự án': r.ma_ct,
-            'Tên dự án': r.ten_ct,
-            'Mã lỗi': r.defect_code,
-            'Mức độ': r.severity,
-            'Trạng thái': r.status,
-            'Mô tả lỗi': r.description,
-            'Người phụ trách': r.responsible_person,
-            'Hạn xử lý': r.deadline,
-            'Người tạo': r.created_by,
-            'Ngày tạo': r.created_at ? new Date(Number(r.created_at) * 1000).toLocaleDateString('vi-VN') : ''
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "NCRs");
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
         const filename = `AATN_NCR_List_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.send(buf);
+
+        // Use streaming writer for large files
+        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream: res,
+            useStyles: true,
+            useSharedStrings: true
+        });
+
+        const sheet = workbook.addWorksheet('NCRs', {
+          views: [{ state: 'frozen', ySplit: 1 }]
+        });
+
+        // 4.2 Locked Headers
+        await sheet.protect('aatn_protect', {
+          selectLockedCells: true,
+          selectUnlockedCells: true
+        });
+
+        sheet.columns = [
+            { header: 'Mã NCR', key: 'id', width: 20 },
+            { header: 'Mã hồ sơ gốc', key: 'inspection_id', width: 25 },
+            { header: 'Mã dự án', key: 'ma_ct', width: 15 },
+            { header: 'Tên dự án', key: 'ten_ct', width: 30 },
+            { header: 'Mã lỗi', key: 'defect_code', width: 20 },
+            { header: 'Mức độ', key: 'severity', width: 15 },
+            { header: 'Trạng thái', key: 'status', width: 15 },
+            { header: 'Mô tả lỗi', key: 'description', width: 40 },
+            { header: 'Người phụ trách', key: 'responsible_person', width: 25 },
+            { header: 'Hạn xử lý', key: 'deadline', width: 15 },
+            { header: 'Người tạo', key: 'created_by', width: 25 },
+            { header: 'Ngày tạo', key: 'created_at', width: 20 }
+        ];
+
+        for (const r of result.rows) {
+            const row = sheet.addRow({
+                id: String(r.id), // 1. Preserve leading zeros
+                inspection_id: String(r.inspection_id),
+                ma_ct: r.ma_ct,
+                ten_ct: r.ten_ct,
+                defect_code: r.defect_code,
+                severity: r.severity || 'MINOR',
+                status: r.status || 'OPEN',
+                description: r.description,
+                responsible_person: r.responsible_person,
+                deadline: r.deadline,
+                created_by: r.created_by,
+                created_at: r.created_at ? new Date(Number(r.created_at) * 1000) : null // 3. Date object
+            });
+
+            // 4.2 Unlock data cells
+            row.eachCell((cell, colNumber) => {
+              cell.protection = { locked: false };
+              
+              // 3. Constant Date Format
+              if (colNumber === 12 && cell.value instanceof Date) {
+                 cell.numFmt = 'yyyy-mm-dd hh:mm:ss';
+              }
+              
+              // 4.1 Data Validation for Status
+              if (colNumber === 7) {
+                cell.dataValidation = {
+                  type: 'list',
+                  allowBlank: true,
+                  formulae: ['"OPEN,IN_PROGRESS,CLOSED"']
+                };
+              }
+
+              // 4.1 Data Validation for Severity
+              if (colNumber === 6) {
+                cell.dataValidation = {
+                  type: 'list',
+                  allowBlank: true,
+                  formulae: ['"MINOR,MAJOR,CRITICAL"']
+                };
+              }
+            });
+
+            await row.commit();
+        }
+
+        await workbook.commit();
     } catch (error) {
         console.error('Error exporting NCRs:', error);
-        res.status(500).json({ error: 'Failed to export NCRs' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to export NCRs' });
+        }
     }
   });
 
@@ -1125,27 +1230,64 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/ncrs/import", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws);
         
+        // Convert buffer to stream for ExcelJS Reader
+        const stream = new Readable();
+        stream.push(req.file.buffer);
+        stream.push(null);
+
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        
+        const validResults = [];
+        const errorLogs = [];
         const schema = process.env.DB_SCHEMA || 'appQAQC';
-        for (const row of data as any[]) {
-            if (row.id) {
-                await query(`
-                    UPDATE "${schema}"."ncrs" 
-                    SET "defect_code" = $1, "description" = $2, "status" = $3, "severity" = $4, "responsible_person" = $5, "updated_at" = (EXTRACT(epoch FROM now()))::bigint
-                    WHERE "id" = $6
-                `, [row.defect_code, row.description || row.issue_description, row.status, row.severity, row.responsible_person, row.id]);
-            } else {
-                const newId = `NCR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                await query(`
-                    INSERT INTO "${schema}"."ncrs" ("id", "defect_code", "description", "status", "severity", "responsible_person", "created_at", "updated_at") 
-                    VALUES ($1, $2, $3, $4, $5, $6, (EXTRACT(epoch FROM now()))::bigint, (EXTRACT(epoch FROM now()))::bigint)
-                `, [newId, row.defect_code, row.description || row.issue_description, row.status, row.severity, row.responsible_person]);
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowIndex = row.number;
+            // Skip Header
+            if (rowIndex === 1) continue;
+
+            try {
+              // 1. Preserve Leading Zeros using .text
+              const id = row.getCell(1).text?.trim(); 
+              const defectCode = row.getCell(5).text?.trim();
+              const description = row.getCell(8).text?.trim();
+              const status = row.getCell(7).text?.trim()?.toUpperCase();
+              const severity = row.getCell(6).text?.trim()?.toUpperCase();
+              const responsiblePerson = row.getCell(9).text?.trim();
+
+              if (!defectCode) throw new Error("Mã lỗi không được để trống");
+              
+              if (id && id.startsWith('NCR-')) {
+                  await query(`
+                      UPDATE "${schema}"."ncrs" 
+                      SET "defect_code" = $1, "description" = $2, "status" = $3, "severity" = $4, "responsible_person" = $5, "updated_at" = (EXTRACT(epoch FROM now()))::bigint
+                      WHERE "id" = $6
+                  `, [defectCode, description, status, severity, responsiblePerson, id]);
+              } else {
+                  const newId = `NCR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                  await query(`
+                      INSERT INTO "${schema}"."ncrs" ("id", "defect_code", "description", "status", "severity", "responsible_person", "created_at", "updated_at") 
+                      VALUES ($1, $2, $3, $4, $5, $6, (EXTRACT(epoch FROM now()))::bigint, (EXTRACT(epoch FROM now()))::bigint)
+                  `, [newId, defectCode, description, status, severity, responsiblePerson]);
+              }
+              validResults.push(id || 'NEW');
+            } catch (err: any) {
+              // 5. Log per-row error
+              errorLogs.push({
+                row_index: rowIndex,
+                error_message: err.message
+              });
             }
+          }
         }
-        res.json({ success: true });
+
+        res.json({ 
+          success: true, 
+          imported_count: validResults.length,
+          errors: errorLogs 
+        });
     } catch (error) {
         console.error('Error importing NCRs:', error);
         res.status(500).json({ error: 'Failed to import NCRs' });
@@ -1158,62 +1300,90 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."defect_library" ORDER BY "defect_code" ASC`);
         
-        const exportData = result.rows.map((r: any) => ({
-            'ID': r.id,
-            'Mã lỗi': r.defect_code,
-            'Tên lỗi (VN)': r.name,
-            'Tên lỗi (EN)': r.name_en,
-            'Công đoạn': r.stage,
-            'Phân loại': r.category,
-            'Mức độ mặc định': r.severity,
-            'Mô tả chi tiết': r.description
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "DefectLibrary");
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
         const filename = `AATN_Defect_Library_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.send(buf);
+
+        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream: res,
+            useStyles: true,
+            useSharedStrings: true
+        });
+
+        const sheet = workbook.addWorksheet('DefectLibrary', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+        sheet.columns = [
+            { header: 'ID', key: 'id', width: 25 },
+            { header: 'Mã lỗi', key: 'defect_code', width: 20 },
+            { header: 'Tên lỗi (VN)', key: 'name', width: 30 },
+            { header: 'Tên lỗi (EN)', key: 'name_en', width: 30 },
+            { header: 'Công đoạn', key: 'stage', width: 20 },
+            { header: 'Phân loại', key: 'category', width: 20 },
+            { header: 'Mức độ mặc định', key: 'severity', width: 15 },
+            { header: 'Mô tả chi tiết', key: 'description', width: 40 }
+        ];
+
+        for (const r of result.rows) {
+            const row = sheet.addRow({
+                id: String(r.id),
+                defect_code: String(r.defect_code),
+                name: r.name,
+                name_en: r.name_en,
+                stage: r.stage,
+                category: r.category,
+                severity: r.severity || 'MINOR',
+                description: r.description
+            });
+            await row.commit();
+        }
+
+        await workbook.commit();
     } catch (error) {
         console.error('Error exporting defect library:', error);
-        res.status(500).json({ error: 'Failed to export defect library' });
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to export defect library' });
     }
   });
 
   app.post("/api/defects/import", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws);
-        
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        let count = 0;
-        for (const row of data as any[]) {
-            const id = row.id || `DEF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-            const defect_code = row.defect_code || row['Mã lỗi'] || '';
-            const name = row.name || row['Tên lỗi'] || '';
-            if (!defect_code || !name) continue;
+        const stream = new Readable();
+        stream.push(req.file.buffer);
+        stream.push(null);
 
-            await query(`
-                INSERT INTO "${schema}"."defect_library" (id, defect_code, name, stage, category, description, severity, suggested_action, updated_at) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (EXTRACT(epoch FROM now()))::bigint)
-                ON CONFLICT(id) DO UPDATE SET 
-                    defect_code = EXCLUDED.defect_code, 
-                    name = EXCLUDED.name, 
-                    stage = EXCLUDED.stage,
-                    category = EXCLUDED.category,
-                    description = EXCLUDED.description,
-                    severity = EXCLUDED.severity,
-                    suggested_action = EXCLUDED.suggested_action,
-                    updated_at = EXCLUDED.updated_at
-            `, [id, defect_code, name, row.stage || row['Công đoạn'] || '', row.category || row['Phân loại'] || 'Ngoại quan', row.description || row['Mô tả'] || '', row.severity || row['Mức độ'] || 'MINOR', row.suggested_action || row['Biện pháp'] || '']);
-            count++;
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        const validResults = [];
+        const errorLogs = [];
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowIndex = row.number;
+            if (rowIndex === 1) continue;
+
+            try {
+              const id = row.getCell(1).text?.trim() || `DEF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+              const defect_code = row.getCell(2).text?.trim();
+              const name = row.getCell(3).text?.trim();
+              
+              if (!defect_code || !name) throw new Error("Mã lỗi và Tên lỗi không được để trống");
+
+              await query(`
+                  INSERT INTO "${schema}"."defect_library" (id, defect_code, name, stage, category, description, severity, suggested_action, updated_at) 
+                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (EXTRACT(epoch FROM now()))::bigint)
+                  ON CONFLICT(id) DO UPDATE SET 
+                      defect_code = EXCLUDED.defect_code, name = EXCLUDED.name, stage = EXCLUDED.stage,
+                      category = EXCLUDED.category, description = EXCLUDED.description, severity = EXCLUDED.severity,
+                      suggested_action = EXCLUDED.suggested_action, updated_at = EXCLUDED.updated_at
+              `, [id, defect_code, name, row.getCell(5).text?.trim(), row.getCell(6).text?.trim(), row.getCell(8).text?.trim(), row.getCell(7).text?.trim()?.toUpperCase() || 'MINOR', '']);
+              
+              validResults.push(id);
+            } catch (err: any) {
+              errorLogs.push({ row_index: rowIndex, error_message: err.message });
+            }
+          }
         }
-        res.json({ success: true, count });
+        res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
         console.error('Error importing defect library:', error);
         res.status(500).json({ error: 'Failed to import defect library' });
@@ -1226,68 +1396,98 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."material" WHERE "deleted_at" IS NULL ORDER BY "material" ASC`);
         
-        const exportData = result.rows.map((r: any) => ({
-            'Mã vật tư': r.material,
-            'Tên vật tư': r.shortText,
-            'Đơn vị tính': r.orderUnit,
-            'Số lượng': r.orderQuantity,
-            'Nhà cung cấp': r.supplierName,
-            'Tên dự án': r.projectName,
-            'Chứng từ mua hàng': r.purchaseDocument,
-            'Ngày giao hàng': r.deliveryDate,
-            'Mã Tender': r.Ma_Tender,
-            'Mã nhà máy (Factory Order)': r.Factory_Order,
-            'ID': r.id
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Danh sách vật tư");
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
         const filename = `AATN_Materials_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.send(buf);
+
+        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream: res,
+            useStyles: true,
+            useSharedStrings: true
+        });
+
+        const sheet = workbook.addWorksheet('Materials', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+        sheet.columns = [
+            { header: 'Mã vật tư', key: 'material', width: 20 },
+            { header: 'Tên vật tư', key: 'shortText', width: 30 },
+            { header: 'Đơn vị tính', key: 'orderUnit', width: 15 },
+            { header: 'Số lượng', key: 'orderQuantity', width: 15 },
+            { header: 'Nhà cung cấp', key: 'supplierName', width: 30 },
+            { header: 'Tên dự án', key: 'projectName', width: 30 },
+            { header: 'Chứng từ mua hàng', key: 'purchaseDocument', width: 25 },
+            { header: 'Ngày giao hàng', key: 'deliveryDate', width: 15 },
+            { header: 'Mã Tender', key: 'Ma_Tender', width: 15 },
+            { header: 'Mã nhà máy (Factory Order)', key: 'Factory_Order', width: 20 },
+            { header: 'ID', key: 'id', width: 25 }
+        ];
+
+        for (const r of result.rows) {
+            const row = sheet.addRow({
+                material: String(r.material || ''),
+                shortText: r.shortText,
+                orderUnit: r.orderUnit,
+                orderQuantity: Number(r.orderQuantity || 0),
+                supplierName: r.supplierName,
+                projectName: r.projectName,
+                purchaseDocument: r.purchaseDocument,
+                deliveryDate: r.deliveryDate,
+                Ma_Tender: String(r.Ma_Tender || ''),
+                Factory_Order: String(r.Factory_Order || ''),
+                id: String(r.id)
+            });
+            await row.commit();
+        }
+
+        await workbook.commit();
     } catch (error) {
         console.error('Error exporting materials:', error);
-        res.status(500).json({ error: 'Failed to export materials' });
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to export materials' });
     }
   });
 
   app.post("/api/materials/import", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws);
-        
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        let count = 0;
-        for (const row of data as any[]) {
-            const id = row.id || `MAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-            const material = row.material || row['Mã vật tư'] || '';
-            const shortText = row.shortText || row['Tên vật tư'] || '';
-            if (!material || !shortText) continue;
+        const stream = new Readable();
+        stream.push(req.file.buffer);
+        stream.push(null);
 
-            await query(`
-                INSERT INTO "${schema}"."material" (id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "updatedAt") 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(epoch FROM now()))::bigint)
-                ON CONFLICT(id) DO UPDATE SET 
-                    material = EXCLUDED.material, 
-                    "shortText" = EXCLUDED."shortText", 
-                    "orderUnit" = EXCLUDED."orderUnit",
-                    "orderQuantity" = EXCLUDED."orderQuantity",
-                    "supplierName" = EXCLUDED."supplierName",
-                    "projectName" = EXCLUDED."projectName",
-                    "purchaseDocument" = EXCLUDED."purchaseDocument",
-                    "deliveryDate" = EXCLUDED."deliveryDate",
-                    "Ma_Tender" = EXCLUDED."Ma_Tender",
-                    "Factory_Order" = EXCLUDED."Factory_Order",
-                    "updatedAt" = EXCLUDED."updatedAt"
-            `, [id, material, shortText, row.orderUnit || row['Đơn vị'] || '', row.orderQuantity || row['Số lượng'] || 0, row.supplierName || row['Nhà cung cấp'] || '', row.projectName || row['Dự án'] || '', row.purchaseDocument || row['Mã PO'] || '', row.deliveryDate || row['Ngày giao'] || '', row.Ma_Tender || row['Mã Tender'] || '', row.Factory_Order || row['Factory Order'] || '']);
-            count++;
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        const validResults = [];
+        const errorLogs = [];
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowIndex = row.number;
+            if (rowIndex === 1) continue;
+
+            try {
+              const material = row.getCell(1).text?.trim();
+              const shortText = row.getCell(2).text?.trim();
+              const id = row.getCell(11).text?.trim() || `MAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+              if (!material || !shortText) throw new Error("Mã vật tư và Tên vật tư không được để trống");
+
+              await query(`
+                  INSERT INTO "${schema}"."material" (id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "updatedAt") 
+                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(epoch FROM now()))::bigint)
+                  ON CONFLICT(id) DO UPDATE SET 
+                      material = EXCLUDED.material, "shortText" = EXCLUDED."shortText", "orderUnit" = EXCLUDED."orderUnit",
+                      "orderQuantity" = EXCLUDED."orderQuantity", "supplierName" = EXCLUDED."supplierName",
+                      "projectName" = EXCLUDED."projectName", "purchaseDocument" = EXCLUDED."purchaseDocument",
+                      "deliveryDate" = EXCLUDED."deliveryDate", "Ma_Tender" = EXCLUDED."Ma_Tender",
+                      "Factory_Order" = EXCLUDED."Factory_Order", "updatedAt" = EXCLUDED."updatedAt"
+              `, [id, material, shortText, row.getCell(3).text?.trim(), Number(row.getCell(4).value || 0), row.getCell(5).text?.trim(), row.getCell(6).text?.trim(), row.getCell(7).text?.trim(), row.getCell(8).text?.trim(), row.getCell(9).text?.trim(), row.getCell(10).text?.trim()]);
+              
+              validResults.push(id);
+            } catch (err: any) {
+              errorLogs.push({ row_index: rowIndex, error_message: err.message });
+            }
+          }
         }
-        res.json({ success: true, count });
+        res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
         console.error('Error importing materials:', error);
         res.status(500).json({ error: 'Failed to import materials' });
@@ -1300,64 +1500,111 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."suppliers" WHERE "deleted_at" IS NULL ORDER BY "name" ASC`);
         
-        const exportData = result.rows.map((r: any) => ({
-            'ID': r.id,
-            'Mã NCC': r.code,
-            'Tên nhà cung cấp': r.name,
-            'Địa chỉ': r.address,
-            'Người liên hệ': r.contact_person,
-            'SĐT': r.phone,
-            'Email': r.email,
-            'Phân loại': r.category,
-            'Trạng thái': r.status
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Danh sách NCC");
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
         const filename = `AATN_Suppliers_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.send(buf);
+
+        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream: res,
+            useStyles: true,
+            useSharedStrings: true
+        });
+
+        const sheet = workbook.addWorksheet('Suppliers', {
+          views: [{ state: 'frozen', ySplit: 1 }]
+        });
+
+        await sheet.protect('aatn_sup_protect', {
+          selectLockedCells: true,
+          selectUnlockedCells: true
+        });
+
+        sheet.columns = [
+            { header: 'ID', key: 'id', width: 25 },
+            { header: 'Mã NCC', key: 'code', width: 15 },
+            { header: 'Tên nhà cung cấp', key: 'name', width: 30 },
+            { header: 'Địa chỉ', key: 'address', width: 40 },
+            { header: 'Người liên hệ', key: 'contact_person', width: 25 },
+            { header: 'SĐT', key: 'phone', width: 20 },
+            { header: 'Email', key: 'email', width: 25 },
+            { header: 'Phân loại', key: 'category', width: 20 },
+            { header: 'Trạng thái', key: 'status', width: 15 }
+        ];
+
+        for (const r of result.rows) {
+            const row = sheet.addRow({
+                id: String(r.id), // 1. Preserve zeros
+                code: String(r.code || ''),
+                name: r.name,
+                address: r.address,
+                contact_person: r.contact_person,
+                phone: String(r.phone || ''), // 1. Preserve zeros
+                email: r.email,
+                category: r.category,
+                status: r.status || 'ACTIVE'
+            });
+
+            row.eachCell((cell, colNumber) => {
+              cell.protection = { locked: false };
+              if (colNumber === 9) { // Status dropdown
+                cell.dataValidation = {
+                  type: 'list',
+                  allowBlank: true,
+                  formulae: ['"ACTIVE,INACTIVE"']
+                };
+              }
+            });
+
+            await row.commit();
+        }
+
+        await workbook.commit();
     } catch (error) {
         console.error('Error exporting suppliers:', error);
-        res.status(500).json({ error: 'Failed to export suppliers' });
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to export suppliers' });
     }
   });
 
   app.post("/api/suppliers/import", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(ws);
-        
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        let count = 0;
-        for (const row of data as any[]) {
-            const id = row.id || `SUP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-            const code = row.code || row['Mã NCC'] || '';
-            const name = row.name || row['Tên nhà cung cấp'] || '';
-            if (!code || !name) continue;
+        const stream = new Readable();
+        stream.push(req.file.buffer);
+        stream.push(null);
 
-            await query(`
-                INSERT INTO "${schema}"."suppliers" (id, code, name, address, contact_person, phone, email, category, status, updated_at) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, (EXTRACT(epoch FROM now()))::bigint)
-                ON CONFLICT(id) DO UPDATE SET 
-                    code = EXCLUDED.code, 
-                    name = EXCLUDED.name, 
-                    address = EXCLUDED.address,
-                    contact_person = EXCLUDED.contact_person,
-                    phone = EXCLUDED.phone,
-                    email = EXCLUDED.email,
-                    category = EXCLUDED.category,
-                    status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
-            `, [id, code, name, row.address || row['Địa chỉ'] || '', row.contact_person || row['Người liên hệ'] || '', row.phone || row['Số điện thoại'] || '', row.email || row['Email'] || '', row.category || row['Ngành hàng'] || '', row.status || row['Trạng thái'] || 'ACTIVE']);
-            count++;
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        const validResults = [];
+        const errorLogs = [];
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowIndex = row.number;
+            if (rowIndex === 1) continue;
+
+            try {
+              const id = row.getCell(1).text?.trim() || `SUP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+              const code = row.getCell(2).text?.trim();
+              const name = row.getCell(3).text?.trim();
+              
+              if (!code || !name) throw new Error("Mã NCC và Tên NCC không được để trống");
+
+              await query(`
+                  INSERT INTO "${schema}"."suppliers" (id, code, name, address, contact_person, phone, email, category, status, updated_at) 
+                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, (EXTRACT(epoch FROM now()))::bigint)
+                  ON CONFLICT(id) DO UPDATE SET 
+                      code = EXCLUDED.code, name = EXCLUDED.name, address = EXCLUDED.address,
+                      contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email,
+                      category = EXCLUDED.category, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+              `, [id, code, name, row.getCell(4).text?.trim(), row.getCell(5).text?.trim(), row.getCell(6).text?.trim(), row.getCell(7).text?.trim(), row.getCell(8).text?.trim(), row.getCell(9).text?.trim()?.toUpperCase() || 'ACTIVE']);
+              
+              validResults.push(id);
+            } catch (err: any) {
+              errorLogs.push({ row_index: rowIndex, error_message: err.message });
+            }
+          }
         }
-        res.json({ success: true, count });
+        res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
         console.error('Error importing suppliers:', error);
         res.status(500).json({ error: 'Failed to import suppliers' });
@@ -1370,30 +1617,103 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "ID" ASC LIMIT 50000`);
         
-        const exportData = result.rows.map((r: any) => ({
-            'ID Factory Order': r.ID_Factory_Order,
-            'Mã Tender': r.Ma_Tender,
-            'Tên dự án': r.Project_name,
-            'Mô tả vật tư': r.Material_description,
-            'Số lượng IPO': r.Quantity_IPO,
-            'Đơn vị tính': r.Base_Unit,
-            'Drawing URL': r.drawing_url,
-            'Mô tả': r.description
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "IPO_Data");
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
         const filename = `AATN_IPO_Data_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.send(buf);
+
+        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream: res,
+            useStyles: true,
+            useSharedStrings: true
+        });
+
+        const sheet = workbook.addWorksheet('IPO_Data', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+        sheet.columns = [
+            { header: 'ID', key: 'id', width: 25 },
+            { header: 'ID Factory Order', key: 'ID_Factory_Order', width: 20 },
+            { header: 'Mã Tender', key: 'Ma_Tender', width: 15 },
+            { header: 'Tên dự án', key: 'Project_name', width: 30 },
+            { header: 'Mô tả vật tư', key: 'Material_description', width: 40 },
+            { header: 'Số lượng IPO', key: 'Quantity_IPO', width: 15 },
+            { header: 'Đơn vị tính', key: 'Base_Unit', width: 15 }
+        ];
+
+        for (const r of result.rows) {
+            const row = sheet.addRow({
+                id: String(r.id),
+                ID_Factory_Order: String(r.ID_Factory_Order || ''),
+                Ma_Tender: String(r.Ma_Tender || ''),
+                Project_name: r.Project_name,
+                Material_description: r.Material_description,
+                Quantity_IPO: Number(r.Quantity_IPO || 0),
+                Base_Unit: r.Base_Unit
+            });
+            await row.commit();
+        }
+
+        await workbook.commit();
     } catch (error) {
         console.error('Error exporting IPO data:', error);
-        res.status(500).json({ error: 'Failed to export IPO data' });
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to export IPO data' });
     }
   });
+  app.post("/api/ipo/import", memoryUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const stream = new Readable();
+        stream.push(req.file.buffer);
+        stream.push(null);
+
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        const validResults = [];
+        const errorLogs = [];
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowIndex = row.number;
+            if (rowIndex === 1) continue;
+
+            try {
+              const idText = row.getCell(1).text?.trim();
+              const factoryOrder = row.getCell(2).text?.trim();
+              const maTender = row.getCell(3).text?.trim();
+              const projectName = row.getCell(4).text?.trim();
+              const materialDesc = row.getCell(5).text?.trim();
+              const qty = Number(row.getCell(6).value || 0);
+              const unit = row.getCell(7).text?.trim();
+
+              if (!factoryOrder) throw new Error("ID Factory Order không được để trống");
+
+              // If id exists, try update, else insert
+              if (idText && !isNaN(Number(idText))) {
+                  await query(`
+                      UPDATE "${schema}"."ipo" 
+                      SET "ID_Factory_Order" = $1, "Ma_Tender" = $2, "Project_name" = $3, "Material_description" = $4, "Quantity_IPO" = $5, "Base_Unit" = $6, "updatedAt" = now()
+                      WHERE "id" = $7
+                  `, [factoryOrder, maTender, projectName, materialDesc, qty, unit, Number(idText)]);
+                  validResults.push(idText);
+              } else {
+                  const result = await query(`
+                      INSERT INTO "${schema}"."ipo" ("ID_Factory_Order", "Ma_Tender", "Project_name", "Material_description", "Quantity_IPO", "Base_Unit", "createdAt", "updatedAt") 
+                      VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+                      RETURNING "id"
+                  `, [factoryOrder, maTender, projectName, materialDesc, qty, unit]);
+                  validResults.push(result.rows[0].id);
+              }
+            } catch (err: any) {
+              errorLogs.push({ row_index: rowIndex, error_message: err.message });
+            }
+          }
+        }
+        res.json({ success: true, count: validResults.length, errors: errorLogs });
+    } catch (error) {
+        console.error('Error importing IPO data:', error);
+        res.status(500).json({ error: 'Failed to import IPO data' });
+    }
+  });
+
   app.get("/api/inspections/export", async (req, res) => {
     try {
         const filters = {
@@ -1406,85 +1726,143 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             endDate: req.query.endDate as string
         };
 
-        // Get all items if no limit specified
         const result = await db.getInspectionsList(filters, 1, 50000);
-        
-        // Map to Vietnamese headers for user friendly export
-        const exportData = result.items.map((item: any) => ({
-            'Mã hồ sơ': item.id,
-            'Loại phiếu': item.type,
-            'Mã dự án': item.ma_ct,
-            'Tên dự án': item.ten_ct,
-            'Hạng mục/Mô tả': item.ten_hang_muc,
-            'Mã nhà máy': item.ma_nha_may,
-            'Headcode': item.headcode,
-            'QC kiểm tra': item.inspectorName,
-            'Xưởng/Công đoạn': item.workshop,
-            'Ngày thực hiện': item.date,
-            'Trạng thái': item.status,
-            'Điểm số': item.score,
-            'Kết luận/Ghi chú': item.summary,
-            'Phụ trách': item.responsiblePerson,
-            'Cập nhật lần cuối': item.updated_at
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Danh sách kiểm tra");
-        
-        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
         
         const filename = `AATN_Inspections_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.send(buf);
+
+        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream: res,
+            useStyles: true,
+            useSharedStrings: true
+        });
+
+        const sheet = workbook.addWorksheet('Inspections', {
+          views: [{ state: 'frozen', ySplit: 1 }]
+        });
+
+        await sheet.protect('aatn_ins_protect', {
+          selectLockedCells: true,
+          selectUnlockedCells: true
+        });
+
+        sheet.columns = [
+            { header: 'Mã hồ sơ', key: 'id', width: 20 },
+            { header: 'Loại phiếu', key: 'type', width: 15 },
+            { header: 'Mã dự án', key: 'ma_ct', width: 15 },
+            { header: 'Tên dự án', key: 'ten_ct', width: 30 },
+            { header: 'Hạng mục/Mô tả', key: 'ten_hang_muc', width: 30 },
+            { header: 'Mã nhà máy', key: 'ma_nha_may', width: 15 },
+            { header: 'Headcode', key: 'headcode', width: 15 },
+            { header: 'QC kiểm tra', key: 'inspectorName', width: 25 },
+            { header: 'Xưởng/Công đoạn', key: 'workshop', width: 20 },
+            { header: 'Ngày thực hiện', key: 'date', width: 15 },
+            { header: 'Trạng thái', key: 'status', width: 15 },
+            { header: 'Điểm số', key: 'score', width: 10 },
+            { header: 'Kết luận/Ghi chú', key: 'summary', width: 40 },
+            { header: 'Phụ trách', key: 'responsiblePerson', width: 25 },
+            { header: 'Cập nhật lần cuối', key: 'updatedAt', width: 20 }
+        ];
+
+        for (const item of result.items) {
+            const row = sheet.addRow({
+                id: String(item.id),
+                type: item.type,
+                ma_ct: item.ma_ct,
+                ten_ct: item.ten_ct,
+                ten_hang_muc: item.ten_hang_muc,
+                ma_nha_may: item.ma_nha_may,
+                headcode: item.headcode,
+                inspectorName: item.inspectorName,
+                workshop: item.workshop,
+                date: item.date ? new Date(item.date) : null,
+                status: item.status,
+                score: Number(item.score || 0),
+                summary: item.summary,
+                responsiblePerson: item.responsiblePerson,
+                updatedAt: item.updatedAt ? new Date(Number(item.updatedAt) * 1000) : null
+            });
+
+            row.eachCell((cell, colNumber) => {
+              cell.protection = { locked: false };
+              if ((colNumber === 10 || colNumber === 15) && cell.value instanceof Date) {
+                 cell.numFmt = 'yyyy-mm-dd hh:mm:ss';
+              }
+              if (colNumber === 11) { // Status dropdown
+                cell.dataValidation = {
+                  type: 'list',
+                  allowBlank: true,
+                  formulae: ['"DRAFT,SUBMITTED,APPROVED,REJECTED,VERIFIED,LOCKED"']
+                };
+              }
+            });
+
+            await row.commit();
+        }
+
+        await workbook.commit();
     } catch (error) {
         console.error('Error exporting inspections:', error);
-        res.status(500).json({ error: 'Failed to export inspections' });
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to export inspections' });
     }
   });
 
   // --- INSPECTIONS IMPORT ---
   app.post("/api/inspections/import", authenticate, memoryUpload.single('file'), async (req, res) => {
     try {
-      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-      const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = wb.SheetNames[0];
-      const data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
-      
-      let count = 0;
-      for (const row of data as any[]) {
-        // Map Vietnamese headers back to Inspection object
-        const inspection: any = {
-          id: row['Mã hồ sơ'] || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          type: row['Loại phiếu'] || 'PQC',
-          ma_ct: row['Mã dự án'],
-          ten_ct: row['Tên dự án'],
-          ten_hang_muc: row['Hạng mục/Mô tả'] || row['Category'],
-          ma_nha_may: row['Mã nhà máy'],
-          headcode: row['Headcode'],
-          inspectorName: row['QC kiểm tra'] || (req as any).user?.name,
-          workshop: row['Xưởng/Công đoạn'],
-          date: row['Ngày thực hiện'] || row['Ngày'],
-          status: row['Trạng thái'] || 'DRAFT',
-          score: Number(row['Điểm số'] || row['Score'] || 0),
-          summary: row['Kết luận/Ghi chú'] || row['Summary'],
-          responsiblePerson: row['Phụ trách'],
-          items: [],
-          images: [],
-          comments: []
-        };
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        
+        const stream = new Readable();
+        stream.push(req.file.buffer);
+        stream.push(null);
 
-        if (inspection.ma_ct) {
-          await db.saveInspection(inspection);
-          count++;
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        const validResults = [];
+        const errorLogs = [];
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowIndex = row.number;
+            if (rowIndex === 1) continue;
+
+            try {
+              const id = row.getCell(1).text?.trim();
+              const ma_ct = row.getCell(3).text?.trim();
+              if (!ma_ct) throw new Error("Mã dự án không được để trống");
+
+              const inspection: any = {
+                id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                type: row.getCell(2).text?.trim() || 'PQC',
+                ma_ct,
+                ten_ct: row.getCell(4).text?.trim(),
+                ten_hang_muc: row.getCell(5).text?.trim(),
+                ma_nha_may: row.getCell(6).text?.trim(),
+                headcode: row.getCell(7).text?.trim(),
+                inspectorName: row.getCell(8).text?.trim() || (req as any).user?.name,
+                workshop: row.getCell(9).text?.trim(),
+                date: row.getCell(10).text?.trim(),
+                status: row.getCell(11).text?.trim()?.toUpperCase() || 'DRAFT',
+                score: Number(row.getCell(12).value || 0),
+                summary: row.getCell(13).text?.trim(),
+                responsiblePerson: row.getCell(14).text?.trim(),
+                items: [],
+                images: [],
+                comments: []
+              };
+
+              await db.saveInspection(inspection);
+              validResults.push(inspection.id);
+            } catch (err: any) {
+              errorLogs.push({ row_index: rowIndex, error_message: err.message });
+            }
+          }
         }
-      }
-      
-      res.json({ success: true, count });
+
+        res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
-      console.error('Error importing inspections:', error);
-      res.status(500).json({ error: 'Failed to import inspections' });
+        console.error('Error importing inspections:', error);
+        res.status(500).json({ error: 'Failed to import inspections' });
     }
   });
 

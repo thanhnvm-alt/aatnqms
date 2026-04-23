@@ -6,7 +6,8 @@ import {
     AlertTriangle, Search, Clock, CheckCircle2, 
     ArrowRight, Loader2, Calendar, User as UserIcon, 
     FileText, ChevronRight, ShieldAlert,
-    Hash, AlertCircle, Maximize2, Upload, Download, Trash2
+    Hash, AlertCircle, Maximize2, Upload, Download, Trash2,
+    Filter, ChevronDown, Layers
 } from 'lucide-react';
 import { NCRDetail } from './NCRDetail';
 import { exportNcrs, importNcrsFile } from '../services/apiService';
@@ -16,6 +17,92 @@ interface NCRListProps {
   onSelectNcr: (inspectionId: string) => void;
 }
 
+interface SearchableSelectProps {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, options, onChange, placeholder = '- TẤT CẢ -', className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const filteredOptions = useMemo(() => {
+    if (!search) return options;
+    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className={`space-y-1 relative ${className}`} ref={containerRef}>
+      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-all border-slate-200 h-[38px]"
+      >
+        <span className={`truncate ${value && value !== 'ALL' ? 'text-slate-900' : 'text-slate-400'}`}>
+          {value && value !== 'ALL' ? value : placeholder}
+        </span>
+        <ChevronDown className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] max-h-64 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="p-2 border-b border-slate-100 bg-slate-50">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+              <input 
+                autoFocus
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm nhanh..."
+                className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+          <div className="overflow-y-auto flex-1 no-scrollbar p-1">
+            <div 
+              onClick={(e) => { e.stopPropagation(); onChange('ALL'); setIsOpen(false); setSearch(''); }}
+              className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all mb-1 ${!value || value === 'ALL' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+            >
+              - TẤT CẢ -
+            </div>
+            <div className="h-px bg-slate-100 mb-1" />
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map(opt => (
+                <div 
+                  key={opt}
+                  onClick={(e) => { e.stopPropagation(); onChange(opt); setIsOpen(false); setSearch(''); }}
+                  className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all ${value === opt ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                >
+                  {opt}
+                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">Không tìm thấy</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) => {
   const [ncrs, setNcrs] = useState<NCR[]>([]);
   const [total, setTotal] = useState(0);
@@ -24,8 +111,11 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'IN_PROGRESS' | 'CLOSED'>('ALL');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [qcFilter, setQcFilter] = useState('ALL');
+  const [workshopFilter, setWorkshopFilter] = useState('ALL');
   const [selectedNcr, setSelectedNcr] = useState<NCR | null>(null);
-  const limit = 20;
+  const limit = 50000;
 
   useEffect(() => {
     loadNcrs(page);
@@ -95,16 +185,36 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
     }
   };
 
+  const filterOptions = useMemo(() => {
+    const qcs = new Set<string>();
+    const workshops = new Set<string>();
+    
+    ncrs.forEach(n => {
+      if (n.inspectorName) qcs.add(n.inspectorName);
+      if (n.workshop) workshops.add(n.workshop);
+    });
+
+    return {
+      qcs: Array.from(qcs).sort(),
+      workshops: Array.from(workshops).sort()
+    };
+  }, [ncrs]);
+
   const filteredNcrs = useMemo(() => {
     const term = (searchTerm || '').toLowerCase().trim();
-    return ncrs.filter(n => 
-        String(n.id || '').toLowerCase().includes(term) || 
-        String(n.issueDescription || '').toLowerCase().includes(term) ||
-        (n.responsiblePerson && String(n.responsiblePerson).toLowerCase().includes(term)) ||
-        String(n.inspection_id || '').toLowerCase().includes(term) ||
-        String(n.defect_code || '').toLowerCase().includes(term)
-    );
-  }, [ncrs, searchTerm]);
+    return ncrs.filter(n => {
+        const matchesSearch = String(n.id || '').toLowerCase().includes(term) || 
+            String(n.issueDescription || '').toLowerCase().includes(term) ||
+            (n.responsiblePerson && String(n.responsiblePerson).toLowerCase().includes(term)) ||
+            String(n.inspection_id || '').toLowerCase().includes(term) ||
+            String(n.defect_code || '').toLowerCase().includes(term);
+        
+        const matchesQC = qcFilter === 'ALL' || n.inspectorName === qcFilter;
+        const matchesWorkshop = workshopFilter === 'ALL' || n.workshop === workshopFilter;
+
+        return matchesSearch && matchesQC && matchesWorkshop;
+    });
+  }, [ncrs, searchTerm, qcFilter, workshopFilter]);
 
   const getSeverityStyle = (severity: string) => {
     switch (severity?.toUpperCase()) {
@@ -171,21 +281,57 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       <option value="IN_PROGRESS">IN PROGRESS</option>
                       <option value="CLOSED">CLOSED</option>
                   </select>
-                  <div className="flex gap-2">
-                      <button onClick={exportNcrs} className="px-4 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-green-700 flex items-center gap-2 shadow-sm">
-                          <Download className="w-4 h-4" /> Xuất
-                      </button>
-                      <input type="file" id="ncr-import" className="hidden" onChange={async (e) => {
-                          if (e.target.files && e.target.files[0]) {
-                              await importNcrsFile(e.target.files[0]);
-                              loadNcrs();
-                          }
-                      }} />
-                      <label htmlFor="ncr-import" className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 flex items-center gap-2 cursor-pointer shadow-sm">
-                          <Upload className="w-4 h-4" /> Nhập
-                      </label>
-                  </div>
+
+                  <button 
+                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                    className={`p-2.5 rounded-xl border transition-all flex items-center justify-center gap-2 ${isFilterOpen ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    <Filter className="w-5 h-5" />
+                    <span className="text-[10px] font-black uppercase tracking-widest hidden md:block">Bộ lọc</span>
+                  </button>
+
+                  {currentUser.role !== 'QC' && (
+                      <div className="flex gap-2">
+                          <button onClick={exportNcrs} className="px-4 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-green-700 flex items-center gap-2 shadow-sm">
+                              <Download className="w-4 h-4" /> Xuất
+                          </button>
+                          <input type="file" id="ncr-import" className="hidden" onChange={async (e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                  await importNcrsFile(e.target.files[0]);
+                                  loadNcrs();
+                              }
+                          }} />
+                          <label htmlFor="ncr-import" className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 flex items-center gap-2 cursor-pointer shadow-sm">
+                              <Upload className="w-4 h-4" /> Nhập
+                          </label>
+                      </div>
+                  )}
               </div>
+
+              {isFilterOpen && (
+                  <div className="bg-white rounded-2xl p-4 border border-slate-200 animate-in slide-in-from-top duration-200 grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 shadow-sm relative">
+                      <SearchableSelect 
+                        label="QC KIỂM TRA" 
+                        value={qcFilter} 
+                        options={filterOptions.qcs} 
+                        onChange={val => setQcFilter(val)} 
+                      />
+                      <SearchableSelect 
+                        label="XƯỞNG SẢN XUẤT" 
+                        value={workshopFilter} 
+                        options={filterOptions.workshops} 
+                        onChange={val => setWorkshopFilter(val)} 
+                      />
+                      <div className="flex items-end">
+                          <button 
+                            onClick={() => { setQcFilter('ALL'); setWorkshopFilter('ALL'); setStatusFilter('ALL'); setSearchTerm(''); setIsFilterOpen(false); }} 
+                            className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]"
+                          >
+                            XÓA BỘ LỌC
+                          </button>
+                      </div>
+                  </div>
+              )}
           </div>
       </div>
 
@@ -232,6 +378,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                       />
                                   </th>
                                   <th className="px-6 py-4">DỰ ÁN / HẠNG MỤC</th>
+                                  <th className="px-6 py-4">XƯỞNG / QC</th>
                                   <th className="px-6 py-4">NCR CODE</th>
                                   <th className="px-6 py-4">MÔ TẢ LỖI</th>
                                   <th className="px-6 py-4">MỨC ĐỘ</th>
@@ -260,6 +407,12 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           <div className="flex flex-col">
                                               <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{ncr.ma_ct || '---'}</span>
                                               <span className="text-[9px] font-bold text-slate-400 uppercase truncate max-w-[150px]">{ncr.ten_hang_muc || '---'}</span>
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-5">
+                                          <div className="flex flex-col">
+                                              <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[120px]">{ncr.workshop || '---'}</span>
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase truncate max-w-[120px]">{ncr.inspectorName || '---'}</span>
                                           </div>
                                       </td>
                                       <td className="px-6 py-5">
@@ -341,6 +494,15 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                       <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
                                           {ncr.severity || 'MINOR'}
                                       </span>
+                                  </div>
+
+                                  <div className="flex flex-col space-y-0.5">
+                                      <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{ncr.ma_ct || '---'}</span>
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase truncate">{ncr.ten_hang_muc || '---'}</span>
+                                      <div className="flex items-center gap-2 mt-1">
+                                          <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[8px] font-black text-slate-600 border border-slate-200">{ncr.workshop || '---'}</span>
+                                          <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">{ncr.inspectorName || '---'}</span>
+                                      </div>
                                   </div>
 
                                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">

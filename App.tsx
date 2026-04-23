@@ -54,6 +54,7 @@ import { DefectDetail } from './components/DefectDetail';
 import { SupplierManagement } from './components/SupplierManagement';
 import { SupplierDetail } from './components/SupplierDetail';
 import { MaterialManagement } from './components/MaterialManagement';
+import { Trash } from './components/Trash';
 import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
@@ -430,7 +431,7 @@ const App = () => {
                 />
             )}
             {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
-            {view === 'IPO' && <IPOPage />}
+            {view === 'IPO' && <IPOPage user={user} />}
             {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
             {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
             {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
@@ -460,6 +461,7 @@ const App = () => {
     initialTab={settingsTab}
 />
             )}
+            {view === 'TRASH' && <Trash user={user} onNavigate={setView} />}
             {view === 'CONVERT_3D' && <ThreeDConverter />}
         </main>
         <MobileBottomBar view={view} onNavigate={setView} user={user} />

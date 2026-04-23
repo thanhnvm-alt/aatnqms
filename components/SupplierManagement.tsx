@@ -149,22 +149,26 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
                 accept=".xlsx, .xls" 
                 className="hidden" 
               />
-              <button 
-                onClick={handleImportClick}
-                disabled={isImporting}
-                title="Nhập Excel"
-                className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-              </button>
-              <button 
-                onClick={handleExport}
-                disabled={isExporting}
-                title="Xuất Excel"
-                className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              </button>
+              {user.role !== 'QC' && (
+                <>
+                  <button 
+                    onClick={handleImportClick}
+                    disabled={isImporting}
+                    title="Nhập Excel"
+                    className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                  </button>
+                  <button 
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    title="Xuất Excel"
+                    className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                  </button>
+                </>
+              )}
               <button onClick={() => handleOpenModal()} className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-5 h-5" /></button>
           </div>
       </div>

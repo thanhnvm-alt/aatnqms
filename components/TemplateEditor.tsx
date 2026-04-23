@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId } from '../types';
+import { CheckItem, CheckStatus, Workshop, DefectLibraryItem, ModuleId, User } from '../types';
 import { Button } from './Button';
 import { Plus, Trash2, Save, Settings, Layers, Factory, Info, FileText, Package, ChevronDown, CheckSquare, X, Loader2, Search, Edit3, Grid, Pencil, LayoutGrid, FileUp, FileDown } from 'lucide-react';
 import { ALL_MODULES, SITE_TEMPLATES } from '../constants';
 import { fetchWorkshops, fetchDefectLibrary, saveDefectLibraryItem } from '../services/apiService';
 
 interface TemplateEditorProps {
+  user: User;
   currentTemplate: CheckItem[];
   onSave: (newTemplate: CheckItem[], subModuleId?: string) => void;
   onCancel: () => void;
@@ -14,7 +15,7 @@ interface TemplateEditorProps {
   allTemplates?: Record<string, CheckItem[]>;
 }
 
-export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate, onSave, onCancel, moduleId, allTemplates }) => {
+export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTemplate, onSave, onCancel, moduleId, allTemplates }) => {
   const [items, setItems] = useState<CheckItem[]>(JSON.parse(JSON.stringify(currentTemplate)));
   const [selectedSiteGroup, setSelectedSiteGroup] = useState<string>('BAN');
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
@@ -280,14 +281,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ currentTemplate,
             </div>
          </div>
          <div className="flex gap-2">
-             <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
-             <button onClick={() => excelInputRef.current?.click()} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
-                <FileUp className="w-4 h-4 text-blue-600" /> Nhập Excel
-             </button>
-             <button onClick={handleExportExcel} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
-                <FileDown className="w-4 h-4 text-emerald-600" /> Xuất Excel
-             </button>
-             <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
+             {user.role !== 'QC' && (
+               <>
+                 <input type="file" ref={excelInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
+                 <button onClick={() => excelInputRef.current?.click()} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+                    <FileUp className="w-4 h-4 text-blue-600" /> Nhập Excel
+                 </button>
+                 <button onClick={handleExportExcel} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs uppercase hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+                    <FileDown className="w-4 h-4 text-emerald-600" /> Xuất Excel
+                 </button>
+                 <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
+               </>
+             )}
              <Button variant="ghost" size="sm" onClick={onCancel} className="hidden md:flex">Hủy</Button>
              <Button onClick={() => onSave(items, moduleId === 'SITE' ? `SITE_${selectedSiteGroup}` : undefined)} icon={<Save className="w-4 h-4"/>} size="sm">Lưu</Button>
          </div>

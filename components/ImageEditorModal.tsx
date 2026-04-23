@@ -1,13 +1,15 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getProxyImageUrl } from '../src/utils';
+import { fetchDefectLibrary } from '../services/apiService';
+import { DefectLibraryItem } from '../types';
 import { 
   X, ChevronLeft, ChevronRight, PenTool, Undo2, 
   Check, ZoomIn, ZoomOut, Download, Loader2, 
   Move, AlertCircle, Maximize2, RotateCw, 
   RotateCcw, Sliders, Trash2, Type,
-  MessageSquare, History, Palette, Layers
+  Search, MessageSquare, History, Palette, Layers
 } from 'lucide-react';
 
 interface ImageEditorModalProps {
@@ -48,17 +50,39 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeText, setActiveText] = useState<{ x: number, y: number, logicX: number, logicY: number, value: string } | null>(null);
   const [showQuickLibrary, setShowQuickLibrary] = useState(false);
+  const [quickTextSearch, setQuickTextSearch] = useState('');
+  const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   
-  const quickTexts = [
-      "LỖI BỀ MẶT - SURFACE DEFECT",
-      "KÍCH THƯỚC SAI - WRONG DIMENSION",
-      "THIẾU CHI TIẾT - MISSING PARTS",
-      "MÓP MÉO - DEFORMATION",
-      "SAI MÀU SẮC - COLOR MISMATCH",
-      "CẦN SỬA CHỮA - REPAIR NEEDED",
-      "ĐÃ KIỂM TRA - CHECKED",
-      "KHÔNG ĐẠT - NG"
-  ];
+  useEffect(() => {
+    const loadLibrary = async () => {
+      try {
+          const data = await fetchDefectLibrary();
+          setDefectLibrary(data || []);
+      } catch (err) {
+          console.error("Failed to load defect library for editor:", err);
+      }
+    };
+    loadLibrary();
+  }, []);
+
+  const quickTexts = useMemo(() => {
+    let list: string[] = [];
+    if (defectLibrary.length > 0) {
+      list = defectLibrary.map(item => `${item.name}${item.code ? ` - ${item.code}` : ''}`.toUpperCase());
+    } else {
+      list = [
+        "LỖI BỀ MẶT - SURFACE DEFECT",
+        "KÍCH THƯỚC SAI - WRONG DIMENSION",
+        "THIẾU CHI TIẾT - MISSING PARTS",
+        "MÓP MÉO - DEFORMATION",
+        "SAI MÀU SẮC - COLOR MISMATCH",
+        "CẦN SỬA CHỮA - REPAIR NEEDED",
+        "ĐÃ KIỂM TRA - CHECKED",
+        "KHÔNG ĐẠT - NG"
+      ];
+    }
+    return Array.from(new Set(list));
+  }, [defectLibrary]);
   
   // Loading & Error State
   const [isLoadingImage, setIsLoadingImage] = useState(false);
@@ -381,9 +405,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] bg-[#0c1421] flex flex-col animate-in fade-in duration-300 overflow-hidden touch-none" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="fixed inset-0 h-[100dvh] w-screen z-[500] bg-[#0c1421] flex flex-col animate-in fade-in duration-300 overflow-hidden touch-none selection:bg-blue-500/30" style={{ fontFamily: 'Inter, sans-serif' }}>
       {/* HEADER: Clean & Professional Dark Style */}
-      <div className="h-14 pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 text-white bg-[#0f172a]/80 backdrop-blur-md border-b border-white/5 shrink-0 z-50">
+      <div className="h-14 pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 text-white bg-[#0f172a]/90 backdrop-blur-xl border-b border-white/5 shrink-0 z-[60]">
         <div className="flex items-center gap-3">
           <button onClick={() => { if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) handleCommitEdit(); else onClose(); }} className="p-3 hover:bg-white/10 rounded-full transition-all active:scale-90"><X className="w-6 h-6" /></button>
           <div className="h-6 w-px bg-white/10 mx-1"></div>
@@ -430,7 +454,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         {!isEditing ? (
           <>
             <div 
-                className="relative transition-transform duration-75 ease-out" 
+                className="relative transition-transform duration-75 ease-out overflow-hidden" 
                 style={{ 
                     transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, 
                     cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' 
@@ -495,7 +519,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <div className="relative group/canvas overflow-hidden" ref={canvasContainerRef}>
                       <canvas 
                         ref={canvasRef} 
-                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-4 border-white/5 max-w-[95vw] max-h-[70vh] w-auto h-auto object-contain"
+                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-2 border-white/10 max-w-[98vw] max-h-[75vh] w-auto h-auto object-contain"
                         style={{
                             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                             transformOrigin: 'center',
@@ -517,10 +541,13 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                 className="fixed z-[200] pointer-events-auto"
                                 style={{ left: activeText.x, top: activeText.y }}
                             >
-                                <div className="bg-[#0f172a] p-3 rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl flex flex-col gap-2 min-w-[200px]">
+                                <div className="bg-[#0f172a] p-3 rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl flex flex-col gap-2 min-w-[220px] max-w-[90vw]">
                                     <div className="flex items-center justify-between text-[10px] font-black uppercase text-blue-400 tracking-widest px-1">
-                                        <span>Typing Annotation</span>
-                                        <button onClick={() => setActiveText(null)}><X className="w-4 p-0.5" /></button>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                            <span>Typing Annotation</span>
+                                        </div>
+                                        <button onClick={() => setActiveText(null)} className="hover:bg-white/10 p-1 rounded-lg transition-colors"><X className="w-4 h-4 text-white/40" /></button>
                                     </div>
                                     <input 
                                         autoFocus
@@ -550,16 +577,30 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                     </div>
 
                                     {showQuickLibrary && (
-                                        <div className="mt-2 flex flex-col gap-1 max-h-[150px] overflow-y-auto no-scrollbar border-t border-white/5 pt-2">
-                                            {quickTexts.map(t => (
+                                        <div className="mt-2 flex flex-col gap-1 max-h-[220px] overflow-y-auto no-scrollbar border-t border-white/5 pt-2">
+                                            <div className="relative mb-2 px-1">
+                                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+                                                <input 
+                                                    type="text"
+                                                    className="w-full bg-white/5 text-white/70 pl-7 pr-2 py-1.5 rounded-lg text-[9px] font-bold outline-none border border-white/10 focus:border-blue-500/50 transition-all font-sans"
+                                                    placeholder="TÌM NHANH..."
+                                                    value={quickTextSearch}
+                                                    onChange={e => setQuickTextSearch(e.target.value.toUpperCase())}
+                                                    onClick={e => e.stopPropagation()}
+                                                />
+                                            </div>
+                                            {quickTexts.filter(t => !quickTextSearch || t.toLowerCase().includes(quickTextSearch.toLowerCase())).map((t, idx) => (
                                                 <button 
-                                                    key={t}
+                                                    key={`${t}-${idx}`}
                                                     onClick={() => commitTextToCanvas(t)}
                                                     className="text-left px-2.5 py-2 text-[8px] font-bold text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors uppercase truncate"
                                                 >
                                                     {t}
                                                 </button>
                                             ))}
+                                            {quickTexts.filter(t => !quickTextSearch || t.toLowerCase().includes(quickTextSearch.toLowerCase())).length === 0 && (
+                                                <div className="text-center py-4 text-[8px] font-black uppercase text-white/20 tracking-widest">Không tìm thấy</div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

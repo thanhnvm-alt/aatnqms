@@ -15,7 +15,8 @@ import {
   BookOpen,
   Truck,
   Factory,
-  Package
+  Package,
+  Trash2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -41,9 +42,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'MATERIALS', label: 'Quản Lý Vật Liệu', icon: Package },
     { id: 'IPO', label: 'IPO Data', icon: FileSpreadsheet },
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
+    { id: 'TRASH', label: 'Thùng Rác', icon: Trash2 },
   ].filter(item => {
     if (user.role === 'QC') {
       return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY'].includes(item.id);
+    }
+    if (item.id === 'TRASH' && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      return false;
     }
     return true;
   });

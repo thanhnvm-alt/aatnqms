@@ -449,7 +449,9 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     reportImages: safeJsonParse(row.report_images_json, []),
                     responsiblePerson: row.responsible_person as string,
                     ma_nha_may: row.ma_nha_may as string,
-                    headcode: row.headcode as string
+                    headcode: row.headcode as string,
+                    createdAt: row.created_at ? String(row.created_at) : undefined,
+                    updatedAt: row.updated_at ? String(row.updated_at) : undefined
                 } as Inspection;
             }
         } catch (e) {
@@ -728,13 +730,17 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit: number
     
     // Union of all inspection tables to get project info
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
-    const inspectionUnion = tables.map(t => `SELECT id, ma_ct, ten_ct, ten_hang_muc FROM ${SCHEMA}."${t}"`).join(' UNION ALL ');
+    const tableQueries = tables.map(t => {
+        const workshopCol = (t === 'forms_pqc') ? 'workshop::text' : 'NULL::text as workshop';
+        return `SELECT id::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, ${workshopCol}, inspector::text as "inspectorName" FROM ${SCHEMA}."${t}"`;
+    });
+    const inspectionUnion = tableQueries.join(' UNION ALL ');
 
     let sql = `
         SELECT 
             n.id, n.inspection_id, n.item_id, n.defect_code, n.severity, n.status, n.description, 
             n.responsible_person, n.deadline, n.created_by, n.created_at,
-            i.ma_ct as "maCt", i.ten_ct as "tenCt", i.ten_hang_muc as "tenHangMuc"
+            i.ma_ct as "maCt", i.ten_ct as "tenCt", i.ten_hang_muc as "tenHangMuc", i.workshop as "workshop", i."inspectorName" as "inspectorName"
         FROM ${SCHEMA}.ncrs n
         LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id
         WHERE n.deleted_at IS NULL
@@ -746,6 +752,16 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit: number
     if (filters.status && filters.status !== 'ALL') { 
         where += " AND n.status = $" + (args.length + 1); 
         args.push(filters.status); 
+    }
+    
+    if (filters.qc && filters.qc !== 'ALL') {
+        where += ` AND i."inspectorName" = $${args.length + 1}`;
+        args.push(filters.qc);
+    }
+
+    if (filters.workshop && filters.workshop !== 'ALL') {
+        where += ` AND i.workshop = $${args.length + 1}`;
+        args.push(filters.workshop);
     }
     
     if (filters.search) {
@@ -775,7 +791,9 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit: number
             createdAt: r.created_at,
             ma_ct: r.maCt,
             ten_ct: r.tenCt,
-            ten_hang_muc: r.tenHangMuc
+            ten_hang_muc: r.tenHangMuc,
+            workshop: r.workshop,
+            inspectorName: r.inspectorName
         })) as unknown as NCR[], 
         total: parseInt(countRes.rows[0].total, 10) 
     };
@@ -1148,6 +1166,45 @@ export async function saveRole(role: Role) {
 
 export async function deleteRole(id: string) {
     await query(`DELETE FROM ${SCHEMA}.roles WHERE id = $1`, [id]);
+}
+
+/**
+ * Fetches all deleted inspections across all modules.
+ */
+export async function getDeletedInspections(): Promise<any[]> {
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    let allDeleted: any[] = [];
+    
+    for (const table of tables) {
+        try {
+            const res = await query(`SELECT id, ma_ct, ten_ct, ten_hang_muc, inspector as "inspectorName", status as status, date, deleted_at, '${table}' as table_name FROM ${SCHEMA}.${table} WHERE deleted_at IS NOT NULL`);
+            allDeleted = [...allDeleted, ...res.rows];
+        } catch (e) {
+            console.error(`Error fetching deleted from ${table}:`, e);
+        }
+    }
+    
+    return allDeleted.sort((a, b) => Number(b.deleted_at) - Number(a.deleted_at));
+}
+
+/**
+ * Restores a soft-deleted inspection.
+ */
+export async function restoreInspection(id: string) {
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    for (const table of tables) {
+        await query(`UPDATE ${SCHEMA}.${table} SET deleted_at = NULL WHERE id = $1`, [id]);
+    }
+}
+
+/**
+ * Permanently deletes an inspection from the database.
+ */
+export async function hardDeleteInspection(id: string) {
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    for (const table of tables) {
+        await query(`DELETE FROM ${SCHEMA}.${table} WHERE id = $1`, [id]);
+    }
 }
 
 /**

@@ -196,11 +196,11 @@ export const Settings: React.FC<SettingsProps> = ({
                 {activeTab === 'TEMPLATE' && isAdminOrManager && (
                     <div className="space-y-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'}`}>{m.label}</button>))}</div></div>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/></div>
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} user={currentUser} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/></div>
                     </div>
                 )}
                 {activeTab === 'USERS' && isAdminOrManager && (
-                    <UserManagement users={users} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} onImportUsers={onImportUsers} />
+                    <UserManagement currentUser={currentUser} users={users} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} onImportUsers={onImportUsers} />
                 )}
                 {activeTab === 'ROLES' && isAdminOrManager && (
                     <RoleManagement roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} onDeleteRole={handleDeleteRole} />
