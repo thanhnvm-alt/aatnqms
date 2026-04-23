@@ -19,7 +19,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import * as pdfParse from 'pdf-parse';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const pipelineAsync = promisify(pipeline);
 const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
@@ -90,7 +90,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
-const aiInstance = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const aiInstance = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Define tools for Gemini to interact with our app data (Server-side)
 const aiTools = [
@@ -184,8 +184,7 @@ app.post("/api/ai/chat", authenticate, async (req, res) => {
     }
 
     try {
-        // Correct method for @google/genai latest
-        const model = (aiInstance as any).getGenerativeModel({
+        const model = aiInstance.getGenerativeModel({
             model: "gemini-1.5-flash", 
             systemInstruction: `Bạn là trợ lý AI chuyên gia về hệ thống QMS của AA Corporation. 
                 Nhiệm vụ của bạn là hỗ trợ nhân viên QC/QA và Quản lý kiểm tra dữ liệu thực tế thông qua các tools.
