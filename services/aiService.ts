@@ -55,6 +55,15 @@ const tools = [
 
 export const generateAIChatResponse = async (userMessage: string, history: any[] = []) => {
     try {
+        const apiKey = process.env.GEMINI_API_KEY;
+        
+        if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY') {
+            return {
+                text: "⚠️ **Chưa thiết lập API Key!**\nVui lòng làm theo các bước sau:\n1. Truy cập [Google AI Studio](https://aistudio.google.com/app/apikey) để lấy key.\n2. Mở menu **Settings** trong AI Studio Build và dán key vào biến `GEMINI_API_KEY`.\n3. Hoặc thêm `GEMINI_API_KEY=your_key` vào file `.env`.",
+                error: "Missing API Key"
+            };
+        }
+
         const chat = ai.chats.create({
             model: "gemini-3-flash-preview",
             history: history,
