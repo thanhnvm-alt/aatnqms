@@ -90,6 +90,42 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 const memoryUpload = multer({ storage: multer.memoryStorage() });
 
+const aiInstance = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+// Define tools for Gemini to interact with our app data (Server-side)
+const aiTools = [
+  {
+      functionDeclarations: [
+          {
+              name: "getRecentInspections",
+              description: "Lấy danh sách các phiếu kiểm tra gần đây nhất bao gồm trạng thái (APPROVED/REJECTED/DRAFT).",
+              parameters: {
+                  type: "OBJECT",
+                  properties: {
+                      limit: { type: "NUMBER", description: "Số lượng phiếu cần lấy (mặc định 10)" }
+                  }
+              }
+          },
+          {
+              name: "getProjectInfo",
+              description: "Lấy thông tin chi tiết về một dự án cụ thể theo mã dự án hoặc tên dự án.",
+              parameters: {
+                  type: "OBJECT",
+                  properties: {
+                      search: { type: "STRING", description: "Mã dự án hoặc tên dự án (ví dụ: 'P23001')" }
+                  },
+                  required: ["search"]
+              }
+          },
+          {
+              name: "getNCRStats",
+              description: "Lấy thống kê về các lỗi không phù hợp (NCR) hiện có trong hệ thống.",
+              parameters: { type: "OBJECT", properties: {} }
+          }
+      ]
+  }
+];
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -138,6 +174,69 @@ app.use('/uploads', express.static('/tmp/qms_uploads'));
 // Health check route
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", env: process.env.NODE_ENV });
+});
+
+app.post("/api/ai/chat", authenticate, async (req, res) => {
+    const { message, history = [] } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the corporate server." });
+    }
+
+    try {
+        // Correct method for @google/genai latest
+        const model = (aiInstance as any).getGenerativeModel({
+            model: "gemini-1.5-flash", 
+            systemInstruction: `Bạn là trợ lý AI chuyên gia về hệ thống QMS của AA Corporation. 
+                Nhiệm vụ của bạn là hỗ trợ nhân viên QC/QA và Quản lý kiểm tra dữ liệu thực tế thông qua các tools.
+                Trả lời bằng tiếng Việt chuyên nghiệp, ngắn gọn.`,
+            tools: aiTools as any,
+        });
+
+        const chat = model.startChat({
+            history: (history || []).map((m: any) => ({
+                role: m.role === 'user' ? 'user' : m.role === 'model' ? 'model' : 'model',
+                parts: [{ text: m.text || m.parts?.[0]?.text || "" }]
+            })),
+        });
+
+        let result = await chat.sendMessage(message);
+        let responseText = result.response.text();
+        const calls = result.response.functionCalls();
+
+        if (calls && calls.length > 0) {
+            console.log("Server AI: Handling function calls", calls);
+            const functionResponses = await Promise.all(calls.map(async (call: any) => {
+                let callResult;
+                try {
+                    if (call.name === "getRecentInspections") {
+                        const limit = (call.args as any).limit || 10;
+                        const data = await db.getInspectionsList({}, 1, limit);
+                        callResult = data.items || [];
+                    } else if (call.name === "getProjectInfo") {
+                        const search = (call.args as any).search;
+                        callResult = await db.getProjectByCode(search);
+                    } else if (call.name === "getNCRStats") {
+                        const data = await db.getNcrs({}, 1, 1);
+                        callResult = { total: data.total };
+                    }
+                } catch (e) {
+                    callResult = { error: "Data fetch failed" };
+                }
+                return {
+                    functionResponse: { name: call.name, response: { result: callResult } }
+                };
+            }));
+
+            const finalResult = await chat.sendMessage(functionResponses as any);
+            responseText = finalResult.response.text();
+        }
+
+        res.json({ text: responseText, history: await chat.getHistory() });
+    } catch (error: any) {
+        console.error("Corporate AI Error:", error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // --- PDF Upload for Procedures ---
