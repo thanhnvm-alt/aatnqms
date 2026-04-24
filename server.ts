@@ -864,7 +864,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       const params: any[] = [];
       let where = '';
       if (search) {
-        where = ` AND (material LIKE $1 OR "shortText" LIKE $1 OR "projectName" LIKE $1 OR "Ma_Tender" LIKE $1 OR "purchaseDocument" LIKE $1)`;
+        where = ` AND (material ILIKE $1 OR "shortText" ILIKE $1 OR "projectName" ILIKE $1 OR "Ma_Tender" ILIKE $1 OR "purchaseDocument" ILIKE $1)`;
         params.push(`%${search}%`);
       }
 

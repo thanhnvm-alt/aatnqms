@@ -294,6 +294,7 @@ export interface Inspection {
   reportImages?: string[];
   deliveryNoteImage?: string;
   deliveryNoteImages?: string[];
+  drawingImages?: string[];
   comments?: NCRComment[];
   priority?: Priority;
   floor_plan_id?: string;
