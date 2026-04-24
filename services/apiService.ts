@@ -289,7 +289,7 @@ export const saveDefectLibraryItem = async (item: DefectLibraryItem) => apiFetch
 export const deleteDefectLibraryItem = async (id: string) => apiFetch(`/api/defect-library/${id}`, { method: 'DELETE' });
 
 export const exportDefectLibrary = async () => {
-    const response = await fetch('/api/defects/export', {
+    const response = await fetch('/api/export/defects', {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -306,7 +306,7 @@ export const exportDefectLibrary = async () => {
 export const importDefectLibraryFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/defects/import', {
+    const response = await fetch('/api/import/defects', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData
@@ -343,7 +343,7 @@ export const deleteMaterial = async (id: string) => {
 };
 
 export const exportNcrs = async () => {
-    const response = await fetch('/api/ncrs/export', {
+    const response = await fetch('/api/export/ncrs', {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -360,7 +360,7 @@ export const exportNcrs = async () => {
 export const importNcrsFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/ncrs/import', {
+    const response = await fetch('/api/import/ncrs', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData
@@ -370,7 +370,7 @@ export const importNcrsFile = async (file: File) => {
 };
 
 export const exportMaterials = async () => {
-    const response = await fetch('/api/materials/export', {
+    const response = await fetch('/api/export/materials', {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -387,7 +387,7 @@ export const exportMaterials = async () => {
 export const importMaterialsFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/materials/import', {
+    const response = await fetch('/api/import/materials', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData
@@ -397,7 +397,7 @@ export const importMaterialsFile = async (file: File) => {
 };
 
 export const exportSuppliers = async () => {
-    const response = await fetch('/api/suppliers/export', {
+    const response = await fetch('/api/export/suppliers', {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -414,7 +414,7 @@ export const exportSuppliers = async () => {
 export const importSuppliersFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/suppliers/import', {
+    const response = await fetch('/api/import/suppliers', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData
@@ -425,7 +425,7 @@ export const importSuppliersFile = async (file: File) => {
 
 export const exportInspections = async (filters: any = {}) => {
     const params = new URLSearchParams(filters);
-    const response = await fetch(`/api/inspections/export?${params.toString()}`, {
+    const response = await fetch(`/api/export/inspections?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -442,7 +442,7 @@ export const exportInspections = async (filters: any = {}) => {
 export const importInspectionsFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/inspections/import', {
+    const response = await fetch('/api/import/inspections', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData
@@ -453,7 +453,7 @@ export const importInspectionsFile = async (file: File) => {
 
 export const exportIpoData = async (filters: any = {}) => {
     const params = new URLSearchParams(filters);
-    const response = await fetch(`/api/ipo/export?${params.toString()}`, {
+    const response = await fetch(`/api/export/ipo?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -470,7 +470,7 @@ export const exportIpoData = async (filters: any = {}) => {
 export const importIpoFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/ipo/import', {
+    const response = await fetch('/api/import/ipo', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData

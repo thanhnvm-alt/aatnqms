@@ -955,7 +955,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  app.get("/api/ncrs/export", async (req, res) => {
+  app.get("/api/export/ncrs", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`
@@ -1227,7 +1227,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  app.post("/api/ncrs/import", memoryUpload.single('file'), async (req, res) => {
+  app.post("/api/import/ncrs", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         
@@ -1295,7 +1295,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // --- DEFECT LIBRARY EXPORT/IMPORT ---
-  app.get("/api/defects/export", async (req, res) => {
+  app.get("/api/export/defects", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."defect_library" ORDER BY "defect_code" ASC`);
@@ -1344,7 +1344,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  app.post("/api/defects/import", memoryUpload.single('file'), async (req, res) => {
+  app.post("/api/import/defects", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const stream = new Readable();
@@ -1391,10 +1391,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // --- MATERIALS EXPORT/IMPORT ---
-  app.get("/api/materials/export", async (req, res) => {
+  app.get("/api/export/materials", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`SELECT * FROM "${schema}"."material" WHERE "deleted_at" IS NULL ORDER BY "material" ASC`);
+        const result = await query(`SELECT * FROM "${schema}"."material" ORDER BY "material" ASC`);
         
         const filename = `AATN_Materials_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
@@ -1446,7 +1446,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  app.post("/api/materials/import", memoryUpload.single('file'), async (req, res) => {
+  app.post("/api/import/materials", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const stream = new Readable();
@@ -1495,7 +1495,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // --- SUPPLIERS EXPORT/IMPORT ---
-  app.get("/api/suppliers/export", async (req, res) => {
+  app.get("/api/export/suppliers", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."suppliers" WHERE "deleted_at" IS NULL ORDER BY "name" ASC`);
@@ -1565,7 +1565,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  app.post("/api/suppliers/import", memoryUpload.single('file'), async (req, res) => {
+  app.post("/api/import/suppliers", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const stream = new Readable();
@@ -1612,10 +1612,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // --- IPO EXPORT ---
-  app.get("/api/ipo/export", async (req, res) => {
+  app.get("/api/export/ipo", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "ID" ASC LIMIT 50000`);
+        const result = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "id" ASC LIMIT 50000`);
         
         const filename = `AATN_IPO_Data_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
@@ -1658,7 +1658,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to export IPO data' });
     }
   });
-  app.post("/api/ipo/import", memoryUpload.single('file'), async (req, res) => {
+  app.post("/api/import/ipo", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const stream = new Readable();
@@ -1714,7 +1714,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
-  app.get("/api/inspections/export", async (req, res) => {
+  app.get("/api/export/inspections", async (req, res) => {
     try {
         const filters = {
             status: req.query.status as string,
@@ -1809,7 +1809,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // --- INSPECTIONS IMPORT ---
-  app.post("/api/inspections/import", authenticate, memoryUpload.single('file'), async (req, res) => {
+  app.post("/api/import/inspections", authenticate, memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         
