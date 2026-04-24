@@ -112,7 +112,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         setFormData(prev => ({ 
             ...prev, 
             supplier: supplier || prev.supplier, 
-            ma_ct: firstMat.Ma_Tender || prev.ma_ct,
+            ma_ct: firstMat.Ma_Tender || firstMat.projectName || prev.ma_ct,
             materials: matIqc 
         }));
       }

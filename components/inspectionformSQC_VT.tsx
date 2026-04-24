@@ -108,7 +108,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         setFormData(prev => ({ 
             ...prev, 
             supplier: supplier || prev.supplier, 
-            ma_ct: firstMat.Ma_Tender || prev.ma_ct,
+            ma_ct: firstMat.Ma_Tender || firstMat.projectName || prev.ma_ct,
             materials: matIqc 
         }));
       }

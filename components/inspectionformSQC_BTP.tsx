@@ -110,7 +110,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
         const item = ipoResponse.items[0];
         setFormData(prev => ({ 
             ...prev, 
-            ma_ct: item.ma_ct || item.Ma_Tender || '',
+            ma_ct: item.ma_ct || item.Ma_Tender || item.ten_ct || item.Project_name || '',
             ten_ct: item.ten_ct || item.Project_name || '',
             ten_hang_muc: item.ten_hang_muc || item.Material_description || '',
             dvt: item.dvt || item.Base_Unit || ''
@@ -135,7 +135,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
             category: mat.shortText || '', 
             inspectType: '100%',
             scope: 'PROJECT',
-            projectCode: mat.Ma_Tender || '', 
+            projectCode: mat.Ma_Tender || mat.projectName || '', 
             projectName: mat.projectName || '',
             orderQty: Number(mat.orderQuantity) || 0,
             deliveryQty: Number(mat.orderQuantity) || 0,

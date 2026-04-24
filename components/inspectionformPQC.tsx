@@ -345,7 +345,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                   const match = ipoItems[0];
                   setFormData(prev => ({ 
                     ...prev, 
-                    ma_ct: match.Ma_Tender || '', 
+                    ma_ct: match.Ma_Tender || match.Project_name || '', 
                     ten_ct: match.Project_name || '', 
                     ten_hang_muc: match.Material_description || '', 
                     dvt: match.Base_Unit || '', 
@@ -379,10 +379,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           if (match) {
               setFormData(prev => ({ 
                 ...prev, 
-                ma_ct: match.ma_ct, 
-                ten_ct: match.ten_ct, 
-                ten_hang_muc: match.ten_hang_muc, 
-                dvt: match.dvt, 
+                ma_ct: match.ma_ct || match.ten_ct || '', 
+                ten_ct: match.ten_ct || '', 
+                ten_hang_muc: match.ten_hang_muc || '', 
+                dvt: match.dvt || '', 
                 so_luong_ipo: match.so_luong_ipo, 
                 ma_nha_may: match.ma_nha_may, 
                 headcode: match.ma_nha_may,

@@ -103,7 +103,7 @@ export const IPOPage = ({ user }: { user: User }) => {
       const ipoItem: IPOItem = {
           id: item.id || item.ID,
           ma_nha_may: item.ID_Factory_Order || '',
-          ma_ct: item.Ma_Tender || '',
+          ma_ct: item.Ma_Tender || item.Project_name || '',
           ten_ct: item.Project_name || '',
           ten_hang_muc: item.Material_description || '',
           so_luong_ipo: item.Quantity_IPO || 0,
