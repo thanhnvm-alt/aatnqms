@@ -416,6 +416,74 @@ export async function runMigrations() {
     }
     await addColumn('projects', 'deleted_at', 'BIGINT');
 
+    // 14. IPO Drawing List & Details
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."ipo_details" (
+            "id" TEXT PRIMARY KEY,
+            "id_factory_order" TEXT UNIQUE NOT NULL,
+            "history_summary" TEXT,
+            "material_history" TEXT,
+            "sample_history" TEXT,
+            "last_analysis_at" BIGINT,
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table ipo_details exists in ${schema}`);
+      
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."ipo_drawing_list" (
+            "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "id_factory_order" TEXT NOT NULL,
+            "drawing_name" TEXT,
+            "version" TEXT,
+            "file_url" TEXT,
+            "revision_notes" TEXT,
+            "page_count" INTEGER,
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "created_by" TEXT,
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table ipo_drawing_list exists in ${schema}`);
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."ipo_material_history" (
+            "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "id_factory_order" TEXT NOT NULL,
+            "material_name" TEXT,
+            "specification" TEXT,
+            "version" TEXT,
+            "drawing_ref" TEXT,
+            "file_url" TEXT,
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "created_by" TEXT,
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table ipo_material_history exists in ${schema}`);
+      await addColumn('ipo_material_history', 'file_url', 'TEXT');
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."ipo_sample_history" (
+            "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "id_factory_order" TEXT NOT NULL,
+            "sample_name" TEXT,
+            "status" TEXT,
+            "version" TEXT,
+            "file_url" TEXT,
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "created_by" TEXT,
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table ipo_sample_history exists in ${schema}`);
+      await addColumn('ipo_sample_history', 'file_url', 'TEXT');
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create ipo tables:`, e.message);
+      migrationLogs.push(`⚠️ Could not create ipo tables: ${e.message}`);
+    }
+
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
     try {
       fs.writeFileSync(path.join(process.cwd(), 'diag_migration.json'), JSON.stringify({

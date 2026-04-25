@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import * as api from "./apiService";
 

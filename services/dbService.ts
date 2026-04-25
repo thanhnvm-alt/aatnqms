@@ -540,6 +540,111 @@ export async function getPlansByProject(maCt: string, limit?: number): Promise<I
     return res.rows as unknown as IPOItem[];
 }
 
+// --- IPO DETAILS & DRAWINGS ---
+
+export async function getIpoDetailById(idFactoryOrder: string) {
+    const res = await query(`
+        SELECT * FROM ${SCHEMA}.ipo_details WHERE id_factory_order = $1
+    `, [idFactoryOrder]);
+    
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+        ...row,
+        data: safeJsonParse(row.data, {})
+    };
+}
+
+export async function saveIpoDetail(detail: any) {
+    const updatedAt = Math.floor(Date.now() / 1000);
+    await query(`
+        INSERT INTO ${SCHEMA}.ipo_details (id, id_factory_order, history_summary, material_history, sample_history, last_analysis_at, data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT(id_factory_order) DO UPDATE SET
+            history_summary = EXCLUDED.history_summary,
+            material_history = EXCLUDED.material_history,
+            sample_history = EXCLUDED.sample_history,
+            last_analysis_at = EXCLUDED.last_analysis_at,
+            data = EXCLUDED.data
+    `, sanitizeArgs([
+        detail.id || `DET-${detail.id_factory_order}`,
+        detail.id_factory_order,
+        detail.history_summary,
+        detail.material_history,
+        detail.sample_history,
+        updatedAt,
+        detail.data || {}
+    ]));
+}
+
+export async function getIpoDrawings(idFactoryOrder: string) {
+    const res = await query(`
+        SELECT * FROM ${SCHEMA}.ipo_drawing_list WHERE id_factory_order = $1 ORDER BY created_at DESC
+    `, [idFactoryOrder]);
+    return res.rows.map((r: any) => ({ ...r, data: safeJsonParse(r.data, {}) }));
+}
+
+export async function saveIpoDrawingRecord(drawing: any) {
+    await query(`
+        INSERT INTO ${SCHEMA}.ipo_drawing_list (drawing_name, version, file_url, revision_notes, page_count, id_factory_order, created_by, data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, sanitizeArgs([
+        drawing.drawing_name,
+        drawing.version,
+        drawing.file_url,
+        drawing.revision_notes,
+        drawing.page_count,
+        drawing.id_factory_order,
+        drawing.created_by,
+        drawing.data || {}
+    ]));
+}
+
+export async function getIpoMaterials(idFactoryOrder: string) {
+    const res = await query(`
+        SELECT * FROM ${SCHEMA}.ipo_material_history WHERE id_factory_order = $1 ORDER BY created_at DESC
+    `, [idFactoryOrder]);
+    return res.rows.map((r: any) => ({ ...r, data: safeJsonParse(r.data, {}) }));
+}
+
+export async function saveIpoMaterialRecord(material: any) {
+    await query(`
+        INSERT INTO ${SCHEMA}.ipo_material_history (material_name, specification, version, drawing_ref, file_url, id_factory_order, created_by, data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, sanitizeArgs([
+        material.material_name,
+        material.specification,
+        material.version,
+        material.drawing_ref,
+        material.file_url,
+        material.id_factory_order,
+        material.created_by,
+        material.data || {}
+    ]));
+}
+
+export async function getIpoSamples(idFactoryOrder: string) {
+    const res = await query(`
+        SELECT * FROM ${SCHEMA}.ipo_sample_history WHERE id_factory_order = $1 ORDER BY created_at DESC
+    `, [idFactoryOrder]);
+    return res.rows.map((r: any) => ({ ...r, data: safeJsonParse(r.data, {}) }));
+}
+
+export async function saveIpoSampleRecord(sample: any) {
+    await query(`
+        INSERT INTO ${SCHEMA}.ipo_sample_history (sample_name, status, version, file_url, id_factory_order, created_by, data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, sanitizeArgs([
+        sample.sample_name,
+        sample.status,
+        sample.version,
+        sample.file_url,
+        sample.id_factory_order,
+        sample.created_by,
+        sample.data || {}
+    ]));
+}
+
 
 // --- SUPPLIERS ---
 

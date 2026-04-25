@@ -44,7 +44,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     status: InspectionStatus.DRAFT,
     materials: initialData?.materials || [],
     supportingDocs: initialData?.supportingDocs || SUPPORTING_DOC_TEMPLATES.map(name => ({ id: `doc_${Math.random()}`, name, verified: false })),
-    inspectorName: user.name,
+    inspectorName: initialData?.inspectorName || user.name,
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',
     supplier: initialData?.supplier || '',
@@ -64,6 +64,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [newDocName, setNewDocName] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
   
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,26 +83,29 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       const result = await fetchMaterials(formData.po_number);
       if (result && result.items && result.items.length > 0) {
         const materials = result.items as Material[];
-        const matIqc: MaterialIQC[] = materials.map(m => ({
-          id: m.id,
-          name: m.shortText || m.material,
-          category: 'Vật tư',
-          inspectType: 'AQL',
-          scope: m.Ma_Tender ? 'PROJECT' : 'COMMON',
-          projectCode: m.Ma_Tender || 'DÙNG CHUNG',
-          projectName: m.projectName || 'VẬT TƯ KHO DÙNG CHUNG',
-          orderQty: m.orderQuantity,
-          deliveryQty: m.orderQuantity,
-          unit: m.orderUnit,
-          criteria: [],
-          items: [],
-          inspectQty: m.orderQuantity,
-          passQty: 0,
-          failQty: 0,
-          images: [],
-          type: 'Material',
-          date: new Date().toISOString()
-        }));
+        const matIqc: MaterialIQC[] = materials.map(m => {
+          const hasProject = !!(m.Ma_Tender || m.projectName);
+          return {
+            id: m.id,
+            name: m.shortText || m.material,
+            category: 'Vật tư',
+            inspectType: 'AQL',
+            scope: hasProject ? 'PROJECT' : 'COMMON',
+            projectCode: m.Ma_Tender || (hasProject ? '' : 'Dùng Chung'),
+            projectName: m.projectName || (hasProject ? '' : 'VẬT TƯ KHO DÙNG CHUNG'),
+            orderQty: m.orderQuantity,
+            deliveryQty: m.orderQuantity,
+            unit: m.orderUnit,
+            criteria: [],
+            items: [],
+            inspectQty: m.orderQuantity,
+            passQty: 0,
+            failQty: 0,
+            images: [],
+            type: 'Material',
+            date: new Date().toISOString()
+          };
+        });
 
         const supplier = materials[0].supplierName;
         const firstMat = materials[0];
@@ -183,7 +187,25 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         else if (field === 'passQty') { mat.failQty = Number((mat.inspectQty - val).toFixed(2)); }
         else if (field === 'failQty') { mat.passQty = Number((mat.inspectQty - val).toFixed(2)); }
 
-        if (field === 'scope') { if (value === 'COMMON') { mat.projectCode = 'DÙNG CHUNG'; mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG'; } else { mat.projectCode = ''; mat.projectName = ''; } }
+        if (field === 'scope') { 
+            if (value === 'COMMON') { 
+                mat.projectCode = 'Dùng Chung'; 
+                mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG'; 
+            } else { 
+                mat.projectCode = ''; 
+                mat.projectName = ''; 
+            } 
+        }
+
+        if (field === 'projectCode' && mat.scope === 'PROJECT') {
+            if (val && val !== 'Dùng Chung') {
+                mat.scope = 'PROJECT';
+            } else if (!val || val === 'Dùng Chung') {
+                mat.scope = 'COMMON';
+                mat.projectCode = 'Dùng Chung';
+                mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG';
+            }
+        }
 
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
@@ -444,8 +466,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                 onChange={e => updateMaterial(matIdx, 'scope', e.target.value)}
                                                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-black text-[11px] h-10 uppercase outline-none focus:ring-2 ring-teal-100 transition-all appearance-none"
                                             >
-                                                <option value="COMMON">Dùng chung</option>
-                                                <option value="PROJECT">Công trình</option>
+                                                <option value="COMMON">DÙNG CHUNG</option>
+                                                <option value="PROJECT">CÔNG TRÌNH</option>
                                             </select>
                                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                                         </div>
@@ -456,7 +478,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                         </label>
                                         <div className="relative flex items-center">
                                             <input 
-                                                value={mat.projectCode} 
+                                                value={mat.projectCode || ''} 
                                                 onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
                                                 onBlur={() => mat.scope === 'PROJECT' && lookupMaterialProject(mat.projectCode || '', matIdx)}
                                                 disabled={mat.scope === 'COMMON'}
@@ -471,7 +493,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                         </label>
                                         <div className="relative flex items-center">
                                             <input 
-                                                value={mat.projectName} 
+                                                value={mat.projectName || ''} 
                                                 readOnly 
                                                 className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-bold text-[11px] h-10 text-slate-500 uppercase truncate" 
                                                 placeholder="..."
@@ -484,10 +506,24 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                                   <div className="md:col-span-3">
                                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
-                                      <select value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9 bg-white shadow-sm">
-                                          <option value="">-- Chọn --</option>
-                                          {sqcGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                                      </select>
+                                      <div className="relative">
+                                          <input 
+                                              value={mat.category || ''} 
+                                              onChange={e => {
+                                                  const val = e.target.value;
+                                                  updateMaterial(matIdx, 'category', val);
+                                              }} 
+                                              list={`category-list-${matIdx}`}
+                                              className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9 bg-white shadow-sm"
+                                              placeholder="Tìm chủng loại..."
+                                          />
+                                          <datalist id={`category-list-${matIdx}`}>
+                                              {sqcGroups.map(g => <option key={g} value={g} />)}
+                                          </datalist>
+                                          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-30">
+                                              <Search className="w-3 h-3" />
+                                          </div>
+                                      </div>
                                   </div>
                                   <div className="md:col-span-2">
                                       <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest block mb-1">Loại kiểm</label>

@@ -60,6 +60,32 @@ export const fetchIpoByFactoryOrder = async (factoryOrder: string) => {
     return data;
 };
 
+export const fetchIpoDetailExtended = async (idFactoryOrder: string) => apiFetch(`/api/ipo/detail/${idFactoryOrder}`);
+
+export const saveIpoDetailExtended = async (detail: any) => apiFetch('/api/ipo/detail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(detail)
+});
+
+export const saveIpoDrawingRecord = async (drawing: any) => apiFetch('/api/ipo/drawings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(drawing)
+});
+
+export const saveIpoMaterialRecord = async (material: any) => apiFetch('/api/ipo/materials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(material)
+});
+
+export const saveIpoSampleRecord = async (sample: any) => apiFetch('/api/ipo/samples', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sample)
+});
+
 export const fetchFloorPlans = async (projectId: string) => apiFetch(`/api/floor-plans?projectId=${projectId}`);
 export const saveFloorPlan = async (fp: FloorPlan) => apiFetch('/api/floor-plans', {
     method: 'POST',

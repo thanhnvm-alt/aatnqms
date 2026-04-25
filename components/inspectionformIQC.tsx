@@ -40,14 +40,15 @@ import { getProxyImageUrl } from '../src/utils';
 
 export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({
+    ...initialData,
     id: initialData?.id || `IQC-${Date.now()}`,
     type: 'IQC' as ModuleId,
-    date: new Date().toISOString().split('T')[0],
-    status: InspectionStatus.DRAFT,
+    date: initialData?.date || new Date().toISOString().split('T')[0],
+    status: initialData?.status || InspectionStatus.DRAFT,
     materials: initialData?.materials || [],
     supportingDocs: initialData?.supportingDocs || SUPPORTING_DOC_TEMPLATES.map(name => ({ id: `doc_${Math.random()}`, name, verified: false })),
     referenceDocs: initialData?.referenceDocs || [],
-    inspectorName: user.name,
+    inspectorName: initialData?.inspectorName || user.name,
     po_number: initialData?.po_number || '', 
     ma_ct: initialData?.ma_ct || '',        
     supplier: initialData?.supplier || '',
@@ -56,8 +57,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     deliveryNoteImages: initialData?.deliveryNoteImages || [],
     summary: initialData?.summary || '',
     images: initialData?.images || [],
-    score: initialData?.score || 0,
-    ...initialData
+    score: initialData?.score || 0
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -85,34 +85,37 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       const result = await fetchMaterials(formData.po_number);
       if (result && result.items && result.items.length > 0) {
         const materials = result.items as Material[];
-        const matIqc: MaterialIQC[] = materials.map(m => ({
-          id: m.id,
-          name: m.shortText || m.material,
-          category: 'Vật tư',
-          inspectType: 'AQL',
-          scope: 'COMMON',
-          projectCode: m.Ma_Tender,
-          projectName: m.projectName,
-          orderQty: m.orderQuantity,
-          deliveryQty: m.orderQuantity,
-          unit: m.orderUnit,
-          criteria: [],
-          items: [],
-          inspectQty: m.orderQuantity,
-          passQty: 0,
-          failQty: 0,
-          images: [],
-          type: 'Material',
-          date: new Date().toISOString()
-        }));
+        const matIqc: MaterialIQC[] = materials.map(m => {
+          const hasProject = !!(m.Ma_Tender || m.projectName);
+          return {
+            id: m.id,
+            name: m.shortText || m.material,
+            category: 'Vật tư',
+            inspectType: 'AQL',
+            scope: hasProject ? 'PROJECT' : 'COMMON',
+            projectCode: m.Ma_Tender || (hasProject ? '' : 'Dùng Chung'),
+            projectName: m.projectName || (hasProject ? '' : 'VẬT TƯ KHO DÙNG CHUNG'),
+            orderQty: m.orderQuantity,
+            deliveryQty: m.orderQuantity,
+            unit: m.orderUnit,
+            criteria: [],
+            items: [],
+            inspectQty: m.orderQuantity,
+            passQty: 0,
+            failQty: 0,
+            images: [],
+            type: 'Material',
+            date: new Date().toISOString()
+          };
+        });
 
         const supplier = materials[0].supplierName;
-        // Also update ma_ct using the first material's projectCode
         const firstMat = materials[0];
         setFormData(prev => ({ 
             ...prev, 
             supplier: supplier || prev.supplier, 
             ma_ct: firstMat.Ma_Tender || firstMat.projectName || prev.ma_ct,
+            ten_ct: firstMat.projectName || prev.ten_ct,
             materials: matIqc 
         }));
       }
@@ -184,7 +187,26 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             const iqcTpl = templates['IQC'] || [];
             mat.items = iqcTpl.filter(i => i.category === value).map(i => ({ ...i, id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, status: CheckStatus.PENDING, notes: '', images: [] }));
         }
-        if (field === 'scope') { if (value === 'COMMON') { mat.projectCode = 'DÙNG CHUNG'; mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG'; } else { mat.projectCode = ''; mat.projectName = ''; } }
+        
+        if (field === 'scope') { 
+            if (value === 'COMMON') { 
+                mat.projectCode = 'Dùng Chung'; 
+                mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG'; 
+            } else { 
+                mat.projectCode = ''; 
+                mat.projectName = ''; 
+            } 
+        }
+
+        if (field === 'projectCode' && mat.scope === 'PROJECT') {
+            if (val && val !== 'Dùng Chung') {
+                mat.scope = 'PROJECT';
+            } else if (!val || val === 'Dùng Chung') {
+                mat.scope = 'COMMON';
+                mat.projectCode = 'Dùng Chung';
+                mat.projectName = 'VẬT TƯ KHO DÙNG CHUNG';
+            }
+        }
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
     });
@@ -344,9 +366,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1 shadow-sm" type="button"><History className="w-3 h-3" /> Lịch sử ({inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number).length})</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label><div className="relative flex items-center"><input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] h-9" placeholder="Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label><div className="relative flex items-center"><input value={formData.po_number || ''} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] h-9" placeholder="Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button></div></div>
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nhà Cung Cấp *</label><div className="relative flex items-center"><input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] h-9 uppercase" placeholder="Tên NCC..."/><Building2 className="absolute left-2 w-4 h-4 text-slate-400" /></div></div>
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Ngày kiểm tra</label><div className="relative flex items-center"><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9"/><Calendar className="absolute left-2 w-4 h-4 text-slate-400" /></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Ngày kiểm tra</label><div className="relative flex items-center"><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9"/><Calendar className="absolute left-2 w-4 h-4 text-slate-400" /></div></div>
             </div>
 
             {/* Evidence Row */}
@@ -368,7 +390,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                     ))}
                 </div>
                 <div className="flex gap-2 pt-2">
-                    <input value={newDocName} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100" placeholder="Thêm tài liệu hỗ trợ khác..."/>
+                    <input value={newDocName || ''} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100" placeholder="Thêm tài liệu hỗ trợ khác..."/>
                     <button onClick={addCustomDoc} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all">Thêm</button>
                 </div>
             </div>
@@ -420,12 +442,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         </label>
                                         <div className="relative">
                                             <select 
-                                                value={mat.scope} 
+                                                value={mat.scope || 'COMMON'} 
                                                 onChange={e => updateMaterial(matIdx, 'scope', e.target.value)}
                                                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-black text-[11px] h-10 uppercase outline-none focus:ring-2 ring-blue-100 transition-all appearance-none"
                                             >
-                                                <option value="COMMON">Dùng chung</option>
-                                                <option value="PROJECT">Công trình</option>
+                                                <option value="COMMON">DÙNG CHUNG</option>
+                                                <option value="PROJECT">CÔNG TRÌNH</option>
                                             </select>
                                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                                         </div>
@@ -436,7 +458,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         </label>
                                         <div className="relative flex items-center">
                                             <input 
-                                                value={mat.projectCode} 
+                                                value={mat.projectCode || ''} 
                                                 onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
                                                 onBlur={() => mat.scope === 'PROJECT' && lookupMaterialProject(mat.projectCode || '', matIdx)}
                                                 disabled={mat.scope === 'COMMON'}
@@ -451,7 +473,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         </label>
                                         <div className="relative flex items-center">
                                             <input 
-                                                value={mat.projectName} 
+                                                value={mat.projectName || ''} 
                                                 readOnly 
                                                 className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-bold text-[11px] h-10 text-slate-500 uppercase truncate" 
                                                 placeholder="..."
@@ -464,10 +486,24 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 <div className="grid grid-cols-12 gap-3">
                                   <div className="col-span-4">
                                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
-                                      <select value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[10px] h-9 bg-white shadow-sm">
-                                          <option value="">-- Chọn --</option>
-                                          {iqcGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                                      </select>
+                                      <div className="relative">
+                                          <input 
+                                              value={mat.category || ''} 
+                                              onChange={e => {
+                                                  const val = e.target.value;
+                                                  updateMaterial(matIdx, 'category', val);
+                                              }} 
+                                              list={`category-list-${matIdx}`}
+                                              className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[10px] h-9 bg-white shadow-sm"
+                                              placeholder="Tìm chủng loại..."
+                                          />
+                                          <datalist id={`category-list-${matIdx}`}>
+                                              {iqcGroups.map(g => <option key={g} value={g} />)}
+                                          </datalist>
+                                          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-30">
+                                              <Search className="w-3 h-3" />
+                                          </div>
+                                      </div>
                                   </div>
                                   <div className="col-span-3">
                                       <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest block mb-1">Loại kiểm</label>
@@ -475,20 +511,20 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                   </div>
                                   <div className="col-span-5">
                                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Tên Vật Tư *</label>
-                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-bold focus:ring-1 ring-blue-500 outline-none text-[10px] h-9 shadow-sm" placeholder="Tên sản phẩm..."/>
+                                      <input value={mat.name || ''} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-bold focus:ring-1 ring-blue-500 outline-none text-[10px] h-9 shadow-sm" placeholder="Tên sản phẩm..."/>
                                   </div>
                                 </div>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase block text-center">Giao(DN)</label><input type="number" step="any" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase block text-center">Giao(DN)</label><input type="number" step="any" value={mat.deliveryQty ?? 0} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-7"/></div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">DVT</label>
-                                        <input list="unit-list" value={mat.unit} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-black text-center bg-white text-[11px] h-7 uppercase" placeholder="DVT..."/>
+                                        <input list="unit-list" value={mat.unit || ''} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-1 py-1 border border-slate-300 rounded-md font-black text-center bg-white text-[11px] h-7 uppercase" placeholder="DVT..."/>
                                         <datalist id="unit-list">{UNIT_OPTIONS.map(opt => <option key={opt} value={opt} />)}</datalist>
                                     </div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-blue-600 uppercase block text-center">Kiểm tra</label><input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-1 py-1 border rounded-md font-bold text-center bg-white text-[11px] h-7 ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600' : 'border-blue-300 text-blue-700'}`}/></div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 uppercase block text-center">Đạt</label><input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/></div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 uppercase block text-center">Hỏng</label><input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-blue-600 uppercase block text-center">Kiểm tra</label><input type="number" step="any" value={mat.inspectQty ?? 0} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-1 py-1 border rounded-md font-bold text-center bg-white text-[11px] h-7 ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600' : 'border-blue-300 text-blue-700'}`}/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 uppercase block text-center">Đạt</label><input type="number" step="any" value={mat.passQty ?? 0} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7"/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 uppercase block text-center">Hỏng</label><input type="number" step="any" value={mat.failQty ?? 0} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7"/></div>
                                 </div>
 
                                 <div className="space-y-2 mt-2">
@@ -530,7 +566,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
 
         {/* III. Summary */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2"><h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT</h3><textarea value={formData.summary} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white h-20 resize-none text-[11px]" placeholder="Nhập nhận xét tổng quan của QC..."/></section>
+        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2"><h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MessageCircle className="w-4 h-4"/> III. GHI CHÚ / TỔNG KẾT</h3><textarea value={formData.summary || ''} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-700 outline-none focus:bg-white h-20 resize-none text-[11px]" placeholder="Nhập nhận xét tổng quan của QC..."/></section>
         
         {/* IV. QC Signature */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">

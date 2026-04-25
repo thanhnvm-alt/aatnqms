@@ -31,6 +31,7 @@
     "jsonwebtoken": "^9.0.3",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.454.0",
+    "motion": "^12.38.0",
     "pdf-parse": "^2.4.5",
     "pg": "^8.20.0",
     "react": "^18.3.1",

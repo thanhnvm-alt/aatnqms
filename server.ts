@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
 import path from "path";
@@ -24,6 +25,15 @@ import { GoogleGenAI } from "@google/genai";
 const pipelineAsync = promisify(pipeline);
 const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Khởi tạo Gemini SDK dựa trên biến môi trường
+const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+  console.warn("GEMINI_API_KEY is not defined in environment variables");
+}
+
+const genAI = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // Configure Google Drive safely
 let drive: any = null;
@@ -253,6 +263,58 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  app.get("/api/ipo/detail/:id", authenticate, async (req, res) => {
+    try {
+      const id = String(req.params.id);
+      const detail = await db.getIpoDetailById(id);
+      const drawings = await db.getIpoDrawings(id);
+      const materials = await db.getIpoMaterials(id);
+      const samples = await db.getIpoSamples(id);
+      res.json({ detail, drawings, materials, samples });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch IPO details' });
+    }
+  });
+
+  app.post("/api/ipo/detail", authenticate, async (req, res) => {
+    try {
+      await db.saveIpoDetail(req.body);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save IPO detail' });
+    }
+  });
+
+  app.post("/api/ipo/drawings", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      await db.saveIpoDrawingRecord({ ...req.body, created_by: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save drawing record' });
+    }
+  });
+
+  app.post("/api/ipo/materials", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      await db.saveIpoMaterialRecord({ ...req.body, created_by: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save material record' });
+    }
+  });
+
+  app.post("/api/ipo/samples", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      await db.saveIpoSampleRecord({ ...req.body, created_by: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save sample record' });
+    }
+  });
+
   // --- AUTH ---
   app.post("/api/auth/login", async (req, res) => {
     console.log("Login attempt for username:", req.body?.username);
@@ -301,14 +363,12 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/chat", express.json(), async (req, res) => {
     const { message, context } = req.body;
     
-    if (!process.env.GEMINI_API_KEY) {
-        console.error("DEBUG: GEMINI_API_KEY is not defined in process.env");
+    if (!genAI) {
+        console.error("DEBUG: genAI is not initialized (GEMINI_API_KEY missing)");
         return res.status(500).json({ error: "Server API Key not configured" });
     }
-    console.log("DEBUG: GEMINI_API_KEY is defined, length:", process.env.GEMINI_API_KEY.length);
+    
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        
         // --- RAG: Fetch relevant history (NCRs) and Procedures (ISO) ---
         let ragContext = "";
         try {
@@ -335,34 +395,35 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         }
 
         // Define fallback models
-        const models = ['gemini-3.1-flash-lite-preview', 'gemini-1.5-flash'];
+        const models = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
         let response;
         
-        for (const model of models) {
+        for (const modelName of models) {
             try {
-                response = await ai.models.generateContent({
-                    model: model,
-                    contents: message,
+                const result = await genAI.models.generateContent({
+                    model: modelName,
+                    contents: [{ role: 'user', parts: [{ text: message }] }],
                     config: {
+                        temperature: 0.1,
                         systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
                         
                         NGỮ CẢNH DỮ LIỆU:
                         ${context}
                         ${ragContext}
-
+ 
                         HƯỚNG DẪN TRẢ LỜI:
                         1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU và LỊCH SỬ SỰ CỐ.
                         2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
                         3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
                         4. Dựa vào LỊCH SỬ SỰ CỐ (NCR) để đưa ra lời khuyên xử lý nếu có.
                         5. Nếu không thấy, hãy trả lời tổng quát.`,
-                        temperature: 0.1,
                     },
                 });
+                response = result;
                 break; // If successful, break the loop
             } catch (err: any) {
-                console.warn(`Model ${model} failed, trying next...`, err.message);
-                if (model === models[models.length - 1]) throw err; // If last model failed, throw
+                console.warn(`Model ${modelName} failed, trying next...`, err.message);
+                if (modelName === models[models.length - 1]) throw err; // If last model failed, throw
             }
         }
         res.json({ text: response!.text });
@@ -1969,12 +2030,14 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   next(err);
 });
 
-// Run migrations before starting the server (disabled, run manually via script)
-// (async () => {
-//   try {
-//     await runMigrations();
-// ...
-// })();
+// Run migrations before starting the server
+(async () => {
+  try {
+    await runMigrations();
+  } catch (err) {
+    console.error("Critical error during startup migrations:", err);
+  }
+})();
 
 // Diagnostic endpoint for database schema
 app.get('/api/diag/db', async (req, res) => {

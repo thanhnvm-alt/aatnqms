@@ -172,7 +172,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                     <div className="text-center md:border-r border-slate-200 space-y-1">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Số IPO</p>
-                        <p className="text-lg font-black text-slate-700">{stats.ipo}</p>
+                        <p className="text-lg font-black text-slate-700">{stats.ipo} <span className="text-[10px] text-slate-400 font-bold">{inspection.dvt}</span></p>
                     </div>
                     <div className="text-center md:border-r border-slate-200 space-y-1">
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Kiểm tra</p>
@@ -271,6 +271,51 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                 );
             })}
         </div>
+
+        {/* --- NOTES & CONCLUSIONS SECTION (BEFORE SIGNATURES) --- */}
+        {(inspection.summary || (inspection.materials?.some(m => m.items?.some(i => i.notes)))) && (
+            <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+                <h3 className="text-amber-800 border-b border-amber-50 pb-4 font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-amber-500"/> GHI CHÚ & KẾT LUẬN CHI TIẾT
+                </h3>
+                
+                <div className="space-y-6">
+                    {inspection.summary && (
+                        <div className="relative p-6 bg-amber-50/30 rounded-[2rem] border border-amber-100 flex gap-4 items-start">
+                            <div className="shrink-0 w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center">
+                                <AlertOctagon className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-black text-amber-800/40 uppercase tracking-widest mb-1.5">Ghi chú tổng hợp:</p>
+                                <p className="text-sm text-slate-700 italic font-medium leading-relaxed leading-3">"{inspection.summary}"</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-3 px-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span> Ghi chú chi tiết theo hạng mục
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {inspection.materials?.map(mat => 
+                                mat.items?.filter(item => item.notes).map(item => (
+                                    <div key={item.id} className="group bg-slate-50/50 p-4 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight leading-none truncate flex-1">{mat.name}</p>
+                                            <span className="text-[8px] font-black bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded leading-none shrink-0 ml-2">{item.label}</span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-600 font-medium italic border-l-2 border-slate-200 pl-3">"{item.notes}"</p>
+                                    </div>
+                                ))
+                            )}
+                            {(!inspection.materials?.some(m => m.items?.some(i => i.notes))) && (
+                                <p className="col-span-full text-center py-6 text-[9px] font-black text-slate-300 uppercase tracking-widest">Không có ghi chú hạng mục lẻ</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        )}
 
         <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
             <h3 className="text-blue-700 border-b border-blue-50 pb-4 font-black text-[11px] uppercase tracking-[0.25em] flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-500"/> NHẬT KÝ PHÊ DUYỆT (ISO 9001)</h3>

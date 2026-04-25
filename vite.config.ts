@@ -46,6 +46,7 @@ export default defineConfig(({ mode }) => {
     define: {
       // Platform will inject GEMINI_API_KEY automatically
       'process.env.NODE_ENV': JSON.stringify(mode),
+      'process.env.GEMINI_API_KEY': JSON.stringify(apiKey),
       
       // Turso Config: Support both standard and VITE_ prefixed variables for flexibility
       'process.env.TURSO_DATABASE_URL': JSON.stringify(tursoUrl),

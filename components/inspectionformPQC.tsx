@@ -150,7 +150,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             <div className="p-2 space-y-2 bg-white border-t border-blue-100 animate-in slide-in-from-top duration-200">
                                 <div className="relative">
                                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                                    <input value={libSearch} onChange={e => setLibSearch(e.target.value)} className="w-full pl-7 pr-2 py-1.5 border rounded-lg outline-none focus:ring-1 ring-blue-100 text-[11px]" placeholder="Tìm lỗi..." />
+                                    <input value={libSearch || ''} onChange={e => setLibSearch(e.target.value)} className="w-full pl-7 pr-2 py-1.5 border rounded-lg outline-none focus:ring-1 ring-blue-100 text-[11px]" placeholder="Tìm lỗi..." />
                                 </div>
                                 <div className="max-h-32 overflow-y-auto space-y-1 no-scrollbar">
                                     {filteredLib.map(item => (
@@ -164,7 +164,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 italic text-[11px] font-medium" /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName || ''} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 italic text-[11px] font-medium" /></div>
                         <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tên lỗi chuẩn</label><input readOnly value={defectName || 'Chưa chọn'} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-blue-700 font-bold text-[11px]" /></div>
                     </div>
                     <div className="space-y-0.5">
@@ -192,7 +192,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                                     <label className="text-[8px] font-black text-blue-400 uppercase tracking-widest ml-1">Tên lỗi sẽ hiển thị trong thư viện</label>
                                     <input 
                                         className="w-full px-2 py-1.5 bg-white border border-blue-200 rounded-lg text-blue-700 font-bold text-[10px]" 
-                                        value={newDefectName} 
+                                        value={newDefectName || ''} 
                                         onChange={e => setNewDefectName(e.target.value)}
                                         placeholder="Ví dụ: Trầy xước bề mặt sơn, Cong vênh khung..."
                                     />
@@ -201,7 +201,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-[11px]" value={ncrData.severity} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-[11px]" value={ncrData.severity || 'MINOR'} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
                         <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Người phụ trách</label><input className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-[11px]" value={ncrData.responsiblePerson || ''} onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})} placeholder="Tên / Bộ phận..." /></div>
                         <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">HẠN XỬ LÝ</label><input type="date" className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white font-mono text-[11px]" value={ncrData.deadline || ''} onChange={e => setNcrData({...ncrData, deadline: e.target.value})} /></div>
                     </div>
@@ -262,14 +262,15 @@ interface InspectionFormProps {
 
 export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, workshops, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
+    ...initialData,
     id: initialData?.id || `INS-${Date.now()}`, 
-    date: new Date().toISOString().split('T')[0], 
-    status: InspectionStatus.DRAFT, 
+    date: initialData?.date || new Date().toISOString().split('T')[0], 
+    status: initialData?.status || InspectionStatus.DRAFT, 
     items: initialData?.items || [], 
     images: initialData?.images || [], 
-    score: 0, 
-    signature: '', 
-    productionSignature: '', 
+    score: initialData?.score || 0, 
+    signature: initialData?.signature || '', 
+    productionSignature: initialData?.productionSignature || '', 
     inspectedQuantity: initialData?.inspectedQuantity || 0, 
     passedQuantity: initialData?.passedQuantity || 0, 
     failedQuantity: initialData?.failedQuantity || 0, 
@@ -278,7 +279,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     headcode: initialData?.headcode || '',
     workshop: initialData?.workshop || initialData?.ma_nha_may || '',
     so_luong_ipo: initialData?.so_luong_ipo || 0,
-    ...initialData 
+    ma_ct: initialData?.ma_ct || '',
+    ten_ct: initialData?.ten_ct || '',
+    ten_hang_muc: initialData?.ten_hang_muc || '',
+    dvt: initialData?.dvt || ''
   });
   
   const [searchCode, setSearchCode] = useState(initialData?.ma_nha_may || initialData?.headcode || ''); 
@@ -601,14 +605,14 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã định danh (Mã NM)</label>
                     <div className="relative flex items-center">
                         <input 
-                            value={searchCode} 
+                            value={searchCode || ''} 
                             onChange={e => {
                                 const val = e.target.value;
                                 setSearchCode(val);
                                 setFormData(prev => ({ ...prev, ma_nha_may: val, headcode: val }));
                             }} 
-                            onBlur={() => lookupPlanInfo(searchCode)} 
-                            onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode)}
+                            onBlur={() => lookupPlanInfo(searchCode || '')} 
+                            onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode || '')}
                             className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" 
                             placeholder="Quét/Nhập mã..."
                         />
@@ -622,10 +626,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner outline-none text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px] h-8 h-auto"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px] h-8 h-auto"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
             </div>
         </section>
 
@@ -669,7 +673,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         <input 
                             type="number" 
                             step="any" 
-                            value={formData.inspectedQuantity || ''} 
+                            value={formData.inspectedQuantity ?? ''} 
                             onChange={e => handleInputChange('inspectedQuantity', e.target.value)} 
                             className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'}`} 
                         />
@@ -688,7 +692,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         <input 
                             type="number" 
                             step="any" 
-                            value={formData.passedQuantity || ''} 
+                            value={formData.passedQuantity ?? ''} 
                             onChange={e => handleInputChange('passedQuantity', e.target.value)} 
                             className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-green-200 bg-white`} 
                         />
@@ -701,7 +705,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         <input 
                             type="number" 
                             step="any" 
-                            value={formData.failedQuantity || ''} 
+                            value={formData.failedQuantity ?? ''} 
                             onChange={e => handleInputChange('failedQuantity', e.target.value)} 
                             className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-red-200 bg-white`} 
                         />
@@ -726,7 +730,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         return (
                             <div key={item.id} className={`bg-white rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-200'}`}>
                                 <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
-                                    <div className="flex-1"><input value={item.label} onChange={e => handleItemChange(actualIndexInFullList, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase text-[11px]" placeholder="Nội dung..." /><div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1"><div className="flex items-start gap-2"><Microscope className="w-3 h-3 text-blue-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 leading-tight"><span className="font-bold text-slate-800">PP:</span> {item.method || '---'}</div></div><div className="flex items-start gap-2"><Ruler className="w-3 h-3 text-orange-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 leading-tight"><span className="font-bold text-slate-800">TC:</span> {item.standard || '---'}</div></div></div></div>
+                                    <div className="flex-1"><input value={item.label || ''} onChange={e => handleItemChange(actualIndexInFullList, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase text-[11px]" placeholder="Nội dung..." /><div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1"><div className="flex items-start gap-2"><Microscope className="w-3 h-3 text-blue-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 leading-tight"><span className="font-bold text-slate-800">PP:</span> {item.method || '---'}</div></div><div className="flex items-start gap-2"><Ruler className="w-3 h-3 text-orange-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 leading-tight"><span className="font-bold text-slate-800">TC:</span> {item.standard || '---'}</div></div></div></div>
                                     <button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button>
                                 </div>
                                 <div className="flex flex-wrap gap-2 items-center">

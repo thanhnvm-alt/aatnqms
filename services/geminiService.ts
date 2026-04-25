@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Inspection, CheckStatus, CheckItem } from "../types";
 
@@ -118,6 +117,58 @@ export const generateNCRSuggestions = async (
     return JSON.parse(text);
   } catch (error) {
     console.error("NCR AI Analysis failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Phân tích IPO Chi tiết (IPO Extended Detail)
+ * Gọi từ client theo tiêu chuẩn AI Studio Builder
+ */
+export const analyzeIpo = async (context: any) => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: JSON.stringify(context),
+      config: {
+        systemInstruction: `Bạn là "Prompt AI Studio" – Chuyên gia tư vấn giải pháp AI cho hệ thống QMS. Nhiệm vụ của bạn là quản lý trang chi tiết IPO (Lệnh sản xuất nội bộ), xử lý logic so sánh bản vẽ và tích hợp dữ liệu đa nguồn từ PostgreSQL.
+
+# NHIỆM VỤ (TASK):
+1. PHÂN TÍCH IPO DETAIL: Tổng hợp dữ liệu từ bảng IPO gốc (Read-only) và bảng Detail mở rộng.
+2. KIỂM SOÁT LỊCH SỬ NHÓM: Phân loại và tóm tắt lịch sử thay đổi của [Vật liệu], [Mẫu vật liệu], [Bản vẽ] dựa trên dữ liệu hệ thống.
+3. SO SÁNH BẢN VẼ ĐA TRANG (FLOW): 
+   - Khi có tệp mới tải lên, so sánh Trang {{page_target}} giữa [PDF Cũ] và [PDF Mới].
+   - Phát hiện sai khác về: Kích thước, Dung sai, Hình học, Ghi chú kỹ thuật (Notes).
+4. ĐỐI CHIẾU CHẤT LƯỢNG: Kết nối dữ liệu IQC/PQC/SQC với các thay đổi thiết kế để cảnh báo rủi ro.
+
+# QUY TẮC NGHIỆP VỤ (BUSINESS RULES):
+- IPO gốc là Read-only. Mọi ghi chú mới phải được tách biệt để lưu vào bảng ipo_drawing_list.
+- Không xử lý logic tại Client. Toàn bộ kết quả phải trả về dạng Field để Backend map vào PostgreSQL.
+
+# ĐỊNH DẠNG ĐẦU RA (OUTPUT JSON FIELDS):
+Hãy luôn trả về JSON sạch với các trường sau:
+{
+  "Field_Header_ID": "Mã IPO",
+  "Field_Group_History_Summary": "Tóm tắt lộ trình thay đổi của Vật liệu/Mẫu/Bản vẽ từ dữ liệu lịch sử.",
+  "Field_Drawing_Revision_Notes": "GHI CHÚ CHI TIẾT các điểm khác biệt phát hiện được tại Trang được chỉ định giữa 2 phiên bản bản vẽ.",
+  "Field_Material_Verification": "Xác nhận tính khớp lệnh giữa vật liệu hiện tại và yêu cầu trên bản vẽ mới.",
+  "Field_Quality_Correlation": "Phân tích rủi ro: Liệu thay đổi thiết kế có gây ra hoặc giải quyết vấn đề PQC/IQC hiện tại không?",
+  "Field_ISO_Compliance_Status": "Đánh giá tuân thủ ISO 9001:2015 cho hồ sơ này."
+}
+
+# LƯU Ý: Không viết văn bản dẫn nhập hoặc kết luận. Chỉ trả về JSON.`,
+        responseMimeType: "application/json"
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("AI did not return any content.");
+    
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("IPO AI Analysis failed:", error);
     throw error;
   }
 };
