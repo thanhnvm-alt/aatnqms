@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from 'dotenv';
+dotenv.config();
 import express from "express";
 import cookieParser from "cookie-parser";
 import path from "path";
@@ -395,7 +396,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         }
 
         // Define fallback models
-        const models = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'];
+        const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview'];
         let response;
         
         for (const modelName of models) {
@@ -569,10 +570,21 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       res.status(500).json({ error: 'Failed to fetch defects' });
     }
   });
-  app.get("/api/inspections", async (req, res) => {
+  app.get("/api/inspections", authenticate, async (req, res) => {
     try {
-      const { status, search, page = 1, limit = 20 } = req.query;
-      const result = await db.getInspectionsList({ status: String(status || ''), search: String(search || '') }, Number(page), Number(limit));
+      const filters = {
+        status: req.query.status as string,
+        search: req.query.search as string,
+        qc: req.query.qc as string,
+        workshop: req.query.workshop as string,
+        project: req.query.project as string,
+        type: req.query.type as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string
+      };
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 20;
+      const result = await db.getInspectionsList(filters, page, limit);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspections' });
@@ -1035,11 +1047,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
         // Use streaming writer for large files
-        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream: res,
-            useStyles: true,
-            useSharedStrings: true
-        });
+        const workbook = new ExcelJS.Workbook();
 
         const sheet = workbook.addWorksheet('NCRs', {
           views: [{ state: 'frozen', ySplit: 1 }]
@@ -1079,7 +1087,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 responsible_person: r.responsible_person,
                 deadline: r.deadline,
                 created_by: r.created_by,
-                created_at: r.created_at ? new Date(Number(r.created_at) * 1000) : null // 3. Date object
+                created_at: r.created_at ? new Date(Number(r.created_at) > 100000000000 ? Number(r.created_at) : Number(r.created_at) * 1000) : null // 3. Date object
             });
 
             // 4.2 Unlock data cells
@@ -1110,10 +1118,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               }
             });
 
-            await row.commit();
+            
         }
 
-        await workbook.commit();
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (error) {
         console.error('Error exporting NCRs:', error);
         if (!res.headersSent) {
@@ -1365,11 +1374,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream: res,
-            useStyles: true,
-            useSharedStrings: true
-        });
+        const workbook = new ExcelJS.Workbook();
 
         const sheet = workbook.addWorksheet('DefectLibrary', { views: [{ state: 'frozen', ySplit: 1 }] });
 
@@ -1395,10 +1400,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 severity: r.severity || 'MINOR',
                 description: r.description
             });
-            await row.commit();
+            
         }
 
-        await workbook.commit();
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (error) {
         console.error('Error exporting defect library:', error);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to export defect library' });
@@ -1461,11 +1467,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream: res,
-            useStyles: true,
-            useSharedStrings: true
-        });
+        const workbook = new ExcelJS.Workbook();
 
         const sheet = workbook.addWorksheet('Materials', { views: [{ state: 'frozen', ySplit: 1 }] });
 
@@ -1497,10 +1499,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 Factory_Order: String(r.Factory_Order || ''),
                 id: String(r.id)
             });
-            await row.commit();
+            
         }
 
-        await workbook.commit();
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (error) {
         console.error('Error exporting materials:', error);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to export materials' });
@@ -1565,11 +1568,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream: res,
-            useStyles: true,
-            useSharedStrings: true
-        });
+        const workbook = new ExcelJS.Workbook();
 
         const sheet = workbook.addWorksheet('Suppliers', {
           views: [{ state: 'frozen', ySplit: 1 }]
@@ -1616,10 +1615,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               }
             });
 
-            await row.commit();
+            
         }
 
-        await workbook.commit();
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (error) {
         console.error('Error exporting suppliers:', error);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to export suppliers' });
@@ -1682,11 +1682,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream: res,
-            useStyles: true,
-            useSharedStrings: true
-        });
+        const workbook = new ExcelJS.Workbook();
 
         const sheet = workbook.addWorksheet('IPO_Data', { views: [{ state: 'frozen', ySplit: 1 }] });
 
@@ -1710,10 +1706,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 Quantity_IPO: Number(r.Quantity_IPO || 0),
                 Base_Unit: r.Base_Unit
             });
-            await row.commit();
+            
         }
 
-        await workbook.commit();
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (error) {
         console.error('Error exporting IPO data:', error);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to export IPO data' });
@@ -1783,6 +1780,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             qc: req.query.qc as string,
             workshop: req.query.workshop as string,
             project: req.query.project as string,
+            type: req.query.type as string,
             startDate: req.query.startDate as string,
             endDate: req.query.endDate as string
         };
@@ -1793,12 +1791,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-        const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream: res,
-            useStyles: true,
-            useSharedStrings: true
-        });
-
+        const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Inspections', {
           views: [{ state: 'frozen', ySplit: 1 }]
         });
@@ -1827,22 +1820,34 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         ];
 
         for (const item of result.items) {
+            let rowDate = item.date ? new Date(item.date) : null;
+            if (rowDate && isNaN(rowDate.getTime())) rowDate = null;
+            
+            let rowUpdated = null;
+            if (item.updatedAt) {
+                const ts = Number(item.updatedAt);
+                // If it's in seconds (like normally stored) multiply by 1000, 
+                // if it's already in ms (very large), keep as is.
+                rowUpdated = new Date(ts > 100000000000 ? ts : ts * 1000);
+                if (isNaN(rowUpdated.getTime())) rowUpdated = null;
+            }
+
             const row = sheet.addRow({
-                id: String(item.id),
-                type: item.type,
-                ma_ct: item.ma_ct,
-                ten_ct: item.ten_ct,
-                ten_hang_muc: item.ten_hang_muc,
-                ma_nha_may: item.ma_nha_may,
-                headcode: item.headcode,
-                inspectorName: item.inspectorName,
-                workshop: item.workshop,
-                date: item.date ? new Date(item.date) : null,
-                status: item.status,
+                id: String(item.id || ''),
+                type: item.type || '',
+                ma_ct: item.ma_ct || '',
+                ten_ct: item.ten_ct || '',
+                ten_hang_muc: item.ten_hang_muc || '',
+                ma_nha_may: item.ma_nha_may || '',
+                headcode: item.headcode || '',
+                inspectorName: item.inspectorName || '',
+                workshop: item.workshop || '',
+                date: rowDate,
+                status: item.status || '',
                 score: Number(item.score || 0),
-                summary: item.summary,
-                responsiblePerson: item.responsiblePerson,
-                updatedAt: item.updatedAt ? new Date(Number(item.updatedAt) * 1000) : null
+                summary: item.summary || '',
+                responsiblePerson: item.responsiblePerson || '',
+                updatedAt: rowUpdated
             });
 
             row.eachCell((cell, colNumber) => {
@@ -1858,11 +1863,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 };
               }
             });
-
-            await row.commit();
         }
 
-        await workbook.commit();
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (error) {
         console.error('Error exporting inspections:', error);
         if (!res.headersSent) res.status(500).json({ error: 'Failed to export inspections' });

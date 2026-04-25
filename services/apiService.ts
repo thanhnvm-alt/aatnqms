@@ -450,7 +450,13 @@ export const importSuppliersFile = async (file: File) => {
 };
 
 export const exportInspections = async (filters: any = {}) => {
-    const params = new URLSearchParams(filters);
+    const cleanFilters: any = {};
+    for (const key in filters) {
+        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+            cleanFilters[key] = filters[key];
+        }
+    }
+    const params = new URLSearchParams(cleanFilters);
     const response = await fetch(`/api/export/inspections?${params.toString()}`, {
         headers: getAuthHeaders()
     });
@@ -478,7 +484,13 @@ export const importInspectionsFile = async (file: File) => {
 };
 
 export const exportIpoData = async (filters: any = {}) => {
-    const params = new URLSearchParams(filters);
+    const cleanFilters: any = {};
+    for (const key in filters) {
+        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+            cleanFilters[key] = filters[key];
+        }
+    }
+    const params = new URLSearchParams(cleanFilters);
     const response = await fetch(`/api/export/ipo?${params.toString()}`, {
         headers: getAuthHeaders()
     });

@@ -349,8 +349,11 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     let whereClause = '';
     const args: any[] = [];
     if (filters.status && filters.status !== 'ALL') {
-        whereClause = ` WHERE status = $1`;
-        args.push(filters.status);
+        const statuses = filters.status.split(',').map((s: string) => s.trim());
+        const placeholders = statuses.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `status IN (${placeholders})`;
+        args.push(...statuses);
     }
     if (filters.search) {
         const searchPattern = `%${filters.search}%`;
@@ -358,6 +361,46 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         whereClause += whereClause ? ' AND ' : ' WHERE ';
         whereClause += `(ma_ct LIKE $${searchIndex} OR ten_ct LIKE $${searchIndex} OR ten_hang_muc LIKE $${searchIndex} OR inspector LIKE $${searchIndex})`;
         args.push(searchPattern);
+    }
+    if (filters.qc && filters.qc !== 'ALL') {
+        const qcs = filters.qc.split(',').map((s: string) => s.trim());
+        const placeholders = qcs.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `inspector IN (${placeholders})`;
+        args.push(...qcs);
+    }
+    if (filters.workshop && filters.workshop !== 'ALL') {
+        const workshops = filters.workshop.split(',').map((s: string) => s.trim());
+        const placeholders = workshops.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `workshop IN (${placeholders})`;
+        args.push(...workshops);
+    }
+    if (filters.project && filters.project !== 'ALL') {
+        const projects = filters.project.split(',').map((s: string) => s.trim());
+        const placeholders = projects.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `ma_ct IN (${placeholders})`;
+        args.push(...projects);
+    }
+    if (filters.type && filters.type !== 'ALL') {
+        const types = filters.type.split(',').map((s: string) => s.trim());
+        const placeholders = types.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `COALESCE(type, REPLACE(table_name, 'forms_', '')) IN (${placeholders})`;
+        args.push(...types);
+    }
+    if (filters.startDate) {
+        const idx = args.length + 1;
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `date >= $${idx}`;
+        args.push(filters.startDate);
+    }
+    if (filters.endDate) {
+        const idx = args.length + 1;
+        whereClause += whereClause ? ' AND ' : ' WHERE ';
+        whereClause += `date <= $${idx}`;
+        args.push(filters.endDate);
     }
 
     const finalQuery = `
