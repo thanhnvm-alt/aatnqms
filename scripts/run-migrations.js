@@ -33,8 +33,12 @@ export async function runMigrations() {
   try {
     // 1. Ensure Schema and Extensions exist
     console.log(`📡 ISO-DB: Using schema ${schema}`);
-    await client.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-    await client.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+    
+    try {
+        await client.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+    } catch (e) {
+        console.warn(`⚠️ Could not create pgcrypto extension (might already exist or permission denied):`, e.message);
+    }
 
     // 2. Audit Logs (Append-Only)
     console.log('📡 ISO-DB: Ensuring audit_logs table...');
