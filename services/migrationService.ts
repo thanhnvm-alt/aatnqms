@@ -10,10 +10,25 @@ export async function runMigrations() {
   try {
     // 1. Ensure Schema and Extensions exist (Try but don't fail if permission denied)
     try {
-      await query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-      await query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+      const checkSchema = await query(`SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`, [schema]);
+      if (checkSchema.rows.length === 0) {
+          try {
+              await query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+          } catch (e: any) {
+              console.warn(`⚠️ Could not ensure schema exists (might already exist or permission denied):`, e.message);
+          }
+      }
+
+      const checkExt = await query(`SELECT extname FROM pg_extension WHERE extname = 'pgcrypto'`);
+      if (checkExt.rows.length === 0) {
+          try {
+              await query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+          } catch (e: any) {
+              console.warn(`⚠️ Could not ensure pgcrypto extension (might already exist or permission denied):`, e.message);
+          }
+      }
     } catch (e: any) {
-      console.warn(`⚠️ Could not ensure schema or extension (might already exist or permission denied):`, e.message);
+      console.warn(`⚠️ Error checking schema/extension:`, e.message);
     }
 
     // Helper for adding columns
