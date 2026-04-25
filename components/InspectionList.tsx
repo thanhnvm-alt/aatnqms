@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile } from '../services/apiService';
 import { formatDisplayDate } from '../lib/utils';
+import { DateRangePicker } from './DateRangePicker';
 import { 
   Search, RefreshCw, FolderOpen, Clock, Upload,
   Loader2, X, ChevronDown, ChevronRight,
@@ -405,24 +406,13 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         onChange={vals => setFilterProject(vals)}
                         className="col-span-2 md:col-span-1"
                       />
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">TỪ NGÀY</label>
-                          <input 
-                            type="date" 
-                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-700 h-[38px] outline-none focus:ring-2 focus:ring-blue-100"
-                            value={startDate}
-                            onChange={e => setStartDate(e.target.value)}
-                          />
-                      </div>
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">ĐẾN NGÀY</label>
-                          <input 
-                            type="date" 
-                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase text-slate-700 h-[38px] outline-none focus:ring-2 focus:ring-blue-100"
-                            value={endDate}
-                            onChange={e => setEndDate(e.target.value)}
-                          />
-                      </div>
+                      <DateRangePicker 
+                        label="KHOẢNG NGÀY"
+                        startDate={startDate}
+                        endDate={endDate}
+                        onStartDateChange={setStartDate}
+                        onEndDateChange={setEndDate}
+                      />
                       <div className="flex items-end col-span-2 md:col-span-1">
                           <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]">XÓA BỘ LỌC</button>
                       </div>

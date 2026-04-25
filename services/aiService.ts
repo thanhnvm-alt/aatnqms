@@ -3,6 +3,8 @@ import * as api from "./apiService";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
+const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview'];
+
 // Define tools for Gemini to interact with our app data
 const getRecentInspectionsTool: FunctionDeclaration = {
     name: "getRecentInspections",
@@ -64,7 +66,7 @@ export const generateAIChatResponse = async (userMessage: string, history: any[]
         }
 
         const chat = ai.chats.create({
-            model: "gemini-3-flash-preview",
+            model: models[1], // Using gemini-3.1-flash-lite-preview
             history: history,
             config: {
                 systemInstruction: `Bạn là trợ lý AI chuyên gia về hệ thống QMS (Quality Management System) của AA Corporation. 
