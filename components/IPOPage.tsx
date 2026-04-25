@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Loader2, Building2, ChevronDown, Download, Upload } from 'lucide-react';
+import { Loader2, Building2, ChevronDown, Download, Upload, Search } from 'lucide-react';
 import { IPODetail } from './IPODetail';
 import { IPOItem, User } from '../types';
 import { exportIpoData, importIpoFile } from '../services/apiService';
@@ -13,6 +13,7 @@ export const IPOPage = ({ user }: { user: User }) => {
   const [error, setError] = useState<string | null>(null);
   const [filterFactoryOrder, setFilterFactoryOrder] = useState('');
   const [filterMaTender, setFilterMaTender] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -57,6 +58,7 @@ export const IPOPage = ({ user }: { user: User }) => {
         params.append('limit', limit.toString());
         if (filterFactoryOrder) params.append('factoryOrder', filterFactoryOrder);
         if (filterMaTender) params.append('maTender', filterMaTender);
+        if (searchTerm) params.append('material', searchTerm);
         
         const response = await fetch(`/api/ipo?${params.toString()}`);
         if (!response.ok) {
@@ -78,7 +80,7 @@ export const IPOPage = ({ user }: { user: User }) => {
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [filterFactoryOrder, filterMaTender, page]);
+  }, [filterFactoryOrder, filterMaTender, searchTerm, page]);
 
   const groupedItems = useMemo(() => {
       const groups: Record<string, any[]> = {};
@@ -136,21 +138,31 @@ export const IPOPage = ({ user }: { user: User }) => {
     <div className="h-full flex flex-col bg-slate-50 font-sans">
       <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-20 shadow-sm">
           <div className="max-w-7xl mx-auto flex flex-col gap-3">
-                <div className="relative w-full flex gap-2">
+                <div className="relative w-full flex flex-col md:flex-row gap-2">
                     <input 
                         type="text" 
-                        placeholder="Filter ID_Factory_Order..." 
-                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                        placeholder="Mã Factory Order..." 
+                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                         value={filterFactoryOrder}
                         onChange={(e) => setFilterFactoryOrder(e.target.value)}
                     />
                     <input 
                         type="text" 
-                        placeholder="Filter Ma_Tender..." 
-                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                        placeholder="Mã Tender..." 
+                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                         value={filterMaTender}
                         onChange={(e) => setFilterMaTender(e.target.value)}
                     />
+                    <div className="relative w-full">
+                        <input 
+                            type="text" 
+                            placeholder="Tìm tên vật tư..." 
+                            className="w-full pl-10 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    </div>
                 </div>
                 
                 <div className="flex items-center justify-between px-2">

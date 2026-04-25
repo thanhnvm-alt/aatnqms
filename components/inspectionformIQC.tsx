@@ -67,6 +67,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [newDocName, setNewDocName] = useState('');
+  const [matSearch, setMatSearch] = useState('');
   
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +78,16 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       const iqcTpl = templates['IQC'] || [];
       return Array.from(new Set(iqcTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
+
+  const filteredMaterials = useMemo(() => {
+      if (!matSearch.trim()) return formData.materials || [];
+      const s = matSearch.toLowerCase().trim();
+      return (formData.materials || []).filter(m => 
+          (m.name || '').toLowerCase().includes(s) || 
+          (m.projectCode || '').toLowerCase().includes(s) ||
+          (m.category || '').toLowerCase().includes(s)
+      );
+  }, [formData.materials, matSearch]);
 
   const handlePoBlur = async () => {
     if (!formData.po_number || formData.po_number.length < 3) return;
@@ -398,15 +409,29 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
         {/* II. Materials Details */}
         <section className="space-y-3">
-            <div className="flex justify-between items-center px-1">
-                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs"><ClipboardList className="w-4 h-4 text-blue-600"/> II. DANH MỤC VẬT TƯ ({formData.materials?.length || 0})</h3>
-                <button onClick={handleAddMaterial} className="bg-blue-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3 hover:bg-blue-700" type="button">
-                    <Plus className="w-3 h-3"/> <span className="text-[10px] font-bold uppercase">Thêm Vật Tư</span>
-                </button>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
+                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs">
+                    <ClipboardList className="w-4 h-4 text-blue-600"/> II. DANH MỤC VẬT TƯ ({formData.materials?.length || 0})
+                </h3>
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            placeholder="Tìm vật tư..." 
+                            value={matSearch}
+                            onChange={e => setMatSearch(e.target.value)}
+                            className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-blue-100 shadow-sm"
+                        />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                    <button onClick={handleAddMaterial} className="bg-blue-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3 hover:bg-blue-700" type="button">
+                        <Plus className="w-3 h-3"/> <span className="text-[10px] font-bold uppercase">Thêm Vật Tư</span>
+                    </button>
+                </div>
             </div>
             
             <div className="space-y-3">
-                {(formData.materials || []).map((mat, matIdx) => {
+                {filteredMaterials.map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                     const hasFail = mat.items?.some(it => it.status === CheckStatus.FAIL);

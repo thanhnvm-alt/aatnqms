@@ -58,7 +58,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 }) => {
   const [project, setProject] = useState(initialProject);
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'LAYOUTS'>('OVERVIEW');
-  const [searchInList, setSearchInList] = useState('');
+  const [ipoSearch, setIpoSearch] = useState('');
+  const [inspectionSearch, setInspectionSearch] = useState('');
+  const [ncrSearch, setNcrSearch] = useState('');
+  const [layoutSearch, setLayoutSearch] = useState('');
   
   const [projectSpecificPlans, setProjectSpecificPlans] = useState<IPOItem[]>([]);
   const [isPlansLoading, setIsPlansLoading] = useState(false);
@@ -112,10 +115,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       finally { setIsLoadingPlans(false); }
   };
 
-  const filteredInspections = useMemo(() => {
+  const filteredIpoPlans = useMemo(() => {
+    const term = ipoSearch.toLowerCase().trim();
+    return projectSpecificPlans.filter(p => 
+        !term || 
+        p.ten_hang_muc.toLowerCase().includes(term) || 
+        p.ma_nha_may.toLowerCase().includes(term)
+    );
+  }, [projectSpecificPlans, ipoSearch]);
+
+  const filteredInspectionsFull = useMemo(() => {
     const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
     const pName = String(project.name || '').trim().toLowerCase();
-    const term = searchInList.toLowerCase().trim();
+    const term = inspectionSearch.toLowerCase().trim();
 
     return inspections.filter(i => {
         if (!i) return false;
@@ -124,22 +136,39 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId;
         return matchesProject && matchesSearch && matchesIpo;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, project, searchInList, selectedIpoId]);
+  }, [inspections, project, inspectionSearch, selectedIpoId]);
 
   const projectNcrs = useMemo(() => {
-      return filteredInspections.filter(i => i.status === InspectionStatus.FLAGGED);
-  }, [filteredInspections]);
+    const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
+    const pName = String(project.name || '').trim().toLowerCase();
+    const term = ncrSearch.toLowerCase().trim();
+
+    return inspections.filter(i => {
+        if (!i || i.status !== InspectionStatus.FLAGGED) return false;
+        const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
+        const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
+        return matchesProject && matchesSearch;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [inspections, project, ncrSearch]);
 
   const filteredLayouts = useMemo(() => {
-    const term = searchInList.toLowerCase().trim();
+    const term = layoutSearch.toLowerCase().trim();
     return floorPlans.filter(fp => !term || fp.name.toLowerCase().includes(term));
-  }, [floorPlans, searchInList]);
+  }, [floorPlans, layoutSearch]);
 
   const stats = useMemo(() => {
-    const total = filteredInspections.length;
-    const completed = filteredInspections.filter(i => i && (i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED)).length;
-    const flagged = filteredInspections.filter(i => i && i.status === InspectionStatus.FLAGGED).length;
-    const drafts = filteredInspections.filter(i => i && i.status === InspectionStatus.DRAFT).length;
+    const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
+    const pName = String(project.name || '').trim().toLowerCase();
+    
+    const projInspections = inspections.filter(i => {
+        if (!i) return false;
+        return String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
+    });
+
+    const total = projInspections.length;
+    const completed = projInspections.filter(i => i && (i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED)).length;
+    const flagged = projInspections.filter(i => i && i.status === InspectionStatus.FLAGGED).length;
+    const drafts = projInspections.filter(i => i && i.status === InspectionStatus.DRAFT).length;
     return { 
         total, 
         completed, 
@@ -147,7 +176,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         drafts, 
         passRate: total > 0 ? Math.round((completed / (completed + flagged)) * 100) || 0 : 0 
     };
-  }, [filteredInspections]);
+  }, [inspections, project]);
 
   const pieData = [{ name: 'Đạt', value: stats.completed }, { name: 'Lỗi', value: stats.flagged }, { name: 'Nháp', value: stats.drafts }].filter(d => d.value > 0);
 
@@ -270,14 +299,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </div>
          </div>
          <div className="flex items-center gap-1 md:gap-2">
-             <div className="relative hidden md:block">
-                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                 <input 
-                    type="text" value={searchInList} onChange={e => setSearchInList(e.target.value)} 
-                    placeholder="Tìm nhanh hạng mục..." 
-                    className="pl-9 pr-4 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:ring-4 ring-blue-100 outline-none w-48 transition-all"
-                 />
-             </div>
              <div className="flex bg-slate-100 p-0.5 md:p-1 rounded-lg md:rounded-xl border border-slate-200 mr-1 md:mr-2">
                  <button onClick={() => setActiveTab('OVERVIEW')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'OVERVIEW' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Overview</button>
                  <button onClick={() => setActiveTab('LAYOUTS')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'LAYOUTS' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>Map</button>
@@ -425,14 +446,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><ClipboardList className="w-4 h-4" /></div>
                                     <span className="font-black text-[11px] uppercase tracking-wider text-blue-900">Danh sách IPO</span>
                                 </div>
-                                <span className="bg-white text-blue-600 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-black">{projectSpecificPlans.length}</span>
+                                <span className="bg-white text-blue-600 px-2 py-1 rounded-lg border border-blue-100 text-[10px] font-black">{filteredIpoPlans.length}</span>
+                            </div>
+                            <div className="px-4 py-2 border-b border-slate-50 shrink-0">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Tìm mã hoặc tên..." 
+                                        value={ipoSearch}
+                                        onChange={e => setIpoSearch(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all"
+                                    />
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {isPlansLoading ? (
                                     <div className="py-20 flex justify-center"><Loader2 className="w-6 h-6 text-blue-300 animate-spin" /></div>
-                                ) : projectSpecificPlans.length > 0 ? (
+                                ) : filteredIpoPlans.length > 0 ? (
                                     <>
-                                        {projectSpecificPlans.slice(0, ipoLimit).map((ipo, idx) => (
+                                        {filteredIpoPlans.slice(0, ipoLimit).map((ipo, idx) => (
                                             <div key={`${ipo.id}-${idx}`} onClick={() => setSelectedIpoId(prev => prev === ipo.ma_nha_may ? null : ipo.ma_nha_may)} className={`p-4 bg-white border ${selectedIpoId === ipo.ma_nha_may ? 'border-blue-500 shadow-md bg-blue-50/30' : 'border-slate-100'} rounded-2xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3`}>
                                                 <div className={`p-2 rounded-xl shrink-0 ${selectedIpoId === ipo.ma_nha_may ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}><ClipboardList className="w-4 h-4"/></div>
                                                 <div className="flex-1 min-w-0">
@@ -446,7 +479,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                 onClick={() => setIpoLimit(Infinity)}
                                                 className="w-full py-3 mt-2 bg-blue-50 text-blue-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-blue-100 hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
                                             >
-                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({projectSpecificPlans.length})
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({filteredIpoPlans.length})
                                             </button>
                                         )}
                                     </>
@@ -461,12 +494,24 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md"><FileText className="w-4 h-4" /></div>
                                     <span className="font-black text-[11px] uppercase tracking-wider text-indigo-900">Phiếu kiểm tra QC</span>
                                 </div>
-                                <span className="bg-white text-indigo-600 px-2 py-1 rounded-lg border border-indigo-100 text-[10px] font-black">{filteredInspections.length}</span>
+                                <span className="bg-white text-indigo-600 px-2 py-1 rounded-lg border border-indigo-100 text-[10px] font-black">{filteredInspectionsFull.length}</span>
+                            </div>
+                            <div className="px-4 py-2 border-b border-slate-50 shrink-0">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Tìm hạng mục..." 
+                                        value={inspectionSearch}
+                                        onChange={e => setInspectionSearch(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-indigo-100 transition-all"
+                                    />
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
-                                {filteredInspections.length > 0 ? (
+                                {filteredInspectionsFull.length > 0 ? (
                                     <>
-                                        {filteredInspections.slice(0, inspectionsLimit).map((ins, idx) => (
+                                        {filteredInspectionsFull.slice(0, inspectionsLimit).map((ins, idx) => (
                                             <div key={`${ins.id}-${idx}`} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
                                                 <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
                                                 <div className="flex-1 min-w-0">
@@ -481,12 +526,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                 </div>
                                             </div>
                                         ))}
-                                        {filteredInspections.length > inspectionsLimit && (
+                                        {filteredInspectionsFull.length > inspectionsLimit && (
                                             <button 
                                                 onClick={() => setInspectionsLimit(Infinity)}
                                                 className="w-full py-3 mt-2 bg-indigo-50 text-indigo-600 font-black text-[9px] uppercase tracking-widest rounded-xl border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
                                             >
-                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({filteredInspections.length})
+                                                <ChevronDownIcon className="w-3 h-3" /> HIỂN THỊ TẤT CẢ ({filteredInspectionsFull.length})
                                             </button>
                                         )}
                                     </>
@@ -502,6 +547,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <span className="font-black text-[11px] uppercase tracking-wider text-red-900">Danh sách lỗi NCR</span>
                                 </div>
                                 <span className="bg-white text-red-600 px-2 py-1 rounded-lg border border-red-100 text-[10px] font-black">{projectNcrs.length}</span>
+                            </div>
+                            <div className="px-4 py-2 border-b border-slate-50 shrink-0">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Tìm lỗi..." 
+                                        value={ncrSearch}
+                                        onChange={e => setNcrSearch(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-red-100 transition-all"
+                                    />
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {projectNcrs.length > 0 ? (
@@ -534,6 +591,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <span className="font-black text-[11px] uppercase tracking-wider text-emerald-900">Bản vẽ kỹ thuật</span>
                                 </div>
                                 <button onClick={() => setIsUploadModalOpen(true)} className="p-1 bg-white text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"><Plus className="w-4 h-4"/></button>
+                            </div>
+                            <div className="px-4 py-2 border-b border-slate-50 shrink-0">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Tìm bản vẽ..." 
+                                        value={layoutSearch}
+                                        onChange={e => setLayoutSearch(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all"
+                                    />
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {filteredLayouts.length > 0 ? (
