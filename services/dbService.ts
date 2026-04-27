@@ -335,7 +335,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         inspected_qty as "inspectedQuantity",
         passed_qty as "passedQuantity",
         failed_qty as "failedQuantity",
-        images_json as "images"
+        images_json as "images",                
+        dvt
     `;
 
     const tableQueries = tables.map(table => {
@@ -352,7 +353,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const failQtyCol = table === 'forms_pqc' ? 'qty_fail::numeric as failed_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'failed_qty::numeric as failed_qty' : '0::numeric as failed_qty');
         const imagesCol = 'images_json::text as images_json';
 
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -455,7 +456,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
                 failedQuantity: Number(row.failedQuantity || 0),
                 isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
                 hasNcr: row.status === 'FLAGGED',
-                isCond: row.status === 'CONDITIONAL'
+                isCond: row.status === 'CONDITIONAL',
+                dvt: row.dvt || ''
             };
         }) as unknown as Inspection[];
 

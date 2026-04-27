@@ -1985,8 +1985,26 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 dvt: getCol(['đvt/unit', 'dvt', 'unit']),
                 items: [],
                 images: [],
-                comments: []
+                comments: [],
+                updatedAt: Math.floor(Date.now() / 1000)
               };
+
+              // Try to set updatedAt from inspection date if provided
+              if (inspection.date) {
+                let parsedDate = null;
+                const dateStr = inspection.date.trim();
+                // Handle DD/MM/YYYY
+                if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+                    const [d, m, y] = dateStr.split('/');
+                    parsedDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+                } else {
+                    parsedDate = new Date(dateStr);
+                }
+                
+                if (parsedDate && !isNaN(parsedDate.getTime())) {
+                    inspection.updatedAt = Math.floor(parsedDate.getTime() / 1000);
+                }
+              }
 
               // Re-format percentage and numbers just in case value property didn't work properly
               if (isNaN(inspection.so_luong_ipo)) inspection.so_luong_ipo = Number(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']) || 0);
