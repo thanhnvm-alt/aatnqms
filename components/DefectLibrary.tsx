@@ -39,6 +39,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
     category: 'Ngoại quan',
     description: '',
     severity: 'MINOR',
+    rootCause: '',
     suggestedAction: '',
     correctImage: '',
     incorrectImage: ''
@@ -116,6 +117,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
               category: 'Ngoại quan',
               description: '',
               severity: 'MINOR',
+              rootCause: '',
               suggestedAction: '',
               correctImage: '',
               incorrectImage: ''
@@ -336,6 +338,11 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                                       </td>
                                                       <td className="px-6 py-5">
                                                           <p className="text-xs font-bold text-slate-700 leading-relaxed italic line-clamp-2">"{item.description}"</p>
+                                                          {item.rootCause && (
+                                                            <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-rose-600 uppercase tracking-tighter">
+                                                                <AlertTriangle className="w-3 h-3" /> Nguyên nhân: {item.rootCause}
+                                                            </div>
+                                                          )}
                                                           {item.suggestedAction && (
                                                               <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-blue-600 uppercase tracking-tighter">
                                                                   <SlidersHorizontal className="w-3 h-3" /> Fix: {item.suggestedAction}
@@ -479,6 +486,12 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-rose-600 uppercase ml-1 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3 h-3" /> Nguyên nhân gốc rễ
+                          </label>
+                          <textarea value={formData.rootCause} onChange={e => setFormData({...formData, rootCause: e.target.value})} className="w-full px-5 py-4 border border-rose-100 rounded-3xl font-bold bg-rose-50/20 text-sm focus:ring-4 focus:ring-rose-100 outline-none resize-none shadow-sm" rows={2} placeholder="Nhập nguyên nhân gốc rễ..."/>
+                      </div>
                       <div className="space-y-2">
                           <label className="text-[10px] font-black text-blue-600 uppercase ml-1 flex items-center gap-1.5">
                               <SlidersHorizontal className="w-3 h-3" /> Biện pháp khắc phục gợi ý

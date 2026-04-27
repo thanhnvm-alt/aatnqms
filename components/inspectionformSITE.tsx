@@ -37,16 +37,46 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     score: 0, 
     type: 'SITE' as ModuleId,
     inspectorName: user.name,
+    headcode: initialData?.headcode || '',
+    ten_hang_muc: initialData?.ten_hang_muc || '',
     ...initialData 
   });
 
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  
+  // Logic to load data based on headcode
+  useEffect(() => {
+    const fetchIpoData = async (headcode: string) => {
+        try {
+            const res = await fetch(`/api/ipo?factoryOrder=${encodeURIComponent(headcode)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.items && data.items.length > 0) {
+                    const ipo = data.items[0];
+                    setFormData(prev => ({
+                        ...prev,
+                        ten_hang_muc: ipo.Material_description || prev.ten_hang_muc,
+                        ma_ct: ipo.Ma_Tender || prev.ma_ct,
+                        ten_ct: ipo.Project_name || prev.ten_ct
+                    }));
+                }
+            }
+        } catch (e) {
+            console.error("Failed to fetch IPO data:", e);
+        }
+    };
+    
+    if (formData.headcode) {
+        fetchIpoData(formData.headcode);
+    }
+  }, [formData.headcode]);
+
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<keyof typeof SITE_TEMPLATES>('BAN');
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
@@ -96,8 +126,15 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     if (!formData.signature) { alert("Yêu cầu chữ ký QC."); return; }
     setIsSaving(true);
     try {
-        const hasFail = formData.items?.some(it => it.status === CheckStatus.FAIL);
-        await onSave({ ...formData, status: hasFail ? InspectionStatus.FLAGGED : InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection);
+        // If status wasn't changed by user (still DRAFT), apply auto-status logic.
+        // Otherwise, use user-selected status.
+        let statusToSave = formData.status;
+        if (statusToSave === InspectionStatus.DRAFT) {
+            const hasFail = formData.items?.some(it => it.status === CheckStatus.FAIL);
+            statusToSave = hasFail ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
+        }
+
+        await onSave({ ...formData, status: statusToSave, updatedAt: new Date().toISOString() } as Inspection);
     } catch (e) { alert("Lỗi lưu phiếu."); } finally { setIsSaving(false); }
   };
 
@@ -119,11 +156,21 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Mã Công Trình</label><input value={formData.ma_ct || ''} readOnly className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 font-bold text-xs shadow-inner uppercase"/></div>
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Tên Công Trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 font-bold text-xs shadow-inner uppercase"/></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Headcode</label><input value={formData.headcode || ''} onChange={e => handleInputChange('headcode', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none" placeholder="Nhập mã Headcode..."/></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Tên Hạng Mục</label><input value={formData.ten_hang_muc || ''} onChange={e => handleInputChange('ten_hang_muc', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none" placeholder="Tên hạng mục..."/></div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Ngày kiểm tra</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none"/></div>
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">QC Site</label><input value={formData.inspectorName || user.name} readOnly className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 font-bold text-xs uppercase"/></div>
-                <div className="md:col-span-2 space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Vị trí lắp đặt / GPS</label><div className="flex gap-2"><input value={formData.location || ''} onChange={e => handleInputChange('location', e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs outline-none" placeholder="Phòng, Tầng, Căn hộ..."/><button onClick={handleGetLocation} className="p-2 bg-slate-100 rounded-lg border border-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-colors" type="button"><Locate className="w-4 h-4"/></button></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Trạng thái phiếu</label>
+                  <select value={formData.status} onChange={e => handleInputChange('status', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none">
+                    <option value={InspectionStatus.PENDING}>Chưa xử lý</option>
+                    <option value={InspectionStatus.SUBMITTED}>Đang xử lý</option>
+                    <option value={InspectionStatus.APPROVED}>Đã phê duyệt</option>
+                    <option value={InspectionStatus.REJECTED}>Đã từ chối</option>
+                  </select>
+                </div>
+                <div className="md:col-span-1 space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">QC Site</label><input value={formData.inspectorName || user.name} readOnly className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 font-bold text-xs uppercase"/></div>
+                <div className="md:col-span-3 space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Vị trí lắp đặt / GPS</label><div className="flex gap-2"><input value={formData.location || ''} onChange={e => handleInputChange('location', e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs outline-none" placeholder="Phòng, Tầng, Căn hộ..."/><button onClick={handleGetLocation} className="p-2 bg-slate-100 rounded-lg border border-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 transition-colors" type="button"><Locate className="w-4 h-4"/></button></div></div>
             </div>
         </section>
 

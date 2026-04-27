@@ -138,46 +138,27 @@ export const IPOPage = ({ user }: { user: User }) => {
     <div className="h-full flex flex-col bg-slate-50 font-sans">
       <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-20 shadow-sm">
           <div className="max-w-7xl mx-auto flex flex-col gap-3">
-                <div className="relative w-full flex flex-col md:flex-row gap-2">
-                    <input 
-                        type="text" 
-                        placeholder="Mã Factory Order..." 
-                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
-                        value={filterFactoryOrder}
-                        onChange={(e) => setFilterFactoryOrder(e.target.value)}
-                    />
-                    <input 
-                        type="text" 
-                        placeholder="Mã Tender..." 
-                        className="w-full pl-4 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
-                        value={filterMaTender}
-                        onChange={(e) => setFilterMaTender(e.target.value)}
-                    />
-                    <div className="relative w-full">
+            <div className="relative w-full flex items-center justify-between gap-3">
+                    <div className="relative flex-1">
                         <input 
                             type="text" 
-                            placeholder="Tìm tên vật tư..." 
+                            placeholder="Tìm kiếm: Mã FO, Tender, vật tư..." 
                             className="w-full pl-10 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     </div>
-                </div>
-                
-                <div className="flex items-center justify-between px-2">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        TỔNG CỘNG: {total} KẾ HOẠCH
-                    </p>
+
                     {user?.role !== 'QC' && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                            <button 
                                 onClick={handleExport}
                                 disabled={isExporting}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-green-500/30 active:scale-95 transition-all disabled:opacity-50"
+                                className="p-3 bg-green-600 text-white rounded-full shadow-lg shadow-green-500/30 active:scale-95 transition-all disabled:opacity-50"
+                                title="Xuất Excel"
                             >
                                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                                Xuất Excel
                             </button>
                             <input 
                                 type="file" 
@@ -188,16 +169,22 @@ export const IPOPage = ({ user }: { user: User }) => {
                             />
                             <label 
                                 htmlFor="ipo-import"
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+                                className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+                                title="Nhập Excel"
                             >
                                 <Upload className="w-4 h-4" />
-                                Nhập Excel
                             </label>
                         </div>
                     )}
                 </div>
+                
+                <div className="flex items-center justify-between px-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        TỔNG CỘNG: {total} KẾ HOẠCH
+                    </p>
+                </div>
+                </div>
           </div>
-      </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-24">
             <div className="max-w-7xl mx-auto space-y-3">

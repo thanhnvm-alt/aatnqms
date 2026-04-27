@@ -358,106 +358,110 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       )}
 
       {/* COMPACT TOOLBAR */}
-      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-30 shadow-sm">
-          <div className="max-w-7xl mx-auto space-y-3">
-              <div className="flex gap-2">
-                  {user.role === 'ADMIN' && (
-                    <button 
-                      onClick={toggleSelectAll}
-                      className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
-                    >
-                      {selectedIds.size === inspections.length && inspections.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600" /> : <LayoutGrid className="w-5 h-5" />}
-                    </button>
-                  )}
-                  <div className="relative flex-1">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
-                      <input 
-                        type="text" placeholder="Tìm Dự án, Sản phẩm..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                      />
-                  </div>
-                  <button 
-                    onClick={() => setIsFilterOpen(!isFilterOpen)} 
-                    className={`p-2.5 rounded-xl border transition-all active:scale-95 ${isFilterOpen || isFilterActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}
-                  >
-                    <Filter className="w-5 h-5" />
-                  </button>
-                  {user.role !== 'QC' && (
-                    <div className="flex items-center gap-1.5">
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        onChange={handleFileChange} 
-                        accept=".xlsx, .xls" 
-                        className="hidden" 
-                      />
-                      <button 
-                        onClick={handleImportClick}
-                        disabled={isImporting}
-                        title="Nhập Excel"
-                        className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-                      >
-                        {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                      </button>
-                      <button 
-                        onClick={handleExport}
-                        disabled={isExporting}
-                        title="Xuất Excel"
-                        className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-                      >
-                        {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  )}
+      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-50 shadow-sm">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+              {user.role === 'ADMIN' && (
+                <button 
+                  onClick={toggleSelectAll}
+                  className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                >
+                  {selectedIds.size === inspections.length && inspections.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600" /> : <LayoutGrid className="w-5 h-5" />}
+                </button>
+              )}
+              <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                  <input 
+                    type="text" placeholder="Tìm Dự án, Sản phẩm..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
               </div>
               
+              <button 
+                onClick={() => setIsFilterOpen(!isFilterOpen)} 
+                className={`p-2.5 rounded-xl border transition-all active:scale-95 relative ${isFilterOpen || isFilterActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}
+              >
+                <Filter className="w-5 h-5" />
+                {isFilterActive && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}
+              </button>
+
               {isFilterOpen && (
-                  <div className="bg-white rounded-2xl p-3 md:p-4 border border-slate-200 animate-in slide-in-from-top duration-200 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 shadow-sm relative">
-                      <SearchableSelect 
-                        label="LOẠI PHIẾU" 
-                        values={filterType} 
-                        options={filterOptions.types} 
-                        onChange={vals => setFilterType(vals)} 
-                        optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
-                      />
-                      <SearchableSelect 
-                        label="TRẠNG THÁI" 
-                        values={filterStatus} 
-                        options={filterOptions.statuses} 
-                        onChange={vals => setFilterStatus(vals)} 
-                      />
-                      <SearchableSelect 
-                        label="QC KIỂM TRA" 
-                        values={filterQC} 
-                        options={filterOptions.inspectors} 
-                        onChange={vals => setFilterQC(vals)} 
-                      />
-                      <SearchableSelect 
-                        label="XƯỞNG SẢN XUẤT" 
-                        values={filterWorkshop} 
-                        options={filterOptions.workshops} 
-                        onChange={vals => setFilterWorkshop(vals)} 
-                      />
-                      <SearchableSelect 
-                        label="MÃ DỰ ÁN" 
-                        values={filterProject} 
-                        options={filterOptions.projects} 
-                        onChange={vals => setFilterProject(vals)}
-                        className="col-span-2 md:col-span-1"
-                      />
-                      <DateRangePicker 
-                        label="KHOẢNG NGÀY"
-                        startDate={startDate}
-                        endDate={endDate}
-                        onStartDateChange={setStartDate}
-                        onEndDateChange={setEndDate}
-                      />
-                      <div className="flex items-end col-span-2 md:col-span-1">
-                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]">XÓA BỘ LỌC</button>
+                  <div className="absolute top-16 right-4 w-[320px] bg-white rounded-2xl p-4 border border-slate-200 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="font-bold text-slate-800">Bộ lọc</span>
+                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                      </div>
+                      <div className="space-y-3">
+                          <SearchableSelect 
+                            label="LOẠI PHIẾU" 
+                            values={filterType} 
+                            options={filterOptions.types} 
+                            onChange={vals => setFilterType(vals)} 
+                            optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
+                          />
+                          <SearchableSelect 
+                            label="TRẠNG THÁI" 
+                            values={filterStatus} 
+                            options={filterOptions.statuses} 
+                            onChange={vals => setFilterStatus(vals)} 
+                          />
+                          <SearchableSelect 
+                            label="QC KIỂM TRA" 
+                            values={filterQC} 
+                            options={filterOptions.inspectors} 
+                            onChange={vals => setFilterQC(vals)} 
+                          />
+                          <SearchableSelect 
+                            label="XƯỞNG SẢN XUẤT" 
+                            values={filterWorkshop} 
+                            options={filterOptions.workshops} 
+                            onChange={vals => setFilterWorkshop(vals)} 
+                          />
+                          <SearchableSelect 
+                            label="MÃ DỰ ÁN" 
+                            values={filterProject} 
+                            options={filterOptions.projects} 
+                            onChange={vals => setFilterProject(vals)}
+                          />
+                          <DateRangePicker 
+                            label="KHOẢNG NGÀY"
+                            startDate={startDate}
+                            endDate={endDate}
+                            onStartDateChange={setStartDate}
+                            onEndDateChange={setEndDate}
+                          />
+                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 transition-colors border border-blue-200">XÓA BỘ LỌC</button>
                       </div>
                   </div>
+              )}
+
+              {user.role !== 'QC' && (
+                <div className="flex items-center gap-1.5">
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileChange} 
+                    accept=".xlsx, .xls" 
+                    className="hidden" 
+                  />
+                  <button 
+                    onClick={handleImportClick}
+                    disabled={isImporting}
+                    title="Nhập Excel"
+                    className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                  </button>
+                  <button 
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    title="Xuất Excel"
+                    className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                  </button>
+                </div>
               )}
           </div>
       </div>

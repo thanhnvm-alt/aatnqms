@@ -6,9 +6,10 @@ import {
     AlertTriangle, Search, Clock, CheckCircle2, 
     ArrowRight, Loader2, Calendar, User as UserIcon, 
     FileText, ChevronRight, ShieldAlert,
-    Hash, AlertCircle, Maximize2, Upload, Download, Trash2,
-    Filter, ChevronDown, Layers
+    Hash, AlertCircle, Maximize2, Upload, Download, Trash2, AlertTriangle,
+    Filter, ChevronDown, Layers, X, ChevronUp
 } from 'lucide-react';
+import { DateRangePicker } from './DateRangePicker';
 import { NCRDetail } from './NCRDetail';
 import { exportNcrs, importNcrsFile } from '../services/apiService';
 
@@ -111,11 +112,23 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'IN_PROGRESS' | 'CLOSED'>('ALL');
+  const [projectFilter, setProjectFilter] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [qcFilter, setQcFilter] = useState('ALL');
   const [workshopFilter, setWorkshopFilter] = useState('ALL');
   const [selectedNcr, setSelectedNcr] = useState<NCR | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const limit = 50000;
+
+  const toggleGroup = (key: string) => {
+      setExpandedGroups(prev => {
+          const next = new Set(prev);
+          if (next.has(key)) next.delete(key); else next.add(key);
+          return next;
+      });
+  }
 
   useEffect(() => {
     loadNcrs(page);
@@ -188,15 +201,18 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   const filterOptions = useMemo(() => {
     const qcs = new Set<string>();
     const workshops = new Set<string>();
+    const projects = new Set<string>();
     
     ncrs.forEach(n => {
       if (n.inspectorName) qcs.add(n.inspectorName);
       if (n.workshop) workshops.add(n.workshop);
+      if (n.ma_ct) projects.add(n.ma_ct);
     });
 
     return {
       qcs: Array.from(qcs).sort(),
-      workshops: Array.from(workshops).sort()
+      workshops: Array.from(workshops).sort(),
+      projects: Array.from(projects).sort()
     };
   }, [ncrs]);
 
@@ -211,10 +227,15 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         
         const matchesQC = qcFilter === 'ALL' || n.inspectorName === qcFilter;
         const matchesWorkshop = workshopFilter === 'ALL' || n.workshop === workshopFilter;
+        const matchesStatus = statusFilter === 'ALL' || n.status === statusFilter;
+        const matchesProject = projectFilter === 'ALL' || n.ma_ct === projectFilter;
+        
+        const ncrDate = n.createdDate ? n.createdDate.split('T')[0] : '';
+        const matchesDate = (!startDate || ncrDate >= startDate) && (!endDate || ncrDate <= endDate);
 
-        return matchesSearch && matchesQC && matchesWorkshop;
+        return matchesSearch && matchesQC && matchesWorkshop && matchesStatus && matchesProject && matchesDate;
     });
-  }, [ncrs, searchTerm, qcFilter, workshopFilter]);
+  }, [ncrs, searchTerm, qcFilter, workshopFilter, statusFilter, projectFilter, startDate, endDate]);
 
   const getSeverityStyle = (severity: string) => {
     switch (severity?.toUpperCase()) {
@@ -233,6 +254,21 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         default: return 'bg-orange-50 text-orange-700 border-orange-200';
     }
   };
+
+  const groupedNcrs = useMemo(() => {
+    const groups: { [dateKey: string]: { [projectKey: string]: NCR[] } } = {};
+    
+    filteredNcrs.forEach(ncr => {
+        const dateKey = ncr.createdDate ? ncr.createdDate.split('T')[0] : '---';
+        const projectKey = ncr.ma_ct || '---';
+        
+        if(!groups[dateKey]) groups[dateKey] = {};
+        if(!groups[dateKey][projectKey]) groups[dateKey][projectKey] = [];
+        groups[dateKey][projectKey].push(ncr);
+    });
+
+    return groups;
+  }, [filteredNcrs]);
 
   if (selectedNcr) {
       return (
@@ -258,79 +294,57 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         </div>
       )}
 
-      {/* Header Toolbar */}
-      <div className="bg-white border-b border-slate-200 shadow-sm shrink-0 z-40 sticky top-0 px-4 py-4">
-          <div className="max-w-7xl mx-auto space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input 
-                        type="text" placeholder="Tìm theo mã, lỗi, người phụ trách..." 
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
-                      />
-                  </div>
-                  <select 
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value as any)}
-                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none cursor-pointer hover:border-blue-300 transition-all shadow-sm"
-                  >
-                      <option value="ALL">TẤT CẢ TRẠNG THÁI</option>
-                      <option value="OPEN">OPEN</option>
-                      <option value="IN_PROGRESS">IN PROGRESS</option>
-                      <option value="CLOSED">CLOSED</option>
-                  </select>
-
-                  <button 
-                    onClick={() => setIsFilterOpen(!isFilterOpen)}
-                    className={`p-2.5 rounded-xl border transition-all flex items-center justify-center gap-2 ${isFilterOpen ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                  >
-                    <Filter className="w-5 h-5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest hidden md:block">Bộ lọc</span>
-                  </button>
-
-                  {currentUser.role !== 'QC' && (
-                      <div className="flex gap-2">
-                          <button onClick={exportNcrs} className="px-4 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-green-700 flex items-center gap-2 shadow-sm">
-                              <Download className="w-4 h-4" /> Xuất
-                          </button>
-                          <input type="file" id="ncr-import" className="hidden" onChange={async (e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                  await importNcrsFile(e.target.files[0]);
-                                  loadNcrs();
-                              }
-                          }} />
-                          <label htmlFor="ncr-import" className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 flex items-center gap-2 cursor-pointer shadow-sm">
-                              <Upload className="w-4 h-4" /> Nhập
-                          </label>
-                      </div>
-                  )}
+      {/* Compact Toolbar */}
+      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-50 shadow-sm">
+          <div className="max-w-7xl mx-auto flex items-center gap-2">
+              {currentUser.role === 'ADMIN' && (
+                <button 
+                  onClick={toggleSelectAll}
+                  className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                >
+                  {selectedIds.size === ncrs.length && ncrs.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600" /> : <Layers className="w-5 h-5" />}
+                </button>
+              )}
+              <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                  <input 
+                    type="text" placeholder="Tìm theo mã, lỗi, người phụ trách..." 
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  />
               </div>
 
+              <button 
+                onClick={() => setIsFilterOpen(!isFilterOpen)} 
+                className={`p-2.5 rounded-xl border transition-all active:scale-95 relative ${isFilterOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}
+              >
+                <Filter className="w-5 h-5" />
+              </button>
+              
               {isFilterOpen && (
-                  <div className="bg-white rounded-2xl p-4 border border-slate-200 animate-in slide-in-from-top duration-200 grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 shadow-sm relative">
-                      <SearchableSelect 
-                        label="QC KIỂM TRA" 
-                        value={qcFilter} 
-                        options={filterOptions.qcs} 
-                        onChange={val => setQcFilter(val)} 
-                      />
-                      <SearchableSelect 
-                        label="XƯỞNG SẢN XUẤT" 
-                        value={workshopFilter} 
-                        options={filterOptions.workshops} 
-                        onChange={val => setWorkshopFilter(val)} 
-                      />
-                      <div className="flex items-end">
-                          <button 
-                            onClick={() => { setQcFilter('ALL'); setWorkshopFilter('ALL'); setStatusFilter('ALL'); setSearchTerm(''); setIsFilterOpen(false); }} 
-                            className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]"
-                          >
-                            XÓA BỘ LỌC
-                          </button>
+                  <div className="absolute top-16 right-4 w-[320px] bg-white rounded-2xl p-4 border border-slate-200 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="font-bold text-slate-800">Bộ lọc chi tiết</span>
+                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                      </div>
+                      <div className="space-y-3">
+                        <SearchableSelect label="TRẠNG THÁI" value={statusFilter} options={['ALL', 'OPEN', 'IN_PROGRESS', 'CLOSED']} onChange={val => setStatusFilter(val as any)} />
+                        <SearchableSelect label="MÃ DỰ ÁN" value={projectFilter} options={filterOptions.projects} onChange={val => setProjectFilter(val)} />
+                        <SearchableSelect label="QC KIỂM TRA" value={qcFilter} options={filterOptions.qcs} onChange={val => setQcFilter(val)} />
+                        <SearchableSelect label="XƯỞNG SẢN XUẤT" value={workshopFilter} options={filterOptions.workshops} onChange={val => setWorkshopFilter(val)} />
+                        <DateRangePicker label="KHOẢNG NGÀY" startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate} />
+                        <button onClick={() => { setQcFilter('ALL'); setWorkshopFilter('ALL'); setStatusFilter('ALL'); setProjectFilter('ALL'); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 transition-colors border border-blue-200">XÓA BỘ LỌC</button>
                       </div>
                   </div>
+              )}
+
+              {currentUser.role !== 'QC' && (
+                <div className="flex items-center gap-1.5">
+                  <button onClick={exportNcrs} title="Xuất Excel" className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"><Download className="w-5 h-5" /></button>
+                  <input type="file" id="ncr-import" className="hidden" onChange={async (e) => { if (e.target.files && e.target.files[0]) { await importNcrsFile(e.target.files[0]); loadNcrs(); } }} />
+                  <label htmlFor="ncr-import" title="Nhập Excel" className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 cursor-pointer"><Upload className="w-5 h-5" /></label>
+                </div>
               )}
           </div>
       </div>
@@ -355,7 +369,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
                   <p className="font-black uppercase tracking-widest text-[9px]">Đang tải danh sách NCR...</p>
               </div>
-          ) : filteredNcrs.length === 0 ? (
+          ) : Object.keys(groupedNcrs).length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300 space-y-4">
                   <div className="p-12 bg-white rounded-[3rem] border-2 border-dashed border-slate-200 shadow-inner flex flex-col items-center">
                       <CheckCircle2 className="w-16 h-16 opacity-10 mb-4" />
@@ -363,213 +377,102 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   </div>
               </div>
           ) : (
-              <div className="max-w-7xl mx-auto pb-20">
-                  {/* DESKTOP TABLE VIEW (>= 1024px) */}
-                  <div className="hidden lg:block bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden mb-6">
-                      <table className="w-full text-left border-collapse">
-                          <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px] sticky top-0 z-10">
-                              <tr>
-                                  <th className="px-6 py-4 w-10">
-                                      <input 
-                                          type="checkbox" 
-                                          checked={filteredNcrs.length > 0 && selectedIds.size === filteredNcrs.length}
-                                          onChange={toggleSelectAll}
-                                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                      />
-                                  </th>
-                                  <th className="px-6 py-4">DỰ ÁN / HẠNG MỤC</th>
-                                  <th className="px-6 py-4">XƯỞNG / QC</th>
-                                  <th className="px-6 py-4">NCR CODE</th>
-                                  <th className="px-6 py-4">MÔ TẢ LỖI</th>
-                                  <th className="px-6 py-4">MỨC ĐỘ</th>
-                                  <th className="px-6 py-4">NGƯỜI PHỤ TRÁCH</th>
-                                  <th className="px-6 py-4">HẠN XỬ LÝ</th>
-                                  <th className="px-6 py-4">TRẠNG THÁI</th>
-                                  <th className="px-6 py-4 text-right">ACTION</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                              {filteredNcrs.map((ncr) => (
-                                  <tr 
-                                      key={ncr.id} 
-                                      onClick={() => handleSelectNcrItem(ncr.id)}
-                                      className="hover:bg-blue-50/30 transition-all cursor-pointer group"
-                                  >
-                                      <td className="px-6 py-5" onClick={(e) => e.stopPropagation()}>
-                                          <input 
-                                              type="checkbox" 
-                                              checked={selectedIds.has(ncr.id)}
-                                              onChange={() => toggleSelect(ncr.id)}
-                                              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                          />
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <div className="flex flex-col">
-                                              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{ncr.ma_ct || '---'}</span>
-                                              <span className="text-[9px] font-bold text-slate-400 uppercase truncate max-w-[150px]">{ncr.ten_hang_muc || '---'}</span>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <div className="flex flex-col">
-                                              <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[120px]">{ncr.workshop || '---'}</span>
-                                              <span className="text-[9px] font-bold text-slate-400 uppercase truncate max-w-[120px]">{ncr.inspectorName || '---'}</span>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <div className="flex flex-col">
-                                              <span className="font-black text-slate-900 text-xs tracking-tight uppercase">{ncr.id}</span>
-                                              <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">ID: {ncr.inspection_id || 'LOCAL'}</span>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <p className="text-xs font-bold text-slate-700 leading-relaxed italic max-w-md line-clamp-2">
-                                              "{ncr.issueDescription}"
-                                          </p>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <span className={`px-2 py-1 rounded text-[9px] font-black uppercase border shadow-sm ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
-                                              {ncr.severity || 'MINOR'}
-                                          </span>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <div className="flex items-center gap-2">
-                                              <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                                                  <UserIcon className="w-3 h-3 text-slate-400" />
-                                              </div>
-                                              <span className="text-[11px] font-black text-slate-600 uppercase truncate max-w-[120px]">
-                                                  {ncr.responsiblePerson || '---'}
-                                              </span>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <span className={`text-[10px] font-black font-mono ${ncr.deadline && new Date(ncr.deadline) < new Date() && ncr.status !== 'CLOSED' ? 'text-red-600' : 'text-slate-500'}`}>
-                                              {ncr.deadline || '---'}
-                                          </span>
-                                      </td>
-                                      <td className="px-6 py-5">
-                                          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
-                                              {ncr.status}
-                                          </span>
-                                      </td>
-                                      <td className="px-6 py-5 text-right">
-                                          <button 
-                                              className="bg-white border border-slate-200 text-blue-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm active:scale-95 flex items-center gap-1 ml-auto"
-                                          >
-                                              CHI TIẾT <ChevronRight className="w-3 h-3" />
-                                          </button>
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-
-                  {/* MOBILE/TABLET CARD VIEW */}
-                  <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredNcrs.map((ncr) => (
-                          <div 
-                              key={ncr.id} 
-                              onClick={() => handleSelectNcrItem(ncr.id)}
-                              className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:shadow-md hover:border-blue-300 group"
-                          >
-                              <div className="p-4 flex-1 space-y-3">
-                                  <div className="flex items-start justify-between gap-3">
-                                      <div className="flex items-center gap-2">
-                                          <div onClick={(e) => e.stopPropagation()} className="mr-1">
-                                              <input 
-                                                  type="checkbox" 
-                                                  checked={selectedIds.has(ncr.id)}
-                                                  onChange={() => toggleSelect(ncr.id)}
-                                                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                              />
-                                          </div>
-                                          <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all">
-                                              <AlertTriangle className="w-4 h-4" />
-                                          </div>
-                                          <div>
-                                              <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">NCR: {ncr.id}</span>
-                                              <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">ID: {ncr.inspection_id || 'LOCAL'}</span>
-                                          </div>
-                                      </div>
-                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
-                                          {ncr.severity || 'MINOR'}
+                <div className="max-w-7xl mx-auto pb-20 space-y-4">
+                  {Object.keys(groupedNcrs).sort((a, b) => b.localeCompare(a)).map(dateKey => {
+                      const dateGroup = groupedNcrs[dateKey];
+                      const isDateExpanded = expandedGroups.has(dateKey);
+                      return (
+                          <div key={dateKey} className="mb-4">
+                              <div 
+                                  onClick={() => toggleGroup(dateKey)}
+                                  className="flex items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors rounded-xl mb-2"
+                              >
+                                  <div className="flex items-center gap-2.5">
+                                      <Calendar className="w-4 h-4 text-blue-500" />
+                                      <h2 className="font-bold text-slate-800 text-[13px] tracking-tight">{dateKey}</h2>
+                                      <span className="ml-2 bg-blue-100/80 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                                          {Object.values(dateGroup).reduce((acc, ncrs) => acc + ncrs.length, 0)}
                                       </span>
                                   </div>
-
-                                  <div className="flex flex-col space-y-0.5">
-                                      <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{ncr.ma_ct || '---'}</span>
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase truncate">{ncr.ten_hang_muc || '---'}</span>
-                                      <div className="flex items-center gap-2 mt-1">
-                                          <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[8px] font-black text-slate-600 border border-slate-200">{ncr.workshop || '---'}</span>
-                                          <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate">{ncr.inspectorName || '---'}</span>
-                                      </div>
-                                  </div>
-
-                                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                      <p className="text-[11px] font-bold text-slate-700 leading-relaxed italic line-clamp-3">
-                                          "{ncr.issueDescription}"
-                                      </p>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-3 pt-1">
-                                      <div className="flex items-center gap-2">
-                                          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                                              <UserIcon className="w-3 h-3 text-slate-400" />
-                                          </div>
-                                          <div className="overflow-hidden">
-                                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-1">Phụ trách</p>
-                                              <p className="text-[10px] font-black text-slate-600 uppercase truncate">{ncr.responsiblePerson || '---'}</p>
-                                          </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                          <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
-                                              <Calendar className="w-3 h-3 text-blue-500" />
-                                          </div>
-                                          <div className="overflow-hidden">
-                                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-1">Hạn xử lý</p>
-                                              <p className={`text-[10px] font-black truncate font-mono ${ncr.deadline && new Date(ncr.deadline) < new Date() && ncr.status !== 'CLOSED' ? 'text-red-600' : 'text-slate-600'}`}>
-                                                  {ncr.deadline || '---'}
-                                              </p>
-                                          </div>
-                                      </div>
-                                  </div>
+                                  {isDateExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               </div>
-
-                              <div className={`px-4 py-3 border-t flex items-center justify-between transition-colors ${ncr.status === 'CLOSED' ? 'bg-green-50/50 border-green-100' : 'bg-slate-50/50 border-slate-100'}`}>
-                                  <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
-                                      {ncr.status}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 text-blue-600 text-[10px] font-black uppercase tracking-tighter hover:underline">
-                                      CHI TIẾT <ChevronRight className="w-3.5 h-3.5" />
+                              
+                              {isDateExpanded && (
+                                  <div className="space-y-4 pl-4 mt-2">
+                                      {Object.keys(dateGroup).map(projectKey => {
+                                          const ncrsUnderProject = dateGroup[projectKey];
+                                          const groupKey = `${dateKey}|${projectKey}`;
+                                          const isProjectExpanded = expandedGroups.has(groupKey);
+                                          
+                                          return (
+                                              <div key={groupKey} className="space-y-2">
+                                                  <div 
+                                                      onClick={() => toggleGroup(groupKey)}
+                                                      className="flex items-center justify-between p-2 rounded-lg cursor-pointer bg-slate-50 border border-slate-100"
+                                                  >
+                                                      <h3 className="font-black text-slate-500 text-[10px] uppercase tracking-widest ml-2">Dự án: {projectKey} ({ncrsUnderProject.length})</h3>
+                                                      {isProjectExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                                  </div>
+                                                  
+                                                  {isProjectExpanded && (
+                                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-4">
+                                                          {ncrsUnderProject.map((ncr) => (
+                                                              <div 
+                                                                  key={ncr.id} 
+                                                                  onClick={() => handleSelectNcrItem(ncr.id)}
+                                                                  className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:shadow-md hover:border-blue-300 group"
+                                                              >
+                                                                  <div className="p-3 flex-1 space-y-3">
+                                                                    <div className="flex items-start justify-between gap-3">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all">
+                                                                                <AlertTriangle className="w-4 h-4" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">{ncr.ma_ct || '---'} - {ncr.ten_ct || '---'}</span>
+                                                                                <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">{ncr.id_factory_order || '---'} - {ncr.ten_hang_muc || '---'}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
+                                                                            {ncr.severity || 'MINOR'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex flex-col space-y-1">
+                                                                        <div className="flex items-center gap-1 mt-1 text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                                                                            <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">{ncr.workshop || '---'}</span>
+                                                                            <span>•</span>
+                                                                            <span className="truncate">{ncr.inspection_id || '---'}</span>
+                                                                            <span>•</span>
+                                                                            <span className="truncate">{ncr.inspectorName || '---'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                                                        <p className="text-[11px] font-bold text-slate-700 leading-relaxed italic line-clamp-3">
+                                                                            "{ncr.issueDescription}"
+                                                                        </p>
+                                                                    </div>
+                                                                 </div>
+                                                                 <div className={`px-4 py-3 border-t flex items-center justify-between transition-colors ${ncr.status === 'CLOSED' ? 'bg-green-50/50 border-green-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                                                                     <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
+                                                                         {ncr.status}
+                                                                     </span>
+                                                                     <div className="flex items-center gap-1.5 text-blue-600 text-[10px] font-black uppercase tracking-tighter hover:underline">
+                                                                         CHI TIẾT <ChevronRight className="w-3.5 h-3.5" />
+                                                                     </div>
+                                                                 </div>
+                                                              </div>
+                                                          ))}
+                                                      </div>
+                                                  )}
+                                              </div>
+                                          );
+                                      })}
                                   </div>
-                              </div>
+                              )}
                           </div>
-                      ))}
-                      {/* PAGINATION CONTROLS */}
-                      {total > limit && (
-                          <div className="flex items-center justify-between px-4 py-8 border-t border-slate-200 mt-8">
-                              <button 
-                                  disabled={page <= 1 || isLoading}
-                                  onClick={() => setPage(page - 1)}
-                                  className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
-                              >
-                                  Trang trước
-                              </button>
-                              <div className="flex flex-col items-center">
-                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
-                                  <span className="text-[8px] font-bold text-slate-300 uppercase">Tổng {total} NCR</span>
-                              </div>
-                              <button 
-                                  disabled={page * limit >= total || isLoading}
-                                  onClick={() => setPage(page + 1)}
-                                  className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
-                              >
-                                  Trang sau
-                              </button>
-                          </div>
-                      )}
-                  </div>
-              </div>
+                      );
+                  })}
+                </div>
           )}
       </div>
 

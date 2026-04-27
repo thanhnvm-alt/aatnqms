@@ -186,7 +186,7 @@ const App = () => {
 
   const loadProjects = async (search: string = '', page: number = 1) => { 
     try { 
-        const result = await fetchProjects(search, page, 20); 
+        const result = await fetchProjects(search, 1, 10000); 
         setProjects(result.items || []); 
         setProjectsTotal(result.total || 0);
     } catch(e) {

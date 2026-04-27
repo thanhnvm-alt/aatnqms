@@ -388,6 +388,7 @@ export interface DefectLibraryItem {
   stage: string;
   category: string;
   severity: string;
+  rootCause?: string; // Add root cause
   suggestedAction?: string;
   correctImage?: string;
   incorrectImage?: string;
