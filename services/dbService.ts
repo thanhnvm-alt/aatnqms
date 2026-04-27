@@ -330,7 +330,12 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         headcode,
         stage as "inspectionStage",
         po_number,
-        materials_json as "materials"
+        materials_json as "materials",
+        so_luong_ipo,
+        inspected_qty as "inspectedQuantity",
+        passed_qty as "passedQuantity",
+        failed_qty as "failedQuantity",
+        images_json as "images"
     `;
 
     const tableQueries = tables.map(table => {
@@ -341,7 +346,13 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
         const matCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'materials_json::text' : 'NULL::text as materials_json';
         
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        const slIpoCol = table === 'forms_pqc' ? 'sl_ipo::numeric as so_luong_ipo' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'so_luong_ipo::numeric as so_luong_ipo' : '0::numeric as so_luong_ipo');
+        const insQtyCol = table === 'forms_pqc' ? 'qty_total::numeric as inspected_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'inspected_qty::numeric as inspected_qty' : '0::numeric as inspected_qty');
+        const passQtyCol = table === 'forms_pqc' ? 'qty_pass::numeric as passed_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'passed_qty::numeric as passed_qty' : '0::numeric as passed_qty');
+        const failQtyCol = table === 'forms_pqc' ? 'qty_fail::numeric as failed_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'failed_qty::numeric as failed_qty' : '0::numeric as failed_qty');
+        const imagesCol = 'images_json::text as images_json';
+
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -406,7 +417,13 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     const finalQuery = `
         SELECT ${selectFields} FROM (${unionQuery}) as combined 
         ${whereClause} 
-        ORDER BY (CASE WHEN updated_at ~ '^[0-9]+$' THEN CAST(updated_at AS BIGINT) ELSE 0 END) DESC 
+        ORDER BY (CASE 
+            WHEN updated_at ~ '^[0-9]+$' THEN 
+                CASE WHEN CAST(updated_at AS BIGINT) > 100000000000 THEN CAST(updated_at AS BIGINT) / 1000 
+                ELSE CAST(updated_at AS BIGINT) 
+                END 
+            ELSE 0 
+        END) DESC 
         LIMIT $${args.length + 1} OFFSET $${args.length + 2}
     `;
 
@@ -423,9 +440,19 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             if (typeof parsedMaterials === 'string') {
                 try { parsedMaterials = JSON.parse(parsedMaterials); } catch(e) {}
             }
+            let parsedImages = row.images;
+            if (typeof parsedImages === 'string') {
+                try { parsedImages = JSON.parse(parsedImages); } catch(e) {}
+            }
             return {
                 ...row,
+                updatedAt: row.updated_at,
                 materials: parsedMaterials,
+                images: parsedImages,
+                so_luong_ipo: Number(row.so_luong_ipo || 0),
+                inspectedQuantity: Number(row.inspectedQuantity || 0),
+                passedQuantity: Number(row.passedQuantity || 0),
+                failedQuantity: Number(row.failedQuantity || 0),
                 isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
                 hasNcr: row.status === 'FLAGGED',
                 isCond: row.status === 'CONDITIONAL'

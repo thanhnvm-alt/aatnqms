@@ -1810,18 +1810,36 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             { header: 'Mã nhà máy', key: 'ma_nha_may', width: 15 },
             { header: 'Headcode', key: 'headcode', width: 15 },
             { header: 'QC kiểm tra', key: 'inspectorName', width: 25 },
-            { header: 'Xưởng/Công đoạn', key: 'workshop', width: 20 },
+            { header: 'Xưởng', key: 'workshop', width: 20 },
+            { header: 'Công đoạn sản xuất', key: 'inspectionStage', width: 20 },
             { header: 'Ngày thực hiện', key: 'date', width: 15 },
             { header: 'Trạng thái', key: 'status', width: 15 },
-            { header: 'Điểm số', key: 'score', width: 10 },
+            { header: 'SL ĐĐH', key: 'so_luong_ipo', width: 10 },
+            { header: 'SLkiem', key: 'inspectedQuantity', width: 10 },
+            { header: 'SLDat', key: 'passedQuantity', width: 10 },
+            { header: 'TLDat', key: 'passedPercentage', width: 10 },
+            { header: 'SLLoi', key: 'failedQuantity', width: 10 },
+            { header: 'TLLoi', key: 'failedPercentage', width: 10 },
             { header: 'Kết luận/Ghi chú', key: 'summary', width: 40 },
-            { header: 'Phụ trách', key: 'responsiblePerson', width: 25 },
-            { header: 'Cập nhật lần cuối', key: 'updatedAt', width: 20 }
+            { header: 'Hình ảnh hiện trường', key: 'siteImages', width: 50 },
+            { header: 'ĐVT/Unit', key: 'dvt', width: 15 }
         ];
 
         for (const item of result.items) {
-            let rowDate = item.date ? new Date(item.date) : null;
-            if (rowDate && isNaN(rowDate.getTime())) rowDate = null;
+            let rowDate = null;
+            if (item.date) {
+                // Handle DD/MM/YYYY
+                if (/^\d{2}\/\d{2}\/\d{4}$/.test(item.date)) {
+                    const [d, m, y] = item.date.split('/');
+                    rowDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+                } else if (!isNaN(Number(item.date)) && Number(item.date) > 100000000) {
+                    const ts = Number(item.date);
+                    rowDate = new Date(ts > 100000000000 ? ts : ts * 1000);
+                } else {
+                    rowDate = new Date(item.date);
+                }
+                if (rowDate && isNaN(rowDate.getTime())) rowDate = null;
+            }
             
             let rowUpdated = null;
             if (item.updatedAt) {
@@ -1830,6 +1848,23 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 // if it's already in ms (very large), keep as is.
                 rowUpdated = new Date(ts > 100000000000 ? ts : ts * 1000);
                 if (isNaN(rowUpdated.getTime())) rowUpdated = null;
+            }
+
+            // Extract images joining with new lines or commas
+            const siteImages = (item.images && Array.isArray(item.images)) 
+                ? item.images.join(', ') 
+                : '';
+
+            const so_luong_ipo = Number(item.so_luong_ipo || 0);
+            const inspectedQuantity = Number(item.inspectedQuantity || 0);
+            const passedQuantity = Number(item.passedQuantity || 0);
+            const failedQuantity = Number(item.failedQuantity || 0);
+            
+            let passedPercentage = '';
+            let failedPercentage = '';
+            if (inspectedQuantity > 0) {
+                passedPercentage = ((passedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
+                failedPercentage = ((failedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
             }
 
             const row = sheet.addRow({
@@ -1842,20 +1877,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 headcode: item.headcode || '',
                 inspectorName: item.inspectorName || '',
                 workshop: item.workshop || '',
+                inspectionStage: item.inspectionStage || '',
                 date: rowDate,
                 status: item.status || '',
-                score: Number(item.score || 0),
+                so_luong_ipo: so_luong_ipo,
+                inspectedQuantity: inspectedQuantity,
+                passedQuantity: passedQuantity,
+                passedPercentage: passedPercentage,
+                failedQuantity: failedQuantity,
+                failedPercentage: failedPercentage,
                 summary: item.summary || '',
-                responsiblePerson: item.responsiblePerson || '',
-                updatedAt: rowUpdated
+                siteImages: siteImages,
+                dvt: item.dvt || ''
             });
 
             row.eachCell((cell, colNumber) => {
               cell.protection = { locked: false };
-              if ((colNumber === 10 || colNumber === 15) && cell.value instanceof Date) {
+              // date is col index 11, updatedAt is 21
+              if ((colNumber === 11 || colNumber === 21) && cell.value instanceof Date) {
                  cell.numFmt = 'yyyy-mm-dd hh:mm:ss';
               }
-              if (colNumber === 11) { // Status dropdown
+              if (colNumber === 12) { // Status dropdown
                 cell.dataValidation = {
                   type: 'list',
                   allowBlank: true,
@@ -1886,35 +1928,71 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         const validResults = [];
         const errorLogs = [];
 
+        let colMap: Record<string, number> = {};
+
         for await (const worksheetReader of workbookReader) {
           for await (const row of worksheetReader) {
             const rowIndex = row.number;
-            if (rowIndex === 1) continue;
+            
+            if (rowIndex === 1) {
+              row.eachCell((cell, colNumber) => {
+                const headerText = cell.text?.trim()?.toLowerCase();
+                if (headerText) colMap[headerText] = colNumber;
+              });
+              continue;
+            }
 
             try {
-              const id = row.getCell(1).text?.trim();
-              const ma_ct = row.getCell(3).text?.trim();
+              const getCol = (names: string[]) => {
+                for (const name of names) {
+                  const idx = colMap[name.toLowerCase()];
+                  if (idx) return row.getCell(idx).text?.trim();
+                }
+                return '';
+              };
+
+              const getVal = (names: string[]) => {
+                for (const name of names) {
+                  const idx = colMap[name.toLowerCase()];
+                  if (idx) return row.getCell(idx).value;
+                }
+                return 0;
+              };
+
+              const id = getCol(['mã hồ sơ', 'id']);
+              const ma_ct = getCol(['mã dự án', 'ma_ct']);
               if (!ma_ct) throw new Error("Mã dự án không được để trống");
 
               const inspection: any = {
                 id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                type: row.getCell(2).text?.trim() || 'PQC',
+                type: getCol(['loại phiếu', 'type']) || 'PQC',
                 ma_ct,
-                ten_ct: row.getCell(4).text?.trim(),
-                ten_hang_muc: row.getCell(5).text?.trim(),
-                ma_nha_may: row.getCell(6).text?.trim(),
-                headcode: row.getCell(7).text?.trim(),
-                inspectorName: row.getCell(8).text?.trim() || (req as any).user?.name,
-                workshop: row.getCell(9).text?.trim(),
-                date: row.getCell(10).text?.trim(),
-                status: row.getCell(11).text?.trim()?.toUpperCase() || 'DRAFT',
-                score: Number(row.getCell(12).value || 0),
-                summary: row.getCell(13).text?.trim(),
-                responsiblePerson: row.getCell(14).text?.trim(),
+                ten_ct: getCol(['tên dự án', 'ten_ct']),
+                ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc']),
+                ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'mã nhà m']),
+                headcode: getCol(['headcode']),
+                inspectorName: getCol(['qc kiểm tra', 'qc kiểm t', 'inspector', 'inspectorname']) || (req as any).user?.name,
+                workshop: getCol(['xưởng', 'workshop']),
+                inspectionStage: getCol(['công đoạn', 'công đoạn sản xuất', 'stage']),
+                date: getCol(['ngày thực hiện', 'ngày thực', 'date']),
+                status: getCol(['trạng thái', 'status'])?.toUpperCase() || 'DRAFT',
+                so_luong_ipo: Number(getVal(['sl đđh', 'sl ipo', 'so_luong_ipo']) || 0),
+                inspectedQuantity: Number(getVal(['slkiem', 'sl kiểm', 'inspected quantity', 'inspected_qty', 'inspectedquantity']) || 0),
+                passedQuantity: Number(getVal(['sldat', 'sl đạt', 'passed quantity', 'passed_qty', 'passedquantity']) || 0),
+                failedQuantity: Number(getVal(['slloi', 'sl lỗi', 'sl hong', 'failed quantity', 'failed_qty', 'failedquantity']) || 0),
+                summary: getCol(['kết luận/ghi chú', 'kết luận', 'summary']),
+                responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), // Fallback in case old templates are used
+                dvt: getCol(['đvt/unit', 'dvt', 'unit']),
                 items: [],
                 images: [],
                 comments: []
               };
+
+              // Re-format percentage and numbers just in case value property didn't work properly
+              if (isNaN(inspection.so_luong_ipo)) inspection.so_luong_ipo = Number(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']) || 0);
+              if (isNaN(inspection.inspectedQuantity)) inspection.inspectedQuantity = Number(getCol(['slkiem', 'sl kiểm', 'inspectedquantity']) || 0);
+              if (isNaN(inspection.passedQuantity)) inspection.passedQuantity = Number(getCol(['sldat', 'sl đạt', 'passedquantity']) || 0);
+              if (isNaN(inspection.failedQuantity)) inspection.failedQuantity = Number(getCol(['slloi', 'sl lỗi', 'sl hong', 'failedquantity']) || 0);
 
               await db.saveInspection(inspection);
               validResults.push(inspection.id);

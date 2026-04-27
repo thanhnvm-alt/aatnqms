@@ -321,6 +321,7 @@ const App = () => {
                     page={inspectionsPage}
                     onPageChange={setInspectionsPage}
                     user={user}
+                    onRefresh={loadInspections}
                 />
             )}
             {view === 'FORM' && (
@@ -467,15 +468,15 @@ const App = () => {
                 <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in duration-200">
                     <header className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                         <div className="flex flex-col">
-                            <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest leading-none">LOẠI KIỂM TRA</h3>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Chọn phiếu để khởi tạo</p>
+                            <h3 className="font-bold text-slate-900 uppercase text-xs tracking-wider leading-none">LOẠI KIỂM TRA</h3>
+                            <p className="text-[10px] font-medium text-slate-400 uppercase mt-1">Chọn phiếu để khởi tạo</p>
                         </div>
                         <button onClick={() => setShowModuleSelector(false)} className="p-2 hover:bg-slate-100 rounded-2xl text-slate-400 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
                     </header>
                     
                     <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50/30">
                         {(ALL_MODULES || [])
-                            .filter(m => (m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.role === 'ADMIN' || user.allowedModules?.includes(m.id)))
+                            .filter(m => (m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.allowedModules?.includes(m.id)))
                             .map(mod => (
                                 <button 
                                     key={mod.id} 
@@ -486,10 +487,10 @@ const App = () => {
                                         <FileText className="w-5 h-5" />
                                     </div>
                                     <div className="flex-1 text-left min-w-0">
-                                        <span className="font-black text-blue-800 text-[11px] uppercase tracking-tight truncate block group-hover:text-blue-900">
+                                        <span className="font-bold text-blue-800 text-[13px] tracking-tight truncate block group-hover:text-blue-900">
                                             {mod.label}
                                         </span>
-                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">
+                                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mt-0.5">
                                             {mod.group} Control
                                         </span>
                                     </div>
@@ -504,7 +505,7 @@ const App = () => {
                     <div className="p-4 bg-white border-t border-slate-100 shrink-0">
                         <button 
                             onClick={() => setShowModuleSelector(false)}
-                            className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-slate-600 transition-colors"
+                            className="w-full py-3 text-xs font-semibold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                         >
                             ĐÓNG DANH SÁCH
                         </button>

@@ -9,7 +9,7 @@ import {
   Loader2, X, ChevronDown, ChevronRight,
   Filter, Building2, SlidersHorizontal,
   PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
-  Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid,
+  Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid, CheckSquare,
   ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle,
   CalendarDays, ArrowRight, Check, FileText, Download, Trash2, Edit, Eye
 } from 'lucide-react';
@@ -48,15 +48,20 @@ interface SearchableSelectProps {
   className?: string;
 }
 
-const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, values, options, onChange, placeholder = '- TẤT CẢ -', className }) => {
+const SearchableSelect: React.FC<SearchableSelectProps & { optionLabels?: Record<string, string> }> = ({ label, values, options, onChange, placeholder = '- TẤT CẢ -', className, optionLabels }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const getLabel = (opt: string) => optionLabels?.[opt] || opt;
+
   const filteredOptions = useMemo(() => {
     if (!search) return options;
-    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
-  }, [options, search]);
+    return options.filter(opt => 
+      opt.toLowerCase().includes(search.toLowerCase()) || 
+      getLabel(opt).toLowerCase().includes(search.toLowerCase())
+    );
+  }, [options, search, optionLabels]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -76,19 +81,19 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, values, opti
     }
   };
 
-  const displayValue = values.length > 0 ? (values.length === 1 ? values[0] : `${values.length} mục đã chọn`) : placeholder;
+  const displayValue = values.length > 0 ? (values.length === 1 ? getLabel(values[0]) : `${values.length} mục đã chọn`) : placeholder;
 
   return (
     <div className={`space-y-1 relative ${className}`} ref={containerRef}>
-      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</label>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-all border-slate-200 h-[38px]"
+        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-all h-[38px]"
       >
         <span className={`truncate ${values.length > 0 ? 'text-slate-900' : 'text-slate-400'}`}>
           {displayValue}
         </span>
-        <ChevronDown className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       {isOpen && (
@@ -96,14 +101,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, values, opti
           <div className="p-2 border-b border-slate-100 bg-slate-50">
             <div className="relative flex gap-2">
               <div className="relative flex-1">
-                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                  <input 
                    autoFocus
                    type="text"
                    value={search}
                    onChange={(e) => setSearch(e.target.value)}
                    placeholder="Tìm nhanh..."
-                   className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                   className="w-full pl-8 pr-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-100"
                    onClick={(e) => e.stopPropagation()}
                  />
               </div>
@@ -112,24 +117,24 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, values, opti
           <div className="overflow-y-auto flex-1 no-scrollbar p-1">
             <div 
               onClick={(e) => { e.stopPropagation(); onChange([]); }}
-              className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all mb-1 ${values.length === 0 ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+              className={`px-3 py-2 text-sm font-medium rounded-lg cursor-pointer hover:bg-blue-50 transition-all mb-1 ${values.length === 0 ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
             >
               - TẤT CẢ -
             </div>
-            <div className="h-px bg-slate-100 mb-1" />
+            <div className="h-px bg-slate-100 mb-1 mx-2" />
             {filteredOptions.length > 0 ? (
               filteredOptions.map(opt => (
                 <div 
                   key={opt}
                   onClick={(e) => { e.stopPropagation(); handleToggle(opt); }}
-                  className={`p-2 text-[10px] font-black flex items-center justify-between uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all ${values.includes(opt) ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                  className={`px-3 py-2 text-sm font-medium flex items-center justify-between rounded-lg cursor-pointer hover:bg-blue-50 transition-all ${values.includes(opt) ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
                 >
-                  <span className="truncate">{opt}</span>
-                  {values.includes(opt) && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+                  <span className="truncate">{getLabel(opt)}</span>
+                  {values.includes(opt) && <CheckSquare className="w-4 h-4 text-blue-600 shrink-0" />}
                 </div>
               ))
             ) : (
-              <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">Không tìm thấy</div>
+              <div className="p-4 text-center text-xs font-medium text-slate-400">Không tìm thấy</div>
             )}
           </div>
         </div>
@@ -231,7 +236,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     try {
       const result = await importInspectionsFile(file);
       alert(`Nhập thành công ${result.count} phiếu kiểm tra`);
-      if (onPageChange) onPageChange(1);
+      if (onRefresh) onRefresh();
+      if (onPageChange && page !== 1) onPageChange(1);
     } catch (error) {
       console.error('Import failed:', error);
       alert('Lỗi khi nhập file Excel');
@@ -259,9 +265,43 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         if (filterWorkshop.length > 0 && !filterWorkshop.includes(item.workshop || '')) return false;
         if (filterProject.length > 0 && !filterProject.includes(item.ma_ct || '')) return false;
         if (filterStatus.length > 0 && !filterStatus.includes(item.status)) return false;
-        if (filterType.length > 0 && !filterType.includes(String(item.type))) return false;
-        if (startDate && item.date < startDate) return false;
-        if (endDate && item.date > endDate) return false;
+        // Improved type filtering
+        if (filterType.length > 0) {
+            const itemType = String(item.type);
+            // Special handling for SQC modules which might have overlapping labels
+            if (!filterType.includes(itemType)) {
+               return false;
+            }
+        }
+        
+        // Robust date filtering
+        if (startDate || endDate) {
+            let itemDateStr = String(item.date);
+            let d: Date | null = null;
+
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(itemDateStr)) {
+                const [day, month, year] = itemDateStr.split('/');
+                d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+            } else if (/^\d{10}$/.test(itemDateStr)) {
+                d = new Date(parseInt(itemDateStr, 10) * 1000);
+            } else {
+                d = new Date(itemDateStr);
+            }
+
+            if (d && !isNaN(d.getTime())) {
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const normalizedItemDate = `${yyyy}-${mm}-${dd}`;
+
+                if (startDate && normalizedItemDate < startDate) return false;
+                if (endDate && normalizedItemDate > endDate) return false;
+            } else {
+                // If we can't parse the date, and a range is set, we skip this item
+                return false;
+            }
+        }
+
         return true;
     });
 
@@ -283,7 +323,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     });
 
     return groups;
-  }, [inspections, searchTerm, filterQC, filterWorkshop, filterProject, filterStatus, startDate, endDate]);
+  }, [inspections, searchTerm, filterQC, filterWorkshop, filterProject, filterStatus, filterType, startDate, endDate]);
 
   const toggleDate = (dateKey: string) => {
     setExpandedDates(prev => {
@@ -330,12 +370,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     </button>
                   )}
                   <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
                       <input 
                         type="text" placeholder="Tìm Dự án, Sản phẩm..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                       />
                   </div>
                   <button 
@@ -380,6 +420,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         values={filterType} 
                         options={filterOptions.types} 
                         onChange={vals => setFilterType(vals)} 
+                        optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
                       />
                       <SearchableSelect 
                         label="TRẠNG THÁI" 
@@ -414,7 +455,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         onEndDateChange={setEndDate}
                       />
                       <div className="flex items-end col-span-2 md:col-span-1">
-                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]">XÓA BỘ LỌC</button>
+                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 transition-colors border border-blue-200 h-[38px]">XÓA BỘ LỌC</button>
                       </div>
                   </div>
               )}
@@ -452,10 +493,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                 onClick={() => toggleDate(dateKey)}
                                 className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors rounded-xl"
                             >
-                                <div className="flex items-center gap-2">
-                                    <CalendarDays className="w-4 h-4 text-blue-600" />
-                                    <h2 className="font-black text-slate-700 text-[13px] uppercase tracking-widest">{dateKey}</h2>
-                                    <span className="ml-2 bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                <div className="flex items-center gap-2.5">
+                                    <CalendarDays className="w-5 h-5 text-blue-500" />
+                                    <h2 className="font-bold text-slate-800 text-[15px] tracking-tight">{dateKey}</h2>
+                                    <span className="ml-2 bg-blue-100/80 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">
                                         {Object.values(dateGroup).reduce((acc, project) => acc + project.items.length, 0)} phiếu
                                     </span>
                                 </div>
@@ -480,35 +521,35 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     <div className={`p-2 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
                                                         <Building2 className="w-4 h-4" />
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <div className="flex items-center gap-2">
-                                                            <h3 className="font-black text-[11px] uppercase tracking-tight truncate text-slate-800">{pKey}</h3>
-                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${isExpanded ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{project.items.length} phiếu</span>
+                                                        <div className="flex flex-col">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <h3 className="font-bold text-[13px] tracking-tight text-slate-800">{pKey}</h3>
+                                                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${isExpanded ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{project.items.length} phiếu</span>
                                                         </div>
-                                                        <p className={`text-[8px] font-bold uppercase truncate ${isExpanded ? 'text-blue-500' : 'text-slate-400'}`}>{project.projectName}</p>
+                                                        <p className={`text-[11px] font-medium tracking-tight ${isExpanded ? 'text-blue-500' : 'text-slate-400'}`}>{project.projectName}</p>
                                                     </div>
                                                 </div>
                                                 <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : 'text-slate-300'}`} />
                                             </div>
 
-                                            {/* PROJECT ITEMS (TABLE VIEW) */}
+                                            {/* PROJECT ITEMS (TABLE VIEW & MOBILE CARDS) */}
                                             {isExpanded && (
-                                                <div className="pl-2 pr-1 py-2 overflow-x-auto">
-                                                    <div className="min-w-[600px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+                                                <div className="pl-2 pr-1 py-3 overflow-x-auto">
+                                                    <div className="hidden md:block min-w-[600px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
                                                         <table className="w-full text-left border-collapse">
                                                             <thead>
-                                                                <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                                                                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 tracking-tight">
                                                                     {user.role === 'ADMIN' && (
                                                                         <th className="p-3 w-10 text-center border-r border-slate-100">
-                                                                            <CheckCircle className="w-4 h-4 mx-auto text-slate-300"/>
+                                                                            <CheckSquare className="w-4 h-4 mx-auto text-slate-300"/>
                                                                         </th>
                                                                     )}
-                                                                    <th className="p-3 w-20 border-r border-slate-100">LOẠI</th>
-                                                                    <th className="p-3 w-32 border-r border-slate-100">MÃ ĐỊNH DANH</th>
-                                                                    <th className="p-3 border-r border-slate-100">HẠNG MỤC</th>
-                                                                    <th className="p-3 w-32 border-r border-slate-100">QC KIỂM TRA</th>
-                                                                    <th className="p-3 w-28 border-r border-slate-100">XƯỞNG/CĐ</th>
-                                                                    <th className="p-3 w-28">TRẠNG THÁI</th>
+                                                                    <th className="p-4 w-24 border-r border-slate-100">LOẠI</th>
+                                                                    <th className="p-4 w-36 border-r border-slate-100">MÃ ĐỊNH DANH</th>
+                                                                    <th className="p-4 border-r border-slate-100">HẠNG MỤC</th>
+                                                                    <th className="p-4 w-36 border-r border-slate-100">QC KIỂM TRA</th>
+                                                                    <th className="p-4 w-32 border-r border-slate-100">XƯỞNG/CĐ</th>
+                                                                    <th className="p-4 w-32">TRẠNG THÁI</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -531,10 +572,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                                     />
                                                                                 </td>
                                                                             )}
-                                                                            <td className="p-3 border-r border-slate-100">
+                                                                            <td className="p-4 border-r border-slate-100">
                                                                                 <div className="flex flex-col gap-1 inline-flex">
-                                                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black ${cfg.bg} ${cfg.color} inline-block uppercase text-center border shadow-sm`}>{cfg.label}</span>
-                                                                                    <span className="text-[8px] font-mono text-slate-400">
+                                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${cfg.bg} ${cfg.color} inline-block uppercase text-center border shadow-sm`}>{cfg.label}</span>
+                                                                                    <span className="text-[9px] font-mono font-medium text-slate-400">
                                                                                         {
                                                                                             (item.type === 'PQC') ? (item.inspectionStage || `---`) :
                                                                                             (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
@@ -543,15 +584,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                                     </span>
                                                                                 </div>
                                                                             </td>
-                                                                            <td className="p-3 border-r border-slate-100 text-[10px] font-bold text-slate-700 uppercase">
+                                                                            <td className="p-4 border-r border-slate-100 text-[13px] font-medium text-slate-700">
                                                                                 {
                                                                                     (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
                                                                                     (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number ? `PO: ${item.po_number}` : (item.ma_ct || item.ma_nha_may || '---')) :
                                                                                     (item.ma_nha_may || item.headcode || '---')
                                                                                 }
                                                                             </td>
-                                                                            <td className="p-3 border-r border-slate-100">
-                                                                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight group-hover:text-blue-700 transition-colors">
+                                                                            <td className="p-4 border-r border-slate-100">
+                                                                                <p className="text-[14px] font-medium text-slate-800 tracking-tight group-hover:text-blue-700 transition-colors">
                                                                                     {
                                                                                         (item.type === 'IQC' || item.type === 'SQC_VT') 
                                                                                             ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
@@ -559,19 +600,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                                     }
                                                                                 </p>
                                                                             </td>
-                                                                            <td className="p-3 border-r border-slate-100">
-                                                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                                                    <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                                                                                        <UserIcon className="w-3 h-3 text-slate-500" />
+                                                                            <td className="p-4 border-r border-slate-100">
+                                                                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                                                                    <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                                                                                        <UserIcon className="w-3.5 h-3.5 text-slate-500" />
                                                                                     </div>
-                                                                                    <span className="text-[10px] font-bold text-slate-700 uppercase truncate">{item.inspectorName || '---'}</span>
+                                                                                    <span className="text-[13px] font-medium text-slate-700 truncate">{item.inspectorName || '---'}</span>
                                                                                 </div>
                                                                             </td>
-                                                                            <td className="p-3 border-r border-slate-100 text-[10px] font-bold text-slate-600 uppercase">
+                                                                            <td className="p-4 border-r border-slate-100 text-[13px] font-medium text-slate-600">
                                                                                 {item.workshop || '---'}
                                                                             </td>
-                                                                            <td className="p-3">
-                                                                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border tracking-tighter block text-center ${
+                                                                            <td className="p-4">
+                                                                                <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase border tracking-tight block text-center ${
                                                                                     item.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-200' :
                                                                                     item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' :
                                                                                     'bg-slate-50 text-slate-500 border-slate-200'
@@ -584,6 +625,83 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                 })}
                                                             </tbody>
                                                         </table>
+                                                    </div>
+
+                                                    {/* Mobile Card View */}
+                                                    <div className="md:hidden space-y-3">
+                                                        {project.items.map((item) => {
+                                                            const cfg = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
+                                                            return (
+                                                                <div 
+                                                                    key={item.id}
+                                                                    onClick={() => onSelect(item.id)}
+                                                                    className="bg-white border hover:border-blue-400 border-slate-200 rounded-2xl p-4 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative mb-2"
+                                                                >
+                                                                    <div className="flex justify-between items-start gap-4 mb-3">
+                                                                        <div className="flex flex-col gap-1.5 flex-1">
+                                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color} uppercase border shadow-sm`}>{cfg.label}</span>
+                                                                                <span className="text-[11px] font-mono font-semibold text-slate-500 bg-slate-100 px-2 rounded-md">
+                                                                                    {
+                                                                                        (item.type === 'PQC') ? (item.inspectionStage || `---`) :
+                                                                                        (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
+                                                                                        `#${item.id.split('-').pop()}`
+                                                                                    }
+                                                                                </span>
+                                                                            </div>
+                                                                            <h4 className="text-[15px] font-bold text-slate-800 leading-snug group-hover:text-blue-700 transition-colors line-clamp-2">
+                                                                                {
+                                                                                    (item.type === 'IQC' || item.type === 'SQC_VT') 
+                                                                                        ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                                        : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                                }
+                                                                            </h4>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end gap-2 shrink-0">
+                                                                            <span className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider ${
+                                                                                item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
+                                                                                item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
+                                                                                'bg-slate-100 text-slate-600'
+                                                                            }`}>
+                                                                                {item.status}
+                                                                            </span>
+                                                                            {user.role === 'ADMIN' && (
+                                                                                 <div className="mt-1 p-2 -mr-2" onClick={(e) => e.stopPropagation()}>
+                                                                                     <input 
+                                                                                         type="checkbox"
+                                                                                         checked={selectedIds.has(item.id)}
+                                                                                         onChange={() => toggleSelect(item.id)}
+                                                                                         className="w-5 h-5 rounded-md border-slate-300 text-blue-600 cursor-pointer"
+                                                                                     />
+                                                                                 </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    <div className="space-y-1 mb-4 hidden">
+                                                                        {/* Kept empty to match previous structure slightly, but we merge title to top */}
+                                                                    </div>
+
+                                                                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 bg-slate-50/50 -mx-4 -mb-4 px-4 pb-4">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center border border-blue-200">
+                                                                                <UserIcon className="w-3 h-3 text-blue-600" />
+                                                                            </div>
+                                                                            <span className="text-[13px] font-semibold text-slate-700">{item.inspectorName || '---'}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 text-right">
+                                                                            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                                                                                 {
+                                                                                     (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
+                                                                                     (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number ? `PO: ${item.po_number}` : (item.ma_ct || item.ma_nha_may || '---')) :
+                                                                                     (item.ma_nha_may || item.headcode || '---')
+                                                                                 }
+                                                                             </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -601,7 +719,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             {total > 0 && (
                 <div className="flex items-center justify-center px-2 py-6 border-t border-slate-100 mt-4">
                     <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tổng {total} phiếu</span>
+                        <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Tổng {total} phiếu</span>
                     </div>
                 </div>
             )}
