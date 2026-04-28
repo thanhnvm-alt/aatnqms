@@ -73,22 +73,22 @@ export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'sqc
 const getTableName = (type: string = 'PQC'): string => {
     const t = String(type || 'PQC').trim().toUpperCase();
     
-    if (t === 'SQC' || t === 'SQC_VT' || t === 'SQC-VT' || t === 'VẬT TƯ' || t === 'VAT TU') return `${SCHEMA}.forms_sqc_vt`;
-    if (t === 'SQC_BTP' || t === 'SQC-BTP' || t === 'BÁN THÀNH PHẨM' || t === 'BAN THANH PHAM') return `${SCHEMA}.forms_sqc_btp`;
-    if (t === 'SQC_MAT' || t === 'SQC-MAT') return `${SCHEMA}.forms_sqc_mat`;
-    if (t === 'PQC') return `${SCHEMA}.forms_pqc`;
-    if (t === 'IQC') return `${SCHEMA}.forms_iqc`;
-    if (t === 'SITE') return `${SCHEMA}.forms_site`;
-    if (t === 'FSR') return `${SCHEMA}.forms_fsr`;
-    if (t === 'FQC') return `${SCHEMA}.forms_fqc`;
-    if (t === 'SPR') return `${SCHEMA}.forms_spr`;
-    if (t === 'STEP') return `${SCHEMA}.forms_step`;
+    if (t === 'SQC' || t === 'SQC_VT' || t === 'SQC-VT' || t === 'VẬT TƯ' || t === 'VAT TU') return `${SCHEMA}."forms_sqc_vt"`;
+    if (t === 'SQC_BTP' || t === 'SQC-BTP' || t === 'BÁN THÀNH PHẨM' || t === 'BAN THANH PHAM') return `${SCHEMA}."forms_sqc_btp"`;
+    if (t === 'SQC_MAT' || t === 'SQC-MAT') return `${SCHEMA}."forms_sqc_mat"`;
+    if (t === 'PQC') return `${SCHEMA}."forms_pqc"`;
+    if (t === 'IQC') return `${SCHEMA}."forms_iqc"`;
+    if (t === 'SITE') return `${SCHEMA}."forms_site"`;
+    if (t === 'FSR') return `${SCHEMA}."forms_fsr"`;
+    if (t === 'FQC') return `${SCHEMA}."forms_fqc"`;
+    if (t === 'SPR') return `${SCHEMA}."forms_spr"`;
+    if (t === 'STEP') return `${SCHEMA}."forms_step"`;
     
     // Fallback search in MODULE_TABLES
     const lowerT = t.toLowerCase();
-    if (MODULE_TABLES.includes(lowerT)) return `${SCHEMA}.forms_${lowerT}`;
+    if (MODULE_TABLES.includes(lowerT)) return `${SCHEMA}."forms_${lowerT}"`;
     
-    return `${SCHEMA}.forms_pqc`;
+    return `${SCHEMA}."forms_pqc"`;
 };
 
 /**
@@ -127,13 +127,13 @@ export const initDatabase = async () => {
 // --- FLOOR PLANS & PINS ---
 
 export async function getFloorPlans(projectId: string): Promise<FloorPlan[]> {
-    const res = await query(`SELECT * FROM ${SCHEMA}.floor_plans WHERE project_id = $1 ORDER BY updated_at DESC`, [projectId]);
+    const res = await query(`SELECT * FROM ${SCHEMA}."floor_plans" WHERE project_id = $1 ORDER BY updated_at DESC`, [projectId]);
     return res.rows as unknown as FloorPlan[];
 }
 
 export async function saveFloorPlan(fp: FloorPlan) {
     await query(`
-        INSERT INTO ${SCHEMA}.floor_plans (id, project_id, name, image_url, version, status, file_name, updated_at) 
+        INSERT INTO ${SCHEMA}."floor_plans" (id, project_id, name, image_url, version, status, file_name, updated_at) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, EXTRACT(EPOCH FROM NOW())::BIGINT) 
         ON CONFLICT(id) DO UPDATE SET 
             name = EXCLUDED.name, 
@@ -145,22 +145,25 @@ export async function saveFloorPlan(fp: FloorPlan) {
 }
 
 export async function deleteFloorPlan(id: string) {
-    await query(`DELETE FROM ${SCHEMA}.floor_plans WHERE id = $1`, [id]);
-    await query(`DELETE FROM ${SCHEMA}.layout_pins WHERE floor_plan_id = $1`, [id]);
+    await query(`DELETE FROM ${SCHEMA}."floor_plans" WHERE id = $1`, [id]);
+    await query(`DELETE FROM ${SCHEMA}."layout_pins" WHERE floor_plan_id = $1`, [id]);
 }
 
 export async function getLayoutPins(floorPlanId: string): Promise<LayoutPin[]> {
-    const res = await query(`SELECT * FROM ${SCHEMA}.layout_pins WHERE floor_plan_id = $1`, [floorPlanId]);
+    const res = await query(`SELECT * FROM ${SCHEMA}."layout_pins" WHERE floor_plan_id = $1`, [floorPlanId]);
     return res.rows as unknown as LayoutPin[];
 }
 
 export async function saveLayoutPin(pin: LayoutPin) {
     await query(`
-        INSERT INTO ${SCHEMA}.layout_pins (id, floor_plan_id, inspection_id, x, y, label, status) 
+        INSERT INTO ${SCHEMA}."layout_pins" (id, floor_plan_id, inspection_id, x, y, label, status) 
         VALUES ($1, $2, $3, $4, $5, $6, $7) 
         ON CONFLICT(id) DO UPDATE SET 
             inspection_id = EXCLUDED.inspection_id, 
-            status = EXCLUDED.status
+            status = EXCLUDED.status,
+            x = EXCLUDED.x,
+            y = EXCLUDED.y,
+            label = EXCLUDED.label
     `, sanitizeArgs([pin.id, pin.floor_plan_id, pin.inspection_id, pin.x, pin.y, pin.label, pin.status]));
 }
 
@@ -177,7 +180,7 @@ export async function saveInspection(inspection: Inspection) {
 
     if (inspection.type === 'PQC') {
       await query(`
-        INSERT INTO ${SCHEMA}.forms_pqc (
+        INSERT INTO ${SCHEMA}."forms_pqc" (
           id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, 
           sl_ipo, qty_total, qty_pass, qty_fail,
           so_luong_ipo, inspected_qty, passed_qty, failed_qty,
@@ -533,7 +536,7 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         try {
-            const res = await query(`SELECT * FROM ${SCHEMA}.${table} WHERE id = $1`, [id]);
+            const res = await query(`SELECT * FROM ${SCHEMA}."${table}" WHERE id = $1`, [id]);
             if (res.rows.length > 0) {
                 const row = res.rows[0];
                 return {
@@ -598,7 +601,7 @@ export async function deleteInspection(id: string) {
 
     for (const table of tables) {
         try {
-            await query(`UPDATE ${SCHEMA}.${table} SET deleted_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = $1`, [id]);
+            await query(`UPDATE ${SCHEMA}."${table}" SET deleted_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = $1`, [id]);
         } catch (e) {}
     }
     await logAudit(inspection.inspectorName || 'SYSTEM', 'DELETE_INSPECTION', 'inspection', id, inspection, null);
@@ -1412,7 +1415,7 @@ export async function getDeletedInspections(): Promise<any[]> {
     
     for (const table of tables) {
         try {
-            const res = await query(`SELECT id, ma_ct, ten_ct, ten_hang_muc, inspector as "inspectorName", status as status, date, deleted_at, '${table}' as table_name FROM ${SCHEMA}.${table} WHERE deleted_at IS NOT NULL`);
+            const res = await query(`SELECT id, ma_ct, ten_ct, ten_hang_muc, inspector as "inspectorName", status as status, date, deleted_at, '${table}' as table_name FROM ${SCHEMA}."${table}" WHERE deleted_at IS NOT NULL`);
             allDeleted = [...allDeleted, ...res.rows];
         } catch (e) {
             console.error(`Error fetching deleted from ${table}:`, e);
@@ -1428,7 +1431,7 @@ export async function getDeletedInspections(): Promise<any[]> {
 export async function restoreInspection(id: string) {
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
-        await query(`UPDATE ${SCHEMA}.${table} SET deleted_at = NULL WHERE id = $1`, [id]);
+        await query(`UPDATE ${SCHEMA}."${table}" SET deleted_at = NULL WHERE id = $1`, [id]);
     }
 }
 
@@ -1438,7 +1441,7 @@ export async function restoreInspection(id: string) {
 export async function hardDeleteInspection(id: string) {
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
-        await query(`DELETE FROM ${SCHEMA}.${table} WHERE id = $1`, [id]);
+        await query(`DELETE FROM ${SCHEMA}."${table}" WHERE id = $1`, [id]);
     }
 }
 

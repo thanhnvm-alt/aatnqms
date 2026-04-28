@@ -295,6 +295,9 @@ export async function runMigrations() {
         await addColumn(table, 'type', 'TEXT');
         await addColumn(table, 'sl_ipo', 'NUMERIC');
         await addColumn(table, 'production_comment', 'TEXT');
+        await addColumn(table, 'floor_plan_id', 'TEXT');
+        await addColumn(table, 'coord_x', 'NUMERIC');
+        await addColumn(table, 'coord_y', 'NUMERIC');
     }
 
     // 8. Defect Library
@@ -343,12 +346,16 @@ export async function runMigrations() {
             "inspection_id" TEXT,
             "x" NUMERIC,
             "y" NUMERIC,
+            "label" TEXT,
             "status" TEXT,
             "type" TEXT,
             "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
         );
       `);
       migrationLogs.push(`✅ Ensured table layout_pins exists in ${schema}`);
+      await addColumn('layout_pins', 'label', 'TEXT');
+      await addColumn('layout_pins', 'inspection_id', 'TEXT');
+      await addColumn('layout_pins', 'status', 'TEXT');
     } catch (e: any) {
       console.warn(`⚠️ Could not create floor_plans/pins:`, e.message);
       migrationLogs.push(`⚠️ Could not create floor_plans/pins: ${e.message}`);

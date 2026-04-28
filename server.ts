@@ -58,7 +58,16 @@ try {
     });
 
     drive = google.drive({ version: 'v3', auth: oauth2Client });
-    console.log("Google Drive storage configured via OAuth2 User Proxy.");
+    
+    // Attempt to identify the authenticated account
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    oauth2.userinfo.get()
+      .then(res => {
+         console.log(`Google Drive storage configured for account: ${res.data.email}`);
+      })
+      .catch(err => {
+         console.warn("Could not fetch Google Drive account email, but client is initialized.", err.message);
+      });
   } else {
     console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
   }
@@ -556,8 +565,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
       await db.saveLayoutPin(req.body);
       res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save layout pin' });
+    } catch (error: any) {
+      console.error("Layout Pins Error:", error);
+      res.status(500).json({ error: error.message || 'Failed to save layout pin' });
     }
   });
 
@@ -605,8 +615,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
       await db.saveInspection(req.body);
       res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save inspection' });
+    } catch (error: any) {
+      console.error("Inspections Save Error:", error);
+      res.status(500).json({ error: error.message || 'Failed to save inspection' });
     }
   });
 
@@ -1141,11 +1152,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
       // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID
       if (imageUrl.includes('googleusercontent.com/u/0/d/')) {
-          fileId = imageUrl.split('/d/')[1]?.split('=')[0];
+          fileId = imageUrl.split('/d/')[1]?.split('=')[0]?.split('?')[0];
       } 
       // Pattern 2: drive.google.com/file/d/FILE_ID/view
       else if (imageUrl.includes('drive.google.com/file/d/')) {
-          fileId = imageUrl.split('/d/')[1]?.split('/')[0];
+          fileId = imageUrl.split('/d/')[1]?.split('/')[0]?.split('?')[0];
       }
       // Pattern 3: drive.google.com/open?id=FILE_ID or uc?id=FILE_ID
       else if (imageUrl.includes('id=')) {
@@ -1154,39 +1165,60 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       }
 
       if (fileId && fileId.length > 20) {
-          if (!drive) {
-            return res.status(503).json({ error: 'Google Drive not configured' });
-          }
-
-          try {
-            const response = await drive.files.get({
-                fileId: fileId,
-                alt: 'media'
-            }, { responseType: 'stream' });
-            
-            const contentType = response.headers['content-type'] || 'image/jpeg';
-            res.set('Content-Type', contentType);
-            res.set('Access-Control-Allow-Origin', '*');
-            res.set('Cache-Control', 'public, max-age=31536000');
-            res.set('X-Content-Type-Options', 'nosniff');
-            
-            await pipelineAsync(response.data, res);
-            return;
-          } catch (driveErr: any) {
-            if (!res.headersSent) {
+          // Attempt 1: Using configured Google Drive client (Auth access)
+          if (drive) {
+            try {
+              const response = await drive.files.get({
+                  fileId: fileId,
+                  alt: 'media'
+              }, { responseType: 'stream' });
+              
+              const contentType = response.headers['content-type'] || 'image/jpeg';
+              res.set('Content-Type', contentType);
+              res.set('Access-Control-Allow-Origin', '*');
+              res.set('Cache-Control', 'public, max-age=31536000');
+              res.set('X-Content-Type-Options', 'nosniff');
+              
+              await pipelineAsync(response.data, res);
+              return;
+            } catch (driveErr: any) {
               const status = driveErr.response?.status || driveErr.code || 500;
               const msg = driveErr.message || 'Upstream Error';
-              console.warn(`[Drive Proxy] Failed to fetch file ${fileId}: ${status} - ${msg}`);
-              
-              if (status === 404) {
-                 return res.status(404).send('Image not found or not shared with Service Account');
-              } else if (status === 401 || status === 403) {
-                 return res.status(status).send('Access denied by upstream');
-              }
-              return res.status(500).send('Error streaming image from upstream');
+              console.warn(`[Drive Proxy] Auth fetch failed for ${fileId}: ${status} - ${msg}. Trying public fallback...`);
             }
-            return; // Headers sent, pipeline already handled it
           }
+
+          // Attempt 2: Public fallback (for files shared as "Anyone with link")
+          const fallbacks = [
+            `https://drive.google.com/uc?export=view&id=${fileId}`,
+            `https://drive.google.com/uc?export=download&id=${fileId}`,
+            `https://lh3.googleusercontent.com/u/0/d/${fileId}`
+          ];
+
+          for (const publicUrl of fallbacks) {
+            try {
+              const response = await fetch(publicUrl);
+              
+              if (response.ok) {
+                  const contentType = response.headers.get('content-type') || 'image/jpeg';
+                  // Ignore common "rejection" contents like HTML sign-in pages
+                  if (contentType.includes('text/html')) {
+                      continue;
+                  }
+
+                  const buffer = await response.arrayBuffer();
+                  res.set('Content-Type', contentType);
+                  res.set('Access-Control-Allow-Origin', '*');
+                  res.set('Cache-Control', 'public, max-age=31536000');
+                  res.send(Buffer.from(buffer));
+                  return;
+              }
+            } catch (pubErr) {
+              console.warn(`[Drive Proxy] Fallback fetch error for ${publicUrl}:`, pubErr);
+            }
+          }
+
+          return res.status(404).send('Image not found or not shared correctly. Please ensure the file is set to "Anyone with the link can view".');
       }
 
       // Fallback for non-drive URLs
@@ -1985,6 +2017,36 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                     }
                 }
 
+                // Mapping specific columns
+                const getValFromHeaders = (headers: string[]) => {
+                    const found = Object.keys(colMap).find(h => headers.some(req => h.toLowerCase().includes(req.toLowerCase())));
+                    return found ? row.getCell(colMap[found]).text?.trim() || String(row.getCell(colMap[found]).value || '').trim() : null;
+                };
+
+                const convertDriveIdToProxy = (val: string) => {
+                    if (!val || val === '0' || val === 'false') return [];
+                    const items = val.split(/[,;\n]/).map(u => u.trim()).filter(u => u);
+                    return items.map(u => {
+                        if (u.length >= 25 && u.length <= 50 && !u.includes('/') && !u.includes(':')) {
+                            const driveUrl = `https://lh3.googleusercontent.com/u/0/d/${u}`;
+                            return `/api/proxy-image?url=${encodeURIComponent(driveUrl)}`;
+                        }
+                        if (u.includes('drive.google.com') && !u.includes('/api/proxy-image')) {
+                            return `/api/proxy-image?url=${encodeURIComponent(u)}`;
+                        }
+                        return u;
+                    });
+                };
+
+                const hinh_anh_val = getValFromHeaders(['hình ảnh hiện trường', 'ảnh hiện trường', 'hình ảnh', 'images', 'image', 'ảnh', 'hình ảnh hiện trường tổng quát']);
+                const images = convertDriveIdToProxy(hinh_anh_val || '');
+
+                const chu_ky_qc_val = getValFromHeaders(['chữ ký qc', 'qc signature', 'chu ky qc', 'ký qc']);
+                const qcSignatures = convertDriveIdToProxy(chu_ky_qc_val || '');
+                const qcSignature = qcSignatures.length > 0 ? qcSignatures[0] : null;
+
+                const inspectorNameRaw = getValFromHeaders(['qc kiểm tra', 'qc thẩm định', 'qc', 'qc_name', 'inspector', 'inspectorname']);
+
                 const inspection: any = {
                     id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
                     type: getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC',
@@ -1993,7 +2055,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                     ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc', 'item name', 'hang_muc', 'ten_hang_muc']),
                     ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'factory code', 'ma_nm']),
                     headcode: getCol(['headcode']),
-                    inspectorName: getCol(['qc kiểm tra', 'qc kiểm t', 'inspector', 'inspectorname']) || (req as any).user?.name,
+                    inspectorName: inspectorNameRaw || (req as any).user?.name,
                     workshop: getCol(['xưởng', 'workshop']),
                     inspectionStage: getCol(['công đoạn', 'công đoạn sản xuất', 'stage']),
                     date: getCol(['ngày thực hiện', 'ngày thực', 'date']),
@@ -2006,7 +2068,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                     responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), 
                     dvt: getCol(['đvt/unit', 'dvt', 'unit']),
                     items: [],
-                    images: [],
+                    images,
+                    signature: qcSignature,
                     comments: [],
                     updatedAt
                 };

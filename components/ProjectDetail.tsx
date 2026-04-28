@@ -217,7 +217,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           setIsInspectionFormOpen(false);
           setPendingPinCoord(null);
           if (onUpdate) onUpdate();
-      } catch (err) { alert("Error saving inspection spatial data."); } finally { setIsSaving(false); }
+      } catch (err: any) { 
+          console.error("Layout Save Detailed Error:", err);
+          alert(`Error saving inspection spatial data: ${err.message || 'Unknown error'}`); 
+      } finally { setIsSaving(false); }
   };
 
   const handleSaveProject = async () => {
