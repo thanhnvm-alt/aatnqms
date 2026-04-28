@@ -1301,33 +1301,29 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         
-        // Convert buffer to stream for ExcelJS Reader
-        const stream = new Readable();
-        stream.push(req.file.buffer);
-        stream.push(null);
-
-        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
         
+        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
+        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
+
         const validResults = [];
         const errorLogs = [];
         const schema = process.env.DB_SCHEMA || 'appQAQC';
 
-        for await (const worksheetReader of workbookReader) {
-          for await (const row of worksheetReader) {
-            const rowIndex = row.number;
-            // Skip Header
-            if (rowIndex === 1) continue;
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+            const row = worksheet.getRow(rowIndex);
+            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
 
             try {
-              // 1. Preserve Leading Zeros using .text
               const id = row.getCell(1).text?.trim(); 
               const defectCode = row.getCell(5).text?.trim();
               const description = row.getCell(8).text?.trim();
-              const status = row.getCell(7).text?.trim()?.toUpperCase();
-              const severity = row.getCell(6).text?.trim()?.toUpperCase();
+              const status = row.getCell(7).text?.trim()?.toUpperCase() || 'OPEN';
+              const severity = row.getCell(6).text?.trim()?.toUpperCase() || 'MEDIUM';
               const responsiblePerson = row.getCell(9).text?.trim();
 
-              if (!defectCode) throw new Error("Mã lỗi không được để trống");
+              if (!defectCode) continue;
               
               if (id && id.startsWith('NCR-')) {
                   await query(`
@@ -1344,13 +1340,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               }
               validResults.push(id || 'NEW');
             } catch (err: any) {
-              // 5. Log per-row error
-              errorLogs.push({
-                row_index: rowIndex,
-                error_message: err.message
-              });
+              errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
-          }
         }
 
         res.json({ 
@@ -1414,26 +1405,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/import/defects", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const stream = new Readable();
-        stream.push(req.file.buffer);
-        stream.push(null);
+        
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        
+        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
+        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
 
-        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
         const validResults = [];
         const errorLogs = [];
         const schema = process.env.DB_SCHEMA || 'appQAQC';
 
-        for await (const worksheetReader of workbookReader) {
-          for await (const row of worksheetReader) {
-            const rowIndex = row.number;
-            if (rowIndex === 1) continue;
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+            const row = worksheet.getRow(rowIndex);
+            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
 
             try {
               const id = row.getCell(1).text?.trim() || `DEF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
               const defect_code = row.getCell(2).text?.trim();
               const name = row.getCell(3).text?.trim();
               
-              if (!defect_code || !name) throw new Error("Mã lỗi và Tên lỗi không được để trống");
+              if (!defect_code || !name) continue;
 
               await query(`
                   INSERT INTO "${schema}"."defect_library" (id, defect_code, name, stage, category, description, severity, suggested_action, updated_at) 
@@ -1448,7 +1440,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             } catch (err: any) {
               errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
-          }
         }
         res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
@@ -1513,26 +1504,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/import/materials", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const stream = new Readable();
-        stream.push(req.file.buffer);
-        stream.push(null);
+        
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        
+        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
+        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
 
-        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
         const validResults = [];
         const errorLogs = [];
         const schema = process.env.DB_SCHEMA || 'appQAQC';
 
-        for await (const worksheetReader of workbookReader) {
-          for await (const row of worksheetReader) {
-            const rowIndex = row.number;
-            if (rowIndex === 1) continue;
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+            const row = worksheet.getRow(rowIndex);
+            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
 
             try {
               const material = row.getCell(1).text?.trim();
               const shortText = row.getCell(2).text?.trim();
               const id = row.getCell(11).text?.trim() || `MAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-              if (!material || !shortText) throw new Error("Mã vật tư và Tên vật tư không được để trống");
+              if (!material || !shortText) continue;
 
               await query(`
                   INSERT INTO "${schema}"."material" (id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "updatedAt") 
@@ -1549,7 +1541,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             } catch (err: any) {
               errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
-          }
         }
         res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
@@ -1629,26 +1620,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/import/suppliers", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const stream = new Readable();
-        stream.push(req.file.buffer);
-        stream.push(null);
+        
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        
+        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
+        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
 
-        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
         const validResults = [];
         const errorLogs = [];
         const schema = process.env.DB_SCHEMA || 'appQAQC';
 
-        for await (const worksheetReader of workbookReader) {
-          for await (const row of worksheetReader) {
-            const rowIndex = row.number;
-            if (rowIndex === 1) continue;
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+            const row = worksheet.getRow(rowIndex);
+            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
 
             try {
               const id = row.getCell(1).text?.trim() || `SUP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
               const code = row.getCell(2).text?.trim();
               const name = row.getCell(3).text?.trim();
               
-              if (!code || !name) throw new Error("Mã NCC và Tên NCC không được để trống");
+              if (!code || !name) continue;
 
               await query(`
                   INSERT INTO "${schema}"."suppliers" (id, code, name, address, contact_person, phone, email, category, status, updated_at) 
@@ -1663,7 +1655,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             } catch (err: any) {
               errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
-          }
         }
         res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
@@ -1719,19 +1710,20 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/import/ipo", memoryUpload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        const stream = new Readable();
-        stream.push(req.file.buffer);
-        stream.push(null);
+        
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        
+        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
+        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
 
-        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
         const validResults = [];
         const errorLogs = [];
         const schema = process.env.DB_SCHEMA || 'appQAQC';
 
-        for await (const worksheetReader of workbookReader) {
-          for await (const row of worksheetReader) {
-            const rowIndex = row.number;
-            if (rowIndex === 1) continue;
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+            const row = worksheet.getRow(rowIndex);
+            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
 
             try {
               const idText = row.getCell(1).text?.trim();
@@ -1742,7 +1734,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               const qty = Number(row.getCell(6).value || 0);
               const unit = row.getCell(7).text?.trim();
 
-              if (!factoryOrder) throw new Error("ID Factory Order không được để trống");
+              if (!factoryOrder) continue;
 
               // If id exists, try update, else insert
               if (idText && !isNaN(Number(idText))) {
@@ -1763,7 +1755,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             } catch (err: any) {
               errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
-          }
         }
         res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
@@ -1920,98 +1911,118 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         
-        const stream = new Readable();
-        stream.push(req.file.buffer);
-        stream.push(null);
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        
+        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
+        if (!worksheet) return res.status(400).json({ error: 'No worksheet found in Excel file' });
 
-        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(stream, {});
         const validResults = [];
         const errorLogs = [];
-
         let colMap: Record<string, number> = {};
 
-        for await (const worksheetReader of workbookReader) {
-          for await (const row of worksheetReader) {
-            const rowIndex = row.number;
-            
-            if (rowIndex === 1) {
-              row.eachCell((cell, colNumber) => {
-                const headerText = cell.text?.trim()?.toLowerCase();
-                if (headerText) colMap[headerText] = colNumber;
-              });
-              continue;
-            }
+        // Map headers from the first row
+        const firstRow = worksheet.getRow(1);
+        firstRow.eachCell((cell, colNumber) => {
+            const headerText = cell.text?.trim()?.toLowerCase();
+            if (headerText) colMap[headerText] = colNumber;
+        });
+
+        // Use standard for loop for async/await support
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+            const row = worksheet.getRow(rowIndex);
+            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
 
             try {
-              const getCol = (names: string[]) => {
-                for (const name of names) {
-                  const idx = colMap[name.toLowerCase()];
-                  if (idx) return row.getCell(idx).text?.trim();
+                const getCol = (names: string[]) => {
+                    for (const name of names) {
+                        const idx = colMap[name.toLowerCase()];
+                        if (idx) return row.getCell(idx).text?.trim();
+                    }
+                    return '';
+                };
+
+                const getVal = (names: string[]) => {
+                    for (const name of names) {
+                        const idx = colMap[name.toLowerCase()];
+                        if (idx) return row.getCell(idx).value;
+                    }
+                    return 0;
+                };
+
+                const cleanNumber = (val: any) => {
+                    if (typeof val === 'number') return val;
+                    if (!val) return 0;
+                    const cleaned = String(val).replace(/[^\d.-]/g, '');
+                    const num = parseFloat(cleaned);
+                    return isNaN(num) ? 0 : num;
+                };
+
+                const id = getCol(['mã hồ sơ', 'id', 'mã']);
+                const ma_ct = getCol(['mã dự án', 'ma_ct', 'mã công trình', 'project code', 'ma_du_an']);
+                if (!ma_ct) continue; // Skip empty rows silently or log if needed
+
+                const inspection_date_raw = getVal(['ngày thực hiện', 'ngày thực', 'date']);
+                let updatedAt = Math.floor(Date.now() / 1000);
+
+                if (inspection_date_raw) {
+                    if (inspection_date_raw instanceof Date) {
+                        updatedAt = Math.floor(inspection_date_raw.getTime() / 1000);
+                    } else {
+                        const dateStr = String(inspection_date_raw).trim();
+                        // Try DD/MM/YYYY
+                        const parts = dateStr.split('/');
+                        if (parts.length === 3) {
+                            const day = parseInt(parts[0], 10);
+                            const month = parseInt(parts[1], 10) - 1;
+                            const year = parseInt(parts[2], 10);
+                            const d = new Date(year, month, day);
+                            if (!isNaN(d.getTime())) updatedAt = Math.floor(d.getTime() / 1000);
+                        } else {
+                            const d = new Date(dateStr);
+                            if (!isNaN(d.getTime())) updatedAt = Math.floor(d.getTime() / 1000);
+                        }
+                    }
                 }
-                return '';
-              };
 
-              const getVal = (names: string[]) => {
-                for (const name of names) {
-                  const idx = colMap[name.toLowerCase()];
-                  if (idx) return row.getCell(idx).value;
-                }
-                return 0;
-              };
+                const inspection: any = {
+                    id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                    type: getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC',
+                    ma_ct,
+                    ten_ct: getCol(['tên dự án', 'ten_ct', 'tên công trình', 'project name']),
+                    ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc', 'item name', 'hang_muc', 'ten_hang_muc']),
+                    ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'factory code', 'ma_nm']),
+                    headcode: getCol(['headcode']),
+                    inspectorName: getCol(['qc kiểm tra', 'qc kiểm t', 'inspector', 'inspectorname']) || (req as any).user?.name,
+                    workshop: getCol(['xưởng', 'workshop']),
+                    inspectionStage: getCol(['công đoạn', 'công đoạn sản xuất', 'stage']),
+                    date: getCol(['ngày thực hiện', 'ngày thực', 'date']),
+                    status: getCol(['trạng thái', 'status'])?.toUpperCase() || 'DRAFT',
+                    so_luong_ipo: cleanNumber(getVal(['sl đđh', 'sl ipo', 'so_luong_ipo'])),
+                    inspectedQuantity: cleanNumber(getVal(['slkiem', 'sl kiểm', 'inspected quantity', 'inspected_qty', 'inspectedquantity'])),
+                    passedQuantity: cleanNumber(getVal(['sldat', 'sl đạt', 'passed quantity', 'passed_qty', 'passedquantity'])),
+                    failedQuantity: cleanNumber(getVal(['slloi', 'sl lỗi', 'sl hồng', 'failed quantity', 'failed_qty', 'failedquantity'])),
+                    summary: getCol(['kết luận/ghi chú', 'kết luận', 'summary']),
+                    responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), 
+                    dvt: getCol(['đvt/unit', 'dvt', 'unit']),
+                    items: [],
+                    images: [],
+                    comments: [],
+                    updatedAt
+                };
 
-              const cleanNumber = (val: any) => {
-                if (typeof val === 'number') return val;
-                if (!val) return 0;
-                const cleaned = String(val).replace(/[^\d.-]/g, '');
-                const num = parseFloat(cleaned);
-                return isNaN(num) ? 0 : num;
-              };
+                // Fallback for numbers
+                if (inspection.so_luong_ipo === 0) inspection.so_luong_ipo = cleanNumber(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']));
+                if (inspection.inspectedQuantity === 0) inspection.inspectedQuantity = cleanNumber(getCol(['slkiem', 'sl kiểm', 'inspectedquantity']));
+                if (inspection.passedQuantity === 0) inspection.passedQuantity = cleanNumber(getCol(['sldat', 'sl đạt', 'passedquantity']));
+                if (inspection.failedQuantity === 0) inspection.failedQuantity = cleanNumber(getCol(['slloi', 'sl lỗi', 'sl hồng', 'failedquantity']));
 
-              const id = getCol(['mã hồ sơ', 'id', 'mã']);
-              const ma_ct = getCol(['mã dự án', 'ma_ct', 'mã công trình', 'project code', 'ma_du_an']);
-              if (!ma_ct) throw new Error("Mã dự án (project code) không được để trống");
-
-              const inspection: any = {
-                id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                type: getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC',
-                ma_ct,
-                ten_ct: getCol(['tên dự án', 'ten_ct', 'tên công trình', 'project name']),
-                ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc', 'item name', 'hang_muc', 'ten_hang_muc']),
-                ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'mã nhà m', 'factory code', 'ma_nm']),
-                headcode: getCol(['headcode']),
-                inspectorName: getCol(['qc kiểm tra', 'qc kiểm t', 'inspector', 'inspectorname']) || (req as any).user?.name,
-                workshop: getCol(['xưởng', 'workshop']),
-                inspectionStage: getCol(['công đoạn', 'công đoạn sản xuất', 'stage']),
-                date: getCol(['ngày thực hiện', 'ngày thực', 'date']),
-                status: getCol(['trạng thái', 'status'])?.toUpperCase() || 'DRAFT',
-                so_luong_ipo: cleanNumber(getVal(['sl đđh', 'sl ipo', 'so_luong_ipo'])),
-                inspectedQuantity: cleanNumber(getVal(['slkiem', 'sl kiểm', 'inspected quantity', 'inspected_qty', 'inspectedquantity'])),
-                passedQuantity: cleanNumber(getVal(['sldat', 'sl đạt', 'passed quantity', 'passed_qty', 'passedquantity'])),
-                failedQuantity: cleanNumber(getVal(['slloi', 'sl lỗi', 'sl hong', 'failed quantity', 'failed_qty', 'failedquantity'])),
-                summary: getCol(['kết luận/ghi chú', 'kết luận', 'summary']),
-                responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), 
-                dvt: getCol(['đvt/unit', 'dvt', 'unit']),
-                items: [],
-                images: [],
-                comments: [],
-                updatedAt: Math.floor(Date.now() / 1000)
-              };
-
-              // Try fallback parsing if initial cleanNumber gave 0 but column exists
-              if (inspection.so_luong_ipo === 0) inspection.so_luong_ipo = cleanNumber(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']));
-              if (inspection.inspectedQuantity === 0) inspection.inspectedQuantity = cleanNumber(getCol(['slkiem', 'sl kiểm', 'inspectedquantity']));
-              if (inspection.passedQuantity === 0) inspection.passedQuantity = cleanNumber(getCol(['sldat', 'sl đạt', 'passedquantity']));
-              if (inspection.failedQuantity === 0) inspection.failedQuantity = cleanNumber(getCol(['slloi', 'sl lỗi', 'sl hong', 'failedquantity']));
-
-
-              await db.saveInspection(inspection);
-              console.log(`✅ Imported inspection ${inspection.id} of type ${inspection.type} to database`);
-              validResults.push(inspection.id);
+                await db.saveInspection(inspection);
+                validResults.push(inspection.id);
             } catch (err: any) {
-              console.error(`❌ Error importing row ${rowIndex}:`, err.message);
-              errorLogs.push({ row_index: rowIndex, error_message: err.message });
+                console.error(`❌ Error importing row ${rowIndex}:`, err.message);
+                errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
-          }
         }
 
         res.json({ success: true, count: validResults.length, errors: errorLogs });
@@ -2117,10 +2128,20 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('SERVER ERROR:', err);
+  
   if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
-    console.error('Bad JSON');
     return res.status(400).send({ error: 'Bad JSON' });
   }
+
+  // If it's an API request, always return JSON
+  if (req.url.startsWith('/api/')) {
+    return res.status(err.status || 500).json({ 
+      error: err.message || 'Internal Server Error',
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+  
   next(err);
 });
 

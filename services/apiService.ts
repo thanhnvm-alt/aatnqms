@@ -329,17 +329,38 @@ export const exportDefectLibrary = async () => {
     window.URL.revokeObjectURL(url);
 };
 
-export const importDefectLibraryFile = async (file: File) => {
+const importFile = async (url: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('/api/import/defects', {
+    const response = await fetch(url, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData
     });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
+    
+    const responseClone = response.clone();
+
+    if (!response.ok) {
+        let errorMsg = 'Import failed';
+        try {
+            const errorData = await response.json();
+            errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+            const text = await responseClone.text().catch(() => 'No response body');
+            errorMsg = `Import failed (${response.status}): ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`;
+        }
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        return await response.json();
+    } catch (e: any) {
+        const text = await responseClone.text().catch(() => 'No response body');
+        throw new Error(`Failed to parse response as JSON: ${e.message}. Response: ${text.substring(0, 200)}`);
+    }
 };
+
+export const importDefectLibraryFile = async (file: File) => importFile('/api/import/defects', file);
 
 export const fetchMaterials = async (search: string = '', page: number = 1, limit: number = 50) => {
     const params = new URLSearchParams();
@@ -383,17 +404,7 @@ export const exportNcrs = async () => {
     window.URL.revokeObjectURL(url);
 };
 
-export const importNcrsFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/import/ncrs', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
-};
+export const importNcrsFile = async (file: File) => importFile('/api/import/ncrs', file);
 
 export const exportMaterials = async () => {
     const response = await fetch('/api/export/materials', {
@@ -410,17 +421,7 @@ export const exportMaterials = async () => {
     window.URL.revokeObjectURL(url);
 };
 
-export const importMaterialsFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/import/materials', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
-};
+export const importMaterialsFile = async (file: File) => importFile('/api/import/materials', file);
 
 export const exportSuppliers = async () => {
     const response = await fetch('/api/export/suppliers', {
@@ -437,17 +438,7 @@ export const exportSuppliers = async () => {
     window.URL.revokeObjectURL(url);
 };
 
-export const importSuppliersFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/import/suppliers', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
-};
+export const importSuppliersFile = async (file: File) => importFile('/api/import/suppliers', file);
 
 export const exportInspections = async (filters: any = {}) => {
     const cleanFilters: any = {};
@@ -471,17 +462,7 @@ export const exportInspections = async (filters: any = {}) => {
     window.URL.revokeObjectURL(url);
 };
 
-export const importInspectionsFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/import/inspections', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
-};
+export const importInspectionsFile = async (file: File) => importFile('/api/import/inspections', file);
 
 export const exportIpoData = async (filters: any = {}) => {
     const cleanFilters: any = {};
@@ -505,17 +486,7 @@ export const exportIpoData = async (filters: any = {}) => {
     window.URL.revokeObjectURL(url);
 };
 
-export const importIpoFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch('/api/import/ipo', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    if (!response.ok) throw new Error('Import failed');
-    return await response.json();
-};
+export const importIpoFile = async (file: File) => importFile('/api/import/ipo', file);
 
 export const checkApiConnection = async () => {
     try {

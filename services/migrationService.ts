@@ -33,13 +33,41 @@ export async function runMigrations() {
 
     // Helper for adding columns
     const migrationLogs: string[] = [];
+    
+    // Cache for existing columns to avoid redundant queries
+    const existingColumnsCache: Record<string, string[]> = {};
+    
+    const getExistingColumns = async (tableName: string) => {
+        if (existingColumnsCache[tableName]) return existingColumnsCache[tableName];
+        try {
+            const res = await query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = $1 AND table_name = $2
+            `, [schema, tableName]);
+            existingColumnsCache[tableName] = res.rows.map((r: any) => r.column_name);
+            return existingColumnsCache[tableName];
+        } catch (e) {
+            return [];
+        }
+    };
+
     const addColumn = async (table: string, column: string, type: string) => {
       try {
-        // Use IF NOT EXISTS directly in ALTER TABLE for better reliability
-        await query(`ALTER TABLE "${schema}"."${table}" ADD COLUMN IF NOT EXISTS "${column}" ${type}`);
-        const msg = `✅ Ensured column ${column} exists in ${schema}.${table}`;
+        const existingCols = await getExistingColumns(table);
+        if (existingCols.includes(column)) {
+            return; // Column already exists, skip
+        }
+
+        await query(`ALTER TABLE "${schema}"."${table}" ADD COLUMN "${column}" ${type}`);
+        const msg = `✅ Added column ${column} to ${schema}.${table}`;
         console.log(msg);
         migrationLogs.push(msg);
+        
+        // Update cache
+        if (existingColumnsCache[table]) {
+            existingColumnsCache[table].push(column);
+        }
       } catch (err: any) {
         const msg = `⚠️ Could not add column ${column} to ${schema}.${table}: ${err.message}`;
         console.warn(msg);

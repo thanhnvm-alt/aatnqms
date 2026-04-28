@@ -178,13 +178,15 @@ export async function saveInspection(inspection: Inspection) {
     if (inspection.type === 'PQC') {
       await query(`
         INSERT INTO ${SCHEMA}.forms_pqc (
-          id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, sl_ipo, qty_total, qty_pass, qty_fail, 
+          id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, 
+          sl_ipo, qty_total, qty_pass, qty_fail,
+          so_luong_ipo, inspected_qty, passed_qty, failed_qty,
           inspector, status, data, updated_at, items_json, images_json, headcode, date, score, summary, type, 
           production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
           signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
           comments_json
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
           updated_at = EXCLUDED.updated_at, 
@@ -208,12 +210,16 @@ export async function saveInspection(inspection: Inspection) {
           qty_total = EXCLUDED.qty_total,
           qty_pass = EXCLUDED.qty_pass,
           qty_fail = EXCLUDED.qty_fail,
+          so_luong_ipo = EXCLUDED.so_luong_ipo,
+          inspected_qty = EXCLUDED.inspected_qty,
+          passed_qty = EXCLUDED.passed_qty,
+          failed_qty = EXCLUDED.failed_qty,
           workshop = EXCLUDED.workshop,
           stage = EXCLUDED.stage
       `, sanitizeArgs([
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
           inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
-          inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
+          inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0, inspection.passedQuantity || 0, inspection.failedQuantity || 0,
           inspection.inspectorName, inspection.status, inspection, updatedAt,
           inspection.items, inspection.images, inspection.headcode, inspection_date, inspection.score, 
           inspection.summary, inspection.type, inspection.productionComment,
@@ -230,11 +236,13 @@ export async function saveInspection(inspection: Inspection) {
         id, type, ma_ct, ten_ct, ten_hang_muc, po_number, supplier, inspector, status, date, 
         score, summary, items_json, materials_json, signature_qc, signature_manager, name_manager,
         signature_production, name_production, comment_production, images_json, delivery_images_json, 
-        report_images_json, comments_json, so_luong_ipo, inspected_qty, passed_qty, failed_qty, 
+        report_images_json, comments_json, 
+        so_luong_ipo, inspected_qty, passed_qty, failed_qty,
+        sl_ipo, qty_total, qty_pass, qty_fail,
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
-        responsible_person, ma_nha_may, workshop, stage, headcode
+        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42)
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
         score = EXCLUDED.score, 
@@ -251,6 +259,7 @@ export async function saveInspection(inspection: Inspection) {
         signature_production = EXCLUDED.signature_production,
         name_production = EXCLUDED.name_production,
         comment_production = EXCLUDED.comment_production,
+        production_comment = EXCLUDED.production_comment,
         location = EXCLUDED.location,
         comments_json = EXCLUDED.comments_json,
         responsible_person = EXCLUDED.responsible_person,
@@ -258,6 +267,10 @@ export async function saveInspection(inspection: Inspection) {
         inspected_qty = EXCLUDED.inspected_qty,
         passed_qty = EXCLUDED.passed_qty,
         failed_qty = EXCLUDED.failed_qty,
+        sl_ipo = EXCLUDED.sl_ipo,
+        qty_total = EXCLUDED.qty_total,
+        qty_pass = EXCLUDED.qty_pass,
+        qty_fail = EXCLUDED.qty_fail,
         materials_json = EXCLUDED.materials_json,
         delivery_images_json = EXCLUDED.delivery_images_json,
         report_images_json = EXCLUDED.report_images_json,
@@ -280,12 +293,13 @@ export async function saveInspection(inspection: Inspection) {
         inspection.signature, inspection.managerSignature, inspection.managerName,
         inspection.productionSignature, inspection.productionName, inspection.productionComment,
         inspection.images, inspection.deliveryNoteImages, inspection.reportImages, inspection.comments,
-        inspection.so_luong_ipo, inspection.inspectedQuantity, inspection.passedQuantity, inspection.failedQuantity,
+        inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0, inspection.passedQuantity || 0, inspection.failedQuantity || 0,
         inspection.dvt, updatedAt, 
         inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
         inspection.location, inspection.supplierAddress, inspection.supportingDocs,
         inspection.responsiblePerson,
-        inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode
+        inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode,
+        inspection.productionComment
       ]));
     }
 
@@ -382,21 +396,10 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
         const matCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'materials_json::text' : 'NULL::text as materials_json';
         
-        const slIpoCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
-            ? 'COALESCE(so_luong_ipo, sl_ipo)::numeric as so_luong_ipo' 
-            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'so_luong_ipo::numeric as so_luong_ipo' : '0::numeric as so_luong_ipo');
-        
-        const insQtyCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
-            ? 'COALESCE(inspected_qty, qty_total)::numeric as inspected_qty' 
-            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'inspected_qty::numeric as inspected_qty' : '0::numeric as inspected_qty');
-            
-        const passQtyCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
-            ? 'COALESCE(passed_qty, qty_pass)::numeric as passed_qty' 
-            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'passed_qty::numeric as passed_qty' : '0::numeric as passed_qty');
-            
-        const failQtyCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
-            ? 'COALESCE(failed_qty, qty_fail)::numeric as failed_qty' 
-            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'failed_qty::numeric as failed_qty' : '0::numeric as failed_qty');
+        const slIpoCol = 'COALESCE(so_luong_ipo, sl_ipo, 0)::numeric as so_luong_ipo';
+        const insQtyCol = 'COALESCE(inspected_qty, qty_total, 0)::numeric as inspected_qty';
+        const passQtyCol = 'COALESCE(passed_qty, qty_pass, 0)::numeric as passed_qty';
+        const failQtyCol = 'COALESCE(failed_qty, qty_fail, 0)::numeric as failed_qty';
         const imagesCol = 'images_json::text as images_json';
 
         return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
