@@ -123,54 +123,43 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-40 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
-                <Truck className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">Danh sách Nhà Cung Cấp</h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">ISO 9001 Supplier Audit</p>
-              </div>
+      <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-40 shadow-sm flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <div className="relative flex-1 min-w-[200px] md:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" placeholder="Tìm tên, mã, ngành hàng..." 
+              value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+            />
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" placeholder="Tìm tên, mã, ngành hàng..." 
-                  value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
-                />
-              </div>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                accept=".xlsx, .xls" 
-                className="hidden" 
-              />
-              {user.role !== 'QC' && (
-                <>
-                  <button 
-                    onClick={handleImportClick}
-                    disabled={isImporting}
-                    title="Nhập Excel"
-                    className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                  </button>
-                  <button 
-                    onClick={handleExport}
-                    disabled={isExporting}
-                    title="Xuất Excel"
-                    className="p-2.5 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                  </button>
-                </>
-              )}
-              <button onClick={() => handleOpenModal()} className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-5 h-5" /></button>
-          </div>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            accept=".xlsx, .xls" 
+            className="hidden" 
+          />
+          {user.role !== 'QC' && (
+            <>
+              <button 
+                onClick={handleImportClick}
+                disabled={isImporting}
+                title="Nhập Excel"
+                className="p-2 bg-slate-50 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              </button>
+              <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                title="Xuất Excel"
+                className="p-2 bg-slate-50 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              </button>
+            </>
+          )}
+          <button onClick={() => handleOpenModal()} className="p-2 bg-slate-900 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-4 h-4" /></button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">

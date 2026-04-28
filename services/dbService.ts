@@ -30,7 +30,22 @@ const safeJsonParse = <T>(jsonString: any, defaultValue: T): T => {
 
 const parseTS = (val: any): number => {
     if (!val) return Math.floor(Date.now() / 1000);
-    const parsed = typeof val === 'string' ? Date.parse(val) : val;
+    if (typeof val === 'number') {
+        // If it's milliseconds (length > 11), convert to seconds
+        if (val > 100000000000) return Math.floor(val / 1000);
+        return val;
+    }
+    const strVal = String(val).trim();
+    
+    // Handle DD/MM/YYYY
+    const ddmmmyyyy = strVal.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (ddmmmyyyy) {
+        const [, d, m, y, h, min, s] = ddmmmyyyy;
+        const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), h ? parseInt(h, 10) : 0, min ? parseInt(min, 10) : 0, s ? parseInt(s, 10) : 0);
+        if (!isNaN(date.getTime())) return Math.floor(date.getTime() / 1000);
+    }
+
+    const parsed = Date.parse(strVal);
     // If it's milliseconds (length > 11), convert to seconds
     if (!isNaN(parsed) && parsed > 100000000000) {
         return Math.floor(parsed / 1000);
@@ -142,7 +157,7 @@ export async function saveInspection(inspection: Inspection) {
   const oldValue = existing ? { ...existing } : null;
 
   // Ensure dates are parsed as BIGINT epochs for DB (seconds)
-  const updatedAt = Math.floor(Date.now() / 1000);
+  const updatedAt = inspection.updatedAt || Math.floor(Date.now() / 1000);
   const inspection_date = parseTS(inspection.date);
 
     if (inspection.type === 'PQC') {
@@ -405,14 +420,20 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     if (filters.startDate) {
         const idx = args.length + 1;
         whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `date >= $${idx}`;
-        args.push(filters.startDate);
+        // Convert YYYY-MM-DD string to numeric epoch seconds
+        const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
+        whereClause += `(CASE WHEN date ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) >= $${idx}`;
+        args.push(ts);
     }
     if (filters.endDate) {
         const idx = args.length + 1;
         whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `date <= $${idx}`;
-        args.push(filters.endDate);
+        // Convert YYYY-MM-DD string to numeric epoch seconds (end of day)
+        const d = new Date(filters.endDate);
+        d.setHours(23, 59, 59, 999);
+        const ts = Math.floor(d.getTime() / 1000);
+        whereClause += `(CASE WHEN date ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) <= $${idx}`;
+        args.push(ts);
     }
 
     const finalQuery = `

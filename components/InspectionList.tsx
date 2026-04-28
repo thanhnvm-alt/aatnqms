@@ -279,8 +279,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             let itemDateStr = String(item.date);
             let d: Date | null = null;
 
-            if (/^\d{2}\/\d{2}\/\d{4}$/.test(itemDateStr)) {
-                const [day, month, year] = itemDateStr.split('/');
+            if (/^\d{2}\/\d{2}\/\d{4}/.test(itemDateStr)) {
+                const [day, month, year] = itemDateStr.substring(0, 10).split('/');
                 d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
             } else if (/^\d{10}$/.test(itemDateStr)) {
                 d = new Date(parseInt(itemDateStr, 10) * 1000);

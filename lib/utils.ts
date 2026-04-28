@@ -16,11 +16,27 @@ export const formatDisplayDate = (dateVal: string | number | undefined | null): 
             year: 'numeric'
         }).format(date);
     }
+    // Nhận dạng DD/MM/YYYY hh:mm:ss
+    if (/^\d{2}\/\d{2}\/\d{4}/.test(strVal)) {
+        return strVal.substring(0, 10);
+    }
+    
     // Nếu đã có format YYYY-MM-DD, thử chuyển sang DD/MM/YYYY
-    if (/^\d{4}-\d{2}-\d{2}$/.test(strVal)) {
-        const [y, m, d] = strVal.split('-');
+    if (/^\d{4}-\d{2}-\d{2}/.test(strVal)) {
+        const strDatePart = strVal.substring(0, 10);
+        const [y, m, d] = strDatePart.split('-');
         return `${d}/${m}/${y}`;
     }
+    
+    // Nếu là chuỗi ISO chứa chữ T
+    if (strVal.includes('T')) {
+        const datePart = strVal.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            const [y, m, d] = datePart.split('-');
+            return `${d}/${m}/${y}`;
+        }
+    }
+    
     // Những TH khác thì return y xì
     return strVal;
 };

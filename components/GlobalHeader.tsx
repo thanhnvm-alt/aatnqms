@@ -100,6 +100,10 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       case 'NCR_LIST': return 'NCR Management';
       case 'DEFECT_LIST': return 'Defect Tracker';
       case 'DEFECT_LIBRARY': return 'Defect Library';
+      case 'SUPPLIERS': return 'Danh sách Nhà cung cấp';
+      case 'SUPPLIER_DETAIL': return 'Hồ sơ Nhà cung cấp';
+      case 'MATERIALS': return 'Quản lý Vật liệu';
+      case 'IPO': return 'IPO Data';
       case 'DETAIL': return 'Inspection Detail';
       default: return 'QAQC System';
     }
@@ -120,7 +124,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         default: return 'Đang thực hiện kiểm tra';
       }
     }
-    return user.name;
+    return null;
   };
 
   const renderMenuItems = () => {
@@ -179,10 +183,12 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
           <h1 className="text-lg md:text-2xl font-bold text-slate-900 tracking-tight truncate">
             {getPageTitle()}
           </h1>
-          <div className="flex items-center gap-2">
-            {view !== 'FORM' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 hidden md:block"></div>}
-            <span className="text-xs md:text-sm font-medium text-slate-500 truncate">{getPageSubtitle()}</span>
-          </div>
+          {getPageSubtitle() && (
+            <div className="flex items-center gap-2">
+              {view !== 'FORM' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 hidden md:block"></div>}
+              <span className="text-xs md:text-sm font-medium text-slate-500 truncate">{getPageSubtitle()}</span>
+            </div>
+          )}
         </div>
       </div>
 

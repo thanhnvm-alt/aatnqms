@@ -1992,13 +1992,16 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               // Try to set updatedAt from inspection date if provided
               if (inspection.date) {
                 let parsedDate = null;
-                const dateStr = inspection.date.trim();
-                // Handle DD/MM/YYYY
-                if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-                    const [d, m, y] = dateStr.split('/');
-                    parsedDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+                let dateStr = String(inspection.date).trim();
+                
+                // Matches DD/MM/YYYY hh:mm:ss or DD/MM/YYYY
+                const dateMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+                if (dateMatch) {
+                    const [, d, m, y, h, min, s] = dateMatch;
+                    parsedDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), h ? parseInt(h, 10) : 0, min ? parseInt(min, 10) : 0, s ? parseInt(s, 10) : 0);
                 } else {
-                    parsedDate = new Date(dateStr);
+                    const ts = Date.parse(dateStr);
+                    if (!isNaN(ts)) parsedDate = new Date(ts);
                 }
                 
                 if (parsedDate && !isNaN(parsedDate.getTime())) {

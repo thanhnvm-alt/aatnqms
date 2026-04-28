@@ -162,16 +162,7 @@ export const Settings: React.FC<SettingsProps> = ({
   return (
     <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0 bg-slate-50">
         <div className="bg-white p-3 md:p-4 border-b border-slate-200 flex flex-col gap-3 sticky top-0 z-20 shadow-sm">
-             <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={onClose} icon={<ArrowLeft className="w-4 h-4"/>} className="px-2">
-                        <span className="hidden md:inline">Quay lại</span>
-                    </Button>
-                    <div className="flex items-center gap-2 px-2 border-l border-slate-200">
-                        <SettingsIcon className="w-5 h-5 text-slate-700" />
-                        <h2 className="text-base md:text-lg font-bold text-slate-800 uppercase tracking-tight">Cài đặt hệ thống</h2>
-                    </div>
-                 </div>
+             <div className="flex items-center justify-end">
                  {isAdminOrManager && onCheckConnection && (
                     <Button variant={connStatus === 'ERROR' ? 'danger' : 'secondary'} size="sm" onClick={handleTestConnection} disabled={isChecking} icon={isChecking ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Wifi className="w-4 h-4"/>} className="md:hidden"></Button>
                  )}

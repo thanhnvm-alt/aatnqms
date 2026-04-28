@@ -175,21 +175,8 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50">
-            <header className="px-6 py-8 bg-white border-b border-slate-200">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => onNavigate('DASHBOARD')} className="p-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-600 transition-all active:scale-90 lg:hidden">
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <ShieldAlert className="w-6 h-6 text-red-600" />
-                                <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Thùng Rác Hệ Thống</h1>
-                            </div>
-                            <p className="text-slate-500 font-medium text-sm mt-1">Quản lý các dữ liệu đã xóa (Chỉ dành cho Admin)</p>
-                        </div>
-                    </div>
-
+            <header className="px-4 py-4 md:px-6 md:py-4 bg-white border-b border-slate-200 shrink-0">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-end gap-6">
                     <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
                         {selectedIds.length > 0 && (
                             <div className="flex items-center gap-2 animate-in slide-in-from-right duration-300">

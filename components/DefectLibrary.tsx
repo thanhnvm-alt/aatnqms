@@ -214,18 +214,8 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
       <input type="file" ref={fileInputRef} onChange={handleImportFile} accept=".xlsx" className="hidden" />
       
       {/* HEADER TOOLBAR */}
-      <div className="bg-white p-4 md:px-6 md:py-4 border-b border-slate-200 shadow-sm shrink-0">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg">
-                      <BookOpen className="w-6 h-6" />
-                  </div>
-                  <div>
-                      <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Thư viện lỗi ISO</h2>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tiêu chuẩn kỹ thuật AATN</p>
-                  </div>
-              </div>
-
+      <div className="bg-white p-3 md:px-6 md:py-3 border-b border-slate-200 shadow-sm shrink-0">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-end gap-4">
               <div className="flex flex-wrap items-center gap-2 flex-1 md:justify-end">
                   <div className="relative group flex-1 md:max-w-xs">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500" />

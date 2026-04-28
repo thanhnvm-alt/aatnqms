@@ -147,12 +147,18 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Package className="text-blue-600" /> Quản lý Vật liệu
-        </h1>
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-40 shadow-sm flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <div className="relative flex-1 min-w-[200px] md:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Tìm kiếm..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+            />
+          </div>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -165,51 +171,41 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
               <button 
                 onClick={handleImportClick}
                 disabled={isImporting}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
+                title="Nhập Excel"
+                className="p-2 bg-slate-50 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
               >
-                {isImporting ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
-                Nhập Excel
+                {isImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
               </button>
               <button 
                 onClick={handleExport}
                 disabled={isExporting}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg flex items-center gap-2 hover:bg-slate-200 disabled:opacity-50"
+                title="Xuất Excel"
+                className="p-2 bg-slate-50 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-50"
               >
-                {isExporting ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
-                Xuất Excel
+                {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
               </button>
             </>
           )}
           <button 
             onClick={() => { setEditingMaterial(null); setIsModalOpen(true); }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700"
+            title="Thêm Vật Liệu"
+            className="p-2 bg-slate-900 text-white rounded-xl shadow-lg active:scale-95 transition-all"
           >
-            <Plus size={20} /> Thêm vật liệu
+            <Plus size={16} /> 
           </button>
-        </div>
       </div>
 
-      {user.role === 'ADMIN' && selectedIds.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
-          <span className="text-sm font-medium text-red-700">Đã chọn {selectedIds.length} vật liệu</span>
-          <button onClick={handleBulkDelete} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-red-700 flex items-center gap-2">
-            <Trash2 size={14} /> Xóa đã chọn
-          </button>
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24 flex flex-col">
+        {user.role === 'ADMIN' && selectedIds.length > 0 && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between shrink-0">
+            <span className="text-sm font-medium text-red-700">Đã chọn {selectedIds.length} vật liệu</span>
+            <button onClick={handleBulkDelete} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-red-700 flex items-center gap-2">
+              <Trash2 size={14} /> Xóa đã chọn
+            </button>
+          </div>
+        )}
 
-      <div className="mb-4 relative shrink-0">
-        <Search className="absolute left-3 top-3 text-slate-400" size={20} />
-        <input 
-          type="text" 
-          placeholder="Tìm kiếm theo mã, tên, NCC, dự án..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-        />
-      </div>
-
-      <div className="bg-white shadow rounded-lg overflow-hidden flex-1 flex flex-col">
+        <div className="bg-white shadow rounded-lg overflow-hidden flex-1 flex flex-col">
         <div className="overflow-x-auto flex-1">
           <table className="w-full min-w-[1000px]">
             <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
@@ -285,6 +281,7 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
                 </button>
             </div>
         )}
+      </div>
       </div>
 
       {isModalOpen && (
