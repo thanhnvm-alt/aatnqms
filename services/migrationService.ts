@@ -8,30 +8,7 @@ export async function runMigrations() {
   console.log(`🚀 ISO-DB: Starting migrations in schema ${schema}...`);
   
   try {
-    // 1. Ensure Schema and Extensions exist (Try but don't fail if permission denied)
-    try {
-      const checkSchema = await query(`SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`, [schema]);
-      if (checkSchema.rows.length === 0) {
-          try {
-              await query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-          } catch (e: any) {
-              console.warn(`⚠️ Could not ensure schema exists (might already exist or permission denied):`, e.message);
-          }
-      }
-
-      const checkExt = await query(`SELECT extname FROM pg_extension WHERE extname = 'pgcrypto'`);
-      if (checkExt.rows.length === 0) {
-          try {
-              await query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
-          } catch (e: any) {
-              console.warn(`⚠️ Could not ensure pgcrypto extension (might already exist or permission denied):`, e.message);
-          }
-      }
-    } catch (e: any) {
-      console.warn(`⚠️ Error checking schema/extension:`, e.message);
-    }
-
-    // Helper for adding columns
+    // 1. Database environment setup (Assume schema/extensions exist externally)
     const migrationLogs: string[] = [];
     
     // Cache for existing columns to avoid redundant queries
