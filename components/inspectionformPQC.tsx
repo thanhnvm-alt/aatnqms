@@ -1,5 +1,6 @@
 import { getProxyImageUrl } from '../src/utils';
 
+import ProxyImage from '../src/components/ProxyImage';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, NCR, DefectLibraryItem } from '../types';
 import { 
@@ -237,7 +238,10 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesBefore?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={getProxyImageUrl(img)} className="w-full h-full object-cover cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')}>
+                                        <ProxyImage src={img} alt="Ảnh trước" className="w-full h-full object-cover" />
+                                        <button onClick={(e) => { e.stopPropagation(); setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -251,7 +255,10 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
                                 {ncrData.imagesAfter?.map((img, i) => (
-                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group"><img src={getProxyImageUrl(img)} className="w-full h-full object-cover" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')} referrerPolicy="no-referrer" /><button onClick={() => setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button></div>
+                                    <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')}>
+                                        <ProxyImage src={img} alt="Ảnh sau" className="w-full h-full object-cover" />
+                                        <button onClick={(e) => { e.stopPropagation(); setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -509,54 +516,82 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
     setIsSaving(true);
     try {
-        const itemsToSave = (formData.items || []).filter(it => it.stage === formData.inspectionStage || !it.stage);
+        const entityId = formData.id || 'new';
+        
+        // Helper to upload if it's base64
+        const uploadIfBase64 = async (url: string, role: string) => {
+            if (url.startsWith('data:')) {
+                // uploadQMSImage expects a Blob or File for PQC/Inspection types
+                // But IQC uses the same service. Let's see if it handles base64 directly or needs conversion.
+                // IQC uses base64 strings if the image source starts with 'data:'.
+                return await uploadQMSImage(url, { entityId, type: 'INSPECTION', role });
+            }
+            return url;
+        };
+
+        // 1. Process Main Images
+        const processedImages = await Promise.all((formData.images || []).map(img => uploadIfBase64(img, 'MAIN')));
+
+        // 2. Process Item Images
+        const processedItems = await Promise.all((formData.items || []).map(async (item) => {
+            const itemImages = await Promise.all((item.images || []).map(img => uploadIfBase64(img, 'ITEM')));
+            return { ...item, images: itemImages };
+        }));
+
+        const itemsToSave = processedItems.filter(it => it.stage === formData.inspectionStage || !it.stage);
         const hasIssues = itemsToSave.some(it => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
         const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
 
         await onSave({ 
             ...formData, 
             items: itemsToSave, 
+            images: processedImages,
             status: finalStatus, 
             inspectorName: user.name, 
             updatedAt: new Date().toISOString() 
         } as Inspection);
-    } catch (e: any) { alert("Lỗi khi lưu phiếu: " + (e.message || e)); } finally { setIsSaving(false); }
+    } catch (e: any) { 
+        console.error("ISO-SAVE: Error uploading images or saving", e);
+        alert("Lỗi lưu báo cáo PQC (có thể do lỗi tải ảnh lên)."); 
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files; 
+    const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadId) return;
-    
     setIsProcessingImages(true);
     try {
-        const uploadedUrls = await Promise.all(
-            Array.from(files).map(async (file: File) => {
-                return await uploadQMSImage(file, { 
-                    entityId: formData.id || 'new', 
-                    type: 'INSPECTION', 
-                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+        const base64Images = await Promise.all(
+            Array.from(files).map((file: File) => {
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
                 });
             })
         );
-
+        
         if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...base64Images] }));
         } else {
             setFormData(prev => ({ 
                 ...prev, 
                 items: prev.items?.map(i => 
                     i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
+                        ? { ...i, images: [...(i.images || []), ...base64Images] } 
                         : i
                 ) 
             }));
         }
-    } catch (err) {
-        console.error("ISO-UPLOAD: Failed", err);
-        alert("Lỗi tải ảnh lên.");
-    } finally {
-        setIsProcessingImages(false);
-        e.target.value = '';
+    } catch (err) { 
+        console.error("ISO-LOCAL-STORAGE: Failed", err); 
+        alert("Lỗi xử lý ảnh.");
+    } finally { 
+        setIsProcessingImages(false); 
+        e.target.value = ''; 
     }
   };
 
@@ -658,10 +693,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
                 <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
-                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group">
-                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)} referrerPolicy="no-referrer" />
-                        <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
-                    </div>
+                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
+                            <ProxyImage src={img} alt="Ảnh" className="w-full h-full object-cover" />
+                            <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                        </div>
                 ))}
             </div>
         </section>
@@ -768,7 +803,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 {item.images && item.images.length > 0 && (
                                     <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
                                         {item.images.map((im, i) => (
-                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group"><img src={getProxyImageUrl(im)} className="w-full h-full object-cover cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)} /><button onClick={() => { const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button></div>
+                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}>
+                                            <ProxyImage src={im} alt="Ảnh lỗi" className="w-full h-full object-cover" />
+                                            <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button>
+                                        </div>
                                         ))}
                                     </div>
                                 )}

@@ -11,12 +11,9 @@ export const INITIAL_CHECKLIST_TEMPLATE = [
 ];
 
 export const PQC_CHECKLIST_TEMPLATE = [
-  { id: 'pqc_1', category: 'Lắp ráp', label: 'Đúng bản vẽ lắp ráp', status: CheckStatus.PENDING, notes: '' },
-  { id: 'pqc_2', category: 'Lắp ráp', label: 'Độ kín khít mối ghép', status: CheckStatus.PENDING, notes: '' },
-  { id: 'pqc_3', category: 'Bề mặt', label: 'Chà nhám/Làm nguội', status: CheckStatus.PENDING, notes: '' },
-  { id: 'pqc_4', category: 'Bề mặt', label: 'Màu sắc đồng bộ', status: CheckStatus.PENDING, notes: '' },
-  { id: 'pqc_5', category: 'Kết cấu', label: 'Độ chắc chắn/Cân bằng', status: CheckStatus.PENDING, notes: '' },
-  { id: 'pqc_6', category: 'Phụ kiện', label: 'Lắp đúng/đủ phụ kiện', status: CheckStatus.PENDING, notes: '' },
+  { id: 'pqc_1', stage: 'Chuẩn bị', category: 'Thi công', label: 'Vệ sinh khu vực', status: CheckStatus.PENDING, notes: '' },
+  { id: 'pqc_2', stage: 'Gia công', category: 'Thi công', label: 'Cắt phôi', status: CheckStatus.PENDING, notes: '' },
+  { id: 'pqc_3', stage: 'Lắp ráp', category: 'Thi công', label: 'Lắp ráp chi tiết', status: CheckStatus.PENDING, notes: '' },
 ];
 
 export const IQC_CHECKLIST_TEMPLATE = [

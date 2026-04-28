@@ -290,6 +290,7 @@ export async function runMigrations() {
         await addColumn(table, 'delivery_images_json', 'TEXT');
         await addColumn(table, 'report_images_json', 'TEXT');
         await addColumn(table, 'date', 'TEXT');
+        await addColumn(table, 'supporting_docs_json', 'TEXT');
     }
 
     // 8. Defect Library

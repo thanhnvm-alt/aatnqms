@@ -22,6 +22,7 @@ interface InspectionFormProps {
 }
 
 import { SignaturePad } from './SignaturePad';
+import { ProxyImage } from '../src/components/ProxyImage';
 
 export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({
@@ -199,7 +200,11 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
         deliveryQty: 0,
         unit: 'PCS',
         criteria: [],
-        items: [],
+        items: [
+            { id: `chk_${Date.now()}_1`, category: '', label: 'Kích thước', status: CheckStatus.PENDING, notes: '', images: [] },
+            { id: `chk_${Date.now()}_2`, category: '', label: 'Ngoại quan', status: CheckStatus.PENDING, notes: '', images: [] },
+            { id: `chk_${Date.now()}_3`, category: '', label: 'Kết cấu', status: CheckStatus.PENDING, notes: '', images: [] }
+        ],
         inspectQty: 0,
         passQty: 0,
         failQty: 0,
@@ -222,6 +227,14 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
         let mat = { ...nextMaterials[idx], [field]: val };
         if (field === 'category') {
             const btpTpl = templates['SQC_BTP'] || [];
+            
+            // Defaul items
+            const defaultItems = [
+                { id: `chk_${Date.now()}_1`, category: value, label: 'Kích thước', status: CheckStatus.PENDING, notes: '', images: [] },
+                { id: `chk_${Date.now()}_2`, category: value, label: 'Ngoại quan', status: CheckStatus.PENDING, notes: '', images: [] },
+                { id: `chk_${Date.now()}_3`, category: value, label: 'Kết cấu', status: CheckStatus.PENDING, notes: '', images: [] }
+            ];
+
             mat.items = btpTpl
                 .filter(i => i.category === value)
                 .map(i => ({
@@ -231,6 +244,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     notes: '',
                     images: []
                 }));
+            
+            // Add defaults if they are missing (simplified)
+            if (mat.items.length === 0) mat.items = defaultItems;
         }
         if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
         else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
@@ -278,7 +294,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
             }
             if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
                 const nextMats = [...(prev.materials || [])];
-                const items = [...nextMats[matIdx].items];
+                const items = [...(nextMats[matIdx].items || [])];
                 items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...base64Images] };
                 nextMats[matIdx] = { ...nextMats[matIdx], items };
                 return { ...prev, materials: nextMats };
@@ -311,7 +327,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
           }
           if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
               const nextMats = [...(prev.materials || [])];
-              const items = [...nextMats[matIdx].items];
+              const items = [...(nextMats[matIdx].items || [])];
               const imgs = [...(items[itemIdx].images || [])];
               imgs[idx] = updatedImg;
               items[itemIdx] = { ...items[itemIdx], images: imgs };
@@ -327,8 +343,51 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
     if (!formData.signature) { alert("QC bắt buộc ký tên."); return; }
     setIsSaving(true);
     try {
-        await onSave({ ...formData, status: InspectionStatus.PENDING, updatedAt: new Date().toISOString() } as Inspection);
-    } catch (e) { alert("Lỗi lưu SQC-BTP."); } finally { setIsSaving(false); }
+        const entityId = formData.id || 'new';
+
+        // Helper to upload if it's base64
+        const uploadIfBase64 = async (url: string, role: string) => {
+            if (url.startsWith('data:')) {
+                return await uploadQMSImage(url, { entityId, type: 'INSPECTION', role });
+            }
+            return url;
+        };
+
+        // 1. Process Images
+        const processedDeliveryImages = await Promise.all((formData.deliveryNoteImages || []).map(img => uploadIfBase64(img, 'DELIVERY')));
+        const processedReportImages = await Promise.all((formData.reportImages || []).map(img => uploadIfBase64(img, 'REPORT')));
+        const processedDrawingImages = await Promise.all((formData.drawingImages || []).map(img => uploadIfBase64(img, 'DRAWING')));
+
+        const processedMaterials = await Promise.all((formData.materials || []).map(async (mat) => {
+            const matImages = await Promise.all((mat.images || []).map(img => uploadIfBase64(img, 'MATERIAL')));
+            
+            const processedItems = await Promise.all((mat.items || []).map(async (item) => {
+                const itemImages = await Promise.all((item.images || []).map(img => uploadIfBase64(img, 'ITEM')));
+                return { ...item, images: itemImages };
+            }));
+
+            return { 
+                ...mat, 
+                images: matImages,
+                items: processedItems
+            };
+        }));
+
+        await onSave({ 
+            ...formData, 
+            deliveryNoteImages: processedDeliveryImages,
+            reportImages: processedReportImages,
+            drawingImages: processedDrawingImages,
+            materials: processedMaterials,
+            status: InspectionStatus.PENDING, 
+            updatedAt: new Date().toISOString() 
+        } as Inspection);
+    } catch (e: any) { 
+        console.error("ISO-SAVE: Error uploading images or saving", e);
+        alert("Lỗi lưu báo cáo SQC-BTP (có thể do lỗi tải ảnh lên)."); 
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   return (
@@ -386,7 +445,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                         <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                             {formData.deliveryNoteImages?.map((img, i) => (
                                 <div key={i} className="relative group shrink-0">
-                                    <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in shadow-sm" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })} />
+                                    <div className="cursor-zoom-in" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })}>
+                                        <ProxyImage src={img} alt="Phiếu giao hàng" className="w-10 h-10 rounded border border-slate-200 object-cover shadow-sm" />
+                                    </div>
                                     <button
                                         onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
                                         className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -403,7 +464,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                         <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                             {formData.reportImages?.map((img, i) => (
                                 <div key={i} className="relative group shrink-0">
-                                    <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in shadow-sm" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })} />
+                                    <div className="cursor-zoom-in" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })}>
+                                        <ProxyImage src={img} alt="Báo cáo NCC" className="w-10 h-10 rounded border border-slate-200 object-cover shadow-sm" />
+                                    </div>
                                     <button
                                         onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
                                         className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -427,7 +490,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.drawingImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.drawingImages!, index: i, context: { type: 'DRAWING' } })} />
+                                <div className="cursor-zoom-in" onClick={() => setEditorState({ images: formData.drawingImages!, index: i, context: { type: 'DRAWING' } })}>
+                                    <ProxyImage src={img} alt="Bản vẽ" className="w-10 h-10 rounded border border-slate-200 object-cover" />
+                                </div>
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, drawingImages: prev.drawingImages?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -515,57 +580,114 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 uppercase flex items-center justify-between"><span>Đạt</span><span className="text-[8px] bg-green-100 px-1 rounded">{passRate}%</span></label><input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-7 shadow-sm"/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 uppercase flex items-center justify-between"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label><input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-7 shadow-sm"/></div>
                                  </div>
-                                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                                     <label className="text-[9px] font-black text-indigo-600 uppercase flex items-center justify-between">Tải lên Ảnh lỗi (nếu có)
-                                        <div className="flex gap-1">
-                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx: 0 }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button>
-                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx: 0 }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3 h-3"/></button>
-                                        </div>
-                                     </label>
-                                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
-                                        {mat.items[0]?.images?.map((img, i) => (
-                                            <div key={i} className="relative group shrink-0">
-                                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: mat.items[0].images!, index: i, context: { type: 'ITEM', matIdx, itemIdx: 0 } })} />
-                                                <button
-                                                    onClick={() => {
-                                                        const nextImgs = [...(mat.items[0].images || [])];
-                                                        nextImgs.splice(i, 1);
-                                                        updateMaterialItem(matIdx, 0, 'images', nextImgs);
-                                                    }}
-                                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                                                    type="button"
-                                                >
-                                                    <X className="w-2 h-2" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                     </div>
-                                 </div>
                                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 mt-2">
-                                     <label className="text-[9px] font-black text-indigo-600 uppercase flex items-center justify-between">Tải ảnh sản phẩm
-                                        <div className="flex gap-1">
-                                            <button onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button>
-                                            <button onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3 h-3"/></button>
-                                        </div>
-                                     </label>
-                                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
-                                        {mat.images?.map((img, i) => (
-                                            <div key={i} className="relative group shrink-0">
-                                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: mat.images!, index: i, context: { type: 'MATERIAL', matIdx } })} />
-                                                <button
-                                                    onClick={() => {
-                                                        const nextImgs = [...(mat.images || [])];
-                                                        nextImgs.splice(i, 1);
-                                                        updateMaterial(matIdx, 'images', nextImgs);
-                                                    }}
-                                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                                                    type="button"
-                                                >
-                                                    <X className="w-2 h-2" />
-                                                </button>
+                                    <label className="text-[9px] font-black text-indigo-600 uppercase flex items-center justify-between">
+                                        DANH MỤC HẠNG MỤC KIỂM TRA
+                                        <button 
+                                            onClick={() => {
+                                                const newItems = [...(mat.items || []), 
+                                                    { 
+                                                        id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                                        category: mat.category || '',
+                                                        label: 'Kích thước',
+                                                        status: CheckStatus.PENDING,
+                                                        notes: '',
+                                                        images: []
+                                                    },
+                                                    { 
+                                                        id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                                        category: mat.category || '',
+                                                        label: 'Ngoại quan',
+                                                        status: CheckStatus.PENDING,
+                                                        notes: '',
+                                                        images: []
+                                                    },
+                                                    { 
+                                                        id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                                        category: mat.category || '',
+                                                        label: 'Kết cấu',
+                                                        status: CheckStatus.PENDING,
+                                                        notes: '',
+                                                        images: []
+                                                    }
+                                                ];
+                                                
+                                                const nextMats = [...(formData.materials || [])];
+                                                nextMats[matIdx] = { ...nextMats[matIdx], items: newItems };
+                                                setFormData(prev => ({ ...prev, materials: nextMats }));
+                                            }}
+                                            className="p-1 hover:text-indigo-800 text-indigo-600"
+                                            type="button"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </label>
+                                    <div className="space-y-2">
+                                        {(mat.items || []).map((item, itemIdx) => (
+                                            <div key={item.id} className={`bg-white rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-200'}`}>
+                                                <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
+                                                    <div className="flex-1 pr-2">
+                                                        <input 
+                                                            value={item.label || ''} 
+                                                            onChange={e => updateMaterialItem(matIdx, itemIdx, 'label', e.target.value)}
+                                                            className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase text-[11px]" 
+                                                            placeholder="Tên hạng mục..." 
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const nextMats = [...(formData.materials || [])];
+                                                            nextMats[matIdx].items = (nextMats[matIdx].items || []).filter((_, i) => i !== itemIdx);
+                                                            setFormData(prev => ({ ...prev, materials: nextMats }));
+                                                        }}
+                                                        className="p-1 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50"
+                                                        type="button"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <textarea 
+                                                        value={item.notes || ''}
+                                                        onChange={e => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)}
+                                                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] outline-none focus:ring-1 ring-teal-100"
+                                                        placeholder="Ghi chú..."
+                                                        rows={2}
+                                                    />
+                                                    
+                                                    <div className="flex flex-wrap gap-2 items-center justify-between">
+                                                        <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">
+                                                            {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
+                                                                <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : st === CheckStatus.FAIL ? 'bg-red-600 text-white' : 'bg-orange-500 text-white') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}</button>
+                                                            ))}
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-teal-600" type="button"><Camera className="w-4 h-4"/></button>
+                                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-teal-600" type="button"><ImageIcon className="w-4 h-4"/></button>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[30px]">
+                                                        {(item.images || []).map((img, i) => (
+                                                            <div key={i} className="relative group shrink-0">
+                                                                <div className="cursor-zoom-in" onClick={() => setEditorState({ images: item.images || [], index: i, context: { type: 'ITEM', matIdx, itemIdx } })}>
+                                                                    <ProxyImage src={img} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 object-cover shadow-sm" />
+                                                                </div>
+                                                                <button onClick={() => {
+                                                                    const nextMats = [...(formData.materials || [])];
+                                                                    const nextItems = [...(nextMats[matIdx].items || [])];
+                                                                    nextItems[itemIdx].images = nextItems[itemIdx].images?.filter((_, idx) => idx !== i);
+                                                                    nextMats[matIdx].items = nextItems;
+                                                                    setFormData(prev => ({ ...prev, materials: nextMats }));
+                                                                }} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-2 h-2"/></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
-                                     </div>
+                                    </div>
                                  </div>
                              </div>
                         )}

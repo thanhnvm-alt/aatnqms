@@ -13,6 +13,7 @@ import { SignaturePad } from './SignaturePad';
 import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
+import { ProxyImage } from '../src/components/ProxyImage';
 
 interface InspectionDetailProps {
   inspection: Inspection;
@@ -204,7 +205,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5 text-blue-500"/> Ảnh Giao Nhận ({deliveryNoteImages.length})</p>
                     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                         {deliveryNoteImages.map((img, idx) => (
-                            <img key={idx} src={getProxyImageUrl(img)} onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })} className="w-20 h-20 rounded-xl border border-slate-100 object-cover cursor-zoom-in transition-transform hover:scale-105" />
+                            <ProxyImage key={idx} src={img} alt="Ảnh giao nhận" className="w-20 h-20 rounded-xl cursor-zoom-in transition-transform hover:scale-105" />
                         ))}
                     </div>
                 </div>
@@ -214,7 +215,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><FileText className="w-3.5 h-3.5 text-emerald-500"/> Báo cáo NCC ({reportImages.length})</p>
                     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                         {reportImages.map((img, idx) => (
-                            <img key={idx} src={getProxyImageUrl(img)} onClick={() => setLightboxState({ images: reportImages, index: idx })} className="w-20 h-20 rounded-xl border border-slate-100 object-cover cursor-zoom-in transition-transform hover:scale-105" />
+                            <ProxyImage key={idx} src={img} alt="Ảnh báo cáo" className="w-20 h-20 rounded-xl cursor-zoom-in transition-transform hover:scale-105" />
                         ))}
                     </div>
                 </div>
@@ -258,7 +259,9 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                                             {item.images && item.images.length > 0 && (
                                                 <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar">
                                                     {item.images.map((img, i) => (
-                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 rounded-xl border border-white shadow-sm object-cover cursor-zoom-in transition-transform hover:scale-110" onClick={() => setLightboxState({ images: item.images!, index: i })} />
+                                                        <div key={i} className="cursor-zoom-in" onClick={() => setLightboxState({ images: item.images!, index: i })}>
+                                                            <ProxyImage src={img} alt={`Ảnh item ${item.label}`} className="w-16 h-16 rounded-xl shadow-sm" />
+                                                        </div>
                                                     ))}
                                                 </div>
                                             )}
@@ -356,8 +359,8 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                             {comment.attachments && comment.attachments.length > 0 && (
                                 <div className="flex gap-3 flex-wrap pt-2">
                                     {comment.attachments.map((img, i) => (
-                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
-                                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt=""/>
+                                        <div key={i} className="cursor-zoom-in" onClick={() => setLightboxState({ images: comment.attachments!, index: i })}>
+                                            <ProxyImage src={img} alt="Ảnh đính kèm comment" className="w-20 h-20 rounded-2xl shadow-sm" />
                                         </div>
                                     ))}
                                 </div>
@@ -372,7 +375,9 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                         {commentAttachments.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 shadow-lg cursor-pointer" onClick={() => setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' })}/>
+                                <div className="cursor-pointer" onClick={() => setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' })}>
+                                    <ProxyImage src={img} alt="Ảnh đính kèm" className="w-20 h-20 rounded-2xl shadow-lg border-2 border-blue-200" />
+                                </div>
                                 <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                             </div>
                         ))}

@@ -59,15 +59,6 @@ try {
 
     drive = google.drive({ version: 'v3', auth: oauth2Client });
     
-    // Attempt to identify the authenticated account
-    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-    oauth2.userinfo.get()
-      .then(res => {
-         console.log(`Google Drive storage configured for account: ${res.data.email}`);
-      })
-      .catch(err => {
-         console.warn("Could not fetch Google Drive account email, but client is initialized.", err.message);
-      });
   } else {
     console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
   }
