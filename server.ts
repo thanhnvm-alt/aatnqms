@@ -117,6 +117,15 @@ app.use(cookieParser());
 
 // Request logging for debugging
 app.use((req, res, next) => {
+  // Check for malformed URI
+  try {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    decodeURIComponent(url.pathname);
+  } catch (e) {
+    console.warn(`[Malformed URI] Rejecting request: ${req.url}`);
+    return res.status(400).json({ error: 'Malformed URI' });
+  }
+
   if (!req.url.startsWith('/_vite') && !req.url.startsWith('/@')) {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   }
@@ -2314,8 +2323,12 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 const PORT = 3000;
+console.log(`🚀 Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
+console.log(`📡 Database Schema: ${process.env.DB_SCHEMA || 'appQAQC'}`);
+console.log(`🔧 PORT: ${PORT}`);
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
 
 export default app;

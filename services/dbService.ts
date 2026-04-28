@@ -890,12 +890,12 @@ export async function deleteSupplier(id: string, userId: string = 'SYSTEM') {
 
 export async function getSupplierStats(name: string) {
     const tables = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
-    const unionQuery = tables.map(t => `SELECT id, score FROM ${SCHEMA}.${t} WHERE supplier = $1`).join(' UNION ALL ');
+    const unionQuery = tables.map(t => `SELECT id, score FROM ${SCHEMA}."${t}" WHERE supplier = $1`).join(' UNION ALL ');
     
     const res = await query(`
         SELECT 
             COUNT(id) as total_pos, 
-            AVG(score::numeric) as pass_rate 
+            AVG(CASE WHEN score ~ '^[0-9.]+$' THEN score::numeric ELSE 0 END) as pass_rate 
         FROM (${unionQuery}) as combined
     `, [name]);
     

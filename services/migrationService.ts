@@ -456,6 +456,8 @@ export async function runMigrations() {
             "ma_ct" TEXT,
             "ten_ct" TEXT,
             "status" TEXT,
+            "start_date" TEXT,
+            "end_date" TEXT,
             "startDate" TEXT,
             "endDate" TEXT,
             "pm" TEXT,
@@ -475,6 +477,10 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create projects: ${e.message}`);
     }
     await addColumn('projects', 'deleted_at', 'BIGINT');
+    await addColumn('projects', 'start_date', 'TEXT');
+    await addColumn('projects', 'end_date', 'TEXT');
+    await addColumn('projects', 'startDate', 'TEXT');
+    await addColumn('projects', 'endDate', 'TEXT');
 
     // 14. IPO Drawing List & Details
     try {

@@ -63,15 +63,26 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
       console.log('Executed query successfully', { duration, rows: res.rowCount });
       return res;
     } catch (error: any) {
+      const position = parseInt(error.position, 10);
+      let queryContext = '';
+      if (!isNaN(position) && position > 0) {
+        const startPos = Math.max(0, position - 50);
+        const endPos = Math.min(text.length, position + 50);
+        const context = text.substring(startPos, endPos);
+        const pointer = ' '.repeat(position - startPos - 1) + '^';
+        queryContext = `\nContext around position ${position}:\n${context}\n${pointer}`;
+      }
+
       const errorDetails = {
         message: error.message,
         code: error.code,
         detail: error.detail,
         hint: error.hint,
+        position: error.position,
         where: error.where,
-        query: text.substring(0, 500)
+        query: text.substring(0, 500) + (text.length > 500 ? '...' : '')
       };
-      console.error('Database query error details:', errorDetails);
+      console.error(`Database query error details:${queryContext}`, errorDetails);
       console.error('Full error object:', error);
       // If the connection is terminated or timed out, reset the pool so the next request starts fresh
       if (error.message.includes('terminated') || error.message.includes('timeout') || error.message.includes('Connection') || error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
