@@ -1,4 +1,4 @@
-import { query } from './services/dbService';
+import { query } from './lib/db';
 
 async function run() {
   try {

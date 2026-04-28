@@ -6,7 +6,7 @@ import {
     AlertTriangle, Search, Clock, CheckCircle2, 
     ArrowRight, Loader2, Calendar, User as UserIcon, 
     FileText, ChevronRight, ShieldAlert,
-    Hash, AlertCircle, Maximize2, Upload, Download, Trash2, AlertTriangle,
+    Hash, AlertCircle, Maximize2, Upload, Download, Trash2, 
     Filter, ChevronDown, Layers, X, ChevronUp
 } from 'lucide-react';
 import { DateRangePicker } from './DateRangePicker';
@@ -430,7 +430,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                                             </div>
                                                                             <div>
                                                                                 <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">{ncr.ma_ct || '---'} - {ncr.ten_ct || '---'}</span>
-                                                                                <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">{ncr.id_factory_order || '---'} - {ncr.ten_hang_muc || '---'}</span>
+                                                                                <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">{ncr.id || '---'} - {ncr.ten_hang_muc || '---'}</span>
                                                                             </div>
                                                                         </div>
                                                                         <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(ncr.severity || 'MINOR')}`}>

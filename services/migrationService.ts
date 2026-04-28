@@ -187,7 +187,7 @@ export async function runMigrations() {
     await addColumn('users', 'data', 'TEXT');
 
     // 7. Inspection Tables
-    const inspectionTables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const inspectionTables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of inspectionTables) {
         try {
           await query(`
@@ -248,15 +248,25 @@ export async function runMigrations() {
         }
         await addColumn(table, 'deleted_at', 'BIGINT');
         await addColumn(table, 'data', 'TEXT');
+        await addColumn(table, 'images_json', 'TEXT');
+        await addColumn(table, 'items_json', 'TEXT');
+        await addColumn(table, 'comments_json', 'TEXT');
+        await addColumn(table, 'so_luong_ipo', 'NUMERIC');
+        await addColumn(table, 'inspected_qty', 'NUMERIC');
+        await addColumn(table, 'passed_qty', 'NUMERIC');
+        await addColumn(table, 'failed_qty', 'NUMERIC');
+        await addColumn(table, 'dvt', 'TEXT');
+        await addColumn(table, 'headcode', 'TEXT');
+        await addColumn(table, 'responsible_person', 'TEXT');
         await addColumn(table, 'workshop', 'TEXT');
         await addColumn(table, 'stage', 'TEXT');
         await addColumn(table, 'ma_nha_may', 'TEXT');
         await addColumn(table, 'qty_total', 'NUMERIC');
         await addColumn(table, 'qty_pass', 'NUMERIC');
         await addColumn(table, 'qty_fail', 'NUMERIC');
-        await addColumn(table, 'headcode', 'TEXT');
+        await addColumn(table, 'type', 'TEXT');
+        await addColumn(table, 'sl_ipo', 'NUMERIC');
         await addColumn(table, 'production_comment', 'TEXT');
-        await addColumn(table, 'responsible_person', 'TEXT');
     }
 
     // 8. Defect Library

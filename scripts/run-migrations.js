@@ -147,7 +147,7 @@ export async function runMigrations() {
     await addColumnIfNotExists(client, schema, 'users', 'data', 'TEXT');
 
     // 7. Inspection Tables (ISO Standard)
-    const inspectionTables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const inspectionTables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of inspectionTables) {
         console.log(`📡 ISO-DB: Ensuring ${table} table...`);
         await client.query(`
@@ -198,12 +198,30 @@ export async function runMigrations() {
                 "qty_pass" NUMERIC,
                 "qty_fail" NUMERIC,
                 "headcode" TEXT,
-                "production_comment" TEXT
+                "production_comment" TEXT,
+                "sl_ipo" NUMERIC
             );
         `);
         
-        // Ensure deleted_at exists for existing tables
+        // Ensure necessary columns exist for existing tables
         await addColumnIfNotExists(client, schema, table, 'deleted_at', 'BIGINT');
+        await addColumnIfNotExists(client, schema, table, 'images_json', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'items_json', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'comments_json', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'ma_nha_may', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'workshop', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'stage', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'sl_ipo', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'qty_total', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'qty_pass', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'qty_fail', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'so_luong_ipo', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'inspected_qty', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'passed_qty', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'failed_qty', 'NUMERIC');
+        await addColumnIfNotExists(client, schema, table, 'headcode', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'responsible_person', 'TEXT');
+        await addColumnIfNotExists(client, schema, table, 'type', 'TEXT');
     }
 
 

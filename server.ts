@@ -1959,29 +1959,37 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 return 0;
               };
 
-              const id = getCol(['mã hồ sơ', 'id']);
-              const ma_ct = getCol(['mã dự án', 'ma_ct']);
-              if (!ma_ct) throw new Error("Mã dự án không được để trống");
+              const cleanNumber = (val: any) => {
+                if (typeof val === 'number') return val;
+                if (!val) return 0;
+                const cleaned = String(val).replace(/[^\d.-]/g, '');
+                const num = parseFloat(cleaned);
+                return isNaN(num) ? 0 : num;
+              };
+
+              const id = getCol(['mã hồ sơ', 'id', 'mã']);
+              const ma_ct = getCol(['mã dự án', 'ma_ct', 'mã công trình', 'project code', 'ma_du_an']);
+              if (!ma_ct) throw new Error("Mã dự án (project code) không được để trống");
 
               const inspection: any = {
                 id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                type: getCol(['loại phiếu', 'type']) || 'PQC',
+                type: getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC',
                 ma_ct,
-                ten_ct: getCol(['tên dự án', 'ten_ct']),
-                ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc']),
-                ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'mã nhà m']),
+                ten_ct: getCol(['tên dự án', 'ten_ct', 'tên công trình', 'project name']),
+                ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc', 'item name', 'hang_muc', 'ten_hang_muc']),
+                ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'mã nhà m', 'factory code', 'ma_nm']),
                 headcode: getCol(['headcode']),
                 inspectorName: getCol(['qc kiểm tra', 'qc kiểm t', 'inspector', 'inspectorname']) || (req as any).user?.name,
                 workshop: getCol(['xưởng', 'workshop']),
                 inspectionStage: getCol(['công đoạn', 'công đoạn sản xuất', 'stage']),
                 date: getCol(['ngày thực hiện', 'ngày thực', 'date']),
                 status: getCol(['trạng thái', 'status'])?.toUpperCase() || 'DRAFT',
-                so_luong_ipo: Number(getVal(['sl đđh', 'sl ipo', 'so_luong_ipo']) || 0),
-                inspectedQuantity: Number(getVal(['slkiem', 'sl kiểm', 'inspected quantity', 'inspected_qty', 'inspectedquantity']) || 0),
-                passedQuantity: Number(getVal(['sldat', 'sl đạt', 'passed quantity', 'passed_qty', 'passedquantity']) || 0),
-                failedQuantity: Number(getVal(['slloi', 'sl lỗi', 'sl hong', 'failed quantity', 'failed_qty', 'failedquantity']) || 0),
+                so_luong_ipo: cleanNumber(getVal(['sl đđh', 'sl ipo', 'so_luong_ipo'])),
+                inspectedQuantity: cleanNumber(getVal(['slkiem', 'sl kiểm', 'inspected quantity', 'inspected_qty', 'inspectedquantity'])),
+                passedQuantity: cleanNumber(getVal(['sldat', 'sl đạt', 'passed quantity', 'passed_qty', 'passedquantity'])),
+                failedQuantity: cleanNumber(getVal(['slloi', 'sl lỗi', 'sl hong', 'failed quantity', 'failed_qty', 'failedquantity'])),
                 summary: getCol(['kết luận/ghi chú', 'kết luận', 'summary']),
-                responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), // Fallback in case old templates are used
+                responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), 
                 dvt: getCol(['đvt/unit', 'dvt', 'unit']),
                 items: [],
                 images: [],
@@ -1989,35 +1997,18 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 updatedAt: Math.floor(Date.now() / 1000)
               };
 
-              // Try to set updatedAt from inspection date if provided
-              if (inspection.date) {
-                let parsedDate = null;
-                let dateStr = String(inspection.date).trim();
-                
-                // Matches DD/MM/YYYY hh:mm:ss or DD/MM/YYYY
-                const dateMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-                if (dateMatch) {
-                    const [, d, m, y, h, min, s] = dateMatch;
-                    parsedDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), h ? parseInt(h, 10) : 0, min ? parseInt(min, 10) : 0, s ? parseInt(s, 10) : 0);
-                } else {
-                    const ts = Date.parse(dateStr);
-                    if (!isNaN(ts)) parsedDate = new Date(ts);
-                }
-                
-                if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    inspection.updatedAt = Math.floor(parsedDate.getTime() / 1000);
-                }
-              }
+              // Try fallback parsing if initial cleanNumber gave 0 but column exists
+              if (inspection.so_luong_ipo === 0) inspection.so_luong_ipo = cleanNumber(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']));
+              if (inspection.inspectedQuantity === 0) inspection.inspectedQuantity = cleanNumber(getCol(['slkiem', 'sl kiểm', 'inspectedquantity']));
+              if (inspection.passedQuantity === 0) inspection.passedQuantity = cleanNumber(getCol(['sldat', 'sl đạt', 'passedquantity']));
+              if (inspection.failedQuantity === 0) inspection.failedQuantity = cleanNumber(getCol(['slloi', 'sl lỗi', 'sl hong', 'failedquantity']));
 
-              // Re-format percentage and numbers just in case value property didn't work properly
-              if (isNaN(inspection.so_luong_ipo)) inspection.so_luong_ipo = Number(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']) || 0);
-              if (isNaN(inspection.inspectedQuantity)) inspection.inspectedQuantity = Number(getCol(['slkiem', 'sl kiểm', 'inspectedquantity']) || 0);
-              if (isNaN(inspection.passedQuantity)) inspection.passedQuantity = Number(getCol(['sldat', 'sl đạt', 'passedquantity']) || 0);
-              if (isNaN(inspection.failedQuantity)) inspection.failedQuantity = Number(getCol(['slloi', 'sl lỗi', 'sl hong', 'failedquantity']) || 0);
 
               await db.saveInspection(inspection);
+              console.log(`✅ Imported inspection ${inspection.id} of type ${inspection.type} to database`);
               validResults.push(inspection.id);
             } catch (err: any) {
+              console.error(`❌ Error importing row ${rowIndex}:`, err.message);
               errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
           }

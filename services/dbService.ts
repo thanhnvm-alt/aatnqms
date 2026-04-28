@@ -65,15 +65,30 @@ const sanitizeArgs = (args: any[]): any[] => {
     });
 };
 
-export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'fsr', 'step', 'fqc', 'spr', 'site'];
+export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'sqc', 'fsr', 'step', 'fqc', 'spr', 'site'];
 
 /**
  * Get the table name based on inspection type
  */
 const getTableName = (type: string = 'PQC'): string => {
-    const t = type.toLowerCase();
-    if (t === 'sqc_mat' || t === 'sqc_vt') return `${SCHEMA}.forms_sqc_vt`;
-    return MODULE_TABLES.includes(t) ? `${SCHEMA}.forms_${t}` : `${SCHEMA}.forms_pqc`;
+    const t = String(type || 'PQC').trim().toUpperCase();
+    
+    if (t === 'SQC' || t === 'SQC_VT' || t === 'SQC-VT' || t === 'VẬT TƯ' || t === 'VAT TU') return `${SCHEMA}.forms_sqc_vt`;
+    if (t === 'SQC_BTP' || t === 'SQC-BTP' || t === 'BÁN THÀNH PHẨM' || t === 'BAN THANH PHAM') return `${SCHEMA}.forms_sqc_btp`;
+    if (t === 'SQC_MAT' || t === 'SQC-MAT') return `${SCHEMA}.forms_sqc_mat`;
+    if (t === 'PQC') return `${SCHEMA}.forms_pqc`;
+    if (t === 'IQC') return `${SCHEMA}.forms_iqc`;
+    if (t === 'SITE') return `${SCHEMA}.forms_site`;
+    if (t === 'FSR') return `${SCHEMA}.forms_fsr`;
+    if (t === 'FQC') return `${SCHEMA}.forms_fqc`;
+    if (t === 'SPR') return `${SCHEMA}.forms_spr`;
+    if (t === 'STEP') return `${SCHEMA}.forms_step`;
+    
+    // Fallback search in MODULE_TABLES
+    const lowerT = t.toLowerCase();
+    if (MODULE_TABLES.includes(lowerT)) return `${SCHEMA}.forms_${lowerT}`;
+    
+    return `${SCHEMA}.forms_pqc`;
 };
 
 /**
@@ -217,9 +232,9 @@ export async function saveInspection(inspection: Inspection) {
         signature_production, name_production, comment_production, images_json, delivery_images_json, 
         report_images_json, comments_json, so_luong_ipo, inspected_qty, passed_qty, failed_qty, 
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
-        responsible_person
+        responsible_person, ma_nha_may, workshop, stage, headcode
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
         score = EXCLUDED.score, 
@@ -253,6 +268,10 @@ export async function saveInspection(inspection: Inspection) {
         ma_ct = EXCLUDED.ma_ct,
         ten_ct = EXCLUDED.ten_ct,
         ten_hang_muc = EXCLUDED.ten_hang_muc,
+        ma_nha_may = EXCLUDED.ma_nha_may,
+        workshop = EXCLUDED.workshop,
+        stage = EXCLUDED.stage,
+        headcode = EXCLUDED.headcode,
         dvt = EXCLUDED.dvt
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
@@ -265,7 +284,8 @@ export async function saveInspection(inspection: Inspection) {
         inspection.dvt, updatedAt, 
         inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
         inspection.location, inspection.supplierAddress, inspection.supportingDocs,
-        inspection.responsiblePerson
+        inspection.responsiblePerson,
+        inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode
       ]));
     }
 
@@ -323,7 +343,7 @@ export async function saveInspection(inspection: Inspection) {
  */
 export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 20): Promise<{ items: Inspection[], total: number }> {
     const offset = (page - 1) * limit;
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     
     // Build a UNION ALL query to fetch from all tables efficiently
     // We select only the fields needed for the list view to improve performance
@@ -355,17 +375,28 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     `;
 
     const tableQueries = tables.map(table => {
-        const workshopCol = table === 'forms_pqc' ? 'workshop::text' : 'NULL::text as workshop';
-        const maNhaMayCol = table === 'forms_pqc' ? 'ma_nha_may::text' : 'NULL::text as ma_nha_may';
-        const headcodeCol = table === 'forms_pqc' ? 'headcode::text' : 'NULL::text as headcode';
-        const stageCol = table === 'forms_pqc' ? 'stage::text' : 'NULL::text as stage';
+        const workshopCol = 'workshop::text';
+        const maNhaMayCol = 'ma_nha_may::text';
+        const headcodeCol = 'headcode::text';
+        const stageCol = 'stage::text';
         const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
         const matCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'materials_json::text' : 'NULL::text as materials_json';
         
-        const slIpoCol = table === 'forms_pqc' ? 'sl_ipo::numeric as so_luong_ipo' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'so_luong_ipo::numeric as so_luong_ipo' : '0::numeric as so_luong_ipo');
-        const insQtyCol = table === 'forms_pqc' ? 'qty_total::numeric as inspected_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'inspected_qty::numeric as inspected_qty' : '0::numeric as inspected_qty');
-        const passQtyCol = table === 'forms_pqc' ? 'qty_pass::numeric as passed_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'passed_qty::numeric as passed_qty' : '0::numeric as passed_qty');
-        const failQtyCol = table === 'forms_pqc' ? 'qty_fail::numeric as failed_qty' : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'failed_qty::numeric as failed_qty' : '0::numeric as failed_qty');
+        const slIpoCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
+            ? 'COALESCE(so_luong_ipo, sl_ipo)::numeric as so_luong_ipo' 
+            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'so_luong_ipo::numeric as so_luong_ipo' : '0::numeric as so_luong_ipo');
+        
+        const insQtyCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
+            ? 'COALESCE(inspected_qty, qty_total)::numeric as inspected_qty' 
+            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'inspected_qty::numeric as inspected_qty' : '0::numeric as inspected_qty');
+            
+        const passQtyCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
+            ? 'COALESCE(passed_qty, qty_pass)::numeric as passed_qty' 
+            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'passed_qty::numeric as passed_qty' : '0::numeric as passed_qty');
+            
+        const failQtyCol = (table === 'forms_pqc' || table === 'forms_sqc_mat') 
+            ? 'COALESCE(failed_qty, qty_fail)::numeric as failed_qty' 
+            : (['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'failed_qty::numeric as failed_qty' : '0::numeric as failed_qty');
         const imagesCol = 'images_json::text as images_json';
 
         return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
@@ -496,7 +527,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
  * Locates an inspection across all module tables.
  */
 export async function getInspectionById(id: string): Promise<Inspection | null> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         try {
             const res = await query(`SELECT * FROM ${SCHEMA}.${table} WHERE id = $1`, [id]);
@@ -521,7 +552,7 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     workshop: row.workshop as string,
                     inspectionStage: row.stage as string,
                     dvt: row.dvt as string,
-                    so_luong_ipo: Number(row.so_luong_ipo ?? row.sl_ipo ?? 0),
+                    so_luong_ipo: Number(row.so_luong_ipo ?? row.sl_ipo ?? row.qty_ipo ?? 0),
                     inspectedQuantity: Number(row.inspected_qty ?? row.qty_total ?? 0),
                     passedQuantity: Number(row.passed_qty ?? row.qty_pass ?? 0),
                     failedQuantity: Number(row.failed_qty ?? row.qty_fail ?? 0),
@@ -558,7 +589,7 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
  * Removes an inspection from all module tables.
  */
 export async function deleteInspection(id: string) {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     const inspection = await getInspectionById(id);
     if (!inspection) return;
 
@@ -987,6 +1018,7 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit: number
             deadline: r.deadline,
             createdBy: r.created_by, 
             createdAt: r.created_at,
+            createdDate: r.created_at ? (typeof r.created_at === 'number' ? new Date(r.created_at * 1000).toISOString() : new Date(Number(r.created_at) * 1000).toISOString()) : new Date().toISOString(),
             ma_ct: r.maCt,
             ten_ct: r.tenCt,
             ten_hang_muc: r.tenHangMuc,
@@ -1006,7 +1038,9 @@ export async function getNcrById(id: string): Promise<NCR | null> {
         severity: r.severity, status: r.status, issueDescription: r.description, rootCause: r.root_cause,
         solution: r.corrective_action, preventiveAction: r.preventive_action, responsiblePerson: r.responsible_person,
         deadline: r.deadline, imagesBefore: safeJsonParse(r.images_before_json, []), imagesAfter: safeJsonParse(r.images_after_json, []),
-        createdBy: r.created_by, comments: safeJsonParse(r.comments_json, [])
+        createdBy: r.created_by, 
+        createdDate: r.created_at ? (typeof r.created_at === 'number' ? new Date(r.created_at * 1000).toISOString() : new Date(Number(r.created_at) * 1000).toISOString()) : new Date().toISOString(),
+        comments: safeJsonParse(r.comments_json, [])
     } as unknown as NCR;
 }
 
@@ -1370,7 +1404,7 @@ export async function deleteRole(id: string) {
  * Fetches all deleted inspections across all modules.
  */
 export async function getDeletedInspections(): Promise<any[]> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     let allDeleted: any[] = [];
     
     for (const table of tables) {
@@ -1389,7 +1423,7 @@ export async function getDeletedInspections(): Promise<any[]> {
  * Restores a soft-deleted inspection.
  */
 export async function restoreInspection(id: string) {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         await query(`UPDATE ${SCHEMA}.${table} SET deleted_at = NULL WHERE id = $1`, [id]);
     }
@@ -1399,7 +1433,7 @@ export async function restoreInspection(id: string) {
  * Permanently deletes an inspection from the database.
  */
 export async function hardDeleteInspection(id: string) {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         await query(`DELETE FROM ${SCHEMA}.${table} WHERE id = $1`, [id]);
     }
