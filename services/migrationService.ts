@@ -256,6 +256,12 @@ export async function runMigrations() {
         await addColumn(table, 'images_json', 'TEXT');
         await addColumn(table, 'items_json', 'TEXT');
         await addColumn(table, 'comments_json', 'TEXT');
+        await addColumn(table, 'signature_qc', 'TEXT');
+        await addColumn(table, 'signature_manager', 'TEXT');
+        await addColumn(table, 'name_manager', 'TEXT');
+        await addColumn(table, 'signature_production', 'TEXT');
+        await addColumn(table, 'name_production', 'TEXT');
+        await addColumn(table, 'comment_production', 'TEXT');
         await addColumn(table, 'so_luong_ipo', 'NUMERIC');
         await addColumn(table, 'inspected_qty', 'NUMERIC');
         await addColumn(table, 'passed_qty', 'NUMERIC');
@@ -275,6 +281,15 @@ export async function runMigrations() {
         await addColumn(table, 'floor_plan_id', 'TEXT');
         await addColumn(table, 'coord_x', 'NUMERIC');
         await addColumn(table, 'coord_y', 'NUMERIC');
+        await addColumn(table, 'po_number', 'TEXT');
+        await addColumn(table, 'supplier', 'TEXT');
+        await addColumn(table, 'inspector', 'TEXT');
+        await addColumn(table, 'score', 'TEXT');
+        await addColumn(table, 'summary', 'TEXT');
+        await addColumn(table, 'materials_json', 'TEXT');
+        await addColumn(table, 'delivery_images_json', 'TEXT');
+        await addColumn(table, 'report_images_json', 'TEXT');
+        await addColumn(table, 'date', 'TEXT');
     }
 
     // 8. Defect Library
