@@ -48,6 +48,17 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
   
   const [filterRole, setFilterRole] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -269,7 +280,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <div className="relative flex-1 lg:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input type="text" placeholder="Tìm tên, mã, username..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" />
+                <input type="text" placeholder="Tìm tên, mã, username..." value={searchInput} onChange={e => setSearchInput(e.target.value)} onBlur={handleCommitSearch} onKeyDown={handleKeyDown} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" />
             </div>
             {currentUser.role !== 'QC' && (
                 <div className="flex items-center gap-2">

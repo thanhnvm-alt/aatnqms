@@ -111,6 +111,17 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'IN_PROGRESS' | 'CLOSED'>('ALL');
   const [projectFilter, setProjectFilter] = useState('ALL');
   const [startDate, setStartDate] = useState('');
@@ -309,8 +320,10 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
                   <input 
                     type="text" placeholder="Tìm theo mã, lỗi, người phụ trách..." 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={e => setSearchInput(e.target.value)}
+                    onBlur={handleCommitSearch}
+                    onKeyDown={handleKeyDown}
                     className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                   />
               </div>

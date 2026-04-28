@@ -19,6 +19,17 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DefectLibraryItem | null>(null);
@@ -221,8 +232,10 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500" />
                       <input 
                         type="text" placeholder="Tìm mã lỗi, tên..." 
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                        value={searchInput}
+                        onChange={e => setSearchInput(e.target.value)}
+                        onBlur={handleCommitSearch}
+                        onKeyDown={handleKeyDown}
                         className="pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold w-full focus:bg-white outline-none focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
                       />
                   </div>

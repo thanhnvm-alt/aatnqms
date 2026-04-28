@@ -59,9 +59,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [project, setProject] = useState(initialProject);
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'LAYOUTS'>('OVERVIEW');
   const [ipoSearch, setIpoSearch] = useState('');
+  const [ipoInput, setIpoInput] = useState('');
   const [inspectionSearch, setInspectionSearch] = useState('');
+  const [inspectionInput, setInspectionInput] = useState('');
   const [ncrSearch, setNcrSearch] = useState('');
+  const [ncrInput, setNcrInput] = useState('');
   const [layoutSearch, setLayoutSearch] = useState('');
+  const [layoutInput, setLayoutInput] = useState('');
   
   const [projectSpecificPlans, setProjectSpecificPlans] = useState<IPOItem[]>([]);
   const [isPlansLoading, setIsPlansLoading] = useState(false);
@@ -457,8 +461,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <input 
                                         type="text" 
                                         placeholder="Tìm mã hoặc tên..." 
-                                        value={ipoSearch}
-                                        onChange={e => setIpoSearch(e.target.value)}
+                                        value={ipoInput}
+                                        onChange={e => setIpoInput(e.target.value)}
+                                        onBlur={() => setIpoSearch(ipoInput)}
+                                        onKeyDown={e => e.key === 'Enter' && setIpoSearch(ipoInput)}
                                         className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all"
                                     />
                                 </div>
@@ -505,8 +511,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <input 
                                         type="text" 
                                         placeholder="Tìm hạng mục..." 
-                                        value={inspectionSearch}
-                                        onChange={e => setInspectionSearch(e.target.value)}
+                                        value={inspectionInput}
+                                        onChange={e => setInspectionInput(e.target.value)}
+                                        onBlur={() => setInspectionSearch(inspectionInput)}
+                                        onKeyDown={e => e.key === 'Enter' && setInspectionSearch(inspectionInput)}
                                         className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-indigo-100 transition-all"
                                     />
                                 </div>
@@ -557,8 +565,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <input 
                                         type="text" 
                                         placeholder="Tìm lỗi..." 
-                                        value={ncrSearch}
-                                        onChange={e => setNcrSearch(e.target.value)}
+                                        value={ncrInput}
+                                        onChange={e => setNcrInput(e.target.value)}
+                                        onBlur={() => setNcrSearch(ncrInput)}
+                                        onKeyDown={e => e.key === 'Enter' && setNcrSearch(ncrInput)}
                                         className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-red-100 transition-all"
                                     />
                                 </div>
@@ -601,8 +611,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <input 
                                         type="text" 
                                         placeholder="Tìm bản vẽ..." 
-                                        value={layoutSearch}
-                                        onChange={e => setLayoutSearch(e.target.value)}
+                                        value={layoutInput}
+                                        onChange={e => setLayoutInput(e.target.value)}
+                                        onBlur={() => setLayoutSearch(layoutInput)}
+                                        onKeyDown={e => e.key === 'Enter' && setLayoutSearch(layoutInput)}
                                         className="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-100 rounded-xl text-[10px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all"
                                     />
                                 </div>

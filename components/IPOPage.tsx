@@ -14,6 +14,17 @@ export const IPOPage = ({ user }: { user: User }) => {
   const [filterFactoryOrder, setFilterFactoryOrder] = useState('');
   const [filterMaTender, setFilterMaTender] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -144,8 +155,10 @@ export const IPOPage = ({ user }: { user: User }) => {
                             type="text" 
                             placeholder="Tìm kiếm: Mã FO, Tender, vật tư..." 
                             className="w-full pl-10 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onBlur={handleCommitSearch}
+                            onKeyDown={handleKeyDown}
                         />
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     </div>

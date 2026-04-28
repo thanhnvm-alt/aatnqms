@@ -147,6 +147,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange, user
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -372,8 +383,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
                   <input 
                     type="text" placeholder="Tìm Dự án, Sản phẩm..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onBlur={handleCommitSearch}
+                    onKeyDown={handleKeyDown}
                     className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                   />
               </div>

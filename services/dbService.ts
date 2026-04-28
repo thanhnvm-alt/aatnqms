@@ -36,6 +36,11 @@ const parseTS = (val: any): number => {
         return val;
     }
     const strVal = String(val).trim();
+    if (/^\d+$/.test(strVal)) {
+        const n = parseInt(strVal, 10);
+        if (n > 100000000000) return Math.floor(n / 1000);
+        return n;
+    }
     
     // Handle DD/MM/YYYY
     const ddmmmyyyy = strVal.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
@@ -175,7 +180,7 @@ export async function saveInspection(inspection: Inspection) {
   const oldValue = existing ? { ...existing } : null;
 
   // Ensure dates are parsed as BIGINT epochs for DB (seconds)
-  const updatedAt = inspection.updatedAt || Math.floor(Date.now() / 1000);
+  const updatedAt = parseTS(inspection.updatedAt);
   const inspection_date = parseTS(inspection.date);
 
     if (inspection.type === 'PQC') {
@@ -189,7 +194,13 @@ export async function saveInspection(inspection: Inspection) {
           signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
           comments_json
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, 
+          $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
+          $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
+          $13, $14, $15::jsonb, $16::bigint, $17::jsonb, $18::jsonb, $19, $20, $21::numeric, $22, $23, 
+          $24, $25, $26::numeric, $27::numeric, $28, $29::text, $30::text, $31::text, $32::text, $33::text, $34::text, $35::jsonb
+        )
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
           updated_at = EXCLUDED.updated_at, 
@@ -245,7 +256,14 @@ export async function saveInspection(inspection: Inspection) {
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
         responsible_person, ma_nha_may, workshop, stage, headcode, production_comment
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42)
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
+        $11::numeric, $12, $13::jsonb, $14::jsonb, $15::text, $16::text, $17::text, $18::text, $19::text, $20::text, 
+        $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb, 
+        $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
+        $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
+        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42
+      )
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
         score = EXCLUDED.score, 
@@ -291,7 +309,7 @@ export async function saveInspection(inspection: Inspection) {
         dvt = EXCLUDED.dvt
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
-        inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection.date,
+        inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection_date,
         inspection.score, inspection.summary, inspection.items, inspection.materials,
         inspection.signature, inspection.managerSignature, inspection.managerName,
         inspection.productionSignature, inspection.productionName, inspection.productionComment,
@@ -1367,7 +1385,7 @@ export async function getDefectLibrary(): Promise<DefectLibraryItem[]> {
 }
 
 export async function saveDefectLibraryItem(item: DefectLibraryItem) {
-    const created_at = typeof item.createdAt === 'string' ? Date.parse(item.createdAt) : (item.createdAt || Math.floor(Date.now() / 1000));
+    const created_at = parseTS(item.createdAt);
     await query(`
         INSERT INTO ${SCHEMA}.defect_library (id, defect_code, name, stage, category, description, severity, suggested_action, created_by, created_at, updated_at, data) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, EXTRACT(EPOCH FROM NOW())::BIGINT, $11) 

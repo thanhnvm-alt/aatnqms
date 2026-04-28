@@ -66,6 +66,17 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
 
   const [formData, setFormData] = useState<Partial<Role>>({
     name: '',
@@ -227,8 +238,10 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
                 <input 
                     type="text" 
                     placeholder="Tìm vai trò..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={e => setSearchInput(e.target.value)}
+                    onBlur={handleCommitSearch}
+                    onKeyDown={handleKeyDown}
                     className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all"
                 />
             </div>

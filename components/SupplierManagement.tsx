@@ -22,6 +22,18 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
+
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,10 +46,7 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   });
 
   useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-        loadSuppliers(searchTerm, page);
-    }, 500);
-    return () => clearTimeout(delayDebounce);
+    loadSuppliers(searchTerm, page);
   }, [searchTerm, page]);
 
   const loadSuppliers = async (search = '', currentPage = 1) => {
@@ -128,7 +137,10 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" placeholder="Tìm tên, mã, ngành hàng..." 
-              value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onBlur={handleCommitSearch}
+              onKeyDown={handleKeyDown}
               className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
             />
           </div>

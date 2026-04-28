@@ -58,6 +58,18 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
+  const [matSearch, setMatSearch] = useState('');
+  const [matSearchInput, setMatSearchInput] = useState('');
+
+  const handleCommitMatSearch = () => {
+      setMatSearch(matSearchInput);
+  };
+
+  const handleKeyDownMatSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+          handleCommitMatSearch();
+      }
+  };
 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +82,16 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
       const btpTpl = templates['SQC_BTP'] || [];
       return Array.from(new Set(btpTpl.map(i => i.category))).filter(Boolean).sort();
   }, [templates]);
+
+  const filteredMaterials = useMemo(() => {
+      if (!matSearch.trim()) return formData.materials || [];
+      const s = matSearch.toLowerCase().trim();
+      return (formData.materials || []).filter(m => 
+          (m.name || '').toLowerCase().includes(s) || 
+          (m.projectCode || '').toLowerCase().includes(s) ||
+          (m.category || '').toLowerCase().includes(s)
+      );
+  }, [formData.materials, matSearch]);
 
   const historicalRecords = useMemo(() => {
     if (!inspections || !formData.po_number) return [];
@@ -357,6 +379,44 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     </div>
                 </div>
 
+                {/* Evidence Row */}
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-50">
+                    <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                        <label className="text-[8px] font-black text-blue-600 uppercase flex items-center justify-between">PHIẾU GIAO HÀNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
+                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                            {formData.deliveryNoteImages?.map((img, i) => (
+                                <div key={i} className="relative group shrink-0">
+                                    <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in shadow-sm" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })} />
+                                    <button
+                                        onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
+                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        type="button"
+                                    >
+                                        <X className="w-2 h-2" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                        <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">BÁO CÁO NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
+                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                            {formData.reportImages?.map((img, i) => (
+                                <div key={i} className="relative group shrink-0">
+                                    <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in shadow-sm" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })} />
+                                    <button
+                                        onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
+                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        type="button"
+                                    >
+                                        <X className="w-2 h-2" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
                 <div className="md:col-span-2 space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-200">
                     <label className="text-[9px] font-black text-indigo-600 uppercase flex items-center justify-between">Tải lên Bản vẽ / PO / Chất lượng
                         <div className="flex gap-1">
@@ -366,16 +426,47 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     </label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.drawingImages?.map((img, i) => (
-                            <img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: formData.drawingImages!, index: i, context: { type: 'DRAWING' } })} />
+                            <div key={i} className="relative group shrink-0">
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.drawingImages!, index: i, context: { type: 'DRAWING' } })} />
+                                <button
+                                    onClick={() => setFormData(prev => ({ ...prev, drawingImages: prev.drawingImages?.filter((_, idx) => idx !== i) }))}
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    type="button"
+                                >
+                                    <X className="w-2 h-2" />
+                                </button>
+                            </div>
                         ))}
                     </div>
                 </div>
             </div>
         </section>
         <section className="space-y-3">
-            <div className="flex justify-between items-center px-1"><h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs"><ClipboardList className="w-4 h-4 text-teal-600"/> II. DANH MỤC BTP KIỂM TRA ({formData.materials?.length || 0})</h3><button onClick={handleAddMaterial} className="bg-teal-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3" type="button"><Plus className="w-3 h-3"/><span className="text-[10px] font-bold uppercase">Thêm BTP</span></button></div>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
+                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs">
+                    <ClipboardList className="w-4 h-4 text-teal-600"/> II. DANH MỤC BTP KIỂM TRA ({formData.materials?.length || 0})
+                </h3>
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            placeholder="Tìm vật tư..." 
+                            value={matSearchInput}
+                            onChange={e => setMatSearchInput(e.target.value)}
+                            onBlur={handleCommitMatSearch}
+                            onKeyDown={handleKeyDownMatSearch}
+                            className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-teal-100 shadow-sm"
+                        />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                    <button onClick={handleAddMaterial} className="bg-teal-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3" type="button">
+                        <Plus className="w-3 h-3"/><span className="text-[10px] font-bold uppercase">Thêm BTP</span>
+                    </button>
+                </div>
+            </div>
+            
             <div className="space-y-3">
-                {(formData.materials || []).map((mat, matIdx) => {
+                {filteredMaterials.map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                     const failRate = mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
@@ -433,7 +524,20 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                      </label>
                                      <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                                         {mat.items[0]?.images?.map((img, i) => (
-                                            <img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: mat.items[0].images!, index: i, context: { type: 'ITEM', matIdx, itemIdx: 0 } })} />
+                                            <div key={i} className="relative group shrink-0">
+                                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: mat.items[0].images!, index: i, context: { type: 'ITEM', matIdx, itemIdx: 0 } })} />
+                                                <button
+                                                    onClick={() => {
+                                                        const nextImgs = [...(mat.items[0].images || [])];
+                                                        nextImgs.splice(i, 1);
+                                                        updateMaterialItem(matIdx, 0, 'images', nextImgs);
+                                                    }}
+                                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                    type="button"
+                                                >
+                                                    <X className="w-2 h-2" />
+                                                </button>
+                                            </div>
                                         ))}
                                      </div>
                                  </div>
@@ -446,7 +550,20 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                      </label>
                                      <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                                         {mat.images?.map((img, i) => (
-                                            <img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => setEditorState({ images: mat.images!, index: i, context: { type: 'MATERIAL', matIdx } })} />
+                                            <div key={i} className="relative group shrink-0">
+                                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: mat.images!, index: i, context: { type: 'MATERIAL', matIdx } })} />
+                                                <button
+                                                    onClick={() => {
+                                                        const nextImgs = [...(mat.images || [])];
+                                                        nextImgs.splice(i, 1);
+                                                        updateMaterial(matIdx, 'images', nextImgs);
+                                                    }}
+                                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                    type="button"
+                                                >
+                                                    <X className="w-2 h-2" />
+                                                </button>
+                                            </div>
                                         ))}
                                      </div>
                                  </div>

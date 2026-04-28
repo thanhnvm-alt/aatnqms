@@ -21,7 +21,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   const [openDefectSelector, setOpenDefectSelector] = useState<string | null>(null); 
+  const [defectSearchInput, setDefectSearchInput] = useState(''); 
   const [defectSearchTerm, setDefectSearchTerm] = useState(''); 
+  
+  const handleCommitDefectSearch = () => {
+    setDefectSearchTerm(defectSearchInput);
+  };
+
+  const handleDefectSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+        handleCommitDefectSearch();
+    }
+  };
   const [isImporting, setIsImporting] = useState(false);
   
   const [isAddDefectModalOpen, setIsAddDefectModalOpen] = useState(false);
@@ -384,7 +395,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
                                                 <div className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-600 cursor-pointer flex justify-between items-center hover:border-blue-400 transition-all" onClick={() => { setOpenDefectSelector(openDefectSelector === item.id ? null : item.id); setDefectSearchTerm(''); }}><span className="truncate font-medium">{item.defectIds && item.defectIds.length > 0 ? defectLibrary.filter(d => item.defectIds?.includes(d.code)).map(d => d.name).join(', ') : 'Gán lỗi chuẩn...'}</span><ChevronDown className="w-4 h-4 text-slate-400"/></div>
                                                 {openDefectSelector === item.id && (
                                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
-                                                        <div className="p-2 border-b border-slate-100 bg-slate-50 flex flex-col gap-2"><div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thư viện lỗi</span><button onClick={() => setOpenDefectSelector(null)}><X className="w-3.5 h-3.5 text-slate-400"/></button></div><div className="relative"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" /><input className="w-full pl-8 pr-16 py-1.5 border border-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 ring-blue-100 font-medium" placeholder="Tìm..." value={defectSearchTerm} onChange={(e) => setDefectSearchTerm(e.target.value)} autoFocus /><button onClick={() => setIsAddDefectModalOpen(true)} className="absolute right-1 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-2 py-0.5 rounded-md text-[9px] font-bold uppercase">Mới</button></div></div>
+                                                        <div className="p-2 border-b border-slate-100 bg-slate-50 flex flex-col gap-2"><div className="flex justify-between items-center"><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thư viện lỗi</span><button onClick={() => setOpenDefectSelector(null)}><X className="w-3.5 h-3.5 text-slate-400"/></button></div><div className="relative"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" /><input className="w-full pl-8 pr-16 py-1.5 border border-slate-200 rounded-lg text-[11px] outline-none focus:ring-2 ring-blue-100 font-medium" placeholder="Tìm..." value={defectSearchInput} onChange={(e) => setDefectSearchInput(e.target.value)} onBlur={handleCommitDefectSearch} onKeyDown={handleDefectSearchKeyDown} autoFocus /><button onClick={() => setIsAddDefectModalOpen(true)} className="absolute right-1 top-1/2 -translate-y-1/2 bg-blue-600 text-white px-2 py-0.5 rounded-md text-[9px] font-bold uppercase">Mới</button></div></div>
                                                         <div className="max-h-56 overflow-y-auto p-2 space-y-1">{defectLibrary.filter(def => !defectSearchTerm || def.name.toLowerCase().includes(defectSearchTerm.toLowerCase()) || def.code.toLowerCase().includes(defectSearchTerm.toLowerCase())).map(def => (<div key={def.code} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${item.defectIds?.includes(def.code) ? 'bg-blue-50 border border-blue-100' : 'hover:bg-slate-50 border border-transparent'}`} onClick={() => toggleDefect(item.id, def.code)}><div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${item.defectIds?.includes(def.code) ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>{item.defectIds?.includes(def.code) && <CheckSquare className="w-3 h-3 text-white" />}</div><div className="flex-1 overflow-hidden"><p className="text-[11px] font-bold text-slate-700 truncate">{def.name}</p><div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] text-slate-400 font-mono bg-slate-100 px-1 rounded">{def.code}</span><span className={`text-[8px] font-bold uppercase ${def.severity === 'CRITICAL' ? 'text-red-500' : 'text-slate-400'}`}>{def.severity}</span></div></div></div>))}</div>
                                                     </div>
                                                 )}

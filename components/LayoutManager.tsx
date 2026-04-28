@@ -62,7 +62,16 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     const [isDragging, setIsDragging] = useState(false);
     const [startDrag, setStartDrag] = useState({ x: 0, y: 0 });
     const [isAddingMode, setIsAddingMode] = useState(false);
+    const [leftSidebarSearchInput, setLeftSidebarSearchInput] = useState('');
     const [leftSidebarSearch, setLeftSidebarSearch] = useState('');
+
+    const handleCommitSidebarSearch = () => {
+        setLeftSidebarSearch(leftSidebarSearchInput);
+    };
+
+    const handleSidebarKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleCommitSidebarSearch();
+    };
     
     const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
     const [originalPinPos, setOriginalPinPos] = useState<{x: number, y: number} | null>(null);
@@ -77,7 +86,16 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
     const [isUserSelectorOpen, setIsUserSelectorOpen] = useState(false);
     const [systemUsers, setSystemUsers] = useState<User[]>([]);
+    const [userSearchInput, setUserSearchInput] = useState('');
     const [userSearchTerm, setUserSearchTerm] = useState('');
+
+    const handleCommitUserSearch = () => {
+        setUserSearchTerm(userSearchInput);
+    };
+
+    const handleUserKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleCommitUserSearch();
+    };
     const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
     const quickCameraRef = useRef<HTMLCanvasElement>(null);
@@ -403,8 +421,10 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                             <input 
-                                value={leftSidebarSearch}
-                                onChange={e => setLeftSidebarSearch(e.target.value)}
+                                value={leftSidebarSearchInput}
+                                onChange={e => setLeftSidebarSearchInput(e.target.value)}
+                                onBlur={handleCommitSidebarSearch}
+                                onKeyDown={handleSidebarKeyDown}
                                 className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:ring-2 ring-blue-100 transition-all"
                                 placeholder="Tìm điểm kiểm tra..."
                             />
@@ -698,7 +718,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                         <div className="p-4 bg-slate-50/50 border-b border-slate-100 shrink-0">
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input value={userSearchTerm} onChange={e => setUserSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />
+                                <input value={userSearchInput} onChange={e => setUserSearchInput(e.target.value)} onBlur={handleCommitUserSearch} onKeyDown={handleUserKeyDown} className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1">

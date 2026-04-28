@@ -46,6 +46,8 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   
+  const [committedHeadcode, setCommittedHeadcode] = useState<string | null>(null);
+  
   // Logic to load data based on headcode
   useEffect(() => {
     const fetchIpoData = async (headcode: string) => {
@@ -68,10 +70,10 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
         }
     };
     
-    if (formData.headcode) {
-        fetchIpoData(formData.headcode);
+    if (committedHeadcode) {
+        fetchIpoData(committedHeadcode);
     }
-  }, [formData.headcode]);
+  }, [committedHeadcode]);
 
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
@@ -121,6 +123,45 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     } finally { setIsProcessingImages(false); e.target.value = ''; }
   };
 
+  const handleEditImage = (images: string[], index: number, context: any) => {
+    setEditorState({ images, index, context });
+  };
+
+  const onImageSave = async (idx: number, updatedImg: string) => {
+    if (!editorState) return;
+    setIsProcessingImages(true);
+    try {
+        const { context } = editorState;
+        // Upload edited image
+        const newUrl = await uploadQMSImage(updatedImg, { 
+            entityId: formData.id || 'new', 
+            type: 'SITE', 
+            role: context.itemId === 'MAIN' ? 'MAIN' : 'ITEM' 
+        });
+
+        if (context.itemId === 'MAIN') {
+            setFormData(prev => {
+                const next = [...(prev.images || [])];
+                next[idx] = newUrl;
+                return { ...prev, images: next };
+            });
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                items: prev.items?.map(it => it.id === context.itemId ? {
+                    ...it,
+                    images: it.images?.map((img, i) => i === idx ? newUrl : img)
+                } : it)
+            }));
+        }
+    } catch (e) {
+        console.error("Failed to save edited image:", e);
+        alert("Không thể lưu ảnh đã chỉnh sửa.");
+    } finally {
+        setIsProcessingImages(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!formData.ma_ct) { alert("Thiếu mã công trình."); return; }
     if (!formData.signature) { alert("Yêu cầu chữ ký QC."); return; }
@@ -156,7 +197,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Mã Công Trình</label><input value={formData.ma_ct || ''} readOnly className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 font-bold text-xs shadow-inner uppercase"/></div>
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Tên Công Trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 font-bold text-xs shadow-inner uppercase"/></div>
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Headcode</label><input value={formData.headcode || ''} onChange={e => handleInputChange('headcode', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none" placeholder="Nhập mã Headcode..."/></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Headcode</label><input value={formData.headcode || ''} onChange={e => handleInputChange('headcode', e.target.value)} onBlur={() => setCommittedHeadcode(formData.headcode || null)} onKeyDown={e => e.key === 'Enter' && setCommittedHeadcode(formData.headcode || null)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none" placeholder="Nhập mã Headcode..."/></div>
                 <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-1">Tên Hạng Mục</label><input value={formData.ten_hang_muc || ''} onChange={e => handleInputChange('ten_hang_muc', e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg font-bold text-xs focus:ring-1 ring-amber-200 outline-none" placeholder="Tên hạng mục..."/></div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -243,7 +284,8 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                                 ))}
                             </div>
                             <div className="flex gap-2 ml-auto">
-                                <button onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 hover:text-amber-600" type="button"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 hover:text-amber-600 active:scale-95 transition-all" type="button" title="Chụp ảnh"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 hover:text-amber-600 active:scale-95 transition-all" type="button" title="Tải ảnh"><ImageIcon className="w-4 h-4"/></button>
                                 {item.status === CheckStatus.FAIL && <button className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-lg active:scale-95" type="button"><AlertOctagon className="w-3.5 h-3.5"/> NCR</button>}
                             </div>
                         </div>
@@ -256,7 +298,9 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar py-1">
                                 {item.images.map((img, i) => (
-                                    <div key={i} className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-slate-200 shadow-sm"><img src={getProxyImageUrl(img)} className="w-full h-full object-cover" /></div>
+                                    <div key={i} className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-slate-200 shadow-sm cursor-pointer" onClick={() => handleEditImage(item.images!, i, { itemId: item.id })}>
+                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -291,6 +335,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
       </div>
 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('ma_ct', data); setShowScanner(false); }} />}
+      {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}
       <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
     </div>

@@ -11,18 +11,23 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    setSearchTerm(searchInput);
+    loadMaterials(1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const limit = 50;
-
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      loadMaterials(1);
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm]);
 
   useEffect(() => {
     loadMaterials(page);
@@ -154,8 +159,10 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
             <input 
               type="text" 
               placeholder="Tìm kiếm..." 
-              value={searchTerm} 
-              onChange={e => setSearchTerm(e.target.value)}
+              value={searchInput} 
+              onChange={e => setSearchInput(e.target.value)}
+              onBlur={handleCommitSearch}
+              onKeyDown={handleKeyDown}
               className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
             />
           </div>

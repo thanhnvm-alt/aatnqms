@@ -50,7 +50,18 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeText, setActiveText] = useState<{ x: number, y: number, logicX: number, logicY: number, value: string } | null>(null);
   const [showQuickLibrary, setShowQuickLibrary] = useState(false);
+  const [quickTextSearchInput, setQuickTextSearchInput] = useState('');
   const [quickTextSearch, setQuickTextSearch] = useState('');
+
+  const handleCommitQuickSearch = () => {
+    setQuickTextSearch(quickTextSearchInput);
+  };
+
+  const handleQuickSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+        handleCommitQuickSearch();
+    }
+  };
   const [defectLibrary, setDefectLibrary] = useState<DefectLibraryItem[]>([]);
   
   useEffect(() => {
@@ -584,8 +595,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                                     type="text"
                                                     className="w-full bg-white/5 text-white/70 pl-7 pr-2 py-1.5 rounded-lg text-[9px] font-bold outline-none border border-white/10 focus:border-blue-500/50 transition-all font-sans"
                                                     placeholder="TÌM NHANH..."
-                                                    value={quickTextSearch}
-                                                    onChange={e => setQuickTextSearch(e.target.value.toUpperCase())}
+                                                    value={quickTextSearchInput}
+                                                    onChange={e => setQuickTextSearchInput(e.target.value.toUpperCase())}
+                                                    onBlur={handleCommitQuickSearch}
+                                                    onKeyDown={handleQuickSearchKeyDown}
                                                     onClick={e => e.stopPropagation()}
                                                 />
                                             </div>

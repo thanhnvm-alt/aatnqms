@@ -23,6 +23,18 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     const [library, setLibrary] = useState<DefectLibraryItem[]>([]);
     const [showLibrary, setShowLibrary] = useState(false);
     const [libSearch, setLibSearch] = useState('');
+    const [libSearchInput, setLibSearchInput] = useState('');
+
+    const handleCommitLibSearch = () => {
+        setLibSearch(libSearchInput);
+    };
+
+    const handleKeyDownLibSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleCommitLibSearch();
+        }
+    };
+
     const [defectName, setDefectName] = useState('');
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [saveToLibrary, setSaveToLibrary] = useState(false);
@@ -150,7 +162,14 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                             <div className="p-2 space-y-2 bg-white border-t border-blue-100 animate-in slide-in-from-top duration-200">
                                 <div className="relative">
                                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                                    <input value={libSearch || ''} onChange={e => setLibSearch(e.target.value)} className="w-full pl-7 pr-2 py-1.5 border rounded-lg outline-none focus:ring-1 ring-blue-100 text-[11px]" placeholder="Tìm lỗi..." />
+                                    <input 
+                                        value={libSearchInput || ''} 
+                                        onChange={e => setLibSearchInput(e.target.value)} 
+                                        onBlur={handleCommitLibSearch}
+                                        onKeyDown={handleKeyDownLibSearch}
+                                        className="w-full pl-7 pr-2 py-1.5 border rounded-lg outline-none focus:ring-1 ring-blue-100 text-[11px]" 
+                                        placeholder="Tìm lỗi..." 
+                                    />
                                 </div>
                                 <div className="max-h-32 overflow-y-auto space-y-1 no-scrollbar">
                                     {filteredLib.map(item => (

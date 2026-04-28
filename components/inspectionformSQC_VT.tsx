@@ -58,6 +58,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -66,6 +67,38 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const [newDocName, setNewDocName] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
   const [matSearch, setMatSearch] = useState('');
+  const [matSearchInput, setMatSearchInput] = useState('');
+
+  const handleGetLocation = () => {
+      setIsGettingLocation(true);
+      if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(
+              async (pos) => {
+                  const lat = pos.coords.latitude;
+                  const lng = pos.coords.longitude;
+                  const loc = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                  setFormData(prev => ({ ...prev, location: loc, supplierAddress: loc }));
+                  setIsGettingLocation(false);
+              },
+              (err) => {
+                  alert("Không thể lấy vị trí GPS.");
+                  setIsGettingLocation(false);
+              }
+          );
+      } else {
+          setIsGettingLocation(false);
+      }
+  };
+
+  const handleCommitMatSearch = () => {
+      setMatSearch(matSearchInput);
+  };
+
+  const handleKeyDownMatSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+          handleCommitMatSearch();
+      }
+  };
   
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,7 +143,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             criteria: [],
             items: [],
             inspectQty: m.orderQuantity,
-            passQty: 0,
+            passQty: m.orderQuantity,
             failQty: 0,
             images: [],
             type: 'Material',
@@ -194,9 +227,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             mat.items = iqcTpl.filter(i => i.category === value).map(i => ({ ...i, id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, status: CheckStatus.PENDING, notes: '', images: [] }));
         }
         
-        if (field === 'inspectQty') { mat.passQty = val; mat.failQty = 0; }
-        else if (field === 'passQty') { mat.failQty = Number((mat.inspectQty - val).toFixed(2)); }
-        else if (field === 'failQty') { mat.passQty = Number((mat.inspectQty - val).toFixed(2)); }
+        if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
+        else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
+        else if (field === 'failQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
 
         if (field === 'scope') { 
             if (value === 'COMMON') { 
@@ -261,6 +294,11 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                 nextMats[matIdx] = { ...nextMats[matIdx], items };
                 return { ...prev, materials: nextMats };
             }
+            if (type === 'MATERIAL' && matIdx !== undefined) {
+                const nextMats = [...(prev.materials || [])];
+                nextMats[matIdx] = { ...nextMats[matIdx], images: [...(nextMats[matIdx].images || []), ...base64Images] };
+                return { ...prev, materials: nextMats };
+            }
             return prev;
         });
     } catch (err) { 
@@ -286,6 +324,11 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
           if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
               const nextMats = [...(prev.materials || [])];
               nextMats[matIdx].items[itemIdx].images![idx] = updatedImg;
+              return { ...prev, materials: nextMats };
+          }
+          if (type === 'MATERIAL' && matIdx !== undefined) {
+              const nextMats = [...(prev.materials || [])];
+              nextMats[matIdx].images![idx] = updatedImg;
               return { ...prev, materials: nextMats };
           }
           return prev;
@@ -387,8 +430,16 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                     <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] h-9 uppercase shadow-inner" placeholder="Tên đơn vị..."/>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ gia công</label>
-                    <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-9 shadow-inner" placeholder="Vị trí..."/>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ nhà cung cấp</label>
+                    <div className="flex gap-1.5 items-center">
+                        <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="flex-1 px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-9 shadow-inner" placeholder="Địa chỉ..."/>
+                        <button onClick={handleGetLocation} disabled={isGettingLocation} className="p-2.5 rounded-lg border bg-slate-50 text-slate-400" type="button"><Locate className="w-4 h-4" /></button>
+                        {formData.location && (
+                            <a href={`https://www.google.com/maps/search/?api=1&query=${formData.location}`} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-lg border bg-slate-50 text-teal-600">
+                                <MapPin className="w-4 h-4" />
+                            </a>
+                        )}
+                    </div>
                 </div>
                 <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày kiểm tra *</label>
@@ -400,10 +451,55 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-50">
                 <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
                     <label className="text-[8px] font-black text-blue-600 uppercase flex items-center justify-between">ẢNH HIỆN TRƯỜNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">{formData.images?.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} />))}</div>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                        {formData.images?.map((img, i) => (
+                            <div key={i} className="relative group shrink-0">
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} />
+                                <button
+                                    onClick={() => setFormData(prev => ({ ...prev, images: prev.images?.filter((_, idx) => idx !== i) }))}
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    type="button"
+                                >
+                                    <X className="w-2 h-2" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100"><label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">PHIẾU GIAO HÀNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label><div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">{formData.deliveryNoteImages?.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => handleEditImage(formData.deliveryNoteImages!, i, { type: 'DELIVERY' })} />))}</div></div>
-                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100"><label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">BÁO CÁO NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label><div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">{formData.reportImages?.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => handleEditImage(formData.reportImages!, i, { type: 'REPORT' })} />))}</div></div>
+                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                    <label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">PHIẾU GIAO HÀNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                        {formData.deliveryNoteImages?.map((img, i) => (
+                            <div key={i} className="relative group shrink-0">
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.deliveryNoteImages!, i, { type: 'DELIVERY' })} />
+                                <button
+                                    onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    type="button"
+                                >
+                                    <X className="w-2 h-2" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                    <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">BÁO CÁO NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                        {formData.reportImages?.map((img, i) => (
+                            <div key={i} className="relative group shrink-0">
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.reportImages!, i, { type: 'REPORT' })} />
+                                <button
+                                    onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    type="button"
+                                >
+                                    <X className="w-2 h-2" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {/* DANH MỤC TÀI LIỆU HỖ TRỢ */}
@@ -435,8 +531,10 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                         <input 
                             type="text" 
                             placeholder="Tìm vật tư..." 
-                            value={matSearch}
-                            onChange={e => setMatSearch(e.target.value)}
+                            value={matSearchInput}
+                            onChange={e => setMatSearchInput(e.target.value)}
+                            onBlur={handleCommitMatSearch}
+                            onKeyDown={handleKeyDownMatSearch}
                             className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-teal-100 shadow-sm"
                         />
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -451,6 +549,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                 {filteredMaterials.map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
                     const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
+                    const failRate = mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
                     
                     // Logic tính toán Nhãn trạng thái
                     const hasFail = mat.items?.some(it => it.status === CheckStatus.FAIL);
@@ -565,7 +664,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                   </div>
                                 </div>
                                 
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">SL Giao(DN)</label>
                                         <input type="number" step="any" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-9 shadow-sm"/>
@@ -590,8 +689,12 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                         <input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1 border border-teal-300 rounded-md font-bold text-center bg-white text-[11px] h-9 shadow-sm text-teal-700"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-green-600 uppercase block text-center">SL Đạt</label>
+                                        <label className="text-[9px] font-bold text-green-600 uppercase flex items-center justify-between px-1"><span>Đạt</span><span className="text-[8px] bg-green-100 px-1 rounded">{passRate}%</span></label>
                                         <input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-9 shadow-sm"/>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-bold text-red-600 uppercase flex items-center justify-between px-1"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label>
+                                        <input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-9 shadow-sm"/>
                                     </div>
                                 </div>
 
@@ -620,10 +723,79 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                     <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:text-teal-600 active:scale-95" type="button"><ImageIcon className="w-4 h-4" /></button>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[40px]">
+                                            <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[40px] py-1">
                                                 {item.images?.map((img, i) => (
-                                                    <img key={i} src={getProxyImageUrl(img)} className="w-12 h-12 rounded-lg border border-slate-200 object-cover shrink-0 cursor-zoom-in shadow-sm" onClick={() => handleEditImage(item.images!, i, { type: 'ITEM', matIdx, itemIdx })} />
+                                                    <div key={i} className="relative group shrink-0">
+                                                        <img
+                                                            src={getProxyImageUrl(img)}
+                                                            className="w-12 h-12 rounded-lg border border-slate-200 object-cover cursor-zoom-in shadow-sm"
+                                                            onClick={() => handleEditImage(item.images!, i, { type: 'ITEM', matIdx, itemIdx })}
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                const nextImgs = [...(item.images || [])];
+                                                                nextImgs.splice(i, 1);
+                                                                updateMaterialItem(matIdx, itemIdx, 'images', nextImgs);
+                                                            }}
+                                                            className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                            type="button"
+                                                        >
+                                                            <X className="w-2.5 h-2.5" />
+                                                        </button>
+                                                    </div>
                                                 ))}
+                                            </div>
+                                            
+                                            {/* MATERIAL IMAGES SECTION */}
+                                            <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <label className="text-[9px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
+                                                        <ImageIcon className="w-3 h-3"/> HÌNH ẢNH SẢN PHẨM
+                                                    </label>
+                                                    <div className="flex gap-1">
+                                                        <button 
+                                                            onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); cameraInputRef.current?.click(); }} 
+                                                            className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 active:scale-95 transition-all" 
+                                                            type="button"
+                                                        >
+                                                            <Camera className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); fileInputRef.current?.click(); }} 
+                                                            className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 active:scale-95 transition-all" 
+                                                            type="button"
+                                                        >
+                                                            <ImageIcon className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[40px] py-1">
+                                                    {mat.images?.map((img, i) => (
+                                                        <div key={i} className="relative group shrink-0">
+                                                            <img 
+                                                                src={getProxyImageUrl(img)} 
+                                                                className="w-12 h-12 rounded-lg border border-slate-200 object-cover cursor-zoom-in shadow-sm" 
+                                                                onClick={() => handleEditImage(mat.images!, i, { type: 'MATERIAL', matIdx })} 
+                                                            />
+                                                            <button
+                                                                onClick={() => {
+                                                                    const nextImgs = [...(mat.images || [])];
+                                                                    nextImgs.splice(i, 1);
+                                                                    updateMaterial(matIdx, 'images', nextImgs);
+                                                                }}
+                                                                className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                                                type="button"
+                                                            >
+                                                                <X className="w-2.5 h-2.5" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    {(!mat.images || mat.images.length === 0) && (
+                                                        <div className="h-12 flex-1 flex items-center justify-center border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
+                                                            <p className="text-[8px] font-bold text-slate-400 uppercase">Chưa có ảnh sản phẩm</p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}

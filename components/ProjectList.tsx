@@ -47,12 +47,15 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   const [filterPC, setFilterPC] = useState<string>('ALL');
   const [filterQA, setFilterQA] = useState<string>('ALL');
 
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-        if (onSearch) onSearch(searchTerm);
-    }, 500);
-    return () => clearTimeout(delayDebounce);
-  }, [searchTerm, onSearch]);
+  const handleCommitSearch = () => {
+    if (onSearch) onSearch(searchTerm);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
 
   // Trích xuất danh sách nhân sự duy nhất từ dữ liệu dự án
   const uniqueStaff = useMemo(() => {
@@ -148,6 +151,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   placeholder="Tìm theo Mã hoặc Tên dự án..." 
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
+                  onBlur={handleCommitSearch}
+                  onKeyDown={handleKeyDown}
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
                 />
               </div>

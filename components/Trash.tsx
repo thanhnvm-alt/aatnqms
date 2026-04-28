@@ -49,6 +49,17 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
     const [deletedItems, setDeletedItems] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [searchInput, setSearchInput] = useState('');
+
+    const handleCommitSearch = () => {
+        setSearchTerm(searchInput);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleCommitSearch();
+        }
+    };
     const [isActionLoading, setIsActionLoading] = useState<string | null | boolean>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [reviewItem, setReviewItem] = useState<Inspection | null>(null);
@@ -201,8 +212,10 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                             <input 
                                 type="text" 
                                 placeholder="Tìm kiếm phiếu đã xóa..." 
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
+                                value={searchInput}
+                                onChange={e => setSearchInput(e.target.value)}
+                                onBlur={handleCommitSearch}
+                                onKeyDown={handleKeyDown}
                                 className="w-full pl-12 pr-4 py-4 bg-slate-100 border-none rounded-3xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-blue-600/20 transition-all placeholder:text-slate-400"
                             />
                         </div>
