@@ -363,7 +363,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                                                         </div>
                                                     </div>
                                                     <div className="w-10 h-10 shrink-0">
-                                                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                                                             <PieChart>
                                                                 <Pie data={chartData} cx="50%" cy="50%" innerRadius={12} outerRadius={18} dataKey="value" stroke="none">
                                                                     {chartData.map((entry, index) => <Cell key={index} fill={entry.color} />)}

@@ -106,7 +106,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
             <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col items-center">
                <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TRẠNG THÁI</h3>
                <div className="w-full h-40 relative">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <PieChart>
                       <Pie
                         data={statusData}
@@ -143,7 +143,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
             <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
                <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
                <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 10 }}>
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis 

@@ -348,15 +348,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
     filtered.forEach(item => {
         const dateKey = formatDisplayDate(item.date) || 'KHÔNG RÕ NGÀY';
-        const pKey = item.ma_ct || 'DÙNG CHUNG';
+        const pKey = (item.type === 'IQC' || item.type === 'SQC_VT') 
+            ? (item.materials?.[0]?.projectCode || item.ma_ct || 'DÙNG CHUNG') 
+            : (item.ma_ct || 'DÙNG CHUNG');
         
         if (!groups[dateKey]) {
             groups[dateKey] = {};
         }
 
         if (!groups[dateKey][pKey]) {
+            const projectName = (item.type === 'IQC' || item.type === 'SQC_VT')
+                ? (item.materials?.[0]?.projectName || item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC'))
+                : (item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC'));
+            
             groups[dateKey][pKey] = { 
-                projectName: item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC'), 
+                projectName,
                 items: [] 
             };
         }
@@ -964,7 +970,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         <div className="max-w-3xl bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
                             <div className="pb-4 border-b border-slate-100">
                                 <p className="text-[13px] font-bold text-blue-600 uppercase tracking-wide mb-1">
-                                    {selectedItemDesktop.ten_ct || '---'}
+                                    {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') ? (selectedItemDesktop.materials?.[0]?.projectName || selectedItemDesktop.ten_ct || '---') : (selectedItemDesktop.ten_ct || '---')}
                                 </p>
                                 <h2 className="text-xl font-bold text-slate-900 leading-snug">
                                     {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') 
@@ -975,7 +981,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${selectedItemDesktop.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' : selectedItemDesktop.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>{selectedItemDesktop.status}</span>
                                     <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.bg} ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.color}`}>{selectedItemDesktop.type}</span>
                                     <span className="text-sm font-bold text-slate-700 border-l border-slate-300 pl-2">
-                                        {selectedItemDesktop.ma_nha_may || selectedItemDesktop.po_number || selectedItemDesktop.headcode || '---'}
+                                        {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') ? (selectedItemDesktop.materials?.[0]?.projectCode || selectedItemDesktop.ma_nha_may || selectedItemDesktop.po_number || selectedItemDesktop.headcode || '---') : (selectedItemDesktop.ma_nha_may || selectedItemDesktop.po_number || selectedItemDesktop.headcode || '---')}
                                     </span>
                                 </div>
                             </div>
@@ -999,36 +1005,54 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                    <div className="min-w-[80px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Đơn Hàng</label>
-                                        <p className="text-[13px] font-medium text-slate-800 truncate">{selectedItemDesktop.so_luong_ipo || '---'}</p>
-                                    </div>
-                                    <div className="min-w-[40px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">ĐVT</label>
-                                        <p className="text-[13px] font-medium text-slate-800 truncate">{selectedItemDesktop.dvt || 'PCS'}</p>
-                                    </div>
-                                    <div className="min-w-[60px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Kiểm</label>
-                                        <p className="text-[13px] font-bold text-blue-600 truncate">{selectedItemDesktop.inspectedQuantity || '---'}</p>
-                                    </div>
-                                    <div className="min-w-[40px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Pass</label>
-                                        <p className="text-[13px] font-bold text-green-600 truncate">{selectedItemDesktop.passedQuantity || '0'}</p>
-                                    </div>
-                                    <div className="min-w-[40px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Fail</label>
-                                        <p className="text-[13px] font-bold text-red-600 truncate">{selectedItemDesktop.failedQuantity || '0'}</p>
-                                    </div>
-                                    <div className="min-w-[50px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Pass</label>
-                                        <p className="text-[13px] font-bold text-green-600 truncate">{parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(selectedItemDesktop.passedQuantity?.toString() || '0') / parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
-                                    </div>
-                                    <div className="min-w-[50px]">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Fail</label>
-                                        <p className="text-[13px] font-bold text-red-600 truncate">{parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(selectedItemDesktop.failedQuantity?.toString() || '0') / parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
-                                    </div>
-                                </div>
+                                {(()=>{
+                                    let so_luong_ipo = selectedItemDesktop.so_luong_ipo;
+                                    let dvt = selectedItemDesktop.dvt;
+                                    let inspectedQuantity = selectedItemDesktop.inspectedQuantity;
+                                    let passedQuantity = selectedItemDesktop.passedQuantity;
+                                    let failedQuantity = selectedItemDesktop.failedQuantity;
+                                    
+                                    if ((selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') && selectedItemDesktop.materials && selectedItemDesktop.materials.length > 0) {
+                                        so_luong_ipo = selectedItemDesktop.materials[0].orderQty ?? so_luong_ipo;
+                                        dvt = selectedItemDesktop.materials[0].unit || dvt;
+                                        inspectedQuantity = selectedItemDesktop.materials[0].inspectQty ?? inspectedQuantity;
+                                        passedQuantity = selectedItemDesktop.materials[0].passQty ?? passedQuantity;
+                                        failedQuantity = selectedItemDesktop.materials[0].failQty ?? failedQuantity;
+                                    }
+
+                                    return (
+                                        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                            <div className="min-w-[80px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Đơn Hàng</label>
+                                                <p className="text-[13px] font-medium text-slate-800 truncate">{so_luong_ipo ?? '---'}</p>
+                                            </div>
+                                            <div className="min-w-[40px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">ĐVT</label>
+                                                <p className="text-[13px] font-medium text-slate-800 truncate">{dvt || 'PCS'}</p>
+                                            </div>
+                                            <div className="min-w-[60px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Kiểm</label>
+                                                <p className="text-[13px] font-bold text-blue-600 truncate">{inspectedQuantity ?? '---'}</p>
+                                            </div>
+                                            <div className="min-w-[40px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Pass</label>
+                                                <p className="text-[13px] font-bold text-green-600 truncate">{passedQuantity ?? '0'}</p>
+                                            </div>
+                                            <div className="min-w-[40px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Fail</label>
+                                                <p className="text-[13px] font-bold text-red-600 truncate">{failedQuantity ?? '0'}</p>
+                                            </div>
+                                            <div className="min-w-[50px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Pass</label>
+                                                <p className="text-[13px] font-bold text-green-600 truncate">{parseFloat(inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(passedQuantity?.toString() || '0') / parseFloat(inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
+                                            </div>
+                                            <div className="min-w-[50px]">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Fail</label>
+                                                <p className="text-[13px] font-bold text-red-600 truncate">{parseFloat(inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(failedQuantity?.toString() || '0') / parseFloat(inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             {(selectedItemDesktop.images && selectedItemDesktop.images.length > 0) ? (

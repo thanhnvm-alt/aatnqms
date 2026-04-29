@@ -415,7 +415,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </div>
                             <div className="flex-1 flex flex-col items-center justify-center w-full">
                                 <div className="relative w-36 h-36">
-                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                                         <PieChart>
                                             <Pie data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1}]} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value" stroke="none">
                                                 {pieData.length > 0 ? pieData.map((entry, index) => (
