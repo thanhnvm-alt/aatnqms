@@ -2,7 +2,7 @@ import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, User, Workshop, CheckStatus } from '../types';
-import { ArrowLeft, Box, Edit3, Trash2, ShieldCheck, ScanEye, CheckCircle2, AlertOctagon, X, Loader2, Eraser, Calendar, Image as ImageIcon, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Box, Edit3, Trash2, ShieldCheck, ScanEye, CheckCircle2, AlertOctagon, X, Loader2, Eraser, Calendar, Image as ImageIcon, Maximize2, Download } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 
 interface InspectionDetailProps {
@@ -22,6 +22,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [showModal, setShowModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   const isApproved = inspection.status === InspectionStatus.APPROVED;
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -32,21 +33,44 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
       try { if (onApprove) await onApprove(inspection.id, managerSig); setShowModal(false); onBack(); } catch (e) { alert("Lỗi duyệt."); } finally { setIsProcessing(false); }
   };
 
+  const handleExportPDF = async () => {
+      if (!pdfContainerRef.current) return;
+      try {
+          const html2pdf = (await import('html2pdf.js')).default;
+          const opt = {
+            margin:       0.5,
+            filename:     `FQC_Report_${inspection.ma_ct}_${inspection.date.replace(/\//g, '')}.pdf`,
+            image:        { type: 'jpeg' as const, quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' as const }
+          };
+          html2pdf().set(opt).from(pdfContainerRef.current).save();
+      } catch (err: any) {
+          console.error(err);
+          alert('Không thể xuất PDF: ' + err.message);
+      }
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
           <div className="flex items-center gap-2"><button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"><ArrowLeft className="w-4 h-4 text-slate-600" /></button><span className="text-sm font-bold text-slate-900 uppercase">FQC REPORT REVIEW</span></div>
-          <div className="flex gap-2">{!isApproved && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4"/></button>}<button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button></div>
+          <div className="flex gap-2">
+            <button onClick={handleExportPDF} className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg"><Download className="w-4 h-4"/></button>
+            {!isApproved && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4"/></button>}
+            <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 bg-red-50 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+          </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 pb-24 no-scrollbar">
-        <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
-            <h1 className="text-lg font-bold text-blue-900 uppercase mb-2 flex items-center gap-2"><ScanEye className="w-5 h-5 text-blue-600"/> {inspection.ten_hang_muc}</h1>
-            <div className="flex justify-between items-end">
-                <div className="text-[10px] font-bold text-slate-600 space-y-1"><p>Dự án: {inspection.ma_ct}</p><p>SL Kiểm: {inspection.inspectedQuantity}</p></div>
-                <div className="text-3xl font-black text-blue-200 absolute right-4 bottom-2 opacity-20">FINAL</div>
+        <div ref={pdfContainerRef} className="space-y-4">
+            <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
+                <h1 className="text-lg font-bold text-blue-900 uppercase mb-2 flex items-center gap-2"><ScanEye className="w-5 h-5 text-blue-600"/> {inspection.ten_hang_muc}</h1>
+                <div className="flex justify-between items-end">
+                    <div className="text-[10px] font-bold text-slate-600 space-y-1"><p>Dự án: {inspection.ma_ct}</p><p>SL Kiểm: {inspection.inspectedQuantity}</p></div>
+                    <div className="text-3xl font-black text-blue-200 absolute right-4 bottom-2 opacity-20">FINAL</div>
+                </div>
             </div>
-        </div>
 
         {/* Global Evidence */}
         {inspection.images && inspection.images.length > 0 && (
@@ -110,6 +134,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
             </div>
         </div>
+      </div>
       </div>
 
       {!isApproved && isManager && (

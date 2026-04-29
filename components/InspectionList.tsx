@@ -2,15 +2,16 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile } from '../services/apiService';
+import { getProxyImageUrl } from '../src/utils';
 import { formatDisplayDate } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
 import { 
   Search, RefreshCw, FolderOpen, Clock, Upload,
-  Loader2, X, ChevronDown, ChevronRight,
+  Loader2, X, ChevronDown, ChevronRight, ChevronLeft, Maximize2,
   Filter, Building2, SlidersHorizontal,
   PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
   Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid, CheckSquare,
-  ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle,
+  ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle, Image as ImageIcon,
   CalendarDays, ArrowRight, Check, FileText, Download, Trash2, Edit, Eye
 } from 'lucide-react';
 
@@ -148,6 +149,35 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
+
+  const [selectedDateDesktop, setSelectedDateDesktop] = useState<string>('ALL');
+  const [selectedProjectDesktop, setSelectedProjectDesktop] = useState<string>('ALL');
+  const [selectedItemDesktop, setSelectedItemDesktop] = useState<Inspection | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+
+  const [colSizes, setColSizes] = useState([160, 220, 280, 500]);
+
+  const startDrag = (index: number) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const initialWidths = [...colSizes];
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      setColSizes(prev => {
+        const next = [...prev];
+        next[index] = Math.max(100, initialWidths[index] + delta);
+        return next;
+      });
+    };
+    
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   const handleCommitSearch = () => {
     setSearchTerm(searchInput);
@@ -353,6 +383,56 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     });
   };
 
+  const sortedDatesList = useMemo(() => {
+    return Object.keys(groupedData).sort((a, b) => {
+        if (a === 'KHÔNG RÕ NGÀY') return 1;
+        if (b === 'KHÔNG RÕ NGÀY') return -1;
+        const [da, ma, ya] = a.split('/');
+        const [db, mb, yb] = b.split('/');
+        const dateA = new Date(`${ya}-${ma}-${da}`);
+        const dateB = new Date(`${yb}-${mb}-${db}`);
+        return dateB.getTime() - dateA.getTime();
+    });
+  }, [groupedData]);
+
+  // Handle desktop side effects when data changes
+  useEffect(() => {
+      // Auto-select date if current is empty or not in list, and wait, if 'ALL' is valid we keep it.
+      if (selectedDateDesktop !== 'ALL' && !sortedDatesList.includes(selectedDateDesktop)) {
+          setSelectedDateDesktop('ALL');
+          setSelectedProjectDesktop('ALL');
+          setSelectedItemDesktop(null);
+      }
+  }, [sortedDatesList, selectedDateDesktop]);
+
+  const desktopProjects = useMemo(() => {
+      if (selectedDateDesktop === 'ALL') {
+          const allProjects = new Set<string>();
+          Object.values(groupedData).forEach(dateGroup => {
+              Object.keys(dateGroup).forEach(pKey => allProjects.add(pKey));
+          });
+          return Array.from(allProjects).sort();
+      }
+      return Object.keys(groupedData[selectedDateDesktop] || {}).sort();
+  }, [groupedData, selectedDateDesktop]);
+
+  const desktopItems = useMemo(() => {
+      let items: Inspection[] = [];
+      const datesToProcess = selectedDateDesktop === 'ALL' ? sortedDatesList : [selectedDateDesktop];
+      
+      datesToProcess.forEach(d => {
+          const dGroup = groupedData[d];
+          if (!dGroup) return;
+          const projectsToProcess = selectedProjectDesktop === 'ALL' ? Object.keys(dGroup) : [selectedProjectDesktop];
+          projectsToProcess.forEach(p => {
+              if (dGroup[p]) {
+                  items = items.concat(dGroup[p].items);
+              }
+          });
+      });
+      return items;
+  }, [groupedData, selectedDateDesktop, selectedProjectDesktop, sortedDatesList]);
+
   return (
     <div className="h-full flex flex-col bg-[#f8fafc] no-scroll-x" style={{ fontFamily: 'Inter, sans-serif' }}>
       {/* BULK ACTION BAR */}
@@ -479,29 +559,24 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           </div>
       </div>
 
-      {/* COMPACT LIST CONTENT */}
-      <div className="flex-1 overflow-y-auto p-3 no-scrollbar pb-24">
-        <div className="max-w-7xl mx-auto space-y-2">
-            {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                    <p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang tải dữ liệu...</p>
-                </div>
-            ) : Object.keys(groupedData).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-                    <FolderOpen className="w-16 h-16 opacity-10 mb-2" />
-                    <p className="font-black uppercase tracking-widest text-[10px]">Không tìm thấy dữ liệu</p>
-                </div>
-            ) : (
-                Object.keys(groupedData).sort((a, b) => {
-                    if (a === 'KHÔNG RÕ NGÀY') return 1;
-                    if (b === 'KHÔNG RÕ NGÀY') return -1;
-                    const [da, ma, ya] = a.split('/');
-                    const [db, mb, yb] = b.split('/');
-                    const dateA = new Date(`${ya}-${ma}-${da}`);
-                    const dateB = new Date(`${yb}-${mb}-${db}`);
-                    return dateB.getTime() - dateA.getTime();
-                }).map(dateKey => {
+      {/* CONTENT AREA */}
+      <div className="flex-1 overflow-hidden flex flex-col md:flex-row pb-24 md:pb-0">
+        
+        {/* MOBILE VIEW */}
+        <div className="md:hidden flex-1 overflow-y-auto p-3 no-scrollbar">
+            <div className="space-y-2">
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+                        <p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang tải dữ liệu...</p>
+                    </div>
+                ) : Object.keys(groupedData).length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-300">
+                        <FolderOpen className="w-16 h-16 opacity-10 mb-2" />
+                        <p className="font-black uppercase tracking-widest text-[10px]">Không tìm thấy dữ liệu</p>
+                    </div>
+                ) : (
+                    sortedDatesList.map(dateKey => {
                     const dateGroup = groupedData[dateKey];
                     const isDateExpanded = expandedDates.has(dateKey) || searchTerm.length > 0;
                     return (
@@ -741,7 +816,288 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 </div>
             )}
         </div>
+        </div>
+
+        {/* DESKTOP 4-COLUMN VIEW */}
+        <div className="hidden md:flex flex-1 h-full w-full bg-white divide-x divide-slate-200 overflow-x-auto overflow-y-hidden text-sm">
+            
+            {/* COLUMN 1: DATES */}
+            <div className="flex flex-col shrink-0 bg-slate-50/50 relative" style={{ width: colSizes[0] }}>
+                <div 
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
+                    onMouseDown={startDrag(0)}
+                />
+                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Ngày Tháng</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
+                    <button 
+                        onClick={() => { setSelectedDateDesktop('ALL'); setSelectedProjectDesktop('ALL'); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                        Tất cả ngày ({sortedDatesList.length})
+                    </button>
+                    {sortedDatesList.map(dateKey => (
+                        <button 
+                            key={dateKey}
+                            onClick={() => { setSelectedDateDesktop(dateKey); setSelectedProjectDesktop('ALL'); }}
+                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                        >
+                            <span><CalendarDays className="w-3.5 h-3.5 inline mr-2 text-slate-400"/> {dateKey}</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* COLUMN 2: PROJECTS */}
+            <div className="flex flex-col shrink-0 bg-white relative" style={{ width: colSizes[1] }}>
+                <div 
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
+                    onMouseDown={startDrag(1)}
+                />
+                <div className="px-4 py-3 border-b border-slate-200 shrink-0">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Công Trình / Dự Án</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
+                    <button 
+                        onClick={() => setSelectedProjectDesktop('ALL')}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                        Tất cả dự án ({desktopProjects.length})
+                    </button>
+                    {desktopProjects.map(pKey => {
+                        let count = 0;
+                        if (selectedDateDesktop !== 'ALL') {
+                            count = groupedData[selectedDateDesktop]?.[pKey]?.items?.length || 0;
+                        } else {
+                            Object.values(groupedData).forEach(g => {
+                                if (g[pKey]) count += g[pKey].items.length;
+                            });
+                        }
+                        
+                        return (
+                        <button 
+                            key={pKey}
+                            onClick={() => setSelectedProjectDesktop(pKey)}
+                            className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === pKey ? 'bg-blue-100' : 'hover:bg-slate-50'}`}
+                        >
+                            <div className="flex items-center justify-between w-full">
+                                <span className={`text-[13px] font-bold truncate ${selectedProjectDesktop === pKey ? 'text-blue-900' : 'text-slate-700'}`}>{pKey}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === pKey ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                            </div>
+                        </button>
+                    )})}
+                </div>
+            </div>
+
+            {/* COLUMN 3: ITEMS */}
+            <div className="flex flex-col shrink-0 bg-[#f8fafc] relative" style={{ width: colSizes[2] }}>
+                <div 
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
+                    onMouseDown={startDrag(2)}
+                />
+                <div className="px-4 py-3 border-b border-slate-200 shrink-0">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">3. Hạng Mục ({desktopItems.length})</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto no-scrollbar p-0">
+                    {desktopItems.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-xs">Không có hạng mục nào</div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {desktopItems.map(item => (
+                                <div 
+                                    key={item.id}
+                                    onClick={() => setSelectedItemDesktop(item)}
+                                    className={`p-4 hover:bg-blue-50/50 cursor-pointer transition-colors relative ${selectedItemDesktop?.id === item.id ? 'bg-blue-50/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white'}`}
+                                >
+                                    <div className="flex justify-between items-start gap-2 mb-2">
+                                        <h4 className="font-bold text-slate-800 text-[13px] leading-snug line-clamp-2 pr-6">
+                                            {(item.type === 'IQC' || item.type === 'SQC_VT') 
+                                                ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
+                                        </h4>
+                                        <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600">
+                                            {item.status === InspectionStatus.FLAGGED ? <AlertTriangle className="w-4 h-4"/> : <CheckSquare className="w-4 h-4 text-blue-600"/>}
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center mt-2 text-[11px] text-slate-500 font-mono">
+                                        <span>
+                                            {(item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
+                                            (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
+                                            (item.ma_nha_may || item.headcode || '---')}
+                                        </span>
+                                        <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3"/> {formatDisplayDate(item.date)}</span>
+                                    </div>
+                                    <div className="mt-2 flex gap-2 items-center">
+                                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
+                                         <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{item.inspectorName || '---'}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* COLUMN 4: DETAIL */}
+            <div className="flex flex-1 flex-col bg-white overflow-hidden relative shrink-0" style={{ minWidth: colSizes[3] }}>
+                <div 
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
+                    onMouseDown={startDrag(3)}
+                />
+                <div className="px-6 py-3 border-b border-slate-200 shrink-0 bg-white flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">4. Chi Tiết Hạng Mục</h3>
+                    {selectedItemDesktop && (
+                        <button onClick={() => onSelect(selectedItemDesktop.id)} className="px-3 py-1 bg-blue-100 text-blue-700 text-[11px] font-bold rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1">
+                            MỞ ĐẦY ĐỦ <ArrowRight className="w-3 h-3" />
+                        </button>
+                    )}
+                </div>
+                <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-slate-50/30">
+                    {!selectedItemDesktop ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                            <Info className="w-12 h-12 mb-4 opacity-20" />
+                            <p className="text-sm font-medium">Chọn một hạng mục để xem chi tiết</p>
+                        </div>
+                    ) : (
+                        <div className="max-w-3xl bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
+                            <div className="pb-4 border-b border-slate-100">
+                                <p className="text-[13px] font-bold text-blue-600 uppercase tracking-wide mb-1">
+                                    {selectedItemDesktop.ten_ct || '---'}
+                                </p>
+                                <h2 className="text-xl font-bold text-slate-900 leading-snug">
+                                    {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') 
+                                                ? (selectedItemDesktop.materials?.[0]?.name || selectedItemDesktop.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                : (selectedItemDesktop.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
+                                </h2>
+                                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${selectedItemDesktop.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' : selectedItemDesktop.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>{selectedItemDesktop.status}</span>
+                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.bg} ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.color}`}>{selectedItemDesktop.type}</span>
+                                    <span className="text-sm font-bold text-slate-700 border-l border-slate-300 pl-2">
+                                        {selectedItemDesktop.ma_nha_may || selectedItemDesktop.po_number || selectedItemDesktop.headcode || '---'}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 gap-y-5">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Xưởng Sản Xuất:</label>
+                                        <p className="text-[14px] font-medium text-slate-800">{selectedItemDesktop.workshop || '---'}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Công Đoạn Kiểm Tra:</label>
+                                        <p className="text-[14px] font-medium text-slate-800">{selectedItemDesktop.inspectionStage || selectedItemDesktop.type || '---'}</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Người Kiểm Tra:</label>
+                                        <p className="text-[14px] font-medium text-slate-800">{selectedItemDesktop.inspectorName || '---'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <div className="min-w-[80px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Đơn Hàng</label>
+                                        <p className="text-[13px] font-medium text-slate-800 truncate">{selectedItemDesktop.so_luong_ipo || '---'}</p>
+                                    </div>
+                                    <div className="min-w-[40px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">ĐVT</label>
+                                        <p className="text-[13px] font-medium text-slate-800 truncate">{selectedItemDesktop.dvt || 'PCS'}</p>
+                                    </div>
+                                    <div className="min-w-[60px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Kiểm</label>
+                                        <p className="text-[13px] font-bold text-blue-600 truncate">{selectedItemDesktop.inspectedQuantity || '---'}</p>
+                                    </div>
+                                    <div className="min-w-[40px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Pass</label>
+                                        <p className="text-[13px] font-bold text-green-600 truncate">{selectedItemDesktop.passedQuantity || '0'}</p>
+                                    </div>
+                                    <div className="min-w-[40px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Fail</label>
+                                        <p className="text-[13px] font-bold text-red-600 truncate">{selectedItemDesktop.failedQuantity || '0'}</p>
+                                    </div>
+                                    <div className="min-w-[50px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Pass</label>
+                                        <p className="text-[13px] font-bold text-green-600 truncate">{parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(selectedItemDesktop.passedQuantity?.toString() || '0') / parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
+                                    </div>
+                                    <div className="min-w-[50px]">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Fail</label>
+                                        <p className="text-[13px] font-bold text-red-600 truncate">{parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(selectedItemDesktop.failedQuantity?.toString() || '0') / parseFloat(selectedItemDesktop.inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {(selectedItemDesktop.images && selectedItemDesktop.images.length > 0) ? (
+                                <div className="pt-4 border-t border-slate-100">
+                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm ({selectedItemDesktop.images.length})</label>
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                                        {selectedItemDesktop.images.map((img: any, i) => {
+                                            const src = typeof img === 'string' ? img : (img.url_hd || img.url_thumbnail || img.file_url);
+                                            const proxySrc = getProxyImageUrl(src);
+                                            return (
+                                                <div key={i} className="relative group cursor-pointer shrink-0" onClick={() => {
+                                                    const formattedImages = selectedItemDesktop.images?.map((im: any) => {
+                                                        const imSrc = typeof im === 'string' ? im : (im.url_hd || im.url_thumbnail || im.file_url);
+                                                        return getProxyImageUrl(imSrc);
+                                                    }) || [];
+                                                    setLightboxState({ images: formattedImages, index: i });
+                                                }}>
+                                                    <img src={proxySrc} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" />
+                                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                                        <Maximize2 className="w-5 h-5 text-white" />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="pt-4 border-t border-slate-100">
+                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm</label>
+                                    <div className="h-24 rounded-lg border border-dashed border-slate-200 flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+                                        <ImageIcon className="w-6 h-6 mb-1 opacity-50" />
+                                        <span className="text-xs">Không có ảnh</span>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    )}
+                </div>
+            </div>
+
+        </div>
+
       </div>
+
+      {lightboxState && (
+          <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex flex-col transition-all">
+              <div className="flex justify-between items-center p-4 text-white/50 shrink-0">
+                  <div className="text-xs font-bold tracking-widest">{lightboxState.index + 1} / {lightboxState.images.length}</div>
+                  <button onClick={() => setLightboxState(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                      <X className="w-6 h-6 text-white"/>
+                  </button>
+              </div>
+              <div className="flex-1 min-h-0 relative flex items-center justify-center p-4">
+                  <img src={lightboxState.images[lightboxState.index]} className="max-w-full max-h-full object-contain rounded-lg" />
+                  {lightboxState.index > 0 && (
+                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index - 1 })} className="absolute left-4 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-colors">
+                          <ChevronLeft className="w-6 h-6" />
+                      </button>
+                  )}
+                  {lightboxState.index < lightboxState.images.length - 1 && (
+                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index + 1 })} className="absolute right-4 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-colors">
+                          <ChevronRight className="w-6 h-6" />
+                      </button>
+                  )}
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

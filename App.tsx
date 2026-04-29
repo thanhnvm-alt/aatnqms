@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ViewState, Inspection, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
@@ -162,10 +162,24 @@ const App = () => {
 
   useEffect(() => {
     if (user && isDbReady) {
-        if (view === 'LIST' || view === 'DASHBOARD') loadInspections(inspectionsPage);
+        loadInspections(inspectionsPage);
+    }
+  }, [user, isDbReady, inspectionsPage]);
+
+  useEffect(() => {
+    if (user && isDbReady) {
+        const interval = setInterval(() => {
+            loadInspections(inspectionsPage);
+        }, 3 * 60 * 1000); // Auto reload every 3 minutes
+        return () => clearInterval(interval);
+    }
+  }, [user, isDbReady, inspectionsPage]);
+
+  useEffect(() => {
+    if (user && isDbReady) {
         if (view === 'PROJECTS') loadProjects(projectsSearch, projectsPage);
     }
-  }, [user, isDbReady, view, inspectionsPage, projectsPage, projectsSearch]);
+  }, [user, isDbReady, view, projectsPage, projectsSearch]);
 
   const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers(data); else setUsers(MOCK_USERS); } catch (e) { setUsers(MOCK_USERS); } };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };

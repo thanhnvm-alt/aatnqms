@@ -64,8 +64,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
   };
 
   return (
-    <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-72'}`}>
-      <div className="p-6 flex items-center justify-between h-20">
+    <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-56'}`}>
+      <div className="px-4 py-6 flex items-center justify-between h-20">
         {!collapsed && (
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
         </button>
       )}
 
-      <nav className="flex-1 px-4 space-y-1.5 mt-2 overflow-y-auto no-scrollbar">
+      <nav className="flex-1 px-3 space-y-1.5 mt-2 overflow-y-auto no-scrollbar">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = isMenuItemActive(item.id);
@@ -101,14 +101,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl transition-all group relative font-medium text-sm ${
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all group relative font-medium text-[14px] ${
                 isActive 
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
                 : 'hover:bg-slate-800 hover:text-slate-200 text-slate-400'
               }`}
             >
               <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400 transition-colors'}`} />
-              {!collapsed && <span className="tracking-tight">{item.label}</span>}
+              {!collapsed && <span className="tracking-tight truncate whitespace-nowrap">{item.label}</span>}
               {collapsed && isActive && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-r-full"></div>
               )}
@@ -117,25 +117,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800 space-y-2">
+      <div className="p-3 border-t border-slate-800 space-y-2">
         <div className={`flex items-center gap-3 p-2 rounded-xl bg-slate-800/50 border border-slate-800 ${collapsed ? 'justify-center p-0 bg-transparent border-0' : ''}`}>
             <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-slate-700 shrink-0">
                 <img src={getProxyImageUrl(user.avatar)} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
             {!collapsed && (
                 <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-white truncate">{user.name}</p>
-                    <p className="text-xs font-medium text-blue-400">{user.role}</p>
+                    <p className="text-[13px] font-medium text-white truncate">{user.name}</p>
+                    <p className="text-[10px] font-medium text-blue-400">{user.role}</p>
                 </div>
             )}
         </div>
         
         <button 
             onClick={onLogout}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all group ${collapsed ? 'justify-center' : ''}`}
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all group ${collapsed ? 'justify-center' : ''}`}
         >
             <LogOut className="w-5 h-5 shrink-0 group-hover:stroke-red-400" />
-            {!collapsed && <span className="text-sm font-medium">Đăng xuất</span>}
+            {!collapsed && <span className="text-[14px] font-medium whitespace-nowrap">Đăng xuất</span>}
         </button>
       </div>
     </aside>

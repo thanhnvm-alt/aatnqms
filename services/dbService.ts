@@ -477,7 +477,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         whereClause += whereClause ? ' AND ' : ' WHERE ';
         // Convert YYYY-MM-DD string to numeric epoch seconds
         const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
-        whereClause += `(CASE WHEN date ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) >= $${idx}`;
+        whereClause += `(CASE WHEN CAST(date AS TEXT) ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) >= $${idx}`;
         args.push(ts);
     }
     if (filters.endDate) {
@@ -487,7 +487,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const d = new Date(filters.endDate);
         d.setHours(23, 59, 59, 999);
         const ts = Math.floor(d.getTime() / 1000);
-        whereClause += `(CASE WHEN date ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) <= $${idx}`;
+        whereClause += `(CASE WHEN CAST(date AS TEXT) ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) <= $${idx}`;
         args.push(ts);
     }
 
@@ -495,7 +495,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         SELECT ${selectFields} FROM (${unionQuery}) as combined 
         ${whereClause} 
         ORDER BY (CASE 
-            WHEN updated_at ~ '^[0-9]+$' THEN 
+            WHEN CAST(updated_at AS TEXT) ~ '^[0-9]+$' THEN 
                 CASE WHEN CAST(updated_at AS BIGINT) > 100000000000 THEN CAST(updated_at AS BIGINT) / 1000 
                 ELSE CAST(updated_at AS BIGINT) 
                 END 
@@ -895,7 +895,7 @@ export async function getSupplierStats(name: string) {
     const res = await query(`
         SELECT 
             COUNT(id) as total_pos, 
-            AVG(CASE WHEN score ~ '^[0-9.]+$' THEN score::numeric ELSE 0 END) as pass_rate 
+            AVG(CASE WHEN CAST(score AS TEXT) ~ '^[0-9.]+$' THEN CAST(score AS numeric) ELSE 0 END) as pass_rate 
         FROM (${unionQuery}) as combined
     `, [name]);
     

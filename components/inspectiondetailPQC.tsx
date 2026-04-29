@@ -6,7 +6,7 @@ import {
   ArrowLeft, User as UserIcon, Building2, Box, Edit3, Trash2, X, Maximize2, ShieldCheck,
   MessageSquare, Loader2, Eraser, Send, UserPlus, AlertOctagon, Check, Save,
   Camera, Image as ImageIcon, Paperclip, PenTool, LayoutList, History, FileText, ChevronRight,
-  Factory, Calendar, Activity, Hash, MapPin, Lock, ImagePlus, AlertCircle, Eye, ClipboardList
+  Factory, Calendar, Activity, Hash, MapPin, Lock, ImagePlus, AlertCircle, Eye, ClipboardList, Download
 } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { uploadQMSImage } from '../services/apiService';
@@ -43,6 +43,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   // --- ISO RBAC LOGIC (CRITICAL) ---
   const isApproved = inspection.status === InspectionStatus.APPROVED;
@@ -51,6 +52,24 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   
   const canModify = isManagerOrAdmin || (isOwner && !isApproved);
   const isLockedForUser = isApproved && !isManagerOrAdmin;
+
+  const handleExportPDF = async () => {
+      if (!pdfContainerRef.current) return;
+      try {
+          const html2pdf = (await import('html2pdf.js')).default;
+          const opt = {
+            margin:       0.5,
+            filename:     `PQC_Report_${inspection.ma_ct}_${inspection.date.replace(/\//g, '')}.pdf`,
+            image:        { type: 'jpeg' as const, quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' as const }
+          };
+          html2pdf().set(opt).from(pdfContainerRef.current).save();
+      } catch (err: any) {
+          console.error(err);
+          alert('Không thể xuất PDF: ' + err.message);
+      }
+  };
 
   const stats = useMemo(() => {
     const ins = Number(inspection.inspectedQuantity || 0);
@@ -163,6 +182,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Chi tiết hồ sơ PQC</h2>
           </div>
           <div className="flex items-center gap-2">
+              <button onClick={handleExportPDF} className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-all border border-slate-200 shadow-sm" type="button"><Download className="w-4 h-4" /></button>
               {isLockedForUser && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-400 rounded-xl border border-slate-200">
                       <Lock className="w-3.5 h-3.5" />
@@ -179,7 +199,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       </div>
 
       <div className="p-3 md:p-4 space-y-4">
-        <div className="max-w-4xl mx-auto space-y-4">
+        <div ref={pdfContainerRef} className="max-w-4xl mx-auto space-y-4">
             {/* --- HEADER INFO --- */}
             <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 border border-slate-200 shadow-sm relative overflow-hidden">
                 <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-7xl rotate-12 select-none">PQC</div>
