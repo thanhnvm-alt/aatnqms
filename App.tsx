@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { ViewState, Inspection, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier } from './types';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
@@ -16,46 +16,11 @@ import {
   SITE_TEMPLATES,
   ALL_MODULES
 } from './constants';
-import { Dashboard } from './components/Dashboard';
-import { InspectionList } from './components/InspectionList';
-import { InspectionFormPQC } from './components/inspectionformPQC';
-import { InspectionFormIQC } from './components/inspectionformIQC';
-import { InspectionFormSQC_VT } from './components/inspectionformSQC_VT';
-import { InspectionFormSQC_BTP } from './components/inspectionformSQC_BTP';
-import { InspectionFormFRS } from './components/inspectionformFRS';
-import { InspectionFormStepVecni } from './components/inspectionformStepVecni';
-import { InspectionFormFQC } from './components/inspectionformFQC';
-import { InspectionFormSPR } from './components/inspectionformSPR';
-import { InspectionFormSITE } from './components/inspectionformSITE';
 
-import { InspectionDetailPQC } from './components/inspectiondetailPQC'; 
-import { InspectionDetailIQC } from './components/inspectiondetailIQC';
-import { InspectionDetailSQC_VT } from './components/inspectiondetailSQC_VT';
-import { InspectionDetailSQC_BTP } from './components/inspectiondetailSQC_BTP';
-import { InspectionDetailFRS } from './components/inspectiondetailFRS';
-import { InspectionDetailStepVecni } from './components/inspectiondetailStepVecni';
-import { InspectionDetailFQC } from './components/inspectiondetailFQC';
-import { InspectionDetailSPR } from './components/inspectiondetailSPR';
-import { InspectionDetailSITE } from './components/inspectiondetailSITE';
-
-import { Settings } from './components/Settings';
-import { IPOPage } from './components/IPOPage';
 import { LoginPage } from './components/LoginPage';
-import { ThreeDConverter } from './components/ThreeDConverter';
-import { ProjectList } from './components/ProjectList';
-import { ProjectDetail } from './components/ProjectDetail';
 import { GlobalHeader } from './components/GlobalHeader';
 import { Sidebar } from './components/Sidebar';
-import { NCRList } from './components/NCRList';
-import { DefectLibrary } from './components/DefectLibrary';
-import { DefectList } from './components/DefectList';
-import { DefectDetail } from './components/DefectDetail';
-import { SupplierManagement } from './components/SupplierManagement';
-import { SupplierDetail } from './components/SupplierDetail';
-import { MaterialManagement } from './components/MaterialManagement';
-import { Trash } from './components/Trash';
 import { ChatAI } from './components/ChatAI';
-import { QRScannerModal } from './components/QRScannerModal';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
   fetchInspections, 
@@ -77,6 +42,43 @@ import {
 } from './services/apiService';
 import { Loader2, X, FileText, ChevronRight, Bell } from 'lucide-react';
 
+const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const InspectionList = lazy(() => import('./components/InspectionList').then(m => ({ default: m.InspectionList })));
+const InspectionFormPQC = lazy(() => import('./components/inspectionformPQC').then(m => ({ default: m.InspectionFormPQC })));
+const InspectionFormIQC = lazy(() => import('./components/inspectionformIQC').then(m => ({ default: m.InspectionFormIQC })));
+const InspectionFormSQC_VT = lazy(() => import('./components/inspectionformSQC_VT').then(m => ({ default: m.InspectionFormSQC_VT })));
+const InspectionFormSQC_BTP = lazy(() => import('./components/inspectionformSQC_BTP').then(m => ({ default: m.InspectionFormSQC_BTP })));
+const InspectionFormFRS = lazy(() => import('./components/inspectionformFRS').then(m => ({ default: m.InspectionFormFRS })));
+const InspectionFormStepVecni = lazy(() => import('./components/inspectionformStepVecni').then(m => ({ default: m.InspectionFormStepVecni })));
+const InspectionFormFQC = lazy(() => import('./components/inspectionformFQC').then(m => ({ default: m.InspectionFormFQC })));
+const InspectionFormSPR = lazy(() => import('./components/inspectionformSPR').then(m => ({ default: m.InspectionFormSPR })));
+const InspectionFormSITE = lazy(() => import('./components/inspectionformSITE').then(m => ({ default: m.InspectionFormSITE })));
+
+const InspectionDetailPQC = lazy(() => import('./components/inspectiondetailPQC').then(m => ({ default: m.InspectionDetailPQC })));
+const InspectionDetailIQC = lazy(() => import('./components/inspectiondetailIQC').then(m => ({ default: m.InspectionDetailIQC })));
+const InspectionDetailSQC_VT = lazy(() => import('./components/inspectiondetailSQC_VT').then(m => ({ default: m.InspectionDetailSQC_VT })));
+const InspectionDetailSQC_BTP = lazy(() => import('./components/inspectiondetailSQC_BTP').then(m => ({ default: m.InspectionDetailSQC_BTP })));
+const InspectionDetailFRS = lazy(() => import('./components/inspectiondetailFRS').then(m => ({ default: m.InspectionDetailFRS })));
+const InspectionDetailStepVecni = lazy(() => import('./components/inspectiondetailStepVecni').then(m => ({ default: m.InspectionDetailStepVecni })));
+const InspectionDetailFQC = lazy(() => import('./components/inspectiondetailFQC').then(m => ({ default: m.InspectionDetailFQC })));
+const InspectionDetailSPR = lazy(() => import('./components/inspectiondetailSPR').then(m => ({ default: m.InspectionDetailSPR })));
+const InspectionDetailSITE = lazy(() => import('./components/inspectiondetailSITE').then(m => ({ default: m.InspectionDetailSITE })));
+
+const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
+const IPOPage = lazy(() => import('./components/IPOPage').then(m => ({ default: m.IPOPage })));
+const ThreeDConverter = lazy(() => import('./components/ThreeDConverter').then(m => ({ default: m.ThreeDConverter })));
+const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
+const ProjectDetail = lazy(() => import('./components/ProjectDetail').then(m => ({ default: m.ProjectDetail })));
+const NCRList = lazy(() => import('./components/NCRList').then(m => ({ default: m.NCRList })));
+const DefectLibrary = lazy(() => import('./components/DefectLibrary').then(m => ({ default: m.DefectLibrary })));
+const DefectList = lazy(() => import('./components/DefectList').then(m => ({ default: m.DefectList })));
+const DefectDetail = lazy(() => import('./components/DefectDetail').then(m => ({ default: m.DefectDetail })));
+const SupplierManagement = lazy(() => import('./components/SupplierManagement').then(m => ({ default: m.SupplierManagement })));
+const SupplierDetail = lazy(() => import('./components/SupplierDetail').then(m => ({ default: m.SupplierDetail })));
+const MaterialManagement = lazy(() => import('./components/MaterialManagement').then(m => ({ default: m.MaterialManagement })));
+const Trash = lazy(() => import('./components/Trash').then(m => ({ default: m.Trash })));
+const QRScannerModal = lazy(() => import('./components/QRScannerModal').then(m => ({ default: m.QRScannerModal })));
+
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
 const DETAIL_COMPONENT_MAP: Record<string, any> = {
@@ -91,6 +93,15 @@ const DETAIL_COMPONENT_MAP: Record<string, any> = {
     'SPR': InspectionDetailSPR,
     'SITE': InspectionDetailSITE
 };
+
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center p-8 h-full w-full">
+    <div className="flex flex-col items-center gap-3">
+      <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      <span className="text-xs font-semibold text-slate-500">Đang tải biểu mẫu...</span>
+    </div>
+  </div>
+);
 
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -324,158 +335,162 @@ const App = () => {
             onNavigateToRecord={handleNavigateToRecord}
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-x-hidden overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0 px-2 md:px-6 safe-pb no-scrollbar" id="main-scroll-container">
-            {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
-            {view === 'LIST' && (
-                <InspectionList 
-                    inspections={inspections} 
-                    onSelect={handleSelectInspection} 
-                    isLoading={isLoadingInspections} 
-                    workshops={workshops} 
-                    total={inspectionsTotal}
-                    page={inspectionsPage}
-                    onPageChange={setInspectionsPage}
-                    user={user}
-                    onRefresh={loadInspections}
-                />
-            )}
-            {view === 'FORM' && (
-                activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
-                activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
-                activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
-                activeInspection?.type === 'SITE' || initialFormState?.type === 'SITE' ? <InspectionFormSITE initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} /> :
-                <InspectionFormPQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} inspections={inspections} user={user} templates={templates} />
-            )}
-            {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
-              inspection: activeInspection, 
-              user, 
-              onBack: () => setView(returnView), 
-              onEdit: handleEditInspection, 
-              onDelete: async (id: string) => { 
-                const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
-                const isOwner = activeInspection.inspectorName === user.name;
-                const isApproved = activeInspection.status === InspectionStatus.APPROVED;
-                if (!isManagerOrAdmin && (!isOwner || isApproved)) {
-                    alert("Bạn không có quyền xóa hồ sơ này.");
-                    return;
-                }
-                if(window.confirm("Xóa phiếu này? Dữ liệu sẽ bị xóa vĩnh viễn khỏi audit log.")){ 
-                    await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); 
-                } 
-              }, 
-              onApprove: async (id: string, sig: string, extra: any) => { 
-                const updated = { ...activeInspection, ...extra };
-                const oldStatus = activeInspection.status;
-                if (sig || extra.managerSignature) {
-                  updated.status = InspectionStatus.APPROVED;
-                  updated.managerSignature = sig || extra.managerSignature;
-                  updated.managerName = extra.managerName || user.name;
-                }
-                await saveInspectionToSheet(updated); 
-                
-                if (updated.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
-                  // Notify the inspector
-                  const inspector = users.find(u => u.name === updated.inspectorName);
-                  if (inspector && user) {
-                    createNotification({
-                      userId: inspector.id,
-                      type: 'SUCCESS',
-                      title: 'Phiếu đã được phê duyệt',
-                      message: `Quản lý ${user.name} đã phê duyệt phiếu ${updated.type} của bạn`,
-                      link: { view: 'DETAIL', id: updated.id }
-                    });
-                  }
-                }
-                
-                setActiveInspection(updated); loadInspections();
-              }, 
-              onPostComment: async (id: string, cmt: any) => {
-                const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
-                await saveInspectionToSheet(updated); 
-                
-                // Notify other participants
-                if (user) {
-                  // Notify inspector if commenter is not inspector
-                  if (user.name !== updated.inspectorName) {
-                    const inspector = users.find(u => u.name === updated.inspectorName);
-                    if (inspector) {
-                      createNotification({
-                        userId: inspector.id,
-                        type: 'MESSAGE',
-                        title: 'Bình luận mới',
-                        message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
-                        link: { view: 'DETAIL', id: updated.id }
-                      });
+            <Suspense fallback={<LoadingFallback />}>
+                {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
+                {view === 'LIST' && (
+                    <InspectionList 
+                        inspections={inspections} 
+                        onSelect={handleSelectInspection} 
+                        isLoading={isLoadingInspections} 
+                        workshops={workshops} 
+                        total={inspectionsTotal}
+                        page={inspectionsPage}
+                        onPageChange={setInspectionsPage}
+                        user={user}
+                        onRefresh={loadInspections}
+                    />
+                )}
+                {view === 'FORM' && (
+                    activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
+                    activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
+                    activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
+                    activeInspection?.type === 'SITE' || initialFormState?.type === 'SITE' ? <InspectionFormSITE initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} /> :
+                    <InspectionFormPQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} inspections={inspections} user={user} templates={templates} />
+                )}
+                {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
+                  inspection: activeInspection, 
+                  user, 
+                  onBack: () => setView(returnView), 
+                  onEdit: handleEditInspection, 
+                  onDelete: async (id: string) => { 
+                    const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
+                    const isOwner = activeInspection.inspectorName === user.name;
+                    const isApproved = activeInspection.status === InspectionStatus.APPROVED;
+                    if (!isManagerOrAdmin && (!isOwner || isApproved)) {
+                        alert("Bạn không có quyền xóa hồ sơ này.");
+                        return;
                     }
-                  }
-                  // Notify manager if commenter is not manager
-                  if (updated.managerName && user.name !== updated.managerName) {
-                    const manager = users.find(u => u.name === updated.managerName);
-                    if (manager) {
-                      createNotification({
-                        userId: manager.id,
-                        type: 'MESSAGE',
-                        title: 'Bình luận mới',
-                        message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
-                        link: { view: 'DETAIL', id: updated.id }
-                      });
+                    if(window.confirm("Xóa phiếu này? Dữ liệu sẽ bị xóa vĩnh viễn khỏi audit log.")){ 
+                        await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); 
+                    } 
+                  }, 
+                  onApprove: async (id: string, sig: string, extra: any) => { 
+                    const updated = { ...activeInspection, ...extra };
+                    const oldStatus = activeInspection.status;
+                    if (sig || extra.managerSignature) {
+                      updated.status = InspectionStatus.APPROVED;
+                      updated.managerSignature = sig || extra.managerSignature;
+                      updated.managerName = extra.managerName || user.name;
                     }
-                  }
-                }
-                
-                setActiveInspection(updated); loadInspections();
-              } 
-            }) : null)}
-            {view === 'PROJECTS' && (
-                <ProjectList 
-                    projects={projects} 
-                    inspections={inspections} 
-                    onSelectProject={maCt => { 
-                        const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; 
-                        if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } 
-                    }} 
-                    onSearch={(term) => { setProjectsSearch(term); setProjectsPage(1); }}
-                    total={projectsTotal}
-                    page={projectsPage}
-                    onPageChange={setProjectsPage}
-                />
-            )}
-            {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
-            {view === 'IPO' && <IPOPage user={user} />}
-            {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
-            {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
-            {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
-            {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
-            {view === 'SUPPLIERS' && <SupplierManagement user={user} onSelectSupplier={s => { setActiveSupplier(s); setView('SUPPLIER_DETAIL'); }} />}
-            {view === 'MATERIALS' && <MaterialManagement user={user} />}
-            {view === 'SUPPLIER_DETAIL' && activeSupplier && <SupplierDetail supplier={activeSupplier} user={user} onBack={() => setView('SUPPLIERS')} onViewInspection={handleSelectInspection} />}
-            {view === 'SETTINGS' && (
-                <Settings 
-                    currentUser={user} allTemplates={templates} onSaveTemplate={async (id, items) => { await saveTemplate(id, items); loadTemplates(); }}
-    users={users} 
-    onAddUser={async (u) => { await saveUser(u); loadUsers(); }} 
-    onUpdateUser={async (u) => { await saveUser(u); loadUsers(); }} 
-    onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
-    onImportUsers={async (importedUsers) => {
-        for (const u of importedUsers) {
-            await saveUser(u);
-        }
-        await loadUsers();
-    }}
-    workshops={workshops} 
-    onAddWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
-    onUpdateWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
-    onDeleteWorkshop={async (id) => { await deleteWorkshop(id); loadWorkshops(); }}
-    onClose={() => setView('DASHBOARD')} 
-    onCheckConnection={async () => (await checkApiConnection()).ok} 
-    initialTab={settingsTab}
-/>
-            )}
-            {view === 'TRASH' && <Trash user={user} onNavigate={setView} />}
-            {view === 'CONVERT_3D' && <ThreeDConverter />}
+                    await saveInspectionToSheet(updated); 
+                    
+                    if (updated.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
+                      // Notify the inspector
+                      const inspector = users.find(u => u.name === updated.inspectorName);
+                      if (inspector && user) {
+                        createNotification({
+                          userId: inspector.id,
+                          type: 'SUCCESS',
+                          title: 'Phiếu đã được phê duyệt',
+                          message: `Quản lý ${user.name} đã phê duyệt phiếu ${updated.type} của bạn`,
+                          link: { view: 'DETAIL', id: updated.id }
+                        });
+                      }
+                    }
+                    
+                    setActiveInspection(updated); loadInspections();
+                  }, 
+                  onPostComment: async (id: string, cmt: any) => {
+                    const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
+                    await saveInspectionToSheet(updated); 
+                    
+                    // Notify other participants
+                    if (user) {
+                      // Notify inspector if commenter is not inspector
+                      if (user.name !== updated.inspectorName) {
+                        const inspector = users.find(u => u.name === updated.inspectorName);
+                        if (inspector) {
+                          createNotification({
+                            userId: inspector.id,
+                            type: 'MESSAGE',
+                            title: 'Bình luận mới',
+                            message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
+                            link: { view: 'DETAIL', id: updated.id }
+                          });
+                        }
+                      }
+                      // Notify manager if commenter is not manager
+                      if (updated.managerName && user.name !== updated.managerName) {
+                        const manager = users.find(u => u.name === updated.managerName);
+                        if (manager) {
+                          createNotification({
+                            userId: manager.id,
+                            type: 'MESSAGE',
+                            title: 'Bình luận mới',
+                            message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
+                            link: { view: 'DETAIL', id: updated.id }
+                          });
+                        }
+                      }
+                    }
+                    
+                    setActiveInspection(updated); loadInspections();
+                  } 
+                }) : null)}
+                {view === 'PROJECTS' && (
+                    <ProjectList 
+                        projects={projects} 
+                        inspections={inspections} 
+                        onSelectProject={maCt => { 
+                            const found = projects.find(p => p.ma_ct === maCt) || { ma_ct: maCt, name: maCt } as Project; 
+                            if(found) { setActiveProject(found); setView('PROJECT_DETAIL'); } 
+                        }} 
+                        onSearch={(term) => { setProjectsSearch(term); setProjectsPage(1); }}
+                        total={projectsTotal}
+                        page={projectsPage}
+                        onPageChange={setProjectsPage}
+                    />
+                )}
+                {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
+                {view === 'IPO' && <IPOPage user={user} />}
+                {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
+                {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
+                {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
+                {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
+                {view === 'SUPPLIERS' && <SupplierManagement user={user} onSelectSupplier={s => { setActiveSupplier(s); setView('SUPPLIER_DETAIL'); }} />}
+                {view === 'MATERIALS' && <MaterialManagement user={user} />}
+                {view === 'SUPPLIER_DETAIL' && activeSupplier && <SupplierDetail supplier={activeSupplier} user={user} onBack={() => setView('SUPPLIERS')} onViewInspection={handleSelectInspection} />}
+                {view === 'SETTINGS' && (
+                    <Settings 
+                        currentUser={user} allTemplates={templates} onSaveTemplate={async (id, items) => { await saveTemplate(id, items); loadTemplates(); }}
+        users={users} 
+        onAddUser={async (u) => { await saveUser(u); loadUsers(); }} 
+        onUpdateUser={async (u) => { await saveUser(u); loadUsers(); }} 
+        onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
+        onImportUsers={async (importedUsers) => {
+            for (const u of importedUsers) {
+                await saveUser(u);
+            }
+            await loadUsers();
+        }}
+        workshops={workshops} 
+        onAddWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
+        onUpdateWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
+        onDeleteWorkshop={async (id) => { await deleteWorkshop(id); loadWorkshops(); }}
+        onClose={() => setView('DASHBOARD')} 
+        onCheckConnection={async () => (await checkApiConnection()).ok} 
+        initialTab={settingsTab}
+    />
+                )}
+                {view === 'TRASH' && <Trash user={user} onNavigate={setView} />}
+                {view === 'CONVERT_3D' && <ThreeDConverter />}
+            </Suspense>
         </main>
-        <MobileBottomBar view={view} onNavigate={setView} user={user} />
-        <ChatAI user={user} />
-        {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
+        <Suspense fallback={null}>
+            <MobileBottomBar view={view} onNavigate={setView} user={user} />
+            <ChatAI user={user} />
+            {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
+        </Suspense>
         
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
