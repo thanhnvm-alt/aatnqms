@@ -249,7 +249,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         {inspection.images?.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm transition-all hover:scale-105" onClick={() => setLightboxState({ images: inspection.images!, index: idx })}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                                <div className="absolute inset-0 bg-black/30 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
                             </div>
                         ))}
                     </div>
@@ -263,7 +263,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         {deliveryNoteImages.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm transition-all hover:scale-105" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                                <div className="absolute inset-0 bg-black/30 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
                             </div>
                         ))}
                     </div>
@@ -277,7 +277,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         {reportImages.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 shrink-0 group cursor-zoom-in shadow-sm transition-all hover:scale-105" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
+                                <div className="absolute inset-0 bg-black/30 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-5 h-5" /></div>
                             </div>
                         ))}
                     </div>

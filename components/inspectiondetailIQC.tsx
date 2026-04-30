@@ -125,7 +125,14 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ngày kiểm</p><p className="text-[11px] font-bold text-slate-800">{inspection.date}</p></div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ngày kiểm</p><p className="text-[11px] font-bold text-slate-800">{(() => {
+                        if (!inspection.date) return '---';
+                        if (/^\d+$/.test(inspection.date)) return new Date(Number(inspection.date) * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        const parts = inspection.date.split('-');
+                        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        const d = new Date(inspection.date);
+                        return isNaN(d.getTime()) ? inspection.date : d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    })()}</p></div>
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">QC/QA</p><p className="text-[11px] font-bold text-slate-800 uppercase">{inspection.inspectorName}</p></div>
                 </div>
             </div>

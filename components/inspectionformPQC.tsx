@@ -240,7 +240,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                                 {ncrData.imagesBefore?.map((img, i) => (
                                     <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleViewImage(ncrData.imagesBefore!, i, 'BEFORE')}>
                                         <ProxyImage src={img} alt="Ảnh trước" className="w-full h-full object-cover" />
-                                        <button onClick={(e) => { e.stopPropagation(); setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setNcrData({...ncrData, imagesBefore: ncrData.imagesBefore?.filter((_, idx) => idx !== i)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                                     </div>
                                 ))}
                             </div>
@@ -257,7 +257,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                                 {ncrData.imagesAfter?.map((img, i) => (
                                     <div key={i} className="relative aspect-square border rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleViewImage(ncrData.imagesAfter!, i, 'AFTER')}>
                                         <ProxyImage src={img} alt="Ảnh sau" className="w-full h-full object-cover" />
-                                        <button onClick={(e) => { e.stopPropagation(); setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setNcrData({...ncrData, imagesAfter: ncrData.imagesAfter?.filter((_, idx) => idx !== i)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                                     </div>
                                 ))}
                             </div>
@@ -695,7 +695,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
                             <ProxyImage src={img} alt="Ảnh" className="w-full h-full object-cover" />
-                            <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                            <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                         </div>
                 ))}
             </div>
@@ -805,7 +805,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         {item.images.map((im, i) => (
                                             <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}>
                                             <ProxyImage src={im} alt="Ảnh lỗi" className="w-full h-full object-cover" />
-                                            <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button>
+                                            <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 md:opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button>
                                         </div>
                                         ))}
                                     </div>

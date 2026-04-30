@@ -354,7 +354,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                                       </td>
                                                       <td className="px-8 py-5 text-right">
                                                           {isQA ? (
-                                                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                              <div className="flex items-center justify-end gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                                                   <button onClick={() => handleOpenModal(item)} className="p-2 text-blue-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-all"><Edit2 className="w-4 h-4"/></button>
                                                                   <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-red-100 transition-all"><Trash2 className="w-4 h-4"/></button>
                                                               </div>

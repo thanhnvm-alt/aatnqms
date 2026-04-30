@@ -30,7 +30,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   projects, inspections, onSelectProject, onSearch, 
   total = 0, page = 1, onPageChange 
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const [committedSearch, setCommittedSearch] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>(() => {
@@ -48,7 +49,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   const [filterQA, setFilterQA] = useState<string>('ALL');
 
   const handleCommitSearch = () => {
-    if (onSearch) onSearch(searchTerm);
+    const term = searchInputRef.current?.value || '';
+    setCommittedSearch(term);
+    if (onSearch) onSearch(term);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -113,11 +116,11 @@ export const ProjectList: React.FC<ProjectListProps> = ({
 
   // Tự động mở rộng các nhóm có dữ liệu sau khi lọc
   useEffect(() => {
-      if (isFilterActive || searchTerm) {
+      if (isFilterActive || committedSearch) {
           const activeGroups = Object.keys(groupedProjects).filter(key => groupedProjects[key].length > 0);
           setExpandedGroups(new Set(activeGroups));
       }
-  }, [groupedProjects, isFilterActive, searchTerm]);
+  }, [groupedProjects, isFilterActive, committedSearch]);
 
   const toggleGroup = (key: string) => {
     setExpandedGroups(prev => {
@@ -149,8 +152,8 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                 <input 
                   type="text" 
                   placeholder="Tìm theo Mã hoặc Tên dự án..." 
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  ref={searchInputRef}
+                  defaultValue={committedSearch}
                   onBlur={handleCommitSearch}
                   onKeyDown={handleKeyDown}
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
@@ -255,7 +258,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
       <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">
         <div className="max-w-7xl mx-auto space-y-4">
             {Object.entries(groupedProjects).map(([groupName, groupItems]: [string, Project[]]) => {
-                if (groupItems.length === 0 && !searchTerm && !isFilterActive) return null;
+                if (groupItems.length === 0 && !committedSearch && !isFilterActive) return null;
                 const isExpanded = expandedGroups.has(groupName);
 
                 return (

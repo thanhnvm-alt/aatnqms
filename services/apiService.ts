@@ -86,6 +86,16 @@ export const saveIpoSampleRecord = async (sample: any) => apiFetch('/api/ipo/sam
     body: JSON.stringify(sample)
 });
 
+export const updateIpoSampleRecord = async (id: string, sample: any) => apiFetch(`/api/ipo/samples/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sample)
+});
+
+export const deleteIpoSampleRecord = async (id: string) => apiFetch(`/api/ipo/samples/${id}`, { 
+    method: 'DELETE' 
+});
+
 export const fetchFloorPlans = async (projectId: string) => apiFetch(`/api/floor-plans?projectId=${projectId}`);
 export const saveFloorPlan = async (fp: FloorPlan) => apiFetch('/api/floor-plans', {
     method: 'POST',

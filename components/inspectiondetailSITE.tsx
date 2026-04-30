@@ -132,7 +132,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                         {inspection.images?.map((img, i) => (
                             <div key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-amber-400 transition-all cursor-zoom-in relative group">
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" />
-                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <Maximize2 className="text-white w-6 h-6" />
                                 </div>
                             </div>

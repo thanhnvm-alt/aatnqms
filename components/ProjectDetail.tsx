@@ -705,7 +705,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                           <span className="text-[9px] font-black uppercase">Chưa có ảnh</span>
                                       </div>
                                   )}
-                                  <button onClick={() => thumbnailInputRef.current?.click()} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2">
+                                  <button onClick={() => thumbnailInputRef.current?.click()} className="absolute inset-0 bg-black/40 md:opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2">
                                       <Camera className="w-8 h-8" />
                                       <span className="text-[9px] font-black uppercase">Thay đổi ảnh</span>
                                   </button>

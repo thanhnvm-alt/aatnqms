@@ -193,7 +193,7 @@ const streamGoogleDriveImage = async (req: express.Request, res: express.Respons
   try {
     // Single API call: Fetch the file content as a stream directly
     const response = await drive.files.get(
-      { fileId, alt: 'media' },
+      { fileId, alt: 'media', supportsAllDrives: true },
       { responseType: 'stream' }
     );
 
@@ -322,6 +322,25 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save sample record' });
+    }
+  });
+
+  app.put("/api/ipo/samples/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      await db.updateIpoSampleRecord(req.params.id as string, { ...req.body, updated_by: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update sample record' });
+    }
+  });
+
+  app.delete("/api/ipo/samples/:id", authenticate, async (req, res) => {
+    try {
+      await db.deleteIpoSampleRecord(req.params.id as string);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete sample record' });
     }
   });
 
@@ -1150,18 +1169,21 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       
       let fileId = '';
 
-      // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID
-      if (imageUrl.includes('googleusercontent.com/u/0/d/')) {
-          fileId = imageUrl.split('/d/')[1]?.split('=')[0]?.split('?')[0];
+      // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID or /d/FILE_ID
+      if (imageUrl.includes('googleusercontent.com/u/0/d/') || imageUrl.includes('googleusercontent.com/d/')) {
+          const splitPart = imageUrl.includes('/u/0/d/') ? '/u/0/d/' : '/d/';
+          fileId = imageUrl.split(splitPart)[1]?.split('=')[0]?.split('?')[0]?.split('&')[0]?.split('/')[0];
       } 
       // Pattern 2: drive.google.com/file/d/FILE_ID/view
       else if (imageUrl.includes('drive.google.com/file/d/')) {
-          fileId = imageUrl.split('/d/')[1]?.split('/')[0]?.split('?')[0];
+          fileId = imageUrl.split('/d/')[1]?.split('/')[0]?.split('?')[0]?.split('&')[0];
       }
       // Pattern 3: drive.google.com/open?id=FILE_ID or uc?id=FILE_ID
       else if (imageUrl.includes('id=')) {
-          const urlParams = new URLSearchParams(imageUrl.split('?')[1]);
-          fileId = urlParams.get('id') || '';
+          const urlParams = new URLSearchParams(imageUrl.split('?')[1]?.split('&token')[0]); // try to isolate params if malformed
+          // fallback string parsing if URLSearchParams fails
+          const idMatch = imageUrl.match(/id=([^&?]+)/);
+          fileId = idMatch ? idMatch[1] : (urlParams.get('id') || '');
       }
 
       if (fileId && fileId.length > 20) {
@@ -1170,7 +1192,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             try {
               const response = await drive.files.get({
                   fileId: fileId,
-                  alt: 'media'
+                  alt: 'media',
+                  supportsAllDrives: true
               }, { responseType: 'stream' });
               
               const contentType = response.headers['content-type'] || 'image/jpeg';
@@ -1182,9 +1205,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               await pipelineAsync(response.data, res);
               return;
             } catch (driveErr: any) {
+              // Extract a clean status and message from the Google API error response
               const status = driveErr.response?.status || driveErr.code || 500;
-              const msg = driveErr.message || 'Upstream Error';
-              console.warn(`[Drive Proxy] Auth fetch failed for ${fileId}: ${status} - ${msg}. Trying public fallback...`);
+              let msg = '';
+              
+              if (driveErr.response?.data?.error?.message) {
+                  msg = driveErr.response.data.error.message;
+              } else if (typeof driveErr.message === 'string') {
+                  msg = driveErr.message;
+              } else {
+                  msg = 'Upstream Error';
+              }
+              
+              // Ensure message is a single line and truncated
+              msg = msg.replace(/[\r\n]+/g, ' ').trim();
+              if (msg.length > 200) {
+                 msg = msg.substring(0, 150) + '...';
+              }
+              
+              const isNotFound = status === 404;
+              const logMsg = `[Drive Proxy] Auth fetch ${isNotFound ? 'rejected (404 Not Found)' : `failed: ${status}`} for ${fileId}${isNotFound ? '' : ` - ${msg}`}. Trying public fallback...`;
+              console.warn(logMsg);
             }
           }
 
@@ -1218,7 +1259,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             }
           }
 
-          return res.status(404).send('Image not found or not shared correctly. Please ensure the file is set to "Anyone with the link can view".');
+          // Attempt 3: Final fallback to redirect to the original URL if proxy fails entirely.
+          console.warn(`[Drive Proxy] All proxied fetches failed for ${fileId}, redirecting to original URL.`);
+          return res.redirect(imageUrl);
       }
 
       // Fallback for non-drive URLs

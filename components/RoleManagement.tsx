@@ -260,7 +260,7 @@ export const RoleManagement: React.FC<RoleManagementProps> = ({ roles, onAddRole
                 <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                   <ShieldCheck className="w-6 h-6" />
                 </div>
-                <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 md:md:opacity-0 group-hover:opacity-100 transition-opacity">
                     {!role.isSystem && (
                         <>
                             <button onClick={() => handleOpenModal(role)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" title="Chỉnh sửa"><Edit2 className="w-4 h-4" /></button>

@@ -224,7 +224,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                 {formData.images?.map((img, idx) => (
                     <div key={idx} className="relative w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 shrink-0 group shadow-sm">
                         <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
-                        <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                        <button onClick={() => setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
             </div>
@@ -298,8 +298,9 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar py-1">
                                 {item.images.map((img, i) => (
-                                    <div key={i} className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-slate-200 shadow-sm cursor-pointer" onClick={() => handleEditImage(item.images!, i, { itemId: item.id })}>
+                                    <div key={i} className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-slate-200 shadow-sm cursor-pointer group" onClick={() => handleEditImage(item.images!, i, { itemId: item.id })}>
                                         <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
+                                        <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(idx, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-bl shadow md:opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button>
                                     </div>
                                 ))}
                             </div>

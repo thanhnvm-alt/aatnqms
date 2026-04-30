@@ -422,7 +422,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
                                             </div>
                                         </div>
                                     </div>
-                                    <button onClick={() => handleRemoveItem(item.id)} className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 p-1.5 rounded-full shadow-sm border border-slate-200 opacity-0 group-hover:opacity-100 transition-all hover:scale-110"><Trash2 className="w-4 h-4"/></button>
+                                    <button onClick={() => handleRemoveItem(item.id)} className="absolute -top-2 -right-2 bg-white text-slate-300 hover:text-red-500 p-1.5 rounded-full shadow-sm border border-slate-200 md:opacity-0 group-hover:opacity-100 transition-all hover:scale-110"><Trash2 className="w-4 h-4"/></button>
                                 </div>
                             ))}
                             <button onClick={() => handleAddItem(activeGroup)} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"><div className="p-1 bg-slate-200 rounded-full group-hover:bg-blue-200 transition-colors"><Plus className="w-4 h-4 text-slate-500 group-hover:text-blue-600" /></div> Thêm tiêu chí vào {activeGroup}</button>

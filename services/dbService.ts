@@ -793,6 +793,26 @@ export async function saveIpoSampleRecord(sample: any) {
     ]));
 }
 
+export async function updateIpoSampleRecord(id: string, sample: any) {
+    await query(`
+        UPDATE ${SCHEMA}.ipo_sample_history 
+        SET sample_name = $1, status = $2, file_url = COALESCE($3, file_url)
+        WHERE id = $4
+    `, sanitizeArgs([
+        sample.sample_name,
+        sample.status,
+        sample.file_url,
+        id
+    ]));
+}
+
+export async function deleteIpoSampleRecord(id: string) {
+    await query(`
+        DELETE FROM ${SCHEMA}.ipo_sample_history WHERE id = $1
+    `, sanitizeArgs([id]));
+}
+
+
 
 // --- SUPPLIERS ---
 

@@ -475,7 +475,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-red-400 transition-all" onClick={() => openGallery(formData.imagesBefore!, idx)}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 {isEditing && !isLocked && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
-                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
+                                <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
                         ))}
                     </div>
@@ -498,7 +498,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in shadow-sm hover:border-green-400 transition-all" onClick={() => openGallery(formData.imagesAfter!, idx)}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 {!isLocked && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
-                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
+                                <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
                         ))}
                     </div>

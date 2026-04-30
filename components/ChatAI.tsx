@@ -284,7 +284,7 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                         onClick={() => setIsOpen(true)}
                         className="w-14 h-14 sm:w-16 sm:h-16 bg-blue-600 text-white rounded-[1.5rem] sm:rounded-[2rem] shadow-2xl shadow-blue-300 flex items-center justify-center group overflow-hidden relative"
                     >
-                        <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent md:opacity-0 group-hover:opacity-100 transition-opacity"></div>
                         <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7 relative z-10" />
                         <motion.div 
                             animate={{ 

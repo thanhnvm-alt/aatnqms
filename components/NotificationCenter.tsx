@@ -127,7 +127,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                 </div>
                                 
                                 {!n.isRead && (
-                                    <div className="absolute right-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="absolute right-3 bottom-3 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                         <ChevronRight className="w-3.5 h-3.5 text-blue-500" />
                                     </div>
                                 )}

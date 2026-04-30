@@ -594,14 +594,14 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                                     onClick={() => setLightbox({ images: quickDetail.images!, index: idx })} 
                                                     className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" 
                                                 />
-                                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                                <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                                                     <div className="bg-white/90 backdrop-blur-md p-2 rounded-xl shadow-lg">
                                                         <Maximize2 className="w-4 h-4 text-blue-600" />
                                                     </div>
                                                 </div>
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); handleQuickDeleteImage(idx); }}
-                                                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all active:scale-90"
+                                                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg shadow-lg md:opacity-0 group-hover:opacity-100 transition-all active:scale-90"
                                                 >
                                                     <X className="w-3 h-3" />
                                                 </button>

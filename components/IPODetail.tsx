@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IPOItem } from '../types';
-import { ArrowLeft, FileText, Package, Ruler, Info, BrainCircuit, History, Share2, AlertTriangle, CheckCircle2, ChevronRight, Upload, Search, FileDiff } from 'lucide-react';
-import { fetchIpoDetailExtended, saveIpoDrawingRecord, uploadFileToStorage, saveIpoMaterialRecord, saveIpoSampleRecord, fetchProjectByCode } from '../services/apiService';
+import { ArrowLeft, FileText, Package, Ruler, Info, BrainCircuit, History, Share2, AlertTriangle, CheckCircle2, ChevronRight, Upload, Search, FileDiff, Edit, Trash2, X } from 'lucide-react';
+import { fetchIpoDetailExtended, saveIpoDrawingRecord, uploadFileToStorage, saveIpoMaterialRecord, saveIpoSampleRecord, updateIpoSampleRecord, deleteIpoSampleRecord, fetchProjectByCode } from '../services/apiService';
 import { analyzeIpo } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -25,6 +25,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
   const [uploadingSample, setUploadingSample] = useState(false);
   const [projectData, setProjectData] = useState<any>(null);
+  const [editingSample, setEditingSample] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -286,7 +287,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                           {dw.revision_notes || "No revision notes provided."}
                         </p>
                       </div>
-                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex flex-col gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                          <a href={dw.file_url} target="_blank" rel="noreferrer" className="p-2 hover:bg-slate-100 rounded-xl text-indigo-600">
                            <ChevronRight className="w-5 h-5" />
                          </a>
@@ -417,22 +418,25 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                >
                  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
                    <div className="flex items-center justify-between">
-                     <h3 className="font-black text-sm text-slate-800 uppercase tracking-widest">Cập nhật hồ sơ mẫu</h3>
-                     <Info className="w-5 h-5 text-amber-500" />
+                     <h3 className="font-black text-sm text-slate-800 uppercase tracking-widest">{editingSample ? 'Chỉnh sửa hồ sơ mẫu' : 'Cập nhật hồ sơ mẫu'}</h3>
+                     <div className="flex items-center gap-2">
+                       {editingSample && (
+                         <button onClick={() => setEditingSample(null)} className="text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-widest px-2 py-1 bg-slate-100 rounded-lg">Hủy</button>
+                       )}
+                       <Info className="w-5 h-5 text-amber-500" />
+                     </div>
                    </div>
-                   <form className="space-y-4" onSubmit={async (e) => {
+                   <form key={editingSample?.id || 'new'} className="space-y-4" onSubmit={async (e) => {
                      e.preventDefault();
                      const form = e.currentTarget;
                      const formData = new FormData(form);
                      const sample_name = formData.get('sample_name') as string;
                      const status = formData.get('status') as string;
-                     const ma_ct = formData.get('ma_ct') as string;
-                     const ten_ct = formData.get('ten_ct') as string;
                      const file = (form.querySelector('input[type="file"]') as HTMLInputElement)?.files?.[0];
                      
                      if (!sample_name) return;
                      
-                     let file_url = "";
+                     let file_url = editingSample?.file_url || "";
                      if (file) {
                        setUploadingSample(true);
                        try {
@@ -444,20 +448,32 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                        }
                      }
                      
-                     await saveIpoSampleRecord({
-                       id_factory_order: item.ma_nha_may,
-                       sample_name,
-                       status,
-                       file_url,
-                       data: { ma_ct, ten_ct },
-                       version: samples.length > 0 ? (samples.length + 1).toFixed(1) : "1.0"
-                     });
+                     if (editingSample) {
+                       await updateIpoSampleRecord(editingSample.id, {
+                         sample_name,
+                         status,
+                         file_url
+                       });
+                       setEditingSample(null);
+                     } else {
+                       const ma_ct = formData.get('ma_ct') as string;
+                       const ten_ct = formData.get('ten_ct') as string;
+                       await saveIpoSampleRecord({
+                         id_factory_order: item.ma_nha_may,
+                         sample_name,
+                         status,
+                         file_url,
+                         data: { ma_ct, ten_ct },
+                         version: samples.length > 0 ? (samples.length + 1).toFixed(1) : "1.0"
+                       });
+                     }
+                     
                      loadData();
                      form.reset();
                    }}>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <input name="sample_name" placeholder="Tên mẫu vật liệu" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" required />
-                       <select name="status" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50">
+                       <input name="sample_name" defaultValue={editingSample?.sample_name} placeholder="Tên mẫu vật liệu" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" required />
+                       <select name="status" defaultValue={editingSample?.status || 'DRAFT'} className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50">
                          <option value="DRAFT">DRAFT</option>
                          <option value="SUBMITTED">SUBMITTED</option>
                          <option value="APPROVED">APPROVED</option>
@@ -466,15 +482,15 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
                        <div className="flex flex-col gap-1">
                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Mã công trình (Auto-filled)</label>
-                         <input name="ma_ct" defaultValue={projectData?.ma_ct || item.ma_ct} placeholder="Mã công trình" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" />
+                         <input name="ma_ct" defaultValue={projectData?.ma_ct || item.ma_ct} placeholder="Mã công trình" disabled={!!editingSample} className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" />
                        </div>
                        <div className="flex flex-col gap-1">
                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tên công trình (Auto-filled)</label>
-                         <input name="ten_ct" defaultValue={projectData?.ten_ct || item.ten_ct} placeholder="Tên công trình" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" />
+                         <input name="ten_ct" defaultValue={projectData?.ten_ct || item.ten_ct} placeholder="Tên công trình" disabled={!!editingSample} className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" />
                        </div>
 
                        <div className="md:col-span-2">
-                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2">Ảnh mẫu thực tế</label>
+                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2">Ảnh mẫu thực tế {editingSample?.file_url ? '(Đã có ảnh)' : ''}</label>
                          <div className="relative group">
                            <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" accept="image/*" />
                            <div className="bg-slate-50 border-2 border-dashed border-slate-100 rounded-2xl px-5 py-4 flex items-center justify-center gap-3 group-hover:border-amber-200 transition-all">
@@ -485,7 +501,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                        </div>
                      </div>
                      <button type="submit" disabled={uploadingSample} className="w-full bg-amber-600 text-white py-3 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-amber-700 transition-all shadow-lg shadow-amber-100 disabled:opacity-50">
-                       {uploadingSample ? 'ĐANG TẢI LÊN...' : 'CẬP NHẬT TRẠNG THÁI MẪU'}
+                       {uploadingSample ? 'ĐANG TẢI LÊN...' : (editingSample ? 'LƯU THAY ĐỔI' : 'CẬP NHẬT TRẠNG THÁI MẪU')}
                      </button>
                    </form>
                  </div>
@@ -497,9 +513,20 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                           V{s.version}
                         </div>
                         <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                             <h4 className="font-black text-slate-800 text-sm uppercase">{s.sample_name}</h4>
-                             <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">• {new Date(Number(s.created_at) * 1000).toLocaleDateString()}</span>
+                          <div className="flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                               <h4 className="font-black text-slate-800 text-sm uppercase">{s.sample_name}</h4>
+                               <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">• {new Date(Number(s.created_at) * 1000).toLocaleDateString()}</span>
+                             </div>
+                             <div className="flex items-center gap-1">
+                               <button type="button" onClick={() => setEditingSample(s)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
+                               <button type="button" onClick={async () => {
+                                 if(window.confirm('Bạn có chắc chắn muốn xóa mẫu này?')) {
+                                   await deleteIpoSampleRecord(s.id);
+                                   loadData();
+                                 }
+                               }} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                             </div>
                           </div>
                           <div className="flex items-center gap-3 mt-1">
                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${

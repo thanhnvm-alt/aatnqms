@@ -82,7 +82,7 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
                                     className="aspect-square rounded-2xl overflow-hidden border border-slate-100 relative group cursor-zoom-in"
                                 >
                                     <img src={getProxyImageUrl(img)} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <Maximize2 className="text-white w-6 h-6" />
                                     </div>
                                 </div>

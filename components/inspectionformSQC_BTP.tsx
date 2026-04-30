@@ -450,7 +450,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                     </div>
                                     <button
                                         onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
-                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                                         type="button"
                                     >
                                         <X className="w-2 h-2" />
@@ -469,7 +469,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                     </div>
                                     <button
                                         onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
-                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                                         type="button"
                                     >
                                         <X className="w-2 h-2" />
@@ -495,7 +495,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                 </div>
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, drawingImages: prev.drawingImages?.filter((_, idx) => idx !== i) }))}
-                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                                     type="button"
                                 >
                                     <X className="w-2 h-2" />
@@ -680,7 +680,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                                                     nextItems[itemIdx].images = nextItems[itemIdx].images?.filter((_, idx) => idx !== i);
                                                                     nextMats[matIdx].items = nextItems;
                                                                     setFormData(prev => ({ ...prev, materials: nextMats }));
-                                                                }} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-2 h-2"/></button>
+                                                                }} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-2 h-2"/></button>
                                                             </div>
                                                         ))}
                                                     </div>

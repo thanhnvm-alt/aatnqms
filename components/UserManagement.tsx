@@ -364,7 +364,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                               </span>
                           </td>
                           <td className="px-8 py-5 text-right">
-                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center justify-end gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button onClick={() => handleOpenModal(u)} className="p-2 text-blue-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-all"><Edit2 className="w-4 h-4"/></button>
                                   <button onClick={() => onDeleteUser(u.id)} disabled={u.username === 'admin'} className="p-2 text-red-600 hover:bg-white rounded-xl shadow-sm border border-transparent hover:border-red-100 transition-all disabled:opacity-20"><Trash2 className="w-4 h-4"/></button>
                               </div>
@@ -403,7 +403,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                           <div className="space-y-6 flex flex-col items-center">
                               <div className="w-32 h-32 rounded-[2rem] border-4 border-white shadow-2xl overflow-hidden relative group bg-slate-200">
                                   <img src={getProxyImageUrl(formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'New')}&background=random&color=fff`)} className="w-full h-full object-cover" alt="" />
-                                  <button onClick={() => avatarInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="w-8 h-8"/></button>
+                                  <button onClick={() => avatarInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="w-8 h-8"/></button>
                               </div>
                               <div className="w-full space-y-4">
                                   <div className="space-y-1">

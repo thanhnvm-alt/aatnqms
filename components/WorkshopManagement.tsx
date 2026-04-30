@@ -418,7 +418,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                         {formData.image ? (
                             <>
                                 <img src={getProxyImageUrl(formData.image)} alt="Preview" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center md:opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Camera className="w-8 h-8 text-white" />
                                 </div>
                             </>
@@ -547,7 +547,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                                            <span className="truncate">{stage}</span>
                                        </div>
                                        
-                                       <div className={`flex gap-1 ${isSelected ? 'text-white' : 'text-slate-400'} opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                       <div className={`flex gap-1 ${isSelected ? 'text-white' : 'text-slate-400'} opacity-100 md:md:opacity-0 group-hover:opacity-100 transition-opacity`}>
                                            <button 
                                               onClick={(e) => startEditStage(e, stage)}
                                               className={`p-1 rounded hover:bg-white/20`}

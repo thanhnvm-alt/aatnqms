@@ -181,7 +181,10 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                         </div>
                         <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[40px]">
                             {item.images?.map((img, i) => (
-                                <img key={i} src={getProxyImageUrl(img)} className="w-12 h-12 rounded-lg border border-slate-200 object-cover shrink-0 cursor-zoom-in shadow-sm" onClick={() => handleEditImage(item.images!, i, { type: 'ITEM', itemIdx: idx })} />
+                                <div key={i} className="relative w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200 shadow-sm cursor-pointer group" onClick={() => handleEditImage(item.images!, i, { type: 'ITEM', itemIdx: idx })}>
+                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
+                                    <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, imageIndex) => imageIndex !== i); handleItemChange(idx, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-bl shadow md:opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button>
+                                </div>
                             ))}
                         </div>
                     </div>
