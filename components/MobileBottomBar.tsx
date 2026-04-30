@@ -40,7 +40,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-[0_-10px_25px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
-      <div className="flex justify-around items-center h-[70px]">
+      <div className="flex justify-around items-center h-[60px]">
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = view === tab.id;

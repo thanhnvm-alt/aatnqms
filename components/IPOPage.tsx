@@ -199,7 +199,7 @@ export const IPOPage = ({ user }: { user: User }) => {
                 </div>
           </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-24">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-[80px] lg:pb-4">
             <div className="max-w-7xl mx-auto space-y-3">
                 {Object.keys(groupedItems).sort().map((groupKey) => {
                     const groupItems = groupedItems[groupKey];
@@ -220,13 +220,13 @@ export const IPOPage = ({ user }: { user: User }) => {
                                         <div 
                                             key={idx} 
                                             onClick={() => handleItemClick(item)}
-                                            className="bg-white p-4 rounded-[1.25rem] border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-blue-300 transition-all"
+                                            className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-2 cursor-pointer hover:border-blue-300 transition-all"
                                         >
                                             <div className="flex justify-between items-start">
                                                 <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg border border-slate-200 uppercase font-mono">#{item.ID_Factory_Order || 'N/A'}</span>
                                             </div>
                                             <h4 className="text-[12px] font-black text-slate-800 uppercase leading-tight">{item.Material_description}</h4>
-                                            <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                                            <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">SL: {item.Quantity_IPO} {item.Base_Unit}</span>
                                             </div>
                                         </div>
@@ -239,7 +239,7 @@ export const IPOPage = ({ user }: { user: User }) => {
 
                 {/* PAGINATION */}
                 {total > limit && (
-                    <div className="flex items-center justify-between px-4 py-8 border-t border-slate-100">
+                    <div className="flex items-center justify-between px-4 py-4 border-t border-slate-100 mt-2">
                         <button 
                             disabled={page <= 1 || loading}
                             onClick={() => setPage(page - 1)}
