@@ -1194,7 +1194,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                   fileId: fileId,
                   alt: 'media',
                   supportsAllDrives: true
-              }, { responseType: 'stream' });
+              }, { responseType: 'stream', timeout: 5000 });
               
               const contentType = response.headers['content-type'] || 'image/jpeg';
               res.set('Content-Type', contentType);
@@ -1238,7 +1238,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
           for (const publicUrl of fallbacks) {
             try {
-              const response = await fetch(publicUrl);
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000);
+              const response = await fetch(publicUrl, { signal: controller.signal });
+              clearTimeout(timeoutId);
               
               if (response.ok) {
                   const contentType = response.headers.get('content-type') || 'image/jpeg';
