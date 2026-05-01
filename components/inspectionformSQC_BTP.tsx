@@ -136,7 +136,8 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
             ma_ct: item.ma_ct || item.Ma_Tender || item.ten_ct || item.Project_name || '',
             ten_ct: item.ten_ct || item.Project_name || '',
             ten_hang_muc: item.ten_hang_muc || item.Material_description || '',
-            dvt: item.dvt || item.Base_Unit || ''
+            dvt: item.dvt || item.Base_Unit || '',
+            so_luong_ipo: Number(item.Quantity_IPO || item.so_luong_ipo) || 0
         }));
         // If it's a PO search we also want materials, so we don't return here
       }
@@ -372,6 +373,10 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                 items: processedItems
             };
         }));
+        
+        const totalInspected = processedMaterials.reduce((acc, mat) => acc + (Number(mat.inspectQty) || 0), 0);
+        const totalPassed = processedMaterials.reduce((acc, mat) => acc + (Number(mat.passQty) || 0), 0);
+        const totalFailed = processedMaterials.reduce((acc, mat) => acc + (Number(mat.failQty) || 0), 0);
 
         await onSave({ 
             ...formData, 
@@ -379,6 +384,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
             reportImages: processedReportImages,
             drawingImages: processedDrawingImages,
             materials: processedMaterials,
+            inspectedQuantity: totalInspected,
+            passedQuantity: totalPassed,
+            failedQuantity: totalFailed,
             status: InspectionStatus.PENDING, 
             updatedAt: new Date().toISOString() 
         } as Inspection);

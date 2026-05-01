@@ -421,7 +421,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const insQtyCol = 'COALESCE(inspected_qty, qty_total, 0)::numeric as inspected_qty';
         const passQtyCol = 'COALESCE(passed_qty, qty_pass, 0)::numeric as passed_qty';
         const failQtyCol = 'COALESCE(failed_qty, qty_fail, 0)::numeric as failed_qty';
-        const imagesCol = 'images_json::text as images_json';
+        const imagesCol = 'NULL::text as images_json';
 
         return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });

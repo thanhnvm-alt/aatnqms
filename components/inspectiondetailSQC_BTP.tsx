@@ -1,6 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { format as formatDateFns, isValid } from 'date-fns';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR } from '../types';
 import { 
   ArrowLeft, Calendar, User as UserIcon, Building2, Box, FileText, 
@@ -49,10 +50,21 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
 
   // --- STATISTICS CALCULATIONS ---
   const stats = useMemo(() => {
-    const ins = Number(inspection.inspectedQuantity || 0);
-    const pas = Number(inspection.passedQuantity || 0);
-    const fai = Number(inspection.failedQuantity || 0);
-    const ipo = Number(inspection.so_luong_ipo || 0);
+    let ins = Number(inspection.inspectedQuantity || 0);
+    let pas = Number(inspection.passedQuantity || 0);
+    let fai = Number(inspection.failedQuantity || 0);
+    let ipo = Number(inspection.so_luong_ipo || 0);
+    
+    if (ins === 0 && inspection.materials && inspection.materials.length > 0) {
+        ins = inspection.materials.reduce((acc, mat) => acc + (Number(mat.inspectQty) || 0), 0);
+        pas = inspection.materials.reduce((acc, mat) => acc + (Number(mat.passQty) || 0), 0);
+        fai = inspection.materials.reduce((acc, mat) => acc + (Number(mat.failQty) || 0), 0);
+    }
+
+    if (ipo === 0) {
+        // try to get from materials if possible
+        ipo = inspection.materials ? inspection.materials.reduce((acc, mat) => acc + (Number(mat.orderQty) || Number(mat.deliveryQty) || 0), 0) : 0;
+    }
     
     return {
       ipo,
@@ -63,6 +75,20 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
       failRate: ins > 0 ? ((fai / ins) * 100).toFixed(1) : "0.0"
     };
   }, [inspection]);
+
+  const displayDate = useMemo(() => {
+    if (!inspection.date) return 'N/A';
+    // Check if it's a timestamp
+    if (!isNaN(Number(inspection.date))) {
+      const ts = Number(inspection.date);
+      const d = new Date(ts > 9999999999 ? ts : ts * 1000);
+      if (isValid(d)) return formatDateFns(d, 'dd/MM/yyyy');
+    }
+    // Try parsing ISO or other string
+    const d = new Date(inspection.date);
+    if (isValid(d)) return formatDateFns(d, 'dd/MM/yyyy');
+    return inspection.date;
+  }, [inspection.date]);
 
   const handleManagerApprove = async () => {
       if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }
@@ -164,7 +190,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                 </div>
                 <div>
                     <p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> Ngày thực hiện</p>
-                    <p className="text-sm text-slate-800 tracking-tight font-mono">{inspection.date}</p>
+                    <p className="text-sm text-slate-800 tracking-tight font-mono">{displayDate}</p>
                 </div>
             </div>
 

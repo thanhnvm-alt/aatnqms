@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
-import { exportInspections, deleteInspection, importInspectionsFile } from '../services/apiService';
+import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
 import { getProxyImageUrl } from '../src/utils';
 import { formatDisplayDate } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
@@ -189,11 +189,28 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     }
   };
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set([new Date().getFullYear().toString()]));
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set([`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2, '0')}`]));
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  
+  const handleSelectItemDesktop = async (item: Inspection) => {
+      setSelectedItemDesktop(item); // Optimistic UI
+      setIsLoadingDetail(true);
+      try {
+          const detailedItem = await fetchInspectionById(item.id);
+          setSelectedItemDesktop(detailedItem);
+      } catch (err) {
+          console.error("Failed to fetch item details:", err);
+      } finally {
+          setIsLoadingDetail(false);
+      }
+  };
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -445,6 +462,45 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       }
       return Object.keys(groupedData[selectedDateDesktop] || {}).sort();
   }, [groupedData, selectedDateDesktop]);
+
+  const nestedDatesTree = useMemo(() => {
+    const tree: { year: string, count: number, months: { month: string, count: number, dates: { dateKey: string, count: number }[] }[] }[] = [];
+    
+    const dateCounts: Record<string, number> = {};
+    sortedDatesList.forEach(d => {
+        dateCounts[d] = Object.values(groupedData[d] || {}).reduce((acc, p) => acc + p.items.length, 0);
+    });
+
+    const yearMap: Record<string, any> = {};
+    const noDateDates: { dateKey: string, count: number }[] = [];
+
+    sortedDatesList.forEach(d => {
+        if (d === 'KHÔNG RÕ NGÀY') {
+            noDateDates.push({ dateKey: d, count: dateCounts[d] });
+            return;
+        }
+        const [day, month, year] = d.split('/');
+        if (!yearMap[year]) yearMap[year] = { count: 0, monthMap: {} };
+        yearMap[year].count += dateCounts[d];
+        
+        if (!yearMap[year].monthMap[month]) yearMap[year].monthMap[month] = { count: 0, dates: [] };
+        yearMap[year].monthMap[month].count += dateCounts[d];
+        yearMap[year].monthMap[month].dates.push({ dateKey: d, count: dateCounts[d] });
+    });
+
+    const sortedYears = Object.keys(yearMap).sort((a,b) => Number(b) - Number(a));
+    sortedYears.forEach(y => {
+        const sortedMonths = Object.keys(yearMap[y].monthMap).sort((a,b) => Number(b) - Number(a));
+        const months = sortedMonths.map(m => ({
+            month: m,
+            count: yearMap[y].monthMap[m].count,
+            dates: yearMap[y].monthMap[m].dates
+        }));
+        tree.push({ year: y, count: yearMap[y].count, months });
+    });
+
+    return { tree, noDateDates };
+  }, [sortedDatesList, groupedData]);
 
   const desktopItems = useMemo(() => {
       let items: Inspection[] = [];
@@ -887,18 +943,81 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                     <button 
                         onClick={() => { setSelectedDateDesktop('ALL'); setSelectedProjectDesktop('ALL'); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors mb-2 ${selectedDateDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
                     >
-                        Tất cả ngày ({sortedDatesList.length})
+                        Tất cả ngày ({inspections.length})
                     </button>
-                    {sortedDatesList.map(dateKey => (
+                    
+                    {nestedDatesTree.tree.map(({ year, count, months }) => {
+                        const isYearExpanded = expandedYears.has(year);
+                        return (
+                            <div key={year} className="mb-1 space-y-1">
+                                <button 
+                                    onClick={() => setExpandedYears(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(year)) next.delete(year); else next.add(year);
+                                        return next;
+                                    })}
+                                    className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 transition-colors"
+                                >
+                                    <span>Năm {year}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] bg-white px-2 py-0.5 rounded text-slate-600">{count}</span>
+                                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
+                                    </div>
+                                </button>
+                                
+                                {isYearExpanded && months.map(({ month, count, dates }) => {
+                                    const mKey = `${year}-${month}`;
+                                    const isMonthExpanded = expandedMonths.has(mKey);
+                                    return (
+                                        <div key={mKey} className="ml-2 space-y-1 border-l-2 border-slate-100 pl-2">
+                                            <button 
+                                                onClick={() => setExpandedMonths(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(mKey)) next.delete(mKey); else next.add(mKey);
+                                                    return next;
+                                                })}
+                                                className="w-full flex items-center justify-between text-left px-3 py-1.5 rounded-lg text-[12px] font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                                            >
+                                                <span>Tháng {month}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{count}</span>
+                                                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isMonthExpanded ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </button>
+
+                                            {isMonthExpanded && dates.map(({ dateKey, count: dCount }) => (
+                                                <button 
+                                                    key={dateKey}
+                                                    onClick={() => { setSelectedDateDesktop(dateKey); setSelectedProjectDesktop('ALL'); }}
+                                                    className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 rounded-lg text-[12px] font-medium transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
+                                                >
+                                                    <span><CalendarDays className="w-3 h-3 inline mr-1.5 text-slate-400"/> {dateKey}</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedDateDesktop === dateKey ? 'bg-white text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{dCount}</span>
+                                                        <ChevronRight className={`w-3 h-3 ${selectedDateDesktop === dateKey ? 'text-blue-500' : 'text-slate-300'}`} />
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+
+                    {nestedDatesTree.noDateDates.map(({ dateKey, count }) => (
                         <button 
                             key={dateKey}
                             onClick={() => { setSelectedDateDesktop(dateKey); setSelectedProjectDesktop('ALL'); }}
                             className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
                         >
                             <span><CalendarDays className="w-3.5 h-3.5 inline mr-2 text-slate-400"/> {dateKey}</span>
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            <div className="flex items-center gap-2">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedDateDesktop === dateKey ? 'bg-white text-blue-600' : 'bg-slate-200 text-slate-600'}`}>{count}</span>
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                            </div>
                         </button>
                     ))}
                 </div>
@@ -914,34 +1033,43 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Công Trình / Dự Án</h3>
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
-                    <button 
-                        onClick={() => setSelectedProjectDesktop('ALL')}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                        Tất cả dự án ({desktopProjects.length})
-                    </button>
-                    {desktopProjects.map(pKey => {
-                        let count = 0;
-                        if (selectedDateDesktop !== 'ALL') {
-                            count = groupedData[selectedDateDesktop]?.[pKey]?.items?.length || 0;
-                        } else {
-                            Object.values(groupedData).forEach(g => {
-                                if (g[pKey]) count += g[pKey].items.length;
-                            });
-                        }
-                        
-                        return (
-                        <button 
-                            key={pKey}
-                            onClick={() => setSelectedProjectDesktop(pKey)}
-                            className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === pKey ? 'bg-blue-100' : 'hover:bg-slate-50'}`}
-                        >
-                            <div className="flex items-center justify-between w-full">
-                                <span className={`text-[13px] font-bold truncate ${selectedProjectDesktop === pKey ? 'text-blue-900' : 'text-slate-700'}`}>{pKey}</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === pKey ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                            </div>
-                        </button>
-                    )})}
+                    {selectedDateDesktop === 'ALL' ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
+                            <CalendarDays className="w-8 h-8 mb-2 opacity-20" />
+                            <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Ngày tháng</strong></p>
+                        </div>
+                    ) : (
+                        <>
+                            <button 
+                                onClick={() => setSelectedProjectDesktop('ALL')}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors mb-2 ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                            >
+                                Tất cả dự án ({desktopProjects.length})
+                            </button>
+                            {desktopProjects.map(pKey => {
+                                let count = 0;
+                                if (selectedDateDesktop !== 'ALL') {
+                                    count = groupedData[selectedDateDesktop]?.[pKey]?.items?.length || 0;
+                                } else {
+                                    Object.values(groupedData).forEach(g => {
+                                        if (g[pKey]) count += g[pKey].items.length;
+                                    });
+                                }
+                                
+                                return (
+                                <button 
+                                    key={pKey}
+                                    onClick={() => setSelectedProjectDesktop(pKey)}
+                                    className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === pKey ? 'bg-blue-100' : 'hover:bg-slate-50'}`}
+                                >
+                                    <div className="flex items-center justify-between w-full">
+                                        <span className={`text-[13px] font-bold truncate ${selectedProjectDesktop === pKey ? 'text-blue-900' : 'text-slate-700'}`}>{pKey}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === pKey ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                    </div>
+                                </button>
+                            )})}
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -955,14 +1083,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">3. Hạng Mục ({desktopItems.length})</h3>
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-0">
-                    {desktopItems.length === 0 ? (
+                    {selectedProjectDesktop === 'ALL' ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
+                            <Building2 className="w-8 h-8 mb-2 opacity-20" />
+                            <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Công trình / Dự án</strong></p>
+                        </div>
+                    ) : desktopItems.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs">Không có hạng mục nào</div>
                     ) : (
                         <div className="divide-y divide-slate-100">
                             {desktopItems.map(item => (
                                 <div 
                                     key={item.id}
-                                    onClick={() => setSelectedItemDesktop(item)}
+                                    onClick={() => handleSelectItemDesktop(item)}
                                     className={`p-4 hover:bg-blue-50/50 cursor-pointer transition-colors relative ${selectedItemDesktop?.id === item.id ? 'bg-blue-50/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white'}`}
                                 >
                                     <div className="flex justify-between items-start gap-2 mb-2">
@@ -1013,6 +1146,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         <div className="flex flex-col items-center justify-center h-full text-slate-400">
                             <Info className="w-12 h-12 mb-4 opacity-20" />
                             <p className="text-sm font-medium">Chọn một hạng mục để xem chi tiết</p>
+                        </div>
+                    ) : isLoadingDetail ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                            <Loader2 className="w-8 h-8 mb-4 animate-spin text-blue-500" />
+                            <p className="text-sm font-medium text-slate-500">Đang tải dữ liệu chi tiết...</p>
                         </div>
                     ) : (
                         <div className="max-w-3xl bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
@@ -1118,7 +1256,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     }) || [];
                                                     setLightboxState({ images: formattedImages, index: i });
                                                 }}>
-                                                    <img src={proxySrc} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" />
+                                                    <img loading="lazy" src={proxySrc} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" />
                                                     <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
                                                         <Maximize2 className="w-5 h-5 text-white" />
                                                     </div>

@@ -377,6 +377,10 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             return { ...mat, items: nextItems, images: matImages };
         }));
 
+        const totalInspected = processedMaterials.reduce((acc, mat) => acc + (Number(mat.inspectQty) || 0), 0);
+        const totalPassed = processedMaterials.reduce((acc, mat) => acc + (Number(mat.passQty) || 0), 0);
+        const totalFailed = processedMaterials.reduce((acc, mat) => acc + (Number(mat.failQty) || 0), 0);
+
         const finalData = { 
             ...formData, 
             status: InspectionStatus.PENDING, 
@@ -385,7 +389,10 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             deliveryNoteImages: processedDelivery,
             reportImages: processedReport,
             signature: processedSignature,
-            materials: processedMaterials
+            materials: processedMaterials,
+            inspectedQuantity: totalInspected,
+            passedQuantity: totalPassed,
+            failedQuantity: totalFailed
         };
 
         await onSave(finalData as Inspection);
