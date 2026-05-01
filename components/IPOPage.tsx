@@ -4,7 +4,7 @@ import { IPODetail } from './IPODetail';
 import { IPOItem, User } from '../types';
 import { exportIpoData, importIpoFile } from '../services/apiService';
 
-export const IPOPage = ({ user }: { user: User }) => {
+export default function IPOPage({ user }: { user: User }) {
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

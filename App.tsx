@@ -65,7 +65,7 @@ const InspectionDetailSPR = lazy(() => import('./components/inspectiondetailSPR'
 const InspectionDetailSITE = lazy(() => import('./components/inspectiondetailSITE').then(m => ({ default: m.InspectionDetailSITE })));
 
 const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
-const IPOPage = lazy(() => import('./components/IPOPage').then(m => ({ default: m.IPOPage })));
+const IPOPage = lazy(() => import('./components/IPOPage'));
 const ThreeDConverter = lazy(() => import('./components/ThreeDConverter').then(m => ({ default: m.ThreeDConverter })));
 const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
 const ProjectDetail = lazy(() => import('./components/ProjectDetail').then(m => ({ default: m.ProjectDetail })));

@@ -415,7 +415,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const headcodeCol = 'headcode::text';
         const stageCol = 'stage::text';
         const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
-        const matCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'materials_json::text' : 'NULL::text as materials_json';
+        const matCol = 'NULL::text as materials_json';
         
         const slIpoCol = 'COALESCE(so_luong_ipo, sl_ipo, 0)::numeric as so_luong_ipo';
         const insQtyCol = 'COALESCE(inspected_qty, qty_total, 0)::numeric as inspected_qty';

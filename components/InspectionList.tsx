@@ -155,7 +155,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [selectedItemDesktop, setSelectedItemDesktop] = useState<Inspection | null>(null);
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
 
-  const [colSizes, setColSizes] = useState([160, 220, 280, 500]);
+  const [colSizes, setColSizes] = useState([260, 260, 280, 500]);
 
   const startDrag = (index: number) => (e: React.MouseEvent) => {
     e.preventDefault();
