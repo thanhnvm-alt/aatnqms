@@ -64,6 +64,38 @@ export const InspectionList: React.FC<InspectionListProps> = (props) => {
     const [colSizes, setColSizes] = useState([230, 200, 250, 0]);
     const [isMobile, setIsMobile] = useState(false);
 
+    // 3.1 BULK SELECTION AND FILTERS
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [filterCriteria, setFilterCriteria] = useState({
+        type: '',
+        inspector: '',
+        workshop: '',
+        status: '',
+        project: '',
+        fromDate: '',
+        toDate: ''
+    });
+
+    // 3.2 FILTERED ITEMS
+    const filteredItems = useMemo(() => {
+        return currentItems.filter(item => {
+            const matchesSearch = searchTerm === '' || 
+                item.ten_hang_muc?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (item as any).ma_ct?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (item as any).headcode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.inspectorName?.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const matchesType = !filterCriteria.type || item.type === filterCriteria.type;
+            const matchesInspector = !filterCriteria.inspector || item.inspectorName === filterCriteria.inspector;
+            const matchesWorkshop = !filterCriteria.workshop || (item as any).workshop === filterCriteria.workshop;
+            const matchesStatus = !filterCriteria.status || item.status === filterCriteria.status;
+            const matchesDate = (!filterCriteria.fromDate || item.created_at >= filterCriteria.fromDate) &&
+                             (!filterCriteria.toDate || item.created_at <= filterCriteria.toDate);
+
+            return matchesSearch && matchesType && matchesInspector && matchesWorkshop && matchesStatus && matchesDate;
+        });
+    }, [currentItems, searchTerm, filterCriteria]);
+
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768);
         checkMobile();
@@ -279,8 +311,30 @@ export const InspectionList: React.FC<InspectionListProps> = (props) => {
                                     <span className="font-black text-slate-800 uppercase tracking-widest text-xs">Bộ lọc</span>
                                     <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
                                 </div>
-                                {/* Filter controls would go here to trigger re-fetching */}
-                                <div className="p-2 bg-slate-100 rounded-lg text-xs text-slate-500 italic">Tính năng lọc đang được phát triển.</div>
+                                <select 
+                                    className="w-full p-2 border rounded-lg text-xs"
+                                    value={filterCriteria.type}
+                                    onChange={(e) => setFilterCriteria(prev => ({ ...prev, type: e.target.value }))}
+                                >
+                                    <option value="">Loại phiếu</option>
+                                    <option value="PQC">PQC</option>
+                                    <option value="IQC">IQC</option>
+                                </select>
+                                <input 
+                                    type="text" placeholder="QC thực hiện" className="w-full p-2 border rounded-lg text-xs" 
+                                    value={filterCriteria.inspector}
+                                    onChange={(e) => setFilterCriteria(prev => ({ ...prev, inspector: e.target.value }))}
+                                />
+                                <input 
+                                    type="text" placeholder="Xưởng" className="w-full p-2 border rounded-lg text-xs"
+                                    value={filterCriteria.workshop}
+                                    onChange={(e) => setFilterCriteria(prev => ({ ...prev, workshop: e.target.value }))}
+                                />
+                                <div className="flex gap-2">
+                                    <input type="date" className="w-1/2 p-2 border rounded-lg text-xs" onChange={(e) => setFilterCriteria(prev => ({ ...prev, fromDate: e.target.value }))} />
+                                    <input type="date" className="w-1/2 p-2 border rounded-lg text-xs" onChange={(e) => setFilterCriteria(prev => ({ ...prev, toDate: e.target.value }))} />
+                                </div>
+                                <button onClick={() => setSelectedIds(new Set())} className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-bold mt-2">Áp dụng</button>
                             </div>
                         )}
                         <input type="file" ref={excelImportRef} className="hidden" accept=".xlsx, .xls" onChange={handleImport} />
@@ -393,44 +447,81 @@ export const InspectionList: React.FC<InspectionListProps> = (props) => {
 
                     {/* COL 3: ITEMS */}
                     <div className={`flex flex-col bg-[#f8fafc]/50 overflow-hidden shrink-0 ${isMobile && mobileStep !== 2 ? 'hidden' : ''}`} style={{ width: isMobile ? '100%' : colSizes[2] }}>
-                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
-                            {isMobile && (
-                                <button onClick={() => setMobileStep(1)} className="text-slate-400 hover:text-slate-800 -ml-2 p-1">
-                                    <ChevronLeft className="w-5 h-5" />
-                                </button>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                {isMobile && (
+                                    <button onClick={() => setMobileStep(1)} className="text-slate-400 hover:text-slate-800 -ml-2 p-1">
+                                        <ChevronLeft className="w-5 h-5" />
+                                    </button>
+                                )}
+                                <h3 className="font-black text-slate-800 tracking-tighter text-[11px] uppercase truncate">3. HẠNG MỤC ({filteredItems.length})</h3>
+                            </div>
+                            {selectedIds.size > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <button onClick={async () => { 
+                                        if (confirm(`Bạn có chắc muốn xóa ${selectedIds.size} phiếu đã chọn?`)) {
+                                            // Handle Bulk Delete
+                                            console.log("Bulk Delete:", Array.from(selectedIds));
+                                            alert("Chức năng xóa hàng loạt đang được cập nhật.");
+                                        }
+                                    }} className="text-[10px] font-black text-red-500 hover:bg-red-50 px-2 py-1 rounded">XÓA</button>
+                                    <button onClick={async () => {
+                                        const newStatus = prompt("Nhập trạng thái mới:", "completed");
+                                        if (newStatus) {
+                                            // Handle Bulk Status Change
+                                            console.log("Bulk Status Change:", Array.from(selectedIds), newStatus);
+                                            alert(`Chức năng cập nhật ${selectedIds.size} phiếu sang trạng thái ${newStatus} đang được cập nhật.`);
+                                        }
+                                    }} className="text-[10px] font-black text-blue-500 hover:bg-blue-50 px-2 py-1 rounded">ĐỔI TRẠNG THÁI</button>
+                                </div>
                             )}
-                            <h3 className="font-black text-slate-800 tracking-tighter text-[11px] uppercase truncate">3. HẠNG MỤC ({currentItems.length})</h3>
                         </div>
                         <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-3">
-                            {currentItems.map(item => {
+                            {filteredItems.map(item => {
                                 const cfg = (item.type && MODULE_CONFIG[item.type]) ? MODULE_CONFIG[item.type] : MODULE_CONFIG['PQC'];
                                 const isSelected = selectedItemDesktop?.id === item.id;
+                                const isChecked = selectedIds.has(item.id);
                                 const headCode = (item as any).headcode || (item as any).id_factory_order || item.ma_nha_may || item.id.slice(0, 8);
                                 
                                 return (
-                                    <button key={item.id} onClick={() => handleSelectItem(item)} className={`w-full flex flex-col p-4 rounded-2xl text-left transition-all border ${isSelected ? 'bg-white border-blue-400 shadow-lg shadow-blue-600/5 ring-1 ring-blue-100' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h4 className="font-black text-slate-800 text-[13px] leading-tight flex-1 uppercase italic tracking-tighter pr-4">{item.ten_hang_muc}</h4>
-                                            <div className="p-1.5 bg-blue-50 text-blue-500 rounded-lg shrink-0"><CheckCircle2 className="w-3.5 h-3.5" /></div>
+                                    <div key={item.id} className={`w-full flex p-4 rounded-2xl transition-all border ${isSelected ? 'bg-white border-blue-400 shadow-lg shadow-blue-600/5 ring-1 ring-blue-100' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                                        <div className="flex items-center mr-3">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                    const next = new Set(selectedIds);
+                                                    if (next.has(item.id)) next.delete(item.id);
+                                                    else next.add(item.id);
+                                                    setSelectedIds(next);
+                                                }}
+                                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
                                         </div>
-
-                                        <div className="flex items-center justify-between mb-4">
-                                            <span className="text-[11px] font-black text-slate-400 tracking-wider font-mono">{headCode}</span>
-                                            <div className="flex items-center gap-1.5 text-slate-400">
-                                                <Calendar className="w-3.5 h-3.5" />
-                                                <span className="text-[10px] font-bold tracking-tight">03/05/2026</span>
+                                        <button onClick={() => handleSelectItem(item)} className="flex-1 flex flex-col text-left">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h4 className="font-black text-slate-800 text-[13px] leading-tight flex-1 uppercase italic tracking-tighter pr-4">{item.ten_hang_muc}</h4>
+                                                <div className="p-1.5 bg-blue-50 text-blue-500 rounded-lg shrink-0"><CheckCircle2 className="w-3.5 h-3.5" /></div>
                                             </div>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-3">
-                                            <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase ring-1 ring-opacity-20 ${cfg.bg} ${cfg.color} ring-current`}>
-                                                {item.type || 'PQC'}
-                                            </span>
-                                            <span className="text-[11px] font-black uppercase text-slate-500 tracking-tighter truncate max-w-[120px]">
-                                                {item.inspectorName || '---'}
-                                            </span>
-                                        </div>
-                                    </button>
+
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-[11px] font-black text-slate-400 tracking-wider font-mono">{headCode}</span>
+                                                <div className="flex items-center gap-1.5 text-slate-400">
+                                                    <Calendar className="w-3.5 h-3.5" />
+                                                    <span className="text-[10px] font-bold tracking-tight">{formatDisplayDate(item.created_at)}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-3">
+                                                <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase ring-1 ring-opacity-20 ${cfg.bg} ${cfg.color} ring-current`}>
+                                                    {item.type || 'PQC'}
+                                                </span>
+                                                <span className="text-[11px] font-black uppercase text-slate-500 tracking-tighter truncate max-w-[120px]">
+                                                    {item.inspectorName || '---'}
+                                                </span>
+                                            </div>
+                                        </button>
+                                    </div>
                                 );
                             })}
                         </div>
