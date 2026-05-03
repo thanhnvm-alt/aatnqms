@@ -212,6 +212,18 @@ export const fetchInspections = async (filters: any = {}, page: number = 1, limi
     return apiFetch(`/api/inspections?${params.toString()}`);
 };
 
+export const fetchInspectionsLight = async () => {
+    return apiFetch(`/api/inspections/light`);
+};
+
+export const fetchInspectionTimeline = async () => {
+    return apiFetch('/api/inspections/timeline');
+};
+
+export const fetchProjectsByDate = async (date: string) => {
+    return apiFetch(`/api/inspections/projects-by-date?date=${date}`);
+};
+
 export const fetchInspectionById = async (id: string) => {
     return apiFetch(`/api/inspections/${id}`);
 };
@@ -513,4 +525,88 @@ export const createNotification = async (params: { userId: string, type: Notific
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
     });
+};
+
+// Grouping all exports into a single object for easier access and namespace management
+export const apiService = {
+    fetchIpoData,
+    fetchIpoByFactoryOrder,
+    fetchIpoDetailExtended,
+    saveIpoDetailExtended,
+    saveIpoDrawingRecord,
+    saveIpoMaterialRecord,
+    saveIpoSampleRecord,
+    updateIpoSampleRecord,
+    deleteIpoSampleRecord,
+    fetchFloorPlans,
+    saveFloorPlan,
+    deleteFloorPlan,
+    fetchLayoutPins,
+    saveLayoutPin,
+    uploadFileToStorage,
+    fetchSuppliers,
+    saveSupplier,
+    deleteSupplier,
+    fetchSupplierStats,
+    fetchSupplierInspections,
+    fetchSupplierMaterials,
+    uploadQMSImage,
+    fetchPlans,
+    updatePlan,
+    fetchPlansByProject,
+    fetchInspections,
+    fetchInspectionsLight,
+    fetchInspectionTimeline,
+    fetchProjectsByDate,
+    fetchInspectionById,
+    fetchInspectionDetail: fetchInspectionById, // Alias for convenience
+    saveInspectionToSheet,
+    deleteInspectionFromSheet,
+    deleteInspection,
+    fetchDeletedInspections,
+    restoreInspection,
+    permanentDeleteInspection,
+    saveNcrMapped,
+    fetchNcrs,
+    fetchNcrById,
+    deleteNcr,
+    fetchDefects,
+    fetchUsers,
+    saveUser,
+    deleteUser,
+    verifyUserCredentials,
+    fetchWorkshops,
+    saveWorkshop,
+    deleteWorkshop,
+    fetchTemplates,
+    saveTemplate,
+    fetchProjects,
+    fetchProjectByCode,
+    updateProject,
+    fetchNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    fetchRoles,
+    saveRole,
+    deleteRole,
+    fetchDefectLibrary,
+    saveDefectLibraryItem,
+    deleteDefectLibraryItem,
+    exportDefectLibrary,
+    importDefectLibraryFile,
+    fetchMaterials,
+    saveMaterial,
+    deleteMaterial,
+    exportNcrs,
+    importNcrsFile,
+    exportMaterials,
+    importMaterialsFile,
+    exportSuppliers,
+    importSuppliersFile,
+    exportInspections,
+    importInspectionsFile,
+    exportIpoData,
+    importIpoFile,
+    checkApiConnection,
+    createNotification
 };

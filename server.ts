@@ -40,7 +40,18 @@ const genAI = apiKey ? new GoogleGenAI({ apiKey }) : null;
 let drive: any = null;
 
 try {
-  if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_CLIENT_SECRET && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+  if (process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY) {
+    console.log("Configuring Google Drive with Service Account...");
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/drive'],
+    });
+    drive = google.drive({ version: 'v3', auth });
+    console.log("Google Drive Service Account initialized.");
+  } else if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_CLIENT_SECRET && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_DRIVE_CLIENT_ID,
       process.env.GOOGLE_DRIVE_CLIENT_SECRET,
@@ -60,7 +71,7 @@ try {
     drive = google.drive({ version: 'v3', auth: oauth2Client });
     
   } else {
-    console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
+    console.log("Google Drive configuration skipped: credentials missing.");
   }
 } catch (err) {
   console.error("Error configuring Google Drive:", err);
@@ -599,6 +610,26 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       res.status(500).json({ error: 'Failed to fetch defects' });
     }
   });
+  app.get("/api/inspections/timeline", authenticate, async (req, res) => {
+    try {
+      const result = await db.getTimelineHierarchy();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch timeline hierarchy' });
+    }
+  });
+
+  app.get("/api/inspections/projects-by-date", authenticate, async (req, res) => {
+    try {
+      const date = req.query.date as string;
+      if (!date) return res.status(400).json({ error: 'Date is required' });
+      const result = await db.getProjectsByTimelineDate(date);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch projects for date' });
+    }
+  });
+
   app.get("/api/inspections", authenticate, async (req, res) => {
     try {
       const filters = {
@@ -627,6 +658,15 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspection' });
+    }
+  });
+
+  app.get("/api/inspections/light", authenticate, async (req, res) => {
+    try {
+      const result = await db.getInspectionsLight();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch light inspections' });
     }
   });
 

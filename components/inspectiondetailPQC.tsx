@@ -175,8 +175,8 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => setViewingNcr(null)} />;
 
   return (
-    <div className="flex flex-col bg-slate-50 relative pb-24" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-      <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center -mx-2 px-4 md:-mx-6 md:px-8">
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center px-4 md:px-8">
           <div className="flex items-center gap-2">
               <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600" /></button>
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Chi tiết hồ sơ PQC</h2>
@@ -198,7 +198,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
           </div>
       </div>
 
-      <div className="p-3 md:p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 no-scrollbar pb-32">
         <div ref={pdfContainerRef} className="max-w-4xl mx-auto space-y-4">
             {/* --- HEADER INFO --- */}
             <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 border border-slate-200 shadow-sm relative overflow-hidden">
