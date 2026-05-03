@@ -376,9 +376,6 @@ export async function saveInspection(inspection: Inspection) {
 /**
  * Aggregates inspections from all module tables with pagination.
  */
-/**
- * Aggregates inspections from all module tables with pagination.
- */
 export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 20): Promise<{ items: Inspection[], total: number }> {
     const offset = (page - 1) * limit;
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
@@ -395,6 +392,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         status, 
         date, 
         score, 
+        summary, 
         workshop, 
         updated_at,
         responsible_person as "responsiblePerson",
@@ -402,10 +400,12 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         headcode,
         stage as "inspectionStage",
         po_number,
+        materials_json as "materials",
         so_luong_ipo,
         inspected_qty as "inspectedQuantity",
         passed_qty as "passedQuantity",
         failed_qty as "failedQuantity",
+        images_json as "images",                
         dvt
     `;
 
@@ -415,13 +415,15 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const headcodeCol = 'headcode::text';
         const stageCol = 'stage::text';
         const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
+        const matCol = 'NULL::text as materials_json';
         
         const slIpoCol = 'COALESCE(so_luong_ipo, sl_ipo, 0)::numeric as so_luong_ipo';
         const insQtyCol = 'COALESCE(inspected_qty, qty_total, 0)::numeric as inspected_qty';
         const passQtyCol = 'COALESCE(passed_qty, qty_pass, 0)::numeric as passed_qty';
         const failQtyCol = 'COALESCE(failed_qty, qty_fail, 0)::numeric as failed_qty';
+        const imagesCol = 'NULL::text as images_json';
 
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -511,12 +513,19 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         ]);
 
         const items = res.rows.map((row: any) => {
+            let parsedMaterials = row.materials;
+            if (typeof parsedMaterials === 'string') {
+                try { parsedMaterials = JSON.parse(parsedMaterials); } catch(e) {}
+            }
+            let parsedImages = row.images;
+            if (typeof parsedImages === 'string') {
+                try { parsedImages = JSON.parse(parsedImages); } catch(e) {}
+            }
             return {
                 ...row,
                 updatedAt: row.updated_at,
-                items: [],
-                images: [],
-                materials: [],
+                materials: parsedMaterials,
+                images: parsedImages,
                 so_luong_ipo: Number(row.so_luong_ipo || 0),
                 inspectedQuantity: Number(row.inspectedQuantity || 0),
                 passedQuantity: Number(row.passedQuantity || 0),
@@ -535,28 +544,6 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     } catch (e) {
         console.error("ISO-DB: getInspectionsList failed", e);
         return { items: [], total: 0 };
-    }
-}
-
-/**
- * Fetches only ID and updatedAt for all inspections.
- */
-export async function getInspectionsLight(): Promise<{ id: string, updatedAt: string }[]> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
-    
-    // Build a UNION ALL query to fetch from all tables efficiently
-    const tableQueries = tables.map(table => {
-        return `SELECT id::text, updated_at::text as "updatedAt" FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
-    });
-
-    const unionQuery = tableQueries.join(' UNION ALL ');
-    
-    try {
-        const res = await query(unionQuery, []);
-        return res.rows as unknown as { id: string, updatedAt: string }[];
-    } catch (e) {
-        console.error("ISO-DB: getInspectionsLight failed", e);
-        return [];
     }
 }
 
@@ -789,89 +776,6 @@ export async function getIpoSamples(idFactoryOrder: string) {
         SELECT * FROM ${SCHEMA}.ipo_sample_history WHERE id_factory_order = $1 ORDER BY created_at DESC
     `, [idFactoryOrder]);
     return res.rows.map((r: any) => ({ ...r, data: safeJsonParse(r.data, {}) }));
-}
-
-/**
- * Get hierarchy of years, months, and days with inspection counts.
- * Optimized to NOT fetch any actual data, only counts.
- */
-export async function getTimelineHierarchy(): Promise<any[]> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
-    
-    // SQL to extract YYYY-MM-DD from BIGINT epoch seconds and group them
-    const tableQueries = tables.map(table => {
-        return `
-            SELECT 
-                CASE 
-                    WHEN CAST(date AS TEXT) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN SUBSTRING(CAST(date AS TEXT) FROM 1 FOR 10)
-                    WHEN CAST(date AS TEXT) ~ '^[0-9]+$' THEN TO_CHAR(TO_TIMESTAMP(CAST(date AS TEXT)::BIGINT), 'YYYY-MM-DD')
-                    ELSE NULL
-                END as date_str,
-                COUNT(*) as count
-            FROM ${SCHEMA}."${table}" 
-            WHERE "deleted_at" IS NULL 
-            GROUP BY date_str
-        `;
-    });
-
-    const unionQuery = tableQueries.join(' UNION ALL ');
-    const finalQuery = `
-        SELECT date_str, SUM(count) as total_count 
-        FROM (${unionQuery}) as combined 
-        WHERE date_str IS NOT NULL
-        GROUP BY date_str 
-        ORDER BY date_str DESC
-    `;
-
-    try {
-        const res = await query(finalQuery, []);
-        return res.rows;
-    } catch (e) {
-        console.error("ISO-DB: getTimelineHierarchy failed", e);
-        return [];
-    }
-}
-
-/**
- * Get list of projects for a specific date string (YYYY-MM-DD)
- */
-export async function getProjectsByTimelineDate(dateStr: string): Promise<any[]> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
-    
-    const tableQueries = tables.map(table => {
-        return `
-            SELECT 
-                ma_ct, 
-                ten_ct,
-                COUNT(*) as count
-            FROM ${SCHEMA}."${table}" 
-            WHERE "deleted_at" IS NULL 
-            AND (
-                CASE 
-                    WHEN CAST(date AS TEXT) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN SUBSTRING(CAST(date AS TEXT) FROM 1 FOR 10)
-                    WHEN CAST(date AS TEXT) ~ '^[0-9]+$' THEN TO_CHAR(TO_TIMESTAMP(CAST(date AS TEXT)::BIGINT), 'YYYY-MM-DD')
-                    ELSE NULL
-                END
-            ) = $1
-            GROUP BY ma_ct, ten_ct
-        `;
-    });
-
-    const unionQuery = tableQueries.join(' UNION ALL ');
-    const finalQuery = `
-        SELECT ma_ct, MAX(ten_ct) as ten_ct, SUM(count) as total_count 
-        FROM (${unionQuery}) as combined 
-        GROUP BY ma_ct 
-        ORDER BY ma_ct ASC
-    `;
-
-    try {
-        const res = await query(finalQuery, [dateStr]);
-        return res.rows;
-    } catch (e) {
-        console.error("ISO-DB: getProjectsByTimelineDate failed", e);
-        return [];
-    }
 }
 
 export async function saveIpoSampleRecord(sample: any) {

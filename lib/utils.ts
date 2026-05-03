@@ -91,10 +91,3 @@ export const uploadImage = async (file: File): Promise<string> => {
     if (!response.ok) throw new Error(data.error || 'Upload failed');
     return data.url;
 };
-
-export const getProxyImageUrl = (url: string | undefined | null): string => {
-    if (!url) return '';
-    if (url.startsWith('http')) return url;
-    if (url.startsWith('/')) return url;
-    return `/${url}`;
-};

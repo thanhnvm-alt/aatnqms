@@ -24,7 +24,6 @@ import { ChatAI } from './components/ChatAI';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
   fetchInspections, 
-  fetchInspectionsLight,
   fetchInspectionById,
   saveInspectionToSheet, 
   deleteInspectionFromSheet, 
@@ -149,8 +148,6 @@ const App = () => {
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES'>('TEMPLATE');
 
-  const [allInspectionsLight, setAllInspectionsLight] = useState<{id: string, updatedAt: string}[]>([]);
-
   useEffect(() => {
     const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
     if (localData) { 
@@ -169,8 +166,6 @@ const App = () => {
             loadUsers();
             loadWorkshops();
             loadTemplates();
-            const lightData = await fetchInspectionsLight();
-            setAllInspectionsLight(lightData);
         } catch (error) { setIsDbReady(true); }
     };
     startup();
@@ -204,7 +199,7 @@ const App = () => {
   const loadInspections = async (page: number = 1) => {
     setIsLoadingInspections(true);
     try {
-        const result = await fetchInspections({}, page, 1000000);
+        const result = await fetchInspections({}, 1, 50000);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
     } catch (e) {
