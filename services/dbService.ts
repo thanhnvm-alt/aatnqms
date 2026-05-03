@@ -376,12 +376,12 @@ export async function saveInspection(inspection: Inspection) {
 /**
  * Aggregates inspections from all module tables with pagination.
  */
-export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 20): Promise<{ items: Inspection[], total: number }> {
+export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 100000): Promise<{ items: Inspection[], total: number }> {
     const offset = (page - 1) * limit;
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     
     // Build a UNION ALL query to fetch from all tables efficiently
-    // We select only the fields needed for the list view to improve performance
+    // We select only the fields needed for the list view to improve performance (No-JSON-in-List Policy)
     const selectFields = `
         id, 
         COALESCE(type, REPLACE(table_name, 'forms_', '')) as type, 
@@ -400,12 +400,10 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         headcode,
         stage as "inspectionStage",
         po_number,
-        materials_json as "materials",
         so_luong_ipo,
         inspected_qty as "inspectedQuantity",
         passed_qty as "passedQuantity",
         failed_qty as "failedQuantity",
-        images_json as "images",                
         dvt
     `;
 
@@ -415,15 +413,13 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         const headcodeCol = 'headcode::text';
         const stageCol = 'stage::text';
         const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
-        const matCol = 'NULL::text as materials_json';
         
         const slIpoCol = 'COALESCE(so_luong_ipo, sl_ipo, 0)::numeric as so_luong_ipo';
         const insQtyCol = 'COALESCE(inspected_qty, qty_total, 0)::numeric as inspected_qty';
         const passQtyCol = 'COALESCE(passed_qty, qty_pass, 0)::numeric as passed_qty';
         const failQtyCol = 'COALESCE(failed_qty, qty_fail, 0)::numeric as failed_qty';
-        const imagesCol = 'NULL::text as images_json';
 
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${matCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, ${imagesCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
+        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
     });
 
     const unionQuery = tableQueries.join(' UNION ALL ');
@@ -513,19 +509,11 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         ]);
 
         const items = res.rows.map((row: any) => {
-            let parsedMaterials = row.materials;
-            if (typeof parsedMaterials === 'string') {
-                try { parsedMaterials = JSON.parse(parsedMaterials); } catch(e) {}
-            }
-            let parsedImages = row.images;
-            if (typeof parsedImages === 'string') {
-                try { parsedImages = JSON.parse(parsedImages); } catch(e) {}
-            }
             return {
                 ...row,
                 updatedAt: row.updated_at,
-                materials: parsedMaterials,
-                images: parsedImages,
+                materials: [], // Explicitly empty (No-JSON-in-List policy)
+                images: [],    // Explicitly empty (No-JSON-in-List policy)
                 so_luong_ipo: Number(row.so_luong_ipo || 0),
                 inspectedQuantity: Number(row.inspectedQuantity || 0),
                 passedQuantity: Number(row.passedQuantity || 0),

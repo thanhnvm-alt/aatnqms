@@ -389,18 +389,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
     filtered.forEach(item => {
         const dateKey = formatDisplayDate(item.date) || 'KHÔNG RÕ NGÀY';
-        const pKey = (item.type === 'IQC' || item.type === 'SQC_VT') 
-            ? (item.materials?.[0]?.projectCode || item.ma_ct || 'DÙNG CHUNG') 
-            : (item.ma_ct || 'DÙNG CHUNG');
+        // Preference: ma_ct/ten_ct directly since materials_json is not loaded in list view
+        const pKey = item.ma_ct || 'DÙNG CHUNG';
         
         if (!groups[dateKey]) {
             groups[dateKey] = {};
         }
 
         if (!groups[dateKey][pKey]) {
-            const projectName = (item.type === 'IQC' || item.type === 'SQC_VT')
-                ? (item.materials?.[0]?.projectName || item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC'))
-                : (item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC'));
+            const projectName = item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC');
             
             groups[dateKey][pKey] = { 
                 projectName,
@@ -780,7 +777,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                                     <span className="text-[9px] font-mono font-medium text-slate-400">
                                                                                         {
                                                                                             (item.type === 'PQC') ? (item.inspectionStage || `---`) :
-                                                                                            (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
+                                                                                            (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.ten_hang_muc || '---') :
                                                                                             `#${item.id.split('-').pop()}`
                                                                                         }
                                                                                     </span>
@@ -795,11 +792,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                             </td>
                                                                             <td className="p-4 border-r border-slate-100">
                                                                                 <p className="text-[14px] font-medium text-slate-800 tracking-tight group-hover:text-blue-700 transition-colors">
-                                                                                    {
-                                                                                        (item.type === 'IQC' || item.type === 'SQC_VT') 
-                                                                                            ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                                                            : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                                                    }
+                                                                                    {item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}
                                                                                 </p>
                                                                             </td>
                                                                             <td className="p-4 border-r border-slate-100">
@@ -854,7 +847,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                             <h4 className="text-[15px] font-bold text-slate-800 leading-snug group-hover:text-blue-700 transition-colors line-clamp-2">
                                                                                 {
                                                                                     (item.type === 'IQC' || item.type === 'SQC_VT') 
-                                                                                        ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                                        ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                                                         : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                                                 }
                                                                             </h4>
@@ -1101,7 +1094,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     <div className="flex justify-between items-start gap-2 mb-2">
                                         <h4 className="font-bold text-slate-800 text-[13px] leading-snug line-clamp-2 pr-6">
                                             {(item.type === 'IQC' || item.type === 'SQC_VT') 
-                                                ? (item.materials?.[0]?.name || item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                 : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
                                         </h4>
                                         <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600">

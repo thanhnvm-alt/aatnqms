@@ -612,7 +612,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         endDate: req.query.endDate as string
       };
       const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 20;
+      const limit = Number(req.query.limit) || 100000;
       const result = await db.getInspectionsList(filters, page, limit);
       res.json(result);
     } catch (error) {

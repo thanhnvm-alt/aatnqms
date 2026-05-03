@@ -199,7 +199,7 @@ const App = () => {
   const loadInspections = async (page: number = 1) => {
     setIsLoadingInspections(true);
     try {
-        const result = await fetchInspections({}, 1, 50000);
+        const result = await fetchInspections({}, 1, 100000);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
     } catch (e) {
