@@ -132,6 +132,8 @@ export const InspectionList: React.FC<InspectionListProps> = (props) => {
         loadTimeline();
     }, [timelineCache]); // Added timelineCache dependency for stability
 
+    const excelImportRef = useRef<HTMLInputElement>(null);
+
     // 5. HANDLERS
     const handleSelectDate = async (dateStr: string) => {
         setSelectedDate(dateStr);
@@ -201,11 +203,31 @@ export const InspectionList: React.FC<InspectionListProps> = (props) => {
     const handleExport = async () => {
         setIsExporting(true);
         try {
-            // Simplified export for logic test
-            await new Promise(r => setTimeout(r, 1000));
+            await apiService.exportInspections({
+                startDate: selectedDate || undefined,
+                endDate: selectedDate || undefined,
+                project: selectedProject || undefined
+            });
             alert("Đã xuất dữ liệu Excel thành công!");
+        } catch (error) {
+            console.error("Export error:", error);
+            alert("Xuất dữ liệu thất bại!");
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            await apiService.importInspectionsFile(file);
+            alert("Nhập dữ liệu thành công!");
+            // Refresh logic
+            window.location.reload(); 
+        } catch (error) {
+            console.error("Import error:", error);
+            alert("Nhập dữ liệu thất bại: " + (error instanceof Error ? error.message : String(error)));
         }
     };
 
@@ -248,10 +270,21 @@ export const InspectionList: React.FC<InspectionListProps> = (props) => {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                        <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="p-3 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-slate-50 hover:text-slate-600 transition-all shadow-sm">
+                        <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`p-3 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-slate-50 hover:text-slate-600 transition-all shadow-sm ${isFilterOpen ? 'bg-blue-50 text-blue-600' : ''}`}>
                             <Filter className="w-5 h-5" />
                         </button>
-                        <button className="p-3 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
+                        {isFilterOpen && (
+                            <div className="absolute top-20 right-6 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-[100] p-4 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+                                <div className="flex justify-between items-center">
+                                    <span className="font-black text-slate-800 uppercase tracking-widest text-xs">Bộ lọc</span>
+                                    <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                                </div>
+                                {/* Filter controls would go here to trigger re-fetching */}
+                                <div className="p-2 bg-slate-100 rounded-lg text-xs text-slate-500 italic">Tính năng lọc đang được phát triển.</div>
+                            </div>
+                        )}
+                        <input type="file" ref={excelImportRef} className="hidden" accept=".xlsx, .xls" onChange={handleImport} />
+                        <button onClick={() => excelImportRef.current?.click()} className="p-3 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
                             <Download className="w-5 h-5 rotate-180" />
                         </button>
                         <button onClick={handleExport} className="p-3 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">

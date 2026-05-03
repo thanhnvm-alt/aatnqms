@@ -121,15 +121,15 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   // Check for malformed URI
   try {
+    decodeURI(req.url); // this helps catch Vite's URI errors before reaching Vite middleware
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     decodeURIComponent(url.pathname);
   } catch (e) {
-    console.warn(`[Malformed URI] Rejecting request: ${req.url}`);
     return res.status(400).json({ error: 'Malformed URI' });
   }
 
   if (!req.url.startsWith('/_vite') && !req.url.startsWith('/@')) {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    // console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   }
   next();
 });
@@ -1265,7 +1265,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               
               const isNotFound = status === 404;
               const logMsg = `[Drive Proxy] Auth fetch ${isNotFound ? 'rejected (404 Not Found)' : `failed: ${status}`} for ${fileId}${isNotFound ? '' : ` - ${msg}`}. Trying public fallback...`;
-              console.warn(logMsg);
+              // console.warn(logMsg); // Suppress log
             }
           }
 
@@ -1298,12 +1298,12 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                   return;
               }
             } catch (pubErr) {
-              console.warn(`[Drive Proxy] Fallback fetch error for ${publicUrl}:`, pubErr);
+              // console.warn(`[Drive Proxy] Fallback fetch error for ${publicUrl}:`, pubErr);
             }
           }
 
           // Attempt 3: Final fallback to redirect to the original URL if proxy fails entirely.
-          console.warn(`[Drive Proxy] All proxied fetches failed for ${fileId}, redirecting to original URL.`);
+          // console.warn(`[Drive Proxy] All proxied fetches failed for ${fileId}, redirecting to original URL.`);
           return res.redirect(imageUrl);
       }
 
@@ -2341,7 +2341,7 @@ app.get('/api/diag/db', async (req, res) => {
 
 // API Catch-all for debugging
 app.all("/api/*all", (req, res) => {
-  console.warn(`API Route not found: ${req.method} ${req.url}`);
+  // console.warn(`API Route not found: ${req.method} ${req.url}`);
   res.status(404).json({ 
     error: "API Route not found", 
     method: req.method, 
