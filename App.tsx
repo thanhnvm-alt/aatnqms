@@ -121,6 +121,7 @@ const App = () => {
   const [projectsSearch, setProjectsSearch] = useState('');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
+  const [inspectionFilters, setInspectionFilters] = useState<any>({});
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   
   const [users, setUsers] = useState<User[]>([]);
@@ -173,18 +174,18 @@ const App = () => {
 
   useEffect(() => {
     if (user && isDbReady) {
-        loadInspections(inspectionsPage);
+        loadInspections(inspectionsPage, inspectionFilters);
     }
-  }, [user, isDbReady, inspectionsPage]);
+  }, [user, isDbReady, inspectionsPage, inspectionFilters]);
 
   useEffect(() => {
     if (user && isDbReady) {
         const interval = setInterval(() => {
-            loadInspections(inspectionsPage);
+            loadInspections(inspectionsPage, inspectionFilters);
         }, 3 * 60 * 1000); // Auto reload every 3 minutes
         return () => clearInterval(interval);
     }
-  }, [user, isDbReady, inspectionsPage]);
+  }, [user, isDbReady, inspectionsPage, inspectionFilters]);
 
   useEffect(() => {
     if (user && isDbReady) {
@@ -196,22 +197,13 @@ const App = () => {
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
-  const loadInspections = async (page: number = 1) => {
+  const loadInspections = async (page: number = 1, filters: any = {}) => {
     setIsLoadingInspections(true);
     try {
-        const filters: any = {};
-        
-        // Detect mobile (simple width check)
         const isMobile = window.innerWidth < 768;
-        if (isMobile) {
-            // Set startDate to 30 days ago
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            filters.startDate = thirtyDaysAgo.toISOString().split('T')[0];
-            console.log("Mobile detected: loading inspections from", filters.startDate);
-        }
-
-        const result = await fetchInspections(filters, 1, 100000);
+        // Desktop loads all, Mobile loads recent with smaller limit to start
+        const limit = isMobile ? 100 : 1000000;
+        const result = await fetchInspections({ ...filters, isMobile: isMobile.toString() }, page, limit);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
     } catch (e) {
@@ -359,7 +351,15 @@ const App = () => {
                         page={inspectionsPage}
                         onPageChange={setInspectionsPage}
                         user={user}
-                        onRefresh={loadInspections}
+                        onRefresh={() => loadInspections(inspectionsPage, inspectionFilters)}
+                        onSearch={(term) => {
+                            setInspectionFilters((prev: any) => ({ ...prev, search: term }));
+                            setInspectionsPage(1);
+                        }}
+                        onFilterChange={(filters) => {
+                            setInspectionFilters(filters);
+                            setInspectionsPage(1);
+                        }}
                     />
                 )}
                 {view === 'FORM' && (

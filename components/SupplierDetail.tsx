@@ -128,8 +128,8 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-8"><BarChart3 className="w-5 h-5 text-indigo-500" /> Biểu đồ chất lượng theo thời gian (%)</h3>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                <div className="h-64 w-full min-h-[256px]">
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={historyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 'bold', fill: '#94a3b8'}} />
                       <YAxis domain={[0, 100]} hide />

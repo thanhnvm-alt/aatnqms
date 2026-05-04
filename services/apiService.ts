@@ -124,10 +124,11 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     } else {
         try {
             const options = {
-                maxSizeMB: 1,
-                maxWidthOrHeight: 1920,
+                maxSizeMB: 0.7, // Target ~700KB for better performance
+                maxWidthOrHeight: 1600, // Sufficient for ISO inspection detail
                 useWebWorker: true,
-                fileType: 'image/jpeg'
+                fileType: 'image/jpeg',
+                initialQuality: 0.8
             };
             fileToUpload = await imageCompression(file, options);
         } catch (error) {

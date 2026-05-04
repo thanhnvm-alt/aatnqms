@@ -234,6 +234,72 @@ app.get("/display-image/:fileId", authenticate, streamGoogleDriveImage);
 app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
 // API routes
+  app.post("/api/upload", authenticate, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      if (!drive) {
+        return res.status(503).json({ error: "Google Drive service not configured" });
+      }
+
+      const user = (req as any).user;
+      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+      // Upload to Google Drive via server stream
+      const fileMetadata = {
+        name: req.file.filename,
+        parents: folderId ? [folderId] : []
+      };
+
+      const media = {
+        mimeType: req.file.mimetype,
+        body: fs.createReadStream(req.file.path)
+      };
+
+      const driveRes = await drive.files.create({
+        requestBody: fileMetadata,
+        media: media,
+        fields: 'id, webViewLink'
+      });
+
+      const fileId = driveRes.data.id;
+
+      // Audit Trail (ISO Requirement)
+      await logAudit(
+        user.username || 'SYSTEM', 
+        'IMAGE_UPLOAD', 
+        'attachment', 
+        fileId, 
+        null, 
+        { 
+          filename: req.file.originalname, 
+          mimeType: req.file.mimetype, 
+          size: req.file.size,
+          driveId: fileId
+        }
+      );
+
+      // Clean up local temp file
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (err) {
+        console.error("Failed to delete temp file:", err);
+      }
+
+      res.json({ 
+        id: fileId, 
+        url: `/api/media/image/${fileId}`, // Internal proxy URL
+        originalName: req.file.originalname 
+      });
+
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      res.status(500).json({ error: 'Upload failed', details: error.message });
+    }
+  });
+
   app.get("/api/ipo", async (req, res) => {
     try {
       const schema = process.env.DB_SCHEMA || 'appQAQC';
@@ -601,6 +667,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
   app.get("/api/inspections", authenticate, async (req, res) => {
     try {
+      const userAgent = req.headers['user-agent'] || '';
+      const isMobile = /mobile|android|iphone|ipad|phone/i.test(userAgent) || req.query.isMobile === 'true';
+
       const filters = {
         status: req.query.status as string,
         search: req.query.search as string,
@@ -611,6 +680,15 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string
       };
+
+      // if mobile and no startDate provided, default to last 30 days
+      if (isMobile && !filters.startDate) {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        filters.startDate = thirtyDaysAgo.toISOString().split('T')[0];
+        console.log(`[Backend] Mobile request detected. Applying 30-day filter: ${filters.startDate}`);
+      }
+
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 100000;
       const result = await db.getInspectionsList(filters, page, limit);

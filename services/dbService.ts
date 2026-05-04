@@ -28,6 +28,48 @@ const safeJsonParse = <T>(jsonString: any, defaultValue: T): T => {
 
 // --- HELPERS ---
 
+/**
+ * Syncs common inspection data to the centralized 'inspections' table
+ */
+async function syncToInspectionsTable(inspection: Inspection) {
+    try {
+        const updatedAt = parseTS(inspection.updatedAt);
+        const createdAt = parseTS(inspection.createdAt || inspection.date || Date.now());
+        
+        await query(`
+            INSERT INTO ${SCHEMA}."inspections" (
+                id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
+                workshop, status, score, created_at, updated_at, created_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10::bigint, $11::bigint, $12)
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                score = EXCLUDED.score,
+                updated_at = EXCLUDED.updated_at,
+                ma_ct = EXCLUDED.ma_ct,
+                ten_ct = EXCLUDED.ten_ct,
+                ma_nha_may = EXCLUDED.ma_nha_may,
+                ten_hang_muc = EXCLUDED.ten_hang_muc,
+                workshop = EXCLUDED.workshop
+        `, sanitizeArgs([
+            inspection.id, 
+            inspection.type, 
+            inspection.ma_ct, 
+            inspection.ten_ct, 
+            inspection.ma_nha_may, 
+            inspection.ten_hang_muc,
+            inspection.workshop, 
+            inspection.status, 
+            inspection.score || 0,
+            createdAt,
+            updatedAt,
+            inspection.inspectorName || 'SYSTEM'
+        ]));
+    } catch (e) {
+        console.error(`❌ ISO-DB: Sync to inspections table failed for ${inspection.id}:`, e);
+    }
+}
+
 const parseTS = (val: any): number => {
     if (!val) return Math.floor(Date.now() / 1000);
     if (typeof val === 'number') {
@@ -350,6 +392,10 @@ export async function saveInspection(inspection: Inspection) {
   }
 
   await logAudit(inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection);
+  
+  // Sync to centralized inspections table
+  await syncToInspectionsTable(inspection);
+
   if (oldValue && oldValue.status !== inspection.status) {
     await logStatusChange('inspection', inspection.id, oldValue.status, inspection.status, inspection.inspectorName || 'SYSTEM');
     
@@ -374,156 +420,119 @@ export async function saveInspection(inspection: Inspection) {
 }
 
 /**
- * Aggregates inspections from all module tables with pagination.
+ * Aggregates inspections from the centralized 'inspections' table.
  */
-export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 100000): Promise<{ items: Inspection[], total: number }> {
+export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 1000000): Promise<{ items: Inspection[], total: number }> {
     const offset = (page - 1) * limit;
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     
-    // Build a UNION ALL query to fetch from all tables efficiently
-    // We select only the fields needed for the list view to improve performance (No-JSON-in-List Policy)
-    const selectFields = `
-        id, 
-        COALESCE(type, REPLACE(table_name, 'forms_', '')) as type, 
-        ma_ct, 
-        ten_ct, 
-        ten_hang_muc, 
-        inspector as "inspectorName", 
-        status, 
-        date, 
-        score, 
-        summary, 
-        workshop, 
-        updated_at,
-        responsible_person as "responsiblePerson",
-        ma_nha_may,
-        headcode,
-        stage as "inspectionStage",
-        po_number,
-        so_luong_ipo,
-        inspected_qty as "inspectedQuantity",
-        passed_qty as "passedQuantity",
-        failed_qty as "failedQuantity",
-        dvt
-    `;
-
-    const tableQueries = tables.map(table => {
-        const workshopCol = 'workshop::text';
-        const maNhaMayCol = 'ma_nha_may::text';
-        const headcodeCol = 'headcode::text';
-        const stageCol = 'stage::text';
-        const poCol = ['forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp'].includes(table) ? 'po_number::text' : 'NULL::text as po_number';
-        
-        const slIpoCol = 'COALESCE(so_luong_ipo, sl_ipo, 0)::numeric as so_luong_ipo';
-        const insQtyCol = 'COALESCE(inspected_qty, qty_total, 0)::numeric as inspected_qty';
-        const passQtyCol = 'COALESCE(passed_qty, qty_pass, 0)::numeric as passed_qty';
-        const failQtyCol = 'COALESCE(failed_qty, qty_fail, 0)::numeric as failed_qty';
-
-        return `SELECT id::text, type::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, inspector::text, status::text, date::text, score::text, summary::text, ${workshopCol}, updated_at::text, "responsible_person"::text, ${maNhaMayCol}, ${headcodeCol}, ${stageCol}, ${poCol}, ${slIpoCol}, ${insQtyCol}, ${passQtyCol}, ${failQtyCol}, dvt::text, '${table}'::text as table_name FROM ${SCHEMA}."${table}" WHERE "deleted_at" IS NULL`;
-    });
-
-    const unionQuery = tableQueries.join(' UNION ALL ');
+    // Build filter clauses
+    let whereClause = 'WHERE 1=1';
+    const subArgs: any[] = [];
     
-    let whereClause = '';
-    const args: any[] = [];
     if (filters.status && filters.status !== 'ALL') {
         const statuses = filters.status.split(',').map((s: string) => s.trim());
-        const placeholders = statuses.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `status IN (${placeholders})`;
-        args.push(...statuses);
+        const placeholders = statuses.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND status IN (${placeholders})`;
+        subArgs.push(...statuses);
     }
+
     if (filters.search) {
         const searchPattern = `%${filters.search}%`;
-        const searchIndex = args.length + 1;
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `(ma_ct LIKE $${searchIndex} OR ten_ct LIKE $${searchIndex} OR ten_hang_muc LIKE $${searchIndex} OR inspector LIKE $${searchIndex})`;
-        args.push(searchPattern);
+        const searchIdx = subArgs.length + 1;
+        whereClause += ` AND (ma_ct ILIKE $${searchIdx} OR ten_ct ILIKE $${searchIdx} OR ten_hang_muc ILIKE $${searchIdx} OR created_by ILIKE $${searchIdx} OR id ILIKE $${searchIdx})`;
+        subArgs.push(searchPattern);
     }
+
+    if (filters.type && filters.type !== 'ALL') {
+        const types = filters.type.split(',').map((s: string) => s.trim().toUpperCase());
+        const placeholders = types.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND type IN (${placeholders})`;
+        subArgs.push(...types);
+    }
+
     if (filters.qc && filters.qc !== 'ALL') {
         const qcs = filters.qc.split(',').map((s: string) => s.trim());
-        const placeholders = qcs.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `inspector IN (${placeholders})`;
-        args.push(...qcs);
+        const placeholders = qcs.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND created_by IN (${placeholders})`;
+        subArgs.push(...qcs);
     }
+
     if (filters.workshop && filters.workshop !== 'ALL') {
         const workshops = filters.workshop.split(',').map((s: string) => s.trim());
-        const placeholders = workshops.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `workshop IN (${placeholders})`;
-        args.push(...workshops);
+        const placeholders = workshops.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND workshop IN (${placeholders})`;
+        subArgs.push(...workshops);
     }
+
     if (filters.project && filters.project !== 'ALL') {
         const projects = filters.project.split(',').map((s: string) => s.trim());
-        const placeholders = projects.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `ma_ct IN (${placeholders})`;
-        args.push(...projects);
+        const placeholders = projects.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND ma_ct IN (${placeholders})`;
+        subArgs.push(...projects);
     }
-    if (filters.type && filters.type !== 'ALL') {
-        const types = filters.type.split(',').map((s: string) => s.trim());
-        const placeholders = types.map((_: any, i: number) => `$${args.length + 1 + i}`).join(', ');
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        whereClause += `COALESCE(type, REPLACE(table_name, 'forms_', '')) IN (${placeholders})`;
-        args.push(...types);
+
+    // NEW: Auto-filter last 30 days for Mobile if no specific start date is provided
+    if (filters.isMobile === 'true' && !filters.startDate) {
+        const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+        const idx = subArgs.length + 1;
+        whereClause += ` AND created_at >= $${idx}`;
+        subArgs.push(thirtyDaysAgo);
     }
+
     if (filters.startDate) {
-        const idx = args.length + 1;
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        // Convert YYYY-MM-DD string to numeric epoch seconds
         const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
-        whereClause += `(CASE WHEN CAST(date AS TEXT) ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) >= $${idx}`;
-        args.push(ts);
+        const idx = subArgs.length + 1;
+        whereClause += ` AND created_at >= $${idx}`;
+        subArgs.push(ts);
     }
+
     if (filters.endDate) {
-        const idx = args.length + 1;
-        whereClause += whereClause ? ' AND ' : ' WHERE ';
-        // Convert YYYY-MM-DD string to numeric epoch seconds (end of day)
         const d = new Date(filters.endDate);
         d.setHours(23, 59, 59, 999);
         const ts = Math.floor(d.getTime() / 1000);
-        whereClause += `(CASE WHEN CAST(date AS TEXT) ~ '^[0-9]+$' THEN CAST(date AS BIGINT) ELSE 0 END) <= $${idx}`;
-        args.push(ts);
+        const idx = subArgs.length + 1;
+        whereClause += ` AND created_at <= $${idx}`;
+        subArgs.push(ts);
     }
 
+    const limitIdx = subArgs.length + 1;
+    const offsetIdx = subArgs.length + 2;
+
     const finalQuery = `
-        SELECT ${selectFields} FROM (${unionQuery}) as combined 
-        ${whereClause} 
-        ORDER BY (CASE 
-            WHEN CAST(updated_at AS TEXT) ~ '^[0-9]+$' THEN 
-                CASE WHEN CAST(updated_at AS BIGINT) > 100000000000 THEN CAST(updated_at AS BIGINT) / 1000 
-                ELSE CAST(updated_at AS BIGINT) 
-                END 
-            ELSE 0 
-        END) DESC 
-        LIMIT $${args.length + 1} OFFSET $${args.length + 2}
+        SELECT 
+            id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
+            workshop, status, score, created_at, updated_at, created_by as "inspectorName"
+        FROM ${SCHEMA}."inspections"
+        ${whereClause}
+        ORDER BY updated_at DESC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
 
-    const countQuery = `SELECT COUNT(*) as total FROM (${unionQuery}) as combined ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM ${SCHEMA}."inspections" ${whereClause}`;
 
     try {
         const [res, countRes] = await Promise.all([
-            query(finalQuery, [...args, limit, offset]),
-            query(countQuery, args)
+            query(finalQuery, [...subArgs, limit, offset]),
+            query(countQuery, subArgs)
         ]);
 
-        const items = res.rows.map((row: any) => {
-            return {
-                ...row,
-                updatedAt: row.updated_at,
-                materials: [], // Explicitly empty (No-JSON-in-List policy)
-                images: [],    // Explicitly empty (No-JSON-in-List policy)
-                so_luong_ipo: Number(row.so_luong_ipo || 0),
-                inspectedQuantity: Number(row.inspectedQuantity || 0),
-                passedQuantity: Number(row.passedQuantity || 0),
-                failedQuantity: Number(row.failedQuantity || 0),
-                isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
-                hasNcr: row.status === 'FLAGGED',
-                isCond: row.status === 'CONDITIONAL',
-                dvt: row.dvt || ''
-            };
-        }) as unknown as Inspection[];
+        const items = res.rows.map((row: any) => ({
+            ...row,
+            date: (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
+                  (row.updated_at && Number(row.updated_at) > 1000000000) ? row.updated_at : 
+                  row.created_at,
+            updatedAt: row.updated_at,
+            materials: [], 
+            images: [],    
+            so_luong_ipo: 0, // Simplified for list view
+            inspectedQuantity: 0,
+            passedQuantity: 0,
+            failedQuantity: 0,
+            isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
+            hasNcr: row.status === 'FLAGGED',
+            isCond: row.status === 'CONDITIONAL',
+            dvt: ''
+        })) as unknown as Inspection[];
 
         return { 
             items, 
@@ -553,7 +562,9 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     ten_hang_muc: row.ten_hang_muc as string,
                     inspectorName: row.inspector as string,
                     status: row.status as InspectionStatus,
-                    date: row.date as string,
+                    date: (row.created_at && Number(row.created_at) > 1000000000) ? String(row.created_at) : 
+                          (row.updated_at && Number(row.updated_at) > 1000000000) ? String(row.updated_at) : 
+                          (row.date as string),
                     score: row.score as number,
                     summary: row.summary as string,
                     items: safeJsonParse(row.items_json, []),
@@ -610,6 +621,12 @@ export async function deleteInspection(id: string) {
             await query(`UPDATE ${SCHEMA}."${table}" SET deleted_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = $1`, [id]);
         } catch (e) {}
     }
+    
+    // Also remove from centralized inspections table
+    try {
+        await query(`DELETE FROM ${SCHEMA}."inspections" WHERE id = $1`, [id]);
+    } catch (e) {}
+
     await logAudit(inspection.inspectorName || 'SYSTEM', 'DELETE_INSPECTION', 'inspection', id, inspection, null);
 }
 

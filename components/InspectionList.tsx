@@ -21,6 +21,8 @@ interface InspectionListProps {
   isLoading?: boolean;
   workshops?: Workshop[];
   onRefresh?: () => void;
+  onSearch?: (term: string) => void;
+  onFilterChange?: (filters: any) => void;
   total?: number;
   page?: number;
   onPageChange?: (page: number) => void;
@@ -145,7 +147,7 @@ const SearchableSelect: React.FC<SearchableSelectProps & { optionLabels?: Record
 };
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, isLoading, workshops = [], onRefresh, total = 0, page = 1, onPageChange, user
+  inspections, onSelect, isLoading, workshops = [], onRefresh, onSearch, onFilterChange, total = 0, page = 1, onPageChange, user
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -181,6 +183,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   const handleCommitSearch = () => {
     setSearchTerm(searchInput);
+    if (onSearch) {
+        onSearch(searchInput);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -276,6 +281,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [filterType, setFilterType] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  
+  useEffect(() => {
+    if (onFilterChange) {
+      onFilterChange({
+        status: filterStatus.join(','),
+        search: searchTerm,
+        qc: filterQC.join(','),
+        workshop: filterWorkshop.join(','),
+        project: filterProject.join(','),
+        type: filterType.join(','),
+        startDate,
+        endDate
+      });
+    }
+  }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, startDate, endDate]);
 
   const filterOptions = useMemo(() => ({
       inspectors: Array.from(new Set(inspections.map(i => i.inspectorName).filter((s): s is string => !!s))).sort(),
@@ -339,13 +359,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     }>> = {};
 
     const filtered = (inspections || []).filter(item => {
-        const term = searchTerm.toLowerCase();
-        const matchesSearch = !term || 
-               item.ma_ct?.toLowerCase().includes(term) ||
-               item.ten_ct?.toLowerCase().includes(term) ||
-               item.ten_hang_muc?.toLowerCase().includes(term) ||
-               item.ma_nha_may?.toLowerCase().includes(term);
-        if (!matchesSearch) return false;
+        // When using server-side search, the 'inspections' prop is already filtered.
+        // We keep local filtering for other secondary filters if not passed to server yet,
+        // but for 'search', the server handles it now.
         if (filterQC.length > 0 && !filterQC.includes(item.inspectorName || '')) return false;
         if (filterWorkshop.length > 0 && !filterWorkshop.includes(item.workshop || '')) return false;
         if (filterProject.length > 0 && !filterProject.includes(item.ma_ct || '')) return false;

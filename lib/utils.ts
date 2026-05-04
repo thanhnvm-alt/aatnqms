@@ -7,9 +7,17 @@ import { IPOItem, IPOResponse } from '../types';
 export const formatDisplayDate = (dateVal: string | number | undefined | null): string => {
     if (!dateVal) return '---';
     const strVal = String(dateVal);
-    // Nếu là chuỗi số có 10 chữ số -> Unix timestamp (seconds)
+    // Nếu là chuỗi số có 10 hoặc 13 chữ số -> Unix timestamp
     if (/^\d{10}$/.test(strVal)) {
         const date = new Date(parseInt(strVal, 10) * 1000);
+        return new Intl.DateTimeFormat('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        }).format(date);
+    }
+    if (/^\d{13}$/.test(strVal)) {
+        const date = new Date(parseInt(strVal, 10));
         return new Intl.DateTimeFormat('vi-VN', {
             day: '2-digit',
             month: '2-digit',
