@@ -198,6 +198,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   
+  // Mobile Pagination State
+  const [mobileMonthsToShow, setMobileMonthsToShow] = useState(1);
+  
   const handleSelectItemDesktop = async (item: Inspection) => {
       setSelectedItemDesktop(item); // Optimistic UI
       setIsLoadingDetail(true);
@@ -439,6 +442,30 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     });
   }, [groupedData]);
 
+  const mobileAvailableMonths = useMemo(() => {
+     const months = new Set<string>();
+     sortedDatesList.forEach(dk => {
+         if (dk === 'KHÔNG RÕ NGÀY') months.add(dk);
+         else {
+             const parts = dk.split('/');
+             if (parts.length === 3) months.add(`${parts[1]}/${parts[2]}`);
+         }
+     });
+     return Array.from(months);
+  }, [sortedDatesList]);
+
+  const mobileSortedDatesList = useMemo(() => {
+     const allowedMonths = new Set(mobileAvailableMonths.slice(0, mobileMonthsToShow));
+     return sortedDatesList.filter(dk => {
+         if (dk === 'KHÔNG RÕ NGÀY') return allowedMonths.has(dk);
+         const parts = dk.split('/');
+         if (parts.length === 3) {
+             return allowedMonths.has(`${parts[1]}/${parts[2]}`);
+         }
+         return false;
+     });
+  }, [sortedDatesList, mobileAvailableMonths, mobileMonthsToShow]);
+
   // Handle desktop side effects when data changes
   useEffect(() => {
       // Auto-select date if current is empty or not in list, and wait, if 'ALL' is valid we keep it.
@@ -659,7 +686,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         <p className="font-black uppercase tracking-widest text-[10px]">Không tìm thấy dữ liệu</p>
                     </div>
                 ) : (
-                    sortedDatesList.map(dateKey => {
+                    <>
+                    {mobileSortedDatesList.map(dateKey => {
                     const dateGroup = groupedData[dateKey];
                     const isDateExpanded = expandedDates.has(dateKey) || searchTerm.length > 0;
                     return (
@@ -907,7 +935,18 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             )}
                         </div>
                     );
-                })
+                })}
+                    {mobileMonthsToShow < mobileAvailableMonths.length && (
+                        <div className="flex justify-center mt-4 mb-6">
+                            <button
+                                onClick={() => setMobileMonthsToShow(prev => prev + 1)}
+                                className="px-6 py-2.5 bg-blue-50 text-blue-600 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-blue-100 transition-colors"
+                            >
+                                Hiển thị thêm 1 tháng
+                            </button>
+                        </div>
+                    )}
+                    </>
             )}
 
             {/* PAGINATION CONTROLS */}

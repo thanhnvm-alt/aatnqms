@@ -199,7 +199,19 @@ const App = () => {
   const loadInspections = async (page: number = 1) => {
     setIsLoadingInspections(true);
     try {
-        const result = await fetchInspections({}, 1, 100000);
+        const filters: any = {};
+        
+        // Detect mobile (simple width check)
+        const isMobile = window.innerWidth < 768;
+        if (isMobile) {
+            // Set startDate to 30 days ago
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            filters.startDate = thirtyDaysAgo.toISOString().split('T')[0];
+            console.log("Mobile detected: loading inspections from", filters.startDate);
+        }
+
+        const result = await fetchInspections(filters, 1, 100000);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
     } catch (e) {
