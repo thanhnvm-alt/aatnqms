@@ -126,7 +126,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
             <div className="pt-2 border-t border-slate-50">
                 <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
                     <label className="text-[8px] font-black text-blue-600 uppercase flex items-center justify-between">ẢNH HIỆN TRƯỜNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">{formData.images?.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} />))}</div>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">{formData.images?.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover shrink-0" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} referrerPolicy="no-referrer" />))}</div>
                 </div>
             </div>
         </div>
@@ -153,7 +153,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                         <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[40px] mt-2">
                             {item.images?.map((img, i) => (
                                 <div key={i} className="relative w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200 shadow-sm cursor-pointer group" onClick={() => handleEditImage(item.images!, i, { type: 'ITEM', itemIdx: idx })}>
-                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
+                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                     <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, imageIndex) => imageIndex !== i); handleItemChange(idx, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-bl shadow md:opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button>
                                 </div>
                             ))}

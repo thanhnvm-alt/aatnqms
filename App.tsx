@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { ViewState, Inspection, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier } from './types';
+import { InspectionProvider } from './src/context/InspectionContext';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
   MOCK_USERS, 
@@ -111,6 +112,8 @@ const App = () => {
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
   const [inspectionsTotal, setInspectionsTotal] = useState(0);
+  const [inspectionsHierarchy, setInspectionsHierarchy] = useState<{ year: number, month: number, count: number }[]>([]);
+  const [projectsByMonth, setProjectsByMonth] = useState<Record<string, {ma_ct: string, ten_ct: string, count: number}[]>>({});
   const [inspectionsPage, setInspectionsPage] = useState(1);
   const [activeInspection, setActiveInspection] = useState<Inspection | null>(null);
   const [activeDefect, setActiveDefect] = useState<Defect | null>(null);
@@ -172,6 +175,7 @@ const App = () => {
     startup();
   }, []);
 
+  // Inspections load only once on startup if user is auth
   useEffect(() => {
     if (user && isDbReady) {
         loadInspections(inspectionsPage, inspectionFilters);
@@ -179,13 +183,8 @@ const App = () => {
   }, [user, isDbReady, inspectionsPage, inspectionFilters]);
 
   useEffect(() => {
-    if (user && isDbReady) {
-        const interval = setInterval(() => {
-            loadInspections(inspectionsPage, inspectionFilters);
-        }, 3 * 60 * 1000); // Auto reload every 3 minutes
-        return () => clearInterval(interval);
-    }
-  }, [user, isDbReady, inspectionsPage, inspectionFilters]);
+    // We remove interval loading for list to avoid loading everything, InspectionList will fetch.
+  }, [user, isDbReady, inspectionsPage, inspectionFilters, view]);
 
   useEffect(() => {
     if (user && isDbReady) {
@@ -200,10 +199,7 @@ const App = () => {
   const loadInspections = async (page: number = 1, filters: any = {}) => {
     setIsLoadingInspections(true);
     try {
-        const isMobile = window.innerWidth < 768;
-        // Desktop loads all, Mobile loads recent with smaller limit to start
-        const limit = isMobile ? 100 : 1000000;
-        const result = await fetchInspections({ ...filters, isMobile: isMobile.toString() }, page, limit);
+        const result = await fetchInspections(filters, page);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
     } catch (e) {
@@ -257,6 +253,19 @@ const App = () => {
     }
   };
 
+  const updateSingleInspection = async (id: string, notifySuccess: boolean = true) => {
+    try {
+      const updated = await fetchInspectionById(id);
+      if (updated) {
+        setInspections(prev => prev.map(item => item.id === id ? updated : item));
+        setActiveInspection(updated);
+        if (notifySuccess) alert('Thao tác thành công');
+      }
+    } catch (error) {
+      console.error("Failed to update single record:", error);
+    }
+  };
+
   const handleSelectInspection = async (id: string) => { 
     setReturnView(view);
     setIsDetailLoading(true); 
@@ -266,7 +275,7 @@ const App = () => {
       else { alert("Không tìm thấy phiếu."); }
     } catch (error) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); } 
   };
-  
+
   const handleEditInspection = async (id: string) => { 
     setIsDetailLoading(true); 
     try { 
@@ -314,13 +323,14 @@ const App = () => {
   };
 
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
-  
+
   return (
-    <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
-      <div className="hidden lg:block h-full shrink-0">
-          <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
-      </div>
-      <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
+    <InspectionProvider>
+      <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
+        <div className="hidden lg:block h-full shrink-0">
+            <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+        </div>
+        <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && (
           <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center">
             <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200">
@@ -341,17 +351,21 @@ const App = () => {
         <main className="flex-1 flex flex-col min-h-0 relative overflow-x-hidden overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0 px-2 md:px-6 safe-pb no-scrollbar" id="main-scroll-container">
             <Suspense fallback={<LoadingFallback />}>
                 {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
-                {view === 'LIST' && (
+                
+                <div className={view === 'LIST' ? "contents" : "hidden"}>
                     <InspectionList 
-                        inspections={inspections} 
+                        inspections={inspections}
+                        isLoading={isLoadingInspections}
                         onSelect={handleSelectInspection} 
-                        isLoading={isLoadingInspections} 
                         workshops={workshops} 
+                        users={users}
                         total={inspectionsTotal}
                         page={inspectionsPage}
                         onPageChange={setInspectionsPage}
                         user={user}
-                        onRefresh={() => loadInspections(inspectionsPage, inspectionFilters)}
+                        onRefresh={(filters) => {
+                            loadInspections(inspectionsPage, filters || inspectionFilters);
+                        }}
                         onSearch={(term) => {
                             setInspectionFilters((prev: any) => ({ ...prev, search: term }));
                             setInspectionsPage(1);
@@ -361,7 +375,7 @@ const App = () => {
                             setInspectionsPage(1);
                         }}
                     />
-                )}
+                </div>
                 {view === 'FORM' && (
                     activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
                     activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
@@ -387,38 +401,59 @@ const App = () => {
                     } 
                   }, 
                   onApprove: async (id: string, sig: string, extra: any) => { 
-                    const updated = { ...activeInspection, ...extra };
-                    const oldStatus = activeInspection.status;
-                    if (sig || extra.managerSignature) {
-                      updated.status = InspectionStatus.APPROVED;
-                      updated.managerSignature = sig || extra.managerSignature;
-                      updated.managerName = extra.managerName || user.name;
-                    }
-                    await saveInspectionToSheet(updated); 
-                    
-                    if (updated.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
-                      // Notify the inspector
-                      const inspector = users.find(u => u.name === updated.inspectorName);
-                      if (inspector && user) {
-                        createNotification({
-                          userId: inspector.id,
-                          type: 'SUCCESS',
-                          title: 'Phiếu đã được phê duyệt',
-                          message: `Quản lý ${user.name} đã phê duyệt phiếu ${updated.type} của bạn`,
-                          link: { view: 'DETAIL', id: updated.id }
-                        });
+                    try {
+                      const updated = { ...activeInspection, ...extra };
+                      const oldStatus = activeInspection.status;
+                      
+                      // Handle explicit status or default to APPROVED if signature is provided
+                      if (extra.status) {
+                        updated.status = extra.status;
+                      } else if (sig || extra.managerSignature) {
+                        updated.status = InspectionStatus.APPROVED;
                       }
+
+                      if (updated.status === InspectionStatus.APPROVED) {
+                        updated.managerSignature = sig || extra.managerSignature;
+                        updated.managerName = extra.managerName || user.name;
+                      }
+                      
+                      await saveInspectionToSheet(updated); 
+                      
+                      if (updated.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
+                        const inspector = users.find(u => u.name === updated.inspectorName);
+                        if (inspector) {
+                          createNotification({
+                            userId: inspector.id,
+                            type: 'SUCCESS',
+                            title: 'Phiếu đã được phê duyệt',
+                            message: `Quản lý ${user.name} đã phê duyệt phiếu ${updated.type} của bạn`,
+                            link: { view: 'DETAIL', id: updated.id }
+                          });
+                        }
+                      } else if (updated.status === InspectionStatus.REJECTED) {
+                        const inspector = users.find(u => u.name === updated.inspectorName);
+                        if (inspector) {
+                          createNotification({
+                            userId: inspector.id,
+                            type: 'NCR',
+                            title: 'Phiếu bị từ chối',
+                            message: `Quản lý ${user.name} đã từ chối phiếu ${updated.type} của bạn`,
+                            link: { view: 'DETAIL', id: updated.id }
+                          });
+                        }
+                      }
+                      
+                      await updateSingleInspection(id, true);
+                      setView(returnView);
+                    } catch (error) {
+                      alert("Lỗi xử lý: " + (error instanceof Error ? error.message : "Thất bại"));
                     }
-                    
-                    setActiveInspection(updated); loadInspections();
                   }, 
                   onPostComment: async (id: string, cmt: any) => {
-                    const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
-                    await saveInspectionToSheet(updated); 
-                    
-                    // Notify other participants
-                    if (user) {
-                      // Notify inspector if commenter is not inspector
+                    try {
+                      const updated = { ...activeInspection, comments: [...(activeInspection.comments || []), cmt] };
+                      await saveInspectionToSheet(updated); 
+                      
                       if (user.name !== updated.inspectorName) {
                         const inspector = users.find(u => u.name === updated.inspectorName);
                         if (inspector) {
@@ -431,23 +466,11 @@ const App = () => {
                           });
                         }
                       }
-                      // Notify manager if commenter is not manager
-                      if (updated.managerName && user.name !== updated.managerName) {
-                        const manager = users.find(u => u.name === updated.managerName);
-                        if (manager) {
-                          createNotification({
-                            userId: manager.id,
-                            type: 'MESSAGE',
-                            title: 'Bình luận mới',
-                            message: `${user.name} vừa bình luận trong phiếu ${updated.type}`,
-                            link: { view: 'DETAIL', id: updated.id }
-                          });
-                        }
-                      }
+                      await updateSingleInspection(id, false);
+                    } catch (error) {
+                      alert("Lỗi bình luận: " + (error instanceof Error ? error.message : "Thất bại"));
                     }
-                    
-                    setActiveInspection(updated); loadInspections();
-                  } 
+                  }
                 }) : null)}
                 {view === 'PROJECTS' && (
                     <ProjectList 
@@ -503,6 +526,7 @@ const App = () => {
             <ChatAI user={user} />
             {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         </Suspense>
+        </div>
         
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
@@ -555,7 +579,7 @@ const App = () => {
             </div>
         )}
       </div>
-    </div>
+    </InspectionProvider>
   );
 };
 

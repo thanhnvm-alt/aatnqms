@@ -11,7 +11,7 @@ interface InspectionDetailProps {
   onBack: () => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  onApprove?: (id: string, signature: string) => Promise<void>;
+  onApprove?: (id: string, signature: string, extraInfo?: any) => Promise<void>;
   workshops?: Workshop[];
 }
 
@@ -30,7 +30,31 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
   const handleApprove = async () => {
       if (!managerSig) return alert("Vui lòng ký tên.");
       setIsProcessing(true);
-      try { if (onApprove) await onApprove(inspection.id, managerSig); setShowModal(false); onBack(); } catch (e) { alert("Lỗi duyệt."); } finally { setIsProcessing(false); }
+      try { 
+          if (onApprove) await onApprove(inspection.id, managerSig, {
+              status: InspectionStatus.APPROVED,
+              managerName: user.name,
+              managerSignature: managerSig
+          }); 
+          setShowModal(false); 
+      } catch (e) { alert("Lỗi duyệt."); } finally { setIsProcessing(false); }
+  };
+
+  const handleReject = async () => {
+      const reason = window.prompt("Nhập lý do từ chối hồ sơ FQC này:");
+      if (reason === null) return;
+      if (!reason.trim()) return alert("Vui lòng nhập lý do từ chối.");
+
+      setIsProcessing(true);
+      try { 
+          if (onApprove) await onApprove(inspection.id, "", { 
+              status: InspectionStatus.REJECTED,
+              summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason 
+          }); 
+      } 
+      catch (e: any) { 
+          alert("Lỗi từ chối: " + (e.message || "Unknown Error")); 
+      } finally { setIsProcessing(false); }
   };
 
   const handleExportPDF = async () => {
@@ -79,7 +103,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                     {inspection.images.map((img, idx) => (
                         <div key={idx} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in">
-                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt=""/>
+                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                         </div>
                     ))}
                 </div>
@@ -104,7 +128,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
                                     {item.images.map((img, imgIdx) => (
                                         <div key={imgIdx} onClick={() => setLightboxState({ images: item.images!, index: imgIdx })} className="w-12 h-12 rounded-lg overflow-hidden border border-slate-100 shrink-0 cursor-zoom-in shadow-sm">
-                                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt=""/>
+                                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
                                         </div>
                                     ))}
                                 </div>
@@ -120,14 +144,14 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
             <div className="grid grid-cols-2 gap-4">
                 <div className="text-center space-y-1">
                     <div className="bg-slate-50 h-24 rounded-xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                        {inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain"/> : <span className="text-[9px] text-slate-300">N/A</span>}
+                        {inspection.signature ? <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain" referrerPolicy="no-referrer" /> : <span className="text-[9px] text-slate-300">N/A</span>}
                     </div>
                     <span className="text-[9px] font-bold uppercase text-slate-800">{inspection.inspectorName}</span>
                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">QC Inspector</p>
                 </div>
                 <div className="text-center space-y-1">
                     <div className="bg-slate-50 h-24 rounded-xl flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
-                        {inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain"/> : <span className="text-[9px] text-orange-400 font-black animate-pulse">CHỜ DUYỆT</span>}
+                        {inspection.managerSignature ? <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain" referrerPolicy="no-referrer" /> : <span className="text-[9px] text-orange-400 font-black animate-pulse">CHỜ DUYỆT</span>}
                     </div>
                     <span className="text-[9px] font-bold uppercase text-slate-800">Manager Approval</span>
                     <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">QA/QC Manager</p>
@@ -138,8 +162,9 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
       </div>
 
       {!isApproved && isManager && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-slate-200 flex justify-end z-40 shadow-lg">
-            <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black uppercase text-[10px] shadow-xl shadow-blue-200 active:scale-95 transition-all">DUYỆT BÁO CÁO FQC</button>
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-slate-200 flex justify-end items-center gap-3 z-40 shadow-lg">
+            <button onClick={handleReject} className="flex-1 max-w-[120px] bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold uppercase text-[10px] border border-red-100 active:scale-95 transition-all">Từ chối</button>
+            <button onClick={() => setShowModal(true)} className="flex-1 bg-blue-600 text-white px-8 py-3 rounded-xl font-black uppercase text-[10px] shadow-xl shadow-blue-200 active:scale-95 transition-all whitespace-nowrap">PHÊ DUYỆT FQC</button>
         </div>
       )}
 

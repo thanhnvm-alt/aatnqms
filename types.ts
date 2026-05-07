@@ -302,6 +302,8 @@ export interface Inspection {
   coord_y?: number;
   responsiblePerson?: string;
   productionComment?: string;
+  materials_json?: string;
+  items_json?: string;
 }
 
 export interface SmartGoal {

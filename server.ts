@@ -681,20 +681,31 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         endDate: req.query.endDate as string
       };
 
-      // if mobile and no startDate provided, default to last 30 days
-      if (isMobile && !filters.startDate) {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        filters.startDate = thirtyDaysAgo.toISOString().split('T')[0];
-        console.log(`[Backend] Mobile request detected. Applying 30-day filter: ${filters.startDate}`);
-      }
-
+      // if mobile and no startDate provided, we now allow everything as requested
       const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 100000;
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
       const result = await db.getInspectionsList(filters, page, limit);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspections' });
+    }
+  });
+
+  app.get("/api/inspections/dates", authenticate, async (req, res) => {
+    try {
+      const dates = await db.getInspectionsDatesList(req.query);
+      res.json(dates);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch inspections dates' });
+    }
+  });
+
+  app.get("/api/inspections/projects", authenticate, async (req, res) => {
+    try {
+      const projects = await db.getInspectionsProjectsList(req.query);
+      res.json(projects);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch inspections projects' });
     }
   });
 

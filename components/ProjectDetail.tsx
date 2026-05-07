@@ -415,15 +415,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </div>
                             <div className="flex-1 flex flex-col items-center justify-center w-full">
                                 <div className="relative w-36 h-36 min-h-[144px] min-w-[144px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1}]} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value" stroke="none">
-                                                {pieData.length > 0 ? pieData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                )) : <Cell fill="#f1f5f9" />}
-                                            </Pie>
-                                        </PieChart>
-                                    </ResponsiveContainer>
+                                    <PieChart width={144} height={144}>
+                                        <Pie data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1}]} innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value" stroke="none">
+                                            {pieData.length > 0 ? pieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            )) : <Cell fill="#f1f5f9" />}
+                                        </Pie>
+                                    </PieChart>
                                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                         <span className="text-2xl font-black text-slate-800">{stats.passRate}%</span>
                                         <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5">QC PASS</span>

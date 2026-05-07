@@ -98,13 +98,33 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       try { 
           await onApprove(inspection.id, managerSig, { 
               managerName: user.name,
-              managerSignature: managerSig 
+              managerSignature: managerSig,
+              status: InspectionStatus.APPROVED
           }); 
           setShowManagerModal(false); 
-          onBack(); 
+          // onBack() is handled by App.tsx (setView(LIST))
       } 
       catch (e: any) { 
           alert("Lỗi phê duyệt: " + (e.message || "Unknown Error")); 
+      } finally { setIsProcessing(false); }
+  };
+
+  const handleManagerReject = async () => {
+      const reason = window.prompt("Nhập lý do từ chối hồ sơ này:");
+      if (reason === null) return;
+      if (!reason.trim()) return alert("Vui lòng nhập lý do từ chối.");
+
+      if (!onApprove) return;
+      setIsProcessing(true);
+      try { 
+          await onApprove(inspection.id, "", { 
+              status: InspectionStatus.REJECTED,
+              summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason 
+          }); 
+          // onBack() is handled by App.tsx
+      } 
+      catch (e: any) { 
+          alert("Lỗi từ chối: " + (e.message || "Unknown Error")); 
       } finally { setIsProcessing(false); }
   };
 
@@ -549,13 +569,22 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
               )}
 
               {isManagerOrAdmin && !isApproved && (
-                  <button 
-                    onClick={() => setShowManagerModal(true)} 
-                    className="flex-1 h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 border border-emerald-500"
-                  >
-                      <Check className="w-4 h-4" />
-                      <span className="whitespace-nowrap">PHÊ DUYỆT</span>
-                  </button>
+                  <>
+                      <button 
+                        onClick={handleManagerReject} 
+                        className="flex-1 h-full bg-red-50 text-red-600 font-black uppercase text-[8px] tracking-tight rounded-xl border border-red-200 hover:bg-red-100 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 shadow-sm"
+                      >
+                          <X className="w-4 h-4" />
+                          <span className="whitespace-nowrap">TỪ CHỐI</span>
+                      </button>
+                      <button 
+                        onClick={() => setShowManagerModal(true)} 
+                        className="flex-1 h-full bg-emerald-600 text-white font-black uppercase text-[8px] tracking-tight rounded-xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 border border-emerald-500"
+                      >
+                          <Check className="w-4 h-4" />
+                          <span className="whitespace-nowrap">PHÊ DUYỆT</span>
+                      </button>
+                  </>
               )}
           </div>
       </div>

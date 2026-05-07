@@ -208,9 +208,20 @@ export const fetchPlansByProject = async (maCt: string, limit?: number) => {
     return apiFetch(`/api/plans/by-project?${params.toString()}`);
 };
 
-export const fetchInspections = async (filters: any = {}, page: number = 1, limit: number = 20) => {
-    const params = new URLSearchParams({ ...filters, page: page.toString(), limit: limit.toString() });
+export const fetchInspections = async (filters: any = {}, page: number = 1, limit?: number) => {
+    const params = new URLSearchParams({ ...filters, page: page.toString() });
+    if (limit) params.append('limit', limit.toString());
     return apiFetch(`/api/inspections?${params.toString()}`);
+};
+
+export const fetchInspectionsDates = async (filters: any = {}): Promise<{ date: string, count?: number }[]> => {
+    const params = new URLSearchParams({ ...filters });
+    return apiFetch(`/api/inspections/dates?${params.toString()}`);
+};
+
+export const fetchInspectionsProjects = async (filters: any = {}): Promise<{ ma_ct: string, ten_ct: string, count: number }[]> => {
+    const params = new URLSearchParams({ ...filters });
+    return apiFetch(`/api/inspections/projects?${params.toString()}`);
 };
 
 export const fetchInspectionById = async (id: string) => {

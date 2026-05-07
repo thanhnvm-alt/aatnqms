@@ -21,7 +21,7 @@ async function seedStressTest() {
             
             if (i % 500 === 0) console.log(`✅ Seeded ${i} records...`);
         } catch (e) {
-            console.error("Error seeding:", e.message);
+            console.error("Error seeding:", e instanceof Error ? e.message : String(e));
         }
     }
     console.log("🏁 Seeding completed!");

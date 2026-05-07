@@ -80,17 +80,20 @@ async function runMigration() {
                     COALESCE(score::text, '0')::double precision,
                     COALESCE(
                         CASE 
-                            WHEN created_at::text ~ '^[0-9]+$' AND created_at::bigint > 1000000000 THEN created_at::text::bigint 
-                            WHEN updated_at::text ~ '^[0-9]+$' AND updated_at::bigint > 1000000000 THEN updated_at::text::bigint
-                            WHEN date::text ~ '^[0-9]+$' AND date::bigint > 1000000000 THEN date::text::bigint
+                            WHEN created_at::text ~ '^[0-9]+$' AND created_at::bigint > 1000000000000 THEN (created_at::bigint / 1000)
+                            WHEN created_at::text ~ '^[0-9]+$' AND created_at::bigint > 1000000000 THEN created_at::bigint
+                            WHEN updated_at::text ~ '^[0-9]+$' AND updated_at::bigint > 1000000000000 THEN (updated_at::bigint / 1000)
+                            WHEN updated_at::text ~ '^[0-9]+$' AND updated_at::bigint > 1000000000 THEN updated_at::bigint
                             ELSE EXTRACT(EPOCH FROM NOW())::bigint
                         END,
                         EXTRACT(EPOCH FROM NOW())::bigint
                     ),
                     COALESCE(
                         CASE 
-                            WHEN updated_at::text ~ '^[0-9]+$' AND updated_at::bigint > 1000000000 THEN updated_at::text::bigint 
-                            WHEN created_at::text ~ '^[0-9]+$' AND created_at::bigint > 1000000000 THEN created_at::text::bigint
+                            WHEN updated_at::text ~ '^[0-9]+$' AND updated_at::bigint > 1000000000000 THEN (updated_at::bigint / 1000)
+                            WHEN updated_at::text ~ '^[0-9]+$' AND updated_at::bigint > 1000000000 THEN updated_at::bigint
+                            WHEN created_at::text ~ '^[0-9]+$' AND created_at::bigint > 1000000000000 THEN (created_at::bigint / 1000)
+                            WHEN created_at::text ~ '^[0-9]+$' AND created_at::bigint > 1000000000 THEN created_at::bigint
                             ELSE EXTRACT(EPOCH FROM NOW())::bigint
                         END,
                         EXTRACT(EPOCH FROM NOW())::bigint

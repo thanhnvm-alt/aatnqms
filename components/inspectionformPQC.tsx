@@ -987,7 +987,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
                                               <div className="flex items-center justify-center gap-2 mb-3 text-slate-400"><ShieldCheck className="w-4 h-4" /> <span className="text-[9px] font-black uppercase tracking-widest">Chữ ký điện tử QC</span></div>
                                               <div className="bg-white h-24 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 mx-auto w-full">
-                                                  <img src={getProxyImageUrl(previewData.signature)} className="h-full object-contain" alt="" />
+                                                  <img src={getProxyImageUrl(previewData.signature)} className="h-full object-contain" alt="" referrerPolicy="no-referrer" />
                                               </div>
                                           </div>
                                       )}

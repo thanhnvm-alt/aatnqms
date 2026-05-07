@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useInspectionContext } from '../src/context/InspectionContext';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
 import { getProxyImageUrl } from '../src/utils';
@@ -15,12 +16,15 @@ import {
   CalendarDays, ArrowRight, Check, FileText, Download, Trash2, Edit, Eye
 } from 'lucide-react';
 
-interface InspectionListProps {
-  inspections: Inspection[];
-  onSelect: (id: string) => void;
+import { fetchInspectionsDates, fetchInspectionsProjects, fetchInspections } from '../services/apiService';
+
+interface InspectionListProps {                
+  inspections?: Inspection[];
   isLoading?: boolean;
+  onSelect: (id: string) => void;
   workshops?: Workshop[];
-  onRefresh?: () => void;
+  users?: User[];
+  onRefresh?: (filters?: any) => void;
   onSearch?: (term: string) => void;
   onFilterChange?: (filters: any) => void;
   total?: number;
@@ -147,15 +151,22 @@ const SearchableSelect: React.FC<SearchableSelectProps & { optionLabels?: Record
 };
 
 export const InspectionList: React.FC<InspectionListProps> = ({ 
-  inspections, onSelect, isLoading, workshops = [], onRefresh, onSearch, onFilterChange, total = 0, page = 1, onPageChange, user
+  inspections: propsInspections, isLoading: propsIsLoading, onSelect, workshops = [], users = [], onRefresh, onSearch, onFilterChange, total = 0, page = 1, onPageChange, user
 }) => {
+  const { inspections: contextInspections, isInspectionsLoading: contextIsLoading, isDatesLoading, isProjectsLoading, loadInspections, loadDates, loadProjects, dates, projects } = useInspectionContext();
+  const inspections = propsInspections || contextInspections || [];
+  const isInspectionsLoading = propsIsLoading !== undefined ? propsIsLoading : contextIsLoading;
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
-  const [selectedDateDesktop, setSelectedDateDesktop] = useState<string>('ALL');
-  const [selectedProjectDesktop, setSelectedProjectDesktop] = useState<string>('ALL');
-  const [selectedItemDesktop, setSelectedItemDesktop] = useState<Inspection | null>(null);
+  const [selectedMonthDesktop, setSelectedMonthDesktop] = useState<{year: number, month: number} | null>(null);
+  const [selectedDateDesktop, setSelectedDateDesktop] = useState<string | null>(null);
+  const [selectedProjectDesktop, setSelectedProjectDesktop] = useState<string | null>(null);
+  const [selectedItemDesktop, setSelectedItemDesktop] = useState<any | null>(null);
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  
+  const [mobileViewStep, setMobileViewStep] = useState<1 | 2 | 3>(1);
 
   const [colSizes, setColSizes] = useState([260, 260, 280, 500]);
 
@@ -201,10 +212,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [lazyLoadedItems, setLazyLoadedItems] = useState<Inspection[]>([]);
+  const [isItemsLoading, setIsItemsLoading] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  
-  // Mobile Pagination State
-  const [mobileMonthsToShow, setMobileMonthsToShow] = useState(1);
   
   const handleSelectItemDesktop = async (item: Inspection) => {
       setSelectedItemDesktop(item); // Optimistic UI
@@ -237,29 +247,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     setSelectedIds(next);
   };
 
-  const toggleSelectDateGroup = (e: React.MouseEvent, dateKey: string) => {
-    e.stopPropagation();
-    const dateGroup = groupedData[dateKey];
-    let allItemsInGroup: string[] = [];
-    Object.values(dateGroup).forEach(project => {
-        allItemsInGroup = allItemsInGroup.concat(project.items.map(item => item.id));
-    });
-    
-    // Check if all are currently selected
-    const areAllSelected = allItemsInGroup.every(id => selectedIds.has(id));
-    
-    setSelectedIds(prev => {
-        const next = new Set(prev);
-        if (areAllSelected) {
-            // Deselect all in group
-            allItemsInGroup.forEach(id => next.delete(id));
-        } else {
-            // Select all in group
-            allItemsInGroup.forEach(id => next.add(id));
-        }
-        return next;
-    });
-  };
+
 
   const handleBulkDelete = async () => {
     if (!confirm(`Bạn có chắc chắn muốn xóa ${selectedIds.size} phiếu đã chọn?`)) return;
@@ -284,26 +272,51 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   
   useEffect(() => {
     if (onFilterChange) {
+      let finalStartDate = startDate;
+      let finalEndDate = endDate;
+
+      if (selectedMonthDesktop) {
+        const { year, month } = selectedMonthDesktop;
+        finalStartDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const lastDay = new Date(year, month, 0).getDate();
+        finalEndDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+
+      let finalProject = filterProject.join(',');
+      if (selectedProjectDesktop === 'ALL') {
+         finalProject = ''; // backend will treat empty as ALL
+      } else if (selectedProjectDesktop) {
+         finalProject = selectedProjectDesktop;
+      } else {
+         // If we strictly want NO loading until project is selected (except for months):
+         // we might want to pass a flag or just keep it as is if we want to load all.
+         // Let's assume for now that if no project is selected, we don't fetch inspection items.
+         finalProject = '__NONE__'; 
+      }
+
       onFilterChange({
         status: filterStatus.join(','),
         search: searchTerm,
         qc: filterQC.join(','),
         workshop: filterWorkshop.join(','),
-        project: filterProject.join(','),
+        project: finalProject,
         type: filterType.join(','),
-        startDate,
-        endDate
+        startDate: finalStartDate,
+        endDate: finalEndDate
       });
     }
-  }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, startDate, endDate]);
+  }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, startDate, endDate, selectedMonthDesktop, selectedProjectDesktop]);
 
   const filterOptions = useMemo(() => ({
-      inspectors: Array.from(new Set(inspections.map(i => i.inspectorName).filter((s): s is string => !!s))).sort(),
-      workshops: Array.from(new Set(inspections.map(i => i.workshop).filter((s): s is string => !!s))).sort(),
-      projects: Array.from(new Set(inspections.map(i => i.ma_ct).filter((s): s is string => !!s))).sort(),
-      types: Array.from(new Set(inspections.map(i => String(i.type)).filter((s): s is string => !!s && s !== 'undefined'))).sort(),
+      inspectors: user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []),
+      workshops: workshops.map(w => w.name),
+      projects: Array.from(new Set([
+          ...projects.map(p => p.ma_ct),
+          ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
+      ])).sort(),
+      types: Object.keys(MODULE_CONFIG),
       statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
-  }), [inspections]);
+  }), [user, users, workshops, projects, inspections]);
 
   const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterProject.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
 
@@ -352,82 +365,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     }
   };
 
-  const groupedData = useMemo(() => {
-    const groups: Record<string, Record<string, { 
-        projectName: string, 
-        items: Inspection[]
-    }>> = {};
 
-    const filtered = (inspections || []).filter(item => {
-        // When using server-side search, the 'inspections' prop is already filtered.
-        // We keep local filtering for other secondary filters if not passed to server yet,
-        // but for 'search', the server handles it now.
-        if (filterQC.length > 0 && !filterQC.includes(item.inspectorName || '')) return false;
-        if (filterWorkshop.length > 0 && !filterWorkshop.includes(item.workshop || '')) return false;
-        if (filterProject.length > 0 && !filterProject.includes(item.ma_ct || '')) return false;
-        if (filterStatus.length > 0 && !filterStatus.includes(item.status)) return false;
-        // Improved type filtering
-        if (filterType.length > 0) {
-            const itemType = String(item.type);
-            // Special handling for SQC modules which might have overlapping labels
-            if (!filterType.includes(itemType)) {
-               return false;
-            }
-        }
-        
-        // Robust date filtering
-        if (startDate || endDate) {
-            let itemDateStr = String(item.date);
-            let d: Date | null = null;
-
-            if (/^\d{2}\/\d{2}\/\d{4}/.test(itemDateStr)) {
-                const [day, month, year] = itemDateStr.substring(0, 10).split('/');
-                d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
-            } else if (/^\d{10}$/.test(itemDateStr)) {
-                d = new Date(parseInt(itemDateStr, 10) * 1000);
-            } else {
-                d = new Date(itemDateStr);
-            }
-
-            if (d && !isNaN(d.getTime())) {
-                const yyyy = d.getFullYear();
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                const normalizedItemDate = `${yyyy}-${mm}-${dd}`;
-
-                if (startDate && normalizedItemDate < startDate) return false;
-                if (endDate && normalizedItemDate > endDate) return false;
-            } else {
-                // If we can't parse the date, and a range is set, we skip this item
-                return false;
-            }
-        }
-
-        return true;
-    });
-
-    filtered.forEach(item => {
-        const dateKey = formatDisplayDate(item.date) || 'KHÔNG RÕ NGÀY';
-        // Preference: ma_ct/ten_ct directly since materials_json is not loaded in list view
-        const pKey = item.ma_ct || 'DÙNG CHUNG';
-        
-        if (!groups[dateKey]) {
-            groups[dateKey] = {};
-        }
-
-        if (!groups[dateKey][pKey]) {
-            const projectName = item.ten_ct || (pKey === 'DÙNG CHUNG' ? 'DANH MỤC DÙNG CHUNG' : 'DỰ ÁN KHÁC');
-            
-            groups[dateKey][pKey] = { 
-                projectName,
-                items: [] 
-            };
-        }
-        groups[dateKey][pKey].items.push(item);
-    });
-
-    return groups;
-  }, [inspections, searchTerm, filterQC, filterWorkshop, filterProject, filterStatus, filterType, startDate, endDate]);
 
   const toggleDate = (dateKey: string) => {
     setExpandedDates(prev => {
@@ -446,83 +384,100 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     });
   };
 
+
+
   const sortedDatesList = useMemo(() => {
-    return Object.keys(groupedData).sort((a, b) => {
-        if (a === 'KHÔNG RÕ NGÀY') return 1;
-        if (b === 'KHÔNG RÕ NGÀY') return -1;
+    // Collect all dates from the hierarchy
+    const dateCounts: Record<string, number> = {};
+    dates.forEach(r => {
+        const dStr = formatDisplayDate(r.date) || 'KHÔNG RÕ NGÀY';
+        dateCounts[dStr] = (dateCounts[dStr] || 0) + (r.count ? Number(r.count) : 1);
+    });
+
+    return Object.keys(dateCounts).sort((a, b) => {
+        if (a === 'KHÔNG RÕ NGÀY' || a === '---') return 1;
+        if (b === 'KHÔNG RÕ NGÀY' || b === '---') return -1;
         const [da, ma, ya] = a.split('/');
         const [db, mb, yb] = b.split('/');
-        const dateA = new Date(`${ya}-${ma}-${da}`);
-        const dateB = new Date(`${yb}-${mb}-${db}`);
-        return dateB.getTime() - dateA.getTime();
+        return new Date(`${yb}-${mb}-${db}`).getTime() - new Date(`${ya}-${ma}-${da}`).getTime();
     });
-  }, [groupedData]);
+  }, [dates]);
 
-  const mobileAvailableMonths = useMemo(() => {
-     const months = new Set<string>();
-     sortedDatesList.forEach(dk => {
-         if (dk === 'KHÔNG RÕ NGÀY') months.add(dk);
-         else {
-             const parts = dk.split('/');
-             if (parts.length === 3) months.add(`${parts[1]}/${parts[2]}`);
-         }
-     });
-     return Array.from(months);
-  }, [sortedDatesList]);
-
-  const mobileSortedDatesList = useMemo(() => {
-     const allowedMonths = new Set(mobileAvailableMonths.slice(0, mobileMonthsToShow));
-     return sortedDatesList.filter(dk => {
-         if (dk === 'KHÔNG RÕ NGÀY') return allowedMonths.has(dk);
-         const parts = dk.split('/');
-         if (parts.length === 3) {
-             return allowedMonths.has(`${parts[1]}/${parts[2]}`);
-         }
-         return false;
-     });
-  }, [sortedDatesList, mobileAvailableMonths, mobileMonthsToShow]);
-
-  // Handle desktop side effects when data changes
+  // Expanded states management
   useEffect(() => {
-      // Auto-select date if current is empty or not in list, and wait, if 'ALL' is valid we keep it.
-      if (selectedDateDesktop !== 'ALL' && !sortedDatesList.includes(selectedDateDesktop)) {
-          setSelectedDateDesktop('ALL');
-          setSelectedProjectDesktop('ALL');
-          setSelectedItemDesktop(null);
-      }
-  }, [sortedDatesList, selectedDateDesktop]);
+    // When inspections load, expand current month and year automatically
+    const now = new Date();
+    const curYear = now.getFullYear().toString();
+    const curMonth = `${curYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    setExpandedYears(prev => new Set([...Array.from(prev), curYear]));
+    setExpandedMonths(prev => new Set([...Array.from(prev), curMonth]));
+  }, [inspections.length]);
 
-  const desktopProjects = useMemo(() => {
-      if (selectedDateDesktop === 'ALL') {
-          const allProjects = new Set<string>();
-          Object.values(groupedData).forEach(dateGroup => {
-              Object.keys(dateGroup).forEach(pKey => allProjects.add(pKey));
-          });
-          return Array.from(allProjects).sort();
-      }
-      return Object.keys(groupedData[selectedDateDesktop] || {}).sort();
-  }, [groupedData, selectedDateDesktop]);
+  // Disable auto-expand selected month to allow manual collapse
+
+  // Auto-expand current year and month on first load
+  useEffect(() => {
+    if (sortedDatesList.length > 0 && !selectedMonthDesktop && !selectedDateDesktop) {
+        const dateKey = sortedDatesList.find(d => d !== 'KHÔNG RÕ NGÀY' && d !== '---');
+        if (dateKey) {
+            const [, mStr, yStr] = dateKey.split('/');
+            const year = parseInt(yStr, 10);
+            const month = parseInt(mStr, 10);
+            
+            setExpandedYears(prev => new Set([...Array.from(prev), yStr]));
+        }
+    }
+  }, [sortedDatesList, selectedMonthDesktop, selectedDateDesktop]);
+
+  
+  // Local Filter argument builder
+  const getFilterArgs = () => {
+     const args: any = {};
+     if (filterQC.length > 0) args.qc = filterQC.join(',');
+     if (filterWorkshop.length > 0) args.workshop = filterWorkshop.join(',');
+     if (filterStatus.length > 0) args.status = filterStatus.join(',');
+     if (filterType.length > 0) args.type = filterType.join(',');
+     if (startDate) args.startDate = startDate;
+     if (endDate) args.endDate = endDate;
+     if (searchTerm) args.search = searchTerm;
+     return args;
+  };
+
+  // 1. Fetch dates on load / filter change
+  useEffect(() => {
+     loadDates(getFilterArgs());
+  }, [filterQC, filterWorkshop, filterStatus, filterType, startDate, endDate, searchTerm]);
 
   const nestedDatesTree = useMemo(() => {
+    // Process the API response (from context: dates)
     const tree: { year: string, count: number, months: { month: string, count: number, dates: { dateKey: string, count: number }[] }[] }[] = [];
-    
-    const dateCounts: Record<string, number> = {};
-    sortedDatesList.forEach(d => {
-        dateCounts[d] = Object.values(groupedData[d] || {}).reduce((acc, p) => acc + p.items.length, 0);
-    });
-
     const yearMap: Record<string, any> = {};
     const noDateDates: { dateKey: string, count: number }[] = [];
+    const dateCounts: Record<string, number> = {};
+    
+    dates.forEach(r => {
+        const dStr = formatDisplayDate(r.date) || 'KHÔNG RÕ NGÀY';
+        // Handle both grouped dates (from optimized api) and individual records
+        dateCounts[dStr] = (dateCounts[dStr] || 0) + (r.count ? Number(r.count) : 1);
+    });
 
-    sortedDatesList.forEach(d => {
-        if (d === 'KHÔNG RÕ NGÀY') {
+    const uniqueDates = Object.keys(dateCounts).sort((a, b) => {
+        if (a === 'KHÔNG RÕ NGÀY' || a === '---') return 1;
+        if (b === 'KHÔNG RÕ NGÀY' || b === '---') return -1;
+        const [da, ma, ya] = a.split('/');
+        const [db, mb, yb] = b.split('/');
+        return new Date(`${yb}-${mb}-${db}`).getTime() - new Date(`${ya}-${ma}-${da}`).getTime();
+    });
+
+    uniqueDates.forEach(d => {
+        if (d === 'KHÔNG RÕ NGÀY' || d === '---') {
             noDateDates.push({ dateKey: d, count: dateCounts[d] });
             return;
         }
         const [day, month, year] = d.split('/');
         if (!yearMap[year]) yearMap[year] = { count: 0, monthMap: {} };
         yearMap[year].count += dateCounts[d];
-        
         if (!yearMap[year].monthMap[month]) yearMap[year].monthMap[month] = { count: 0, dates: [] };
         yearMap[year].monthMap[month].count += dateCounts[d];
         yearMap[year].monthMap[month].dates.push({ dateKey: d, count: dateCounts[d] });
@@ -540,24 +495,83 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     });
 
     return { tree, noDateDates };
-  }, [sortedDatesList, groupedData]);
+  }, [dates]);
 
-  const desktopItems = useMemo(() => {
-      let items: Inspection[] = [];
-      const datesToProcess = selectedDateDesktop === 'ALL' ? sortedDatesList : [selectedDateDesktop];
+  // 2. Fetch projects when date/month selected
+  useEffect(() => {
+    if (!selectedDateDesktop && !selectedMonthDesktop && !startDate && !endDate) return;
+
+    loadProjects(getFilterArgs(), selectedDateDesktop, selectedMonthDesktop);
+  }, [selectedDateDesktop, selectedMonthDesktop, filterQC, filterWorkshop, filterStatus, filterType, startDate, endDate, searchTerm]);
+
+  // 3. Trigger Item load when Project is selected (Desktop)
+  useEffect(() => {
+      // Clear selected item when project changes to avoid stale detail view
+      setSelectedItemDesktop(null);
+
+      if (!selectedProjectDesktop || selectedProjectDesktop === 'ALL') {
+          setLazyLoadedItems([]);
+          return;
+      }
+
+      setIsItemsLoading(true);
+      let isActive = true;
+      const args = getFilterArgs();
       
-      datesToProcess.forEach(d => {
-          const dGroup = groupedData[d];
-          if (!dGroup) return;
-          const projectsToProcess = selectedProjectDesktop === 'ALL' ? Object.keys(dGroup) : [selectedProjectDesktop];
-          projectsToProcess.forEach(p => {
-              if (dGroup[p]) {
-                  items = items.concat(dGroup[p].items);
-              }
-          });
+      // Pass project filter correctly
+      args.project = selectedProjectDesktop;
+      
+      if (selectedDateDesktop && selectedDateDesktop !== 'ALL') {
+             const [d, m, y] = selectedDateDesktop.split('/');
+             const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+             args.unixStart = Math.floor(dateObj.getTime() / 1000);
+             args.unixEnd = args.unixStart + 86399;
+      } else if (selectedMonthDesktop) {
+             const { year, month } = selectedMonthDesktop;
+             const mapDays = new Date(year, month, 0).getDate();
+             args.unixStart = Math.floor(new Date(year, month - 1, 1).getTime() / 1000);
+             args.unixEnd = Math.floor(new Date(year, month - 1, mapDays, 23, 59, 59, 999).getTime() / 1000);
+      }
+      
+      fetchInspections(args).then(res => {
+          if (isActive) {
+              setLazyLoadedItems(res.items || []);
+              setIsItemsLoading(false);
+          }
+      }).catch(() => {
+          if (isActive) setIsItemsLoading(false);
       });
-      return items;
-  }, [groupedData, selectedDateDesktop, selectedProjectDesktop, sortedDatesList]);
+
+      return () => { isActive = false; };
+  }, [selectedProjectDesktop, selectedDateDesktop, selectedMonthDesktop, filterQC, filterWorkshop, filterStatus, filterType, startDate, endDate, searchTerm]);
+
+  const { desktopProjectsList, desktopItems } = useMemo(() => {
+      let itemsForProject = lazyLoadedItems;
+      
+      if (selectedProjectDesktop && selectedProjectDesktop !== 'ALL') {
+          itemsForProject = itemsForProject.filter(i => (i.ma_ct || 'DÙNG CHUNG') === selectedProjectDesktop);
+      }
+      
+      // Apply Date/Month filtering on top of lazyLoadedItems
+      if (selectedDateDesktop && selectedDateDesktop !== 'ALL') {
+          itemsForProject = itemsForProject.filter(i => (formatDisplayDate(i.date) || 'KHÔNG RÕ NGÀY') === selectedDateDesktop);
+      } else if (selectedMonthDesktop) {
+          const { month, year } = selectedMonthDesktop;
+          itemsForProject = itemsForProject.filter(i => {
+              const dk = formatDisplayDate(i.date) || 'KHÔNG RÕ NGÀY';
+              if (dk === 'KHÔNG RÕ NGÀY' || dk === '---') return false;
+              const [, m, y] = dk.split('/');
+              return parseInt(m, 10) === month && parseInt(y, 10) === year;
+          });
+      }
+      
+      return { desktopProjectsList: projects, desktopItems: itemsForProject };
+  }, [selectedDateDesktop, selectedMonthDesktop, selectedProjectDesktop, projects, lazyLoadedItems]);
+
+  const totalInspectionsCount = useMemo(() => {
+    const sum = dates && dates.length > 0 ? dates.reduce((acc, d) => acc + (Number(d.count) || 0), 0) : 0;
+    return sum || total;
+  }, [dates, total]);
 
   return (
     <div className="h-full flex flex-col bg-[#f8fafc] no-scroll-x" style={{ fontFamily: 'Inter, sans-serif' }}>
@@ -686,294 +700,230 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       </div>
 
       {/* CONTENT AREA */}
-      <div className="flex-1 overflow-hidden flex flex-col md:flex-row pb-[80px] lg:pb-0">
+      <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
         
         {/* MOBILE VIEW */}
-        <div className="md:hidden flex-1 overflow-y-auto p-3 no-scrollbar">
-            <div className="space-y-2">
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                        <p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang tải dữ liệu...</p>
-                    </div>
-                ) : Object.keys(groupedData).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-                        <FolderOpen className="w-16 h-16 opacity-10 mb-2" />
-                        <p className="font-black uppercase tracking-widest text-[10px]">Không tìm thấy dữ liệu</p>
-                    </div>
-                ) : (
-                    <>
-                    {mobileSortedDatesList.map(dateKey => {
-                    const dateGroup = groupedData[dateKey];
-                    const isDateExpanded = expandedDates.has(dateKey) || searchTerm.length > 0;
-                    return (
-                        <div key={dateKey} className="space-y-3 mb-3">
-                            <div 
-                                onClick={() => toggleDate(dateKey)}
-                                className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors rounded-xl"
-                            >
-                                <div className="flex items-center gap-2.5">
-                                    {user.role === 'ADMIN' && (
-                                        <div 
-                                            onClick={(e) => toggleSelectDateGroup(e, dateKey)}
-                                            className="cursor-pointer mr-1 flex items-center"
-                                        >
-                                            {(() => {
-                                                const totalItems = Object.values(dateGroup).reduce((acc, project) => acc + project.items.length, 0);
-                                                const selectedItemsInGroup = Object.values(dateGroup).reduce((acc, project) => acc + project.items.filter(item => selectedIds.has(item.id)).length, 0);
-                                                return (
-                                                    <input 
-                                                        type="checkbox"
-                                                        readOnly
-                                                        checked={selectedItemsInGroup > 0}
-                                                        ref={(input) => {
-                                                            if (input) {
-                                                                input.indeterminate = selectedItemsInGroup > 0 && selectedItemsInGroup < totalItems;
-                                                            }
-                                                        }}
-                                                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer pointer-events-none"
-                                                    />
-                                                );
-                                            })()}
-                                        </div>
-                                    )}
-                                    <CalendarDays className="w-5 h-5 text-blue-500" />
-                                    <h2 className="font-bold text-slate-800 text-[15px] tracking-tight">{dateKey}</h2>
-                                    <span className="ml-2 bg-blue-100/80 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                                        {Object.values(dateGroup).reduce((acc, project) => acc + project.items.length, 0)} phiếu
-                                    </span>
-                                </div>
-                                <ChevronDown className={`w-4 h-4 transition-transform ${isDateExpanded ? 'rotate-180 text-blue-600' : 'text-slate-300'}`} />
+        <div className="md:hidden flex-1 flex flex-col bg-slate-50 overflow-hidden h-full">
+            <div className="px-3 py-3 border-b border-slate-200 bg-white shadow-sm flex items-center shrink-0 z-10">
+                <div className="flex bg-slate-200/60 rounded-lg p-1 w-full relative transition-all gap-1">
+                    <button onClick={() => setMobileViewStep(1)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 1 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Ngày Tháng</button>
+                    {(selectedDateDesktop || selectedMonthDesktop) && (
+                        <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Dự Án {desktopProjectsList.length > 0 && `(${desktopProjectsList.length})`}</button>
+                    )}
+                    {(selectedProjectDesktop && selectedProjectDesktop !== 'ALL') && (
+                        <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Hạng Mục {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar relative block h-full w-full">
+                {mobileViewStep === 1 && (
+                    <div className="p-3 space-y-2 animate-in fade-in slide-in-from-left-4 duration-300">
+                        {isDatesLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20">
+                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                             </div>
-                            
-                            {isDateExpanded && (
-                                <div className="space-y-2 mt-2">
-                                    {Object.keys(dateGroup).map(pKey => {
-                                        const project = dateGroup[pKey];
-                                        const expKey = `${dateKey}_${pKey}`;
-                                        const isExpanded = searchTerm.length > 0 ? true : expandedProjects.has(expKey);
-                                        
-                                        return (
-                                        <div key={expKey} className="space-y-1">
-                                            {/* PROJECT HEADER */}
-                                            <div 
-                                                onClick={() => toggleProject(dateKey, pKey)}
-                                                className={`flex items-center justify-between p-3 rounded-2xl cursor-pointer transition-all ${isExpanded ? 'bg-blue-50 text-blue-900 border-blue-100 shadow-sm' : 'bg-white border border-slate-100 shadow-sm hover:border-blue-200'}`}
+                        ) : (
+                            <>
+                                {nestedDatesTree.tree.map(({ year, count, months }) => {
+                                    const isYearExpanded = expandedYears.has(year);
+                                    return (
+                                        <div key={year} className="mb-2 space-y-1">
+                                            <button 
+                                                onClick={() => setExpandedYears(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(year)) next.delete(year); else next.add(year);
+                                                    return next;
+                                                })}
+                                                className="w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold text-slate-800 bg-white border border-slate-200 shadow-sm transition-colors"
                                             >
-                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                    <div className={`p-2 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
-                                                        <Building2 className="w-4 h-4" />
-                                                    </div>
-                                                        <div className="flex flex-col">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <h3 className="font-bold text-[13px] tracking-tight text-slate-800">{pKey}</h3>
-                                                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${isExpanded ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{project.items.length} phiếu</span>
-                                                        </div>
-                                                        <p className={`text-[11px] font-medium tracking-tight ${isExpanded ? 'text-blue-500' : 'text-slate-400'}`}>{project.projectName}</p>
-                                                    </div>
+                                                <span>Năm {year}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[11px] font-bold bg-slate-100 px-2 py-0.5 rounded-full text-slate-600">{count}</span>
+                                                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
                                                 </div>
-                                                <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180 text-blue-600' : 'text-slate-300'}`} />
-                                            </div>
-
-                                            {/* PROJECT ITEMS (TABLE VIEW & MOBILE CARDS) */}
-                                            {isExpanded && (
-                                                <div className="pl-2 pr-1 py-3 overflow-x-auto">
-                                                    <div className="hidden md:block min-w-[600px] border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
-                                                        <table className="w-full text-left border-collapse">
-                                                            <thead>
-                                                                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 tracking-tight">
-                                                                    {user.role === 'ADMIN' && (
-                                                                        <th className="p-3 w-10 text-center border-r border-slate-100">
-                                                                            <CheckSquare className="w-4 h-4 mx-auto text-slate-300"/>
-                                                                        </th>
-                                                                    )}
-                                                                    <th className="p-4 w-24 border-r border-slate-100">LOẠI</th>
-                                                                    <th className="p-4 w-36 border-r border-slate-100">MÃ ĐỊNH DANH</th>
-                                                                    <th className="p-4 border-r border-slate-100">HẠNG MỤC</th>
-                                                                    <th className="p-4 w-36 border-r border-slate-100">QC KIỂM TRA</th>
-                                                                    <th className="p-4 w-32 border-r border-slate-100">XƯỞNG/CĐ</th>
-                                                                    <th className="p-4 w-32">TRẠNG THÁI</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {project.items.map((item, index) => {
-                                                                    const cfg = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
-                                                                    
-                                                                    return (
-                                                                        <tr 
-                                                                            key={item.id} 
-                                                                            className={`group hover:bg-blue-50/50 transition-colors cursor-pointer ${index < project.items.length - 1 ? 'border-b border-slate-100' : ''}`}
-                                                                            onClick={() => onSelect(item.id)}
-                                                                        >
-                                                                            {user.role === 'ADMIN' && (
-                                                                                <td className="p-3 text-center border-r border-slate-100" onClick={(e) => e.stopPropagation()}>
-                                                                                    <input 
-                                                                                        type="checkbox"
-                                                                                        checked={selectedIds.has(item.id)}
-                                                                                        onChange={() => toggleSelect(item.id)}
-                                                                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                                                    />
-                                                                                </td>
-                                                                            )}
-                                                                            <td className="p-4 border-r border-slate-100">
-                                                                                <div className="flex flex-col gap-1 inline-flex">
-                                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${cfg.bg} ${cfg.color} inline-block uppercase text-center border shadow-sm`}>{cfg.label}</span>
-                                                                                    <span className="text-[9px] font-mono font-medium text-slate-400">
-                                                                                        {
-                                                                                            (item.type === 'PQC') ? (item.inspectionStage || `---`) :
-                                                                                            (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.ten_hang_muc || '---') :
-                                                                                            `#${item.id.split('-').pop()}`
-                                                                                        }
-                                                                                    </span>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="p-4 border-r border-slate-100 text-[13px] font-medium text-slate-700">
-                                                                                {
-                                                                                    (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
-                                                                                    (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number ? `PO: ${item.po_number}` : (item.ma_ct || item.ma_nha_may || '---')) :
-                                                                                    (item.ma_nha_may || item.headcode || '---')
-                                                                                }
-                                                                            </td>
-                                                                            <td className="p-4 border-r border-slate-100">
-                                                                                <p className="text-[14px] font-medium text-slate-800 tracking-tight group-hover:text-blue-700 transition-colors">
-                                                                                    {item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}
-                                                                                </p>
-                                                                            </td>
-                                                                            <td className="p-4 border-r border-slate-100">
-                                                                                <div className="flex items-center gap-2 whitespace-nowrap">
-                                                                                    <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                                                                                        <UserIcon className="w-3.5 h-3.5 text-slate-500" />
-                                                                                    </div>
-                                                                                    <span className="text-[13px] font-medium text-slate-700 truncate">{item.inspectorName || '---'}</span>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="p-4 border-r border-slate-100 text-[13px] font-medium text-slate-600">
-                                                                                {item.workshop || '---'}
-                                                                            </td>
-                                                                            <td className="p-4">
-                                                                                <span className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase border tracking-tight block text-center ${
-                                                                                    item.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-200' :
-                                                                                    item.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-700 border-red-200' :
-                                                                                    'bg-slate-50 text-slate-500 border-slate-200'
-                                                                                }`}>
-                                                                                    {item.status}
-                                                                                </span>
-                                                                            </td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-
-                                                    {/* Mobile Card View */}
-                                                    <div className="md:hidden space-y-3">
-                                                        {project.items.map((item) => {
-                                                            const cfg = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
+                                            </button>
+                                            
+                                            {isYearExpanded && months.map(({ month, count, dates }) => {
+                                                const mKey = `${year}-${month}`;
+                                                const isMonthSelected = selectedMonthDesktop?.year === parseInt(year, 10) && selectedMonthDesktop?.month === parseInt(month, 10) && !selectedDateDesktop;
+                                                const isMonthExpanded = expandedMonths.has(mKey);
+                                                return (
+                                                    <div key={mKey} className="pl-2">
+                                                        <button 
+                                                            onClick={() => {
+                                                                setExpandedMonths(prev => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(mKey)) next.delete(mKey); else next.add(mKey);
+                                                                    return next;
+                                                                });
+                                                                setSelectedDateDesktop('');
+                                                                setSelectedMonthDesktop({ year: parseInt(year, 10), month: parseInt(month, 10) });
+                                                                setSelectedProjectDesktop('ALL');
+                                                                if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
+                                                            }}
+                                                            className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 rounded-xl text-[13px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'text-slate-700 bg-white border border-slate-200 shadow-sm'}`}
+                                                        >
+                                                            <span>Tháng {month}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{count}</span>
+                                                                <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                            </div>
+                                                        </button>
+                                                        
+                                                        {isMonthExpanded && dates.map(({ dateKey, count }) => {
+                                                            const isDateSelected = selectedDateDesktop === dateKey;
                                                             return (
-                                                                <div 
-                                                                    key={item.id}
-                                                                    onClick={() => onSelect(item.id)}
-                                                                    className="bg-white border hover:border-blue-400 border-slate-200 rounded-2xl p-3 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative"
+                                                                <button 
+                                                                    key={dateKey}
+                                                                    onClick={() => {
+                                                                        setSelectedDateDesktop(dateKey);
+                                                                        setSelectedMonthDesktop({ year: parseInt(year, 10), month: parseInt(month, 10) });
+                                                                        setSelectedProjectDesktop('ALL');
+                                                                        if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
+                                                                    }}
+                                                                    className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 ml-4 rounded-xl text-[12px] font-medium transition-colors ${isDateSelected ? 'bg-blue-500 text-white font-bold shadow-md' : 'text-slate-600 bg-white border border-slate-200 shadow-sm'}`}
+                                                                    style={{ width: 'calc(100% - 1rem)' }}
                                                                 >
-                                                                    <div className="flex justify-between items-start gap-4 mb-2">
-                                                                        <div className="flex flex-col gap-1.5 flex-1">
-                                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color} uppercase border shadow-sm`}>{cfg.label}</span>
-                                                                                <span className="text-[11px] font-mono font-semibold text-slate-500 bg-slate-100 px-2 rounded-md">
-                                                                                    {
-                                                                                        (item.type === 'PQC') ? (item.inspectionStage || `---`) :
-                                                                                        (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
-                                                                                        `#${item.id.split('-').pop()}`
-                                                                                    }
-                                                                                </span>
-                                                                            </div>
-                                                                            <h4 className="text-[15px] font-bold text-slate-800 leading-snug group-hover:text-blue-700 transition-colors line-clamp-2">
-                                                                                {
-                                                                                    (item.type === 'IQC' || item.type === 'SQC_VT') 
-                                                                                        ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                                                        : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                                                }
-                                                                            </h4>
-                                                                        </div>
-                                                                        <div className="flex flex-col items-end gap-2 shrink-0">
-                                                                            <span className={`px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider ${
-                                                                                item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
-                                                                                item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
-                                                                                'bg-slate-100 text-slate-600'
-                                                                            }`}>
-                                                                                {item.status}
-                                                                            </span>
-                                                                            {user.role === 'ADMIN' && (
-                                                                                 <div className="mt-1 p-2 -mr-2" onClick={(e) => e.stopPropagation()}>
-                                                                                     <input 
-                                                                                         type="checkbox"
-                                                                                         checked={selectedIds.has(item.id)}
-                                                                                         onChange={() => toggleSelect(item.id)}
-                                                                                         className="w-5 h-5 rounded-md border-slate-300 text-blue-600 cursor-pointer"
-                                                                                     />
-                                                                                 </div>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                    
-                                                                    <div className="space-y-1 mb-4 hidden">
-                                                                        {/* Kept empty to match previous structure slightly, but we merge title to top */}
-                                                                    </div>
-
-                                                                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 bg-slate-50/50 -mx-3 -mb-3 px-3 pb-3">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center border border-blue-200">
-                                                                                <UserIcon className="w-3 h-3 text-blue-600" />
-                                                                            </div>
-                                                                            <span className="text-[13px] font-semibold text-slate-700">{item.inspectorName || '---'}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2 text-right">
-                                                                            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                                                                                 {
-                                                                                     (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
-                                                                                     (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number ? `PO: ${item.po_number}` : (item.ma_ct || item.ma_nha_may || '---')) :
-                                                                                     (item.ma_nha_may || item.headcode || '---')
-                                                                                 }
-                                                                             </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
+                                                                    <span>{dateKey.substring(0, 5)}</span>
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                                                </button>
                                                             );
                                                         })}
                                                     </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                                {totalInspectionsCount > 0 && (
+                                    <div className="flex items-center justify-center px-2 py-2 border-t border-slate-200 mt-2">
+                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Tổng {totalInspectionsCount} phiếu</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+                {mobileViewStep === 2 && (
+                    <div className="p-3 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+                        {isProjectsLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20">
+                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            </div>
+                        ) : (!selectedDateDesktop && !selectedMonthDesktop) ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                                <CalendarDays className="w-12 h-12 mb-4 opacity-20" />
+                                <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Ngày / Tháng</strong> ở bước 1</p>
+                                <button onClick={() => setMobileViewStep(1)} className="mt-4 px-4 py-2 bg-blue-100 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Ngày</button>
+                            </div>
+                        ) : desktopProjectsList.length === 0 ? (
+                            <div className="p-8 text-center text-sm text-slate-500 font-medium bg-white rounded-2xl border border-slate-200 shadow-sm">Không có dự án</div>
+                        ) : (
+                            <div className="space-y-2">
+                                {desktopProjectsList.map(p => (
+                                    <button 
+                                        key={p.ma_ct}
+                                        onClick={() => {
+                                            setSelectedProjectDesktop(p.ma_ct);
+                                            if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
+                                        }}
+                                        className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500/20' : 'bg-white border-slate-200'}`}
+                                    >
+                                        <div className="flex flex-col min-w-0 pr-4">
+                                            <span className={`text-[14px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-800'}`}>{p.ten_ct}</span>
+                                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">{p.ma_ct}</span>
+                                        </div>
+                                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{p.count}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+                {mobileViewStep === 3 && (
+                    <div className="p-3 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+                        {isItemsLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20">
+                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            </div>
+                        ) : (!selectedProjectDesktop || selectedProjectDesktop === 'ALL') ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                                <Building2 className="w-12 h-12 mb-4 opacity-20" />
+                                <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Dự Án</strong> ở bước 2</p>
+                                <button onClick={() => setMobileViewStep(2)} className="mt-4 px-4 py-2 bg-blue-100 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Dự Án</button>
+                            </div>
+                        ) : desktopItems.length === 0 ? (
+                            <div className="p-8 text-center text-sm text-slate-500 font-medium bg-white rounded-2xl border border-slate-200 shadow-sm">Không có hạng mục nào</div>
+                        ) : (
+                            <div className="space-y-3 pb-2">
+                                {desktopItems.map((item) => {
+                                    const cfg = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
+                                    return (
+                                        <div 
+                                            key={item.id}
+                                            onClick={() => onSelect(item.id)}
+                                            className="bg-white border hover:border-blue-400 border-slate-200 rounded-2xl p-4 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative"
+                                        >
+                                            <div className="flex flex-col gap-2">
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color} uppercase border shadow-sm tracking-tight`}>{cfg.label}</span>
+                                                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md uppercase">
+                                                            {
+                                                                (item.type === 'PQC') ? (item.inspectionStage || `---`) :
+                                                                (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
+                                                                `#${item.id.split('-').pop()}`
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                                        item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
+                                                        item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
+                                                        'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                        {item.status}
+                                                    </span>
+                                                </div>
+                                                <h4 className="text-[14px] font-bold text-slate-800 leading-snug group-hover:text-blue-700 transition-colors line-clamp-3">
+                                                    {
+                                                        (item.type === 'IQC' || item.type === 'SQC_VT') 
+                                                            ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                            : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                    }
+                                                </h4>
+                                            </div>
+                                            
+                                            <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-4 border-t border-slate-100/80">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100">
+                                                        <UserIcon className="w-3 h-3 text-blue-500" />
+                                                    </div>
+                                                    <span className="text-[12px] font-semibold text-slate-600">{item.inspectorName || '---'}</span>
+                                                </div>
+                                                <span className="text-[11px] font-bold text-slate-400">
+                                                    {formatDisplayDate(item.date)}
+                                                </span>
+                                            </div>
+                                            
+                                            {user.role === 'ADMIN' && (
+                                                <div className="absolute top-2 right-2 p-2" onClick={(e) => e.stopPropagation()}>
+                                                    <input 
+                                                         type="checkbox"
+                                                         checked={selectedIds.has(item.id)}
+                                                         onChange={() => toggleSelect(item.id)}
+                                                         className="w-5 h-5 rounded-md border-slate-300 text-blue-600 cursor-pointer shadow-sm"
+                                                     />
                                                 </div>
                                             )}
                                         </div>
                                     );
                                 })}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-                    {mobileMonthsToShow < mobileAvailableMonths.length && (
-                        <div className="flex justify-center mt-4 mb-6">
-                            <button
-                                onClick={() => setMobileMonthsToShow(prev => prev + 1)}
-                                className="px-6 py-2.5 bg-blue-50 text-blue-600 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-blue-100 transition-colors"
-                            >
-                                Hiển thị thêm 1 tháng
-                            </button>
-                        </div>
-                    )}
-                    </>
-            )}
-
-            {/* PAGINATION CONTROLS */}
-            {total > 0 && (
-                <div className="flex items-center justify-center px-2 py-6 border-t border-slate-100 mt-4">
-                    <div className="flex flex-col items-center">
-                        <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Tổng {total} phiếu</span>
+                            </div>
+                        )}
                     </div>
-                </div>
-            )}
-        </div>
+                )}
+            </div>
         </div>
 
         {/* DESKTOP 4-COLUMN VIEW */}
@@ -985,17 +935,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(0)}
                 />
-                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Ngày Tháng</h3>
+                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Ngày Tháng - {totalInspectionsCount}</h3>
+                    {isDatesLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
-                    <button 
-                        onClick={() => { setSelectedDateDesktop('ALL'); setSelectedProjectDesktop('ALL'); }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors mb-2 ${selectedDateDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                        Tất cả ngày ({inspections.length})
-                    </button>
-                    
                     {nestedDatesTree.tree.map(({ year, count, months }) => {
                         const isYearExpanded = expandedYears.has(year);
                         return (
@@ -1017,57 +961,56 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                 
                                 {isYearExpanded && months.map(({ month, count, dates }) => {
                                     const mKey = `${year}-${month}`;
+                                    const isMonthSelected = selectedMonthDesktop?.year === parseInt(year, 10) && selectedMonthDesktop?.month === parseInt(month, 10) && !selectedDateDesktop;
                                     const isMonthExpanded = expandedMonths.has(mKey);
                                     return (
-                                        <div key={mKey} className="ml-2 space-y-1 border-l-2 border-slate-100 pl-2">
+                                        <div key={mKey}>
                                             <button 
-                                                onClick={() => setExpandedMonths(prev => {
-                                                    const next = new Set(prev);
-                                                    if (next.has(mKey)) next.delete(mKey); else next.add(mKey);
-                                                    return next;
-                                                })}
-                                                className="w-full flex items-center justify-between text-left px-3 py-1.5 rounded-lg text-[12px] font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                                                onClick={() => {
+                                                    setExpandedMonths(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(mKey)) next.delete(mKey); else next.add(mKey);
+                                                        return next;
+                                                    });
+                                                    setSelectedDateDesktop('');
+                                                    setSelectedMonthDesktop({ year: parseInt(year, 10), month: parseInt(month, 10) });
+                                                    setSelectedProjectDesktop('ALL');
+                                                    setSelectedItemDesktop(null);
+                                                }}
+                                                className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 mt-1 rounded-lg text-[12px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800' : 'text-slate-600 bg-white hover:bg-slate-50'}`}
                                             >
                                                 <span>Tháng {month}</span>
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{count}</span>
-                                                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isMonthExpanded ? 'rotate-180' : ''}`} />
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isMonthSelected ? 'bg-white text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-500' : 'text-slate-400'}`} />
                                                 </div>
                                             </button>
-
-                                            {isMonthExpanded && dates.map(({ dateKey, count: dCount }) => (
-                                                <button 
-                                                    key={dateKey}
-                                                    onClick={() => { setSelectedDateDesktop(dateKey); setSelectedProjectDesktop('ALL'); }}
-                                                    className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 rounded-lg text-[12px] font-medium transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
-                                                >
-                                                    <span><CalendarDays className="w-3 h-3 inline mr-1.5 text-slate-400"/> {dateKey}</span>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedDateDesktop === dateKey ? 'bg-white text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{dCount}</span>
-                                                        <ChevronRight className={`w-3 h-3 ${selectedDateDesktop === dateKey ? 'text-blue-500' : 'text-slate-300'}`} />
-                                                    </div>
-                                                </button>
-                                            ))}
+                                            
+                                            {isMonthExpanded && dates.map(({ dateKey, count }) => {
+                                                const isDateSelected = selectedDateDesktop === dateKey;
+                                                return (
+                                                    <button 
+                                                        key={dateKey}
+                                                        onClick={() => {
+                                                            setSelectedDateDesktop(dateKey);
+                                                            setSelectedMonthDesktop({ year: parseInt(year, 10), month: parseInt(month, 10) });
+                                                            setSelectedProjectDesktop('ALL');
+                                                            setSelectedItemDesktop(null);
+                                                        }}
+                                                        className={`w-full flex items-center justify-between text-left px-3 py-1 ml-6 mt-1 rounded-lg text-[11px] font-medium transition-colors ${isDateSelected ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-500 hover:bg-slate-50'}`}
+                                                        style={{ width: 'calc(100% - 1.5rem)' }}
+                                                    >
+                                                        <span>{dateKey.substring(0, 5)}</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${isDateSelected ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     );
                                 })}
                             </div>
                         );
                     })}
-
-                    {nestedDatesTree.noDateDates.map(({ dateKey, count }) => (
-                        <button 
-                            key={dateKey}
-                            onClick={() => { setSelectedDateDesktop(dateKey); setSelectedProjectDesktop('ALL'); }}
-                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-                        >
-                            <span><CalendarDays className="w-3.5 h-3.5 inline mr-2 text-slate-400"/> {dateKey}</span>
-                            <div className="flex items-center gap-2">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedDateDesktop === dateKey ? 'bg-white text-blue-600' : 'bg-slate-200 text-slate-600'}`}>{count}</span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                            </div>
-                        </button>
-                    ))}
                 </div>
             </div>
 
@@ -1077,45 +1020,39 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(1)}
                 />
-                <div className="px-4 py-3 border-b border-slate-200 shrink-0">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Công Trình / Dự Án</h3>
+                <div className="px-4 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Công Trình / Dự Án - {desktopProjectsList.length}</h3>
+                    {isProjectsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
-                    {selectedDateDesktop === 'ALL' ? (
+                    {!selectedDateDesktop && !selectedMonthDesktop && !startDate && !endDate ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
                             <CalendarDays className="w-8 h-8 mb-2 opacity-20" />
-                            <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Ngày tháng</strong></p>
+                            <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Ngày / Tháng</strong></p>
                         </div>
                     ) : (
                         <>
-                            <button 
-                                onClick={() => setSelectedProjectDesktop('ALL')}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors mb-2 ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-                            >
-                                Tất cả dự án ({desktopProjects.length})
-                            </button>
-                            {desktopProjects.map(pKey => {
-                                let count = 0;
-                                if (selectedDateDesktop !== 'ALL') {
-                                    count = groupedData[selectedDateDesktop]?.[pKey]?.items?.length || 0;
-                                } else {
-                                    Object.values(groupedData).forEach(g => {
-                                        if (g[pKey]) count += g[pKey].items.length;
-                                    });
+                            {(() => {
+                                if (desktopProjectsList.length === 0 && !isProjectsLoading) {
+                                    return <div className="p-4 text-center text-[11px] text-slate-400">Không có dự án</div>;
                                 }
-                                
-                                return (
-                                <button 
-                                    key={pKey}
-                                    onClick={() => setSelectedProjectDesktop(pKey)}
-                                    className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === pKey ? 'bg-blue-100' : 'hover:bg-slate-50'}`}
-                                >
-                                    <div className="flex items-center justify-between w-full">
-                                        <span className={`text-[13px] font-bold truncate ${selectedProjectDesktop === pKey ? 'text-blue-900' : 'text-slate-700'}`}>{pKey}</span>
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === pKey ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                                    </div>
-                                </button>
-                            )})}
+
+                                return desktopProjectsList.map(p => (
+                                    <button 
+                                        key={p.ma_ct}
+                                        onClick={() => setSelectedProjectDesktop(p.ma_ct)}
+                                        className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-100' : 'hover:bg-slate-50'}`}
+                                    >
+                                        <div className="flex items-center justify-between w-full">
+                                            <div className="flex flex-col min-w-0 pr-2">
+                                                <span className={`text-[13px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-700'}`}>{p.ten_ct}</span>
+                                                <span className="text-[10px] text-slate-500 font-medium">{p.ma_ct}</span>
+                                            </div>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{p.count}</span>
+                                        </div>
+                                    </button>
+                                ));
+                            })()}
                         </>
                     )}
                 </div>
@@ -1127,14 +1064,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(2)}
                 />
-                <div className="px-4 py-3 border-b border-slate-200 shrink-0">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">3. Hạng Mục ({desktopItems.length})</h3>
+                <div className="px-4 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">3. Hạng Mục - {desktopItems.length} Phiếu</h3>
+                    {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-0">
-                    {selectedProjectDesktop === 'ALL' ? (
+                    {(!selectedProjectDesktop || selectedProjectDesktop === 'ALL') ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
                             <Building2 className="w-8 h-8 mb-2 opacity-20" />
                             <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Công trình / Dự án</strong></p>
+                        </div>
+                    ) : (isItemsLoading && desktopItems.length === 0) ? (
+                        <div className="flex flex-col items-center justify-center h-full py-20">
+                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                         </div>
                     ) : desktopItems.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs">Không có hạng mục nào</div>
@@ -1293,7 +1235,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                 <div className="pt-4 border-t border-slate-100">
                                     <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm ({selectedItemDesktop.images.length})</label>
                                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                                        {selectedItemDesktop.images.map((img: any, i) => {
+                                        {selectedItemDesktop.images.map((img: any, i: number) => {
                                             const src = typeof img === 'string' ? img : (img.url_hd || img.url_thumbnail || img.file_url);
                                             const proxySrc = getProxyImageUrl(src);
                                             return (
@@ -1304,7 +1246,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     }) || [];
                                                     setLightboxState({ images: formattedImages, index: i });
                                                 }}>
-                                                    <img loading="lazy" src={proxySrc} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" />
+                                                    <img loading="lazy" src={proxySrc} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" referrerPolicy="no-referrer" />
                                                     <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
                                                         <Maximize2 className="w-5 h-5 text-white" />
                                                     </div>
@@ -1341,7 +1283,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   </button>
               </div>
               <div className="flex-1 min-h-0 relative flex items-center justify-center p-4">
-                  <img src={lightboxState.images[lightboxState.index]} className="max-w-full max-h-full object-contain rounded-lg" />
+                  <img src={lightboxState.images[lightboxState.index]} className="max-w-full max-h-full object-contain rounded-lg" referrerPolicy="no-referrer" />
                   {lightboxState.index > 0 && (
                       <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index - 1 })} className="absolute left-4 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-colors">
                           <ChevronLeft className="w-6 h-6" />

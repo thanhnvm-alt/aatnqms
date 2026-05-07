@@ -7,7 +7,7 @@ import {
     ArrowRight, Loader2, Calendar, User as UserIcon, Factory,
     FileText, ChevronRight, ShieldAlert,
     Hash, AlertCircle, Maximize2, Upload, Download, Trash2, 
-    Filter, ChevronDown, Layers, X, ChevronUp
+    Filter, ChevronDown, Layers, X, ChevronUp, ChevronLeft, Plus, MoreVertical, CalendarDays
 } from 'lucide-react';
 import { DateRangePicker } from './DateRangePicker';
 import { NCRDetail } from './NCRDetail';
@@ -134,10 +134,14 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   const limit = 50000;
 
   // DESKTOP LAYOUT STATES
+  const [selectedMonthDesktop, setSelectedMonthDesktop] = useState<string | 'ALL'>('ALL');
   const [selectedDateDesktop, setSelectedDateDesktop] = useState<string>('ALL');
   const [selectedProjectDesktop, setSelectedProjectDesktop] = useState<string>('ALL');
   const [selectedNcrDesktop, setSelectedNcrDesktop] = useState<NCR | null>(null);
-  const [colSizes, setColSizes] = useState([160, 220, 320, 500]);
+  const [colSizes, setColSizes] = useState([260, 260, 280, 500]);
+  const [mobileViewStep, setMobileViewStep] = useState<1 | 2 | 3>(1);
+  const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set([new Date().getFullYear().toString()]));
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set([`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2, '0')}`]));
   
   const startDrag = (index: number) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -198,6 +202,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
         const fullNcr = await fetchNcrById(ncrId);
         if (fullNcr) {
             setSelectedNcr(fullNcr);
+            setSelectedNcrDesktop(fullNcr);
         } else {
             alert("Không tìm thấy thông tin chi tiết lỗi.");
         }
@@ -311,32 +316,100 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
     return Array.from(dates).sort((a, b) => b.localeCompare(a));
   }, [filteredNcrs]);
 
+  const nestedDatesTree = useMemo(() => {
+    const tree: { year: string, count: number, months: { month: string, count: number, dates: { dateKey: string, count: number }[] }[] }[] = [];
+    const yearMap: Record<string, any> = {};
+    const noDateDates: { dateKey: string, count: number }[] = [];
+    const dateCounts: Record<string, number> = {};
+    
+    filteredNcrs.forEach(n => {
+        const dStr = n.createdDate ? n.createdDate.split('T')[0].split('-').reverse().join('/') : '---';
+        dateCounts[dStr] = (dateCounts[dStr] || 0) + 1;
+    });
+
+    const uniqueDates = Object.keys(dateCounts).sort((a, b) => {
+        if (a === '---') return 1;
+        if (b === '---') return -1;
+        const [da, ma, ya] = a.split('/');
+        const [db, mb, yb] = b.split('/');
+        return new Date(`${yb}-${mb}-${db}`).getTime() - new Date(`${ya}-${ma}-${da}`).getTime();
+    });
+
+    uniqueDates.forEach(d => {
+        if (d === '---') {
+            noDateDates.push({ dateKey: d, count: dateCounts[d] });
+            return;
+        }
+        const [day, month, year] = d.split('/');
+        if (!yearMap[year]) yearMap[year] = { count: 0, monthMap: {} };
+        yearMap[year].count += dateCounts[d];
+        if (!yearMap[year].monthMap[month]) yearMap[year].monthMap[month] = { count: 0, dates: [] };
+        yearMap[year].monthMap[month].count += dateCounts[d];
+        yearMap[year].monthMap[month].dates.push({ dateKey: d, count: dateCounts[d] });
+    });
+
+    const sortedYears = Object.keys(yearMap).sort((a,b) => Number(b) - Number(a));
+    sortedYears.forEach(y => {
+        const sortedMonths = Object.keys(yearMap[y].monthMap).sort((a,b) => Number(b) - Number(a));
+        const months = sortedMonths.map(m => ({
+            month: m,
+            count: yearMap[y].monthMap[m].count,
+            dates: yearMap[y].monthMap[m].dates
+        }));
+        tree.push({ year: y, count: yearMap[y].count, months });
+    });
+
+    return { tree, noDateDates };
+  }, [filteredNcrs]);
+
   const desktopProjects = useMemo(() => {
-      if (selectedDateDesktop === 'ALL') {
-          const allProjects = new Set<string>();
-          filteredNcrs.forEach(ncr => {
-              allProjects.add(ncr.ma_ct || '---');
-          });
-          return Array.from(allProjects).sort();
-      } else {
-          const allProjects = new Set<string>();
-          filteredNcrs.forEach(ncr => {
-              const dateKey = ncr.createdDate ? ncr.createdDate.split('T')[0] : '---';
-              if (dateKey === selectedDateDesktop) allProjects.add(ncr.ma_ct || '---');
-          });
-          return Array.from(allProjects).sort();
-      }
-  }, [filteredNcrs, selectedDateDesktop]);
+    let sourceItems = filteredNcrs;
+    if (selectedDateDesktop !== 'ALL') {
+        const targetDate = selectedDateDesktop.split('/').reverse().join('-');
+        sourceItems = sourceItems.filter(n => (n.createdDate ? n.createdDate.split('T')[0] : '---') === targetDate);
+    } else if (selectedMonthDesktop && selectedMonthDesktop !== 'ALL') {
+        const [m, y] = (selectedMonthDesktop as string).split('/');
+        sourceItems = sourceItems.filter(n => {
+            const dStr = n.createdDate ? n.createdDate.split('T')[0] : '';
+            if (!dStr) return false;
+            const [ny, nm] = dStr.split('-');
+            return ny === y && nm.padStart(2, '0') === m.padStart(2, '0');
+        });
+    }
+
+    const allProjects = new Set<string>();
+    sourceItems.forEach(ncr => {
+        allProjects.add(ncr.ma_ct || '---');
+    });
+    return Array.from(allProjects).sort();
+  }, [filteredNcrs, selectedDateDesktop, selectedMonthDesktop]);
 
   const desktopItems = useMemo(() => {
       return filteredNcrs.filter(ncr => {
-          const dateKey = ncr.createdDate ? ncr.createdDate.split('T')[0] : '---';
+          const dateKey = ncr.createdDate ? ncr.createdDate.split('T')[0].split('-').reverse().join('/') : '---';
           const projectKey = ncr.ma_ct || '---';
-          const matchDate = selectedDateDesktop === 'ALL' || dateKey === selectedDateDesktop;
+          
+          let matchDate = true;
+          if (selectedDateDesktop !== 'ALL') {
+              matchDate = dateKey === selectedDateDesktop;
+          } else if (selectedMonthDesktop && selectedMonthDesktop !== 'ALL') {
+              const [m, y] = (selectedMonthDesktop as string).split('/');
+              const [ny, nm] = (ncr.createdDate ? ncr.createdDate.split('T')[0] : '---').split('-');
+              matchDate = ny === y && nm.padStart(2, '0') === m.padStart(2, '0');
+          }
+          
           const matchProject = selectedProjectDesktop === 'ALL' || projectKey === selectedProjectDesktop;
           return matchDate && matchProject;
       }).sort((a, b) => new Date(b.createdDate || '').getTime() - new Date(a.createdDate || '').getTime());
-  }, [filteredNcrs, selectedDateDesktop, selectedProjectDesktop]);
+  }, [filteredNcrs, selectedDateDesktop, selectedMonthDesktop, selectedProjectDesktop]);
+
+  useEffect(() => {
+    const today = new Date();
+    const curYear = today.getFullYear().toString();
+    const curMonth = (today.getMonth() + 1).toString().padStart(2, '0');
+    setExpandedYears(new Set([curYear]));
+    setExpandedMonths(new Set([`${curYear}-${curMonth}`]));
+  }, []);
 
   useEffect(() => {
       if (selectedDateDesktop !== 'ALL' && !sortedDatesList.includes(selectedDateDesktop)) {
@@ -458,117 +531,207 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
       {/* Main Content Area */}
       
       {/* MOBILE LIST VIEW */}
-      <div className="md:hidden flex-1 overflow-y-auto p-4 no-scrollbar">
-          {isLoading ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                  <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-                  <p className="font-black uppercase tracking-widest text-[9px]">Đang tải danh sách NCR...</p>
+      <div className="md:hidden flex-1 flex flex-col bg-slate-50 overflow-hidden h-full">
+          <div className="px-3 py-3 border-b border-slate-200 bg-white shadow-sm flex items-center shrink-0 z-10">
+              <div className="flex bg-slate-200/60 rounded-lg p-1 w-full relative transition-all gap-1">
+                  <button onClick={() => setMobileViewStep(1)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 1 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Ngày Tháng</button>
+                  {(selectedDateDesktop !== 'ALL' || selectedMonthDesktop !== 'ALL') && (
+                      <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Dự Án {desktopProjects.length > 0 && `(${desktopProjects.length})`}</button>
+                  )}
+                  {(selectedProjectDesktop && selectedProjectDesktop !== 'ALL') && (
+                      <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Phiếu NCR {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
+                  )}
               </div>
-          ) : Object.keys(groupedNcrs).length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300 space-y-4">
-                  <div className="p-12 bg-white rounded-[3rem] border-2 border-dashed border-slate-200 shadow-inner flex flex-col items-center">
-                      <CheckCircle2 className="w-16 h-16 opacity-10 mb-4" />
-                      <p className="font-black uppercase tracking-[0.2em] text-[10px] text-slate-400">Không có bản ghi NCR nào</p>
-                  </div>
-              </div>
-          ) : (
-                <div className="max-w-7xl mx-auto pb-20 space-y-4">
-                  {Object.keys(groupedNcrs).sort((a, b) => b.localeCompare(a)).map(dateKey => {
-                      const dateGroup = groupedNcrs[dateKey];
-                      const isDateExpanded = expandedGroups.has(dateKey);
-                      return (
-                          <div key={dateKey} className="mb-4">
-                              <div 
-                                  onClick={() => toggleGroup(dateKey)}
-                                  className="flex items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors rounded-xl mb-2"
-                              >
-                                  <div className="flex items-center gap-2.5">
-                                      <Calendar className="w-4 h-4 text-blue-500" />
-                                      <h2 className="font-bold text-slate-800 text-[13px] tracking-tight">{dateKey}</h2>
-                                      <span className="ml-2 bg-blue-100/80 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                                          {Object.values(dateGroup).reduce((acc, ncrs) => acc + ncrs.length, 0)}
-                                      </span>
-                                  </div>
-                                  {isDateExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </div>
-                              
-                              {isDateExpanded && (
-                                  <div className="space-y-4 pl-4 mt-2">
-                                      {Object.keys(dateGroup).map(projectKey => {
-                                          const ncrsUnderProject = dateGroup[projectKey];
-                                          const groupKey = `${dateKey}|${projectKey}`;
-                                          const isProjectExpanded = expandedGroups.has(groupKey);
-                                          
-                                          return (
-                                              <div key={groupKey} className="space-y-2">
-                                                  <div 
-                                                      onClick={() => toggleGroup(groupKey)}
-                                                      className="flex items-center justify-between p-2 rounded-lg cursor-pointer bg-slate-50 border border-slate-100"
-                                                  >
-                                                      <h3 className="font-black text-slate-500 text-[10px] uppercase tracking-widest ml-2">Dự án: {projectKey} ({ncrsUnderProject.length})</h3>
-                                                      {isProjectExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                                  </div>
-                                                  
-                                                  {isProjectExpanded && (
-                                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-4">
-                                                          {ncrsUnderProject.map((ncr) => (
-                                                              <div 
-                                                                  key={ncr.id} 
-                                                                  onClick={() => handleSelectNcrItem(ncr.id)}
-                                                                  className="bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:shadow-md hover:border-blue-300 group"
-                                                              >
-                                                                  <div className="p-3 flex-1 space-y-3">
-                                                                    <div className="flex items-start justify-between gap-3">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all">
-                                                                                <AlertTriangle className="w-4 h-4" />
-                                                                            </div>
-                                                                            <div>
-                                                                                <span className="font-black text-slate-900 text-xs tracking-tight block uppercase">{ncr.ma_ct || '---'} - {ncr.ten_ct || '---'}</span>
-                                                                                <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">{ncr.id || '---'} - {ncr.ten_hang_muc || '---'}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
-                                                                            {ncr.severity || 'MINOR'}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex flex-col space-y-1">
-                                                                        <div className="flex items-center gap-1 mt-1 text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
-                                                                            <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">{ncr.workshop || '---'}</span>
-                                                                            <span>•</span>
-                                                                            <span className="truncate">{ncr.inspection_id || '---'}</span>
-                                                                            <span>•</span>
-                                                                            <span className="truncate">{ncr.inspectorName || '---'}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                                                        <p className="text-[11px] font-bold text-slate-700 leading-relaxed italic line-clamp-3">
-                                                                            "{ncr.issueDescription}"
-                                                                        </p>
-                                                                    </div>
-                                                                 </div>
-                                                                 <div className={`px-4 py-3 border-t flex items-center justify-between transition-colors ${ncr.status === 'CLOSED' ? 'bg-green-50/50 border-green-100' : 'bg-slate-50/50 border-slate-100'}`}>
-                                                                     <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
-                                                                         {ncr.status}
-                                                                     </span>
-                                                                     <div className="flex items-center gap-1.5 text-blue-600 text-[10px] font-black uppercase tracking-tighter hover:underline">
-                                                                         CHI TIẾT <ChevronRight className="w-3.5 h-3.5" />
-                                                                     </div>
-                                                                 </div>
-                                                              </div>
-                                                          ))}
-                                                      </div>
-                                                  )}
-                                              </div>
-                                          );
-                                      })}
-                                  </div>
-                              )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar relative block h-full w-full">
+              {mobileViewStep === 1 && (
+                  <div className="p-3 space-y-2 animate-in fade-in slide-in-from-left-4 duration-300">
+                      {isLoading ? (
+                          <div className="flex flex-col items-center justify-center py-20">
+                              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                           </div>
-                      );
-                  })}
-                </div>
-          )}
+                      ) : (
+                          <>
+                              {nestedDatesTree.tree.map(({ year, count, months }) => {
+                                  const isYearExpanded = expandedYears.has(year);
+                                  return (
+                                      <div key={year} className="mb-2 space-y-1">
+                                          <button 
+                                              onClick={() => setExpandedYears(prev => {
+                                                  const next = new Set(prev);
+                                                  if (next.has(year)) next.delete(year); else next.add(year);
+                                                  return next;
+                                              })}
+                                              className="w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold text-slate-800 bg-white border border-slate-200 shadow-sm transition-colors"
+                                          >
+                                              <span>Năm {year}</span>
+                                              <div className="flex items-center gap-2">
+                                                  <span className="text-[11px] font-bold bg-slate-100 px-2 py-0.5 rounded-full text-slate-600">{count}</span>
+                                                  <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
+                                              </div>
+                                          </button>
+                                          
+                                          {isYearExpanded && months.map(({ month, count, dates }) => {
+                                              const mKey = `${year}-${month}`;
+                                              const isMonthSelected = selectedMonthDesktop === `${month}/${year}` && selectedDateDesktop === 'ALL';
+                                              const isMonthExpanded = expandedMonths.has(mKey);
+                                              return (
+                                                  <div key={mKey} className="pl-2">
+                                                      <button 
+                                                          onClick={() => {
+                                                              setExpandedMonths(prev => {
+                                                                  const next = new Set(prev);
+                                                                  if (next.has(mKey)) next.delete(mKey); else next.add(mKey);
+                                                                  return next;
+                                                              });
+                                                              setSelectedDateDesktop('ALL');
+                                                              setSelectedMonthDesktop(`${month}/${year}`);
+                                                              setSelectedProjectDesktop('ALL');
+                                                              setSelectedNcrDesktop(null);
+                                                              if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
+                                                          }}
+                                                          className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 rounded-xl text-[13px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'text-slate-700 bg-white border border-slate-200 shadow-sm'}`}
+                                                      >
+                                                          <span>Tháng {month}</span>
+                                                          <div className="flex items-center gap-2">
+                                                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{count}</span>
+                                                              <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                          </div>
+                                                      </button>
+                                                      
+                                                      {isMonthExpanded && dates.map(({ dateKey, count }) => {
+                                                          const isDateSelected = selectedDateDesktop === dateKey;
+                                                          return (
+                                                              <button 
+                                                                  key={dateKey}
+                                                                  onClick={() => {
+                                                                      setSelectedDateDesktop(dateKey);
+                                                                      setSelectedMonthDesktop('ALL');
+                                                                      setSelectedProjectDesktop('ALL');
+                                                                      setSelectedNcrDesktop(null);
+                                                                      if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
+                                                                  }}
+                                                                  className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 ml-4 rounded-xl text-[12px] font-medium transition-colors ${isDateSelected ? 'bg-blue-500 text-white font-bold shadow-md' : 'text-slate-600 bg-white border border-slate-200 shadow-sm'}`}
+                                                                  style={{ width: 'calc(100% - 1rem)' }}
+                                                              >
+                                                                  <span>{dateKey.substring(0, 5)}</span>
+                                                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                                              </button>
+                                                          );
+                                                      })}
+                                                  </div>
+                                              );
+                                          })}
+                                      </div>
+                                  );
+                              })}
+                              {nestedDatesTree.noDateDates.length > 0 && nestedDatesTree.noDateDates.map(({ dateKey, count }) => (
+                                  <button
+                                      key={dateKey}
+                                      onClick={() => {
+                                          setSelectedDateDesktop(dateKey);
+                                          setSelectedMonthDesktop('ALL');
+                                          setSelectedProjectDesktop('ALL');
+                                          setSelectedNcrDesktop(null);
+                                          if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
+                                      }}
+                                      className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-500 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}
+                                  >
+                                      <span>{dateKey}</span>
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedDateDesktop === dateKey ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                  </button>
+                              ))}
+                          </>
+                      )}
+                  </div>
+              )}
+
+              {mobileViewStep === 2 && (
+                  <div className="p-3 space-y-2 animate-in fade-in slide-in-from-right-4 duration-300">
+                      <div className="flex items-center gap-2 mb-2">
+                          <button onClick={() => setMobileViewStep(1)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500"><ChevronLeft className="w-4 h-4" /></button>
+                          <h3 className="font-bold text-slate-800 text-xs uppercase">Chọn Dự Án - {selectedDateDesktop !== 'ALL' ? selectedDateDesktop : selectedMonthDesktop}</h3>
+                      </div>
+                      
+                      {desktopProjects.length === 0 ? (
+                          <div className="py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Không có dự án nào</div>
+                      ) : (
+                          desktopProjects.map(pKey => {
+                              const count = desktopItems.filter(i => (i.ma_ct || '---') === pKey).length;
+                              return (
+                                  <button 
+                                      key={pKey}
+                                      onClick={() => {
+                                          setSelectedProjectDesktop(pKey);
+                                          if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
+                                      }}
+                                      className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[13px] font-bold transition-colors ${selectedProjectDesktop === pKey ? 'bg-blue-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-800'}`}
+                                  >
+                                      <span>{pKey}</span>
+                                      <div className="flex items-center gap-2">
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedProjectDesktop === pKey ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                          <ChevronRight className={`w-4 h-4 ${selectedProjectDesktop === pKey ? 'text-white' : 'text-slate-400'}`} />
+                                      </div>
+                                  </button>
+                              );
+                          })
+                      )}
+                  </div>
+              )}
+
+              {mobileViewStep === 3 && (
+                  <div className="p-3 space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+                      <div className="flex items-center gap-2 mb-2">
+                          <button onClick={() => setMobileViewStep(2)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500"><ChevronLeft className="w-4 h-4" /></button>
+                          <h3 className="font-bold text-slate-800 text-xs uppercase truncate">NCR: {selectedProjectDesktop}</h3>
+                      </div>
+                      
+                      {desktopItems.length === 0 ? (
+                          <div className="py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Không có phiếu nào</div>
+                      ) : (
+                          desktopItems.map(ncr => (
+                              <div 
+                                  key={ncr.id} 
+                                  onClick={() => handleSelectNcrItem(ncr.id)}
+                                  className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:border-blue-300 group"
+                              >
+                                  <div className="p-3 space-y-3">
+                                      <div className="flex items-start justify-between gap-3">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                              <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all shrink-0">
+                                                  <AlertTriangle className="w-4 h-4" />
+                                              </div>
+                                              <div className="min-w-0">
+                                                  <span className="font-black text-slate-900 text-xs tracking-tight block uppercase truncate">{ncr.ten_hang_muc || ncr.issueDescription}</span>
+                                                  <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">{ncr.id}</span>
+                                              </div>
+                                          </div>
+                                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm shrink-0 ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
+                                              {ncr.severity || 'MINOR'}
+                                          </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-tighter overflow-hidden">
+                                          <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200 shrink-0">{ncr.workshop || '---'}</span>
+                                          <span>•</span>
+                                          <span className="truncate">{ncr.inspectorName || '---'}</span>
+                                      </div>
+                                      <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 line-clamp-2 text-[10px] font-bold text-slate-600 italic">
+                                          "{ncr.issueDescription}"
+                                      </div>
+                                  </div>
+                                  <div className={`px-3 py-2 border-t flex items-center justify-between ${ncr.status === 'CLOSED' ? 'bg-green-50/50 border-green-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
+                                          {ncr.status}
+                                      </span>
+                                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                                  </div>
+                              </div>
+                          ))
+                      )}
+                  </div>
+              )}
+          </div>
       </div>
 
       {/* DESKTOP 4-COLUMN VIEW */}
@@ -580,26 +743,89 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(0)}
               />
-              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Ngày Lập</h3>
+              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Thời Gian</h3>
+                  {isLoading && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                   <button 
-                      onClick={() => { setSelectedDateDesktop('ALL'); setSelectedProjectDesktop('ALL'); }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                      onClick={() => { setSelectedDateDesktop('ALL'); setSelectedMonthDesktop('ALL'); setSelectedProjectDesktop('ALL'); setSelectedNcrDesktop(null); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold transition-colors ${selectedDateDesktop === 'ALL' && selectedMonthDesktop === 'ALL' ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'}`}
                   >
-                      Tất cả ngày ({sortedDatesList.length})
+                      Tất cả ({total})
                   </button>
-                  {sortedDatesList.map(dateKey => (
-                      <button 
-                          key={dateKey}
-                          onClick={() => { setSelectedDateDesktop(dateKey); setSelectedProjectDesktop('ALL'); }}
-                          className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-                      >
-                          <span><Calendar className="w-3.5 h-3.5 inline mr-2 text-slate-400"/> {dateKey}</span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                      </button>
-                  ))}
+                  
+                  {nestedDatesTree.tree.map(({ year, count, months }) => {
+                      const isYearExpanded = expandedYears.has(year);
+                      return (
+                        <div key={year} className="space-y-1">
+                            <button 
+                                onClick={() => setExpandedYears(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(year)) next.delete(year); else next.add(year);
+                                    return next;
+                                })}
+                                className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 hover:bg-slate-200/50 transition-colors"
+                            >
+                                <span className="flex items-center gap-2"><CalendarDays className="w-3.5 h-3.5 text-blue-600" /> Năm {year}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold bg-slate-200 px-1.5 py-0.5 rounded-full text-slate-600">{count}</span>
+                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
+                                </div>
+                            </button>
+                            
+                            {isYearExpanded && months.map(({ month, count, dates }) => {
+                                const mKey = `${year}-${month}`;
+                                const isMonthSelected = selectedMonthDesktop === `${month}/${year}` && selectedDateDesktop === 'ALL';
+                                const isMonthExpanded = expandedMonths.has(mKey);
+                                return (
+                                    <div key={mKey} className="pl-3 space-y-0.5">
+                                        <button 
+                                            onClick={() => {
+                                                setExpandedMonths(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(mKey)) next.delete(mKey); else next.add(mKey);
+                                                    return next;
+                                                });
+                                                setSelectedDateDesktop('ALL');
+                                                setSelectedMonthDesktop(`${month}/${year}`);
+                                                setSelectedProjectDesktop('ALL');
+                                                setSelectedNcrDesktop(null);
+                                            }}
+                                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[12px] font-bold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        >
+                                            <span>Tháng {month}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200' : 'bg-slate-100'}`}>{count}</span>
+                                                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`} />
+                                            </div>
+                                        </button>
+                                        
+                                        {isMonthExpanded && dates.map(({ dateKey, count }) => {
+                                            const isDateSelected = selectedDateDesktop === dateKey;
+                                            return (
+                                                <button 
+                                                    key={dateKey}
+                                                    onClick={() => {
+                                                        setSelectedDateDesktop(dateKey);
+                                                        setSelectedMonthDesktop('ALL');
+                                                        setSelectedProjectDesktop('ALL');
+                                                        setSelectedNcrDesktop(null);
+                                                    }}
+                                                    className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-3 rounded-lg text-[11px] font-bold transition-colors ${isDateSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                                                    style={{ width: 'calc(100% - 1rem)' }}
+                                                >
+                                                    <span>{dateKey.substring(0, 5)}</span>
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-700' : 'bg-slate-100'}`}>{count}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                      );
+                  })}
               </div>
           </div>
 
@@ -610,7 +836,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   onMouseDown={startDrag(1)}
               />
               <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Dự Án</h3>
+                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Dự Án / Công Trình</h3>
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                   <button 
@@ -622,8 +848,20 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   {desktopProjects.map(pKey => {
                       let count = 0;
                       filteredNcrs.forEach(n => {
-                          const dateKey = n.createdDate ? n.createdDate.split('T')[0] : '---';
-                          if ((selectedDateDesktop === 'ALL' || dateKey === selectedDateDesktop) && (n.ma_ct || '---') === pKey) {
+                          const dateKey = n.createdDate ? n.createdDate.split('T')[0].split('-').reverse().join('/') : '---';
+                          const [ny, nm] = (n.createdDate ? n.createdDate.split('T')[0] : '---').split('-');
+                          const [sm, sy] = (selectedMonthDesktop as string).split('/');
+                          
+                          let dateMatch = false;
+                          if (selectedDateDesktop !== 'ALL') {
+                              dateMatch = dateKey === selectedDateDesktop;
+                          } else if (selectedMonthDesktop !== 'ALL') {
+                              dateMatch = ny === sy && nm.padStart(2, '0') === sm.padStart(2, '0');
+                          } else {
+                              dateMatch = true;
+                          }
+
+                          if (dateMatch && (n.ma_ct || '---') === pKey) {
                               count++;
                           }
                       });
@@ -651,7 +889,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               />
               <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
                   <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase flex justify-between">
-                      <span>3. Phiếu NCR</span>
+                      <span>3. Danh Sách Lỗi (NCR)</span>
                       <span className="text-slate-400 font-medium">{desktopItems.length} PHIẾU</span>
                   </h3>
               </div>
@@ -716,6 +954,9 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(3)}
               />
+              <div className="px-6 py-3 border-b border-slate-200 shrink-0 bg-white flex justify-between items-center bg-slate-50">
+                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">4. Chi Tiết Lỗi</h3>
+              </div>
               {selectedNcrDesktop ? (
                   <div className="flex flex-col h-full bg-slate-50 relative">
                       <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-30 shadow-sm flex items-center justify-between">

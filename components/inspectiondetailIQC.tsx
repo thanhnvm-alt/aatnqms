@@ -46,11 +46,33 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
     if (!onApprove) return;
     setIsProcessing(true);
     try { 
-        await onApprove(inspection.id, managerSig, { managerName: user.name }); 
+        await onApprove(inspection.id, managerSig, { 
+            managerName: user.name,
+            managerSignature: managerSig,
+            status: InspectionStatus.APPROVED
+        }); 
         setShowManagerModal(false); 
-        onBack(); 
+        // Logic handled by App.tsx (setView(LIST))
     } 
     catch (e) { alert("Lỗi khi phê duyệt."); } finally { setIsProcessing(false); }
+  };
+
+  const handleManagerReject = async () => {
+      const reason = window.prompt("Nhập lý do từ chối hồ sơ IQC này:");
+      if (reason === null) return;
+      if (!reason.trim()) return alert("Vui lòng nhập lý do từ chối.");
+
+      if (!onApprove) return;
+      setIsProcessing(true);
+      try { 
+          await onApprove(inspection.id, "", { 
+              status: InspectionStatus.REJECTED,
+              summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason 
+          }); 
+      } 
+      catch (e: any) { 
+          alert("Lỗi từ chối: " + (e.message || "Unknown Error")); 
+      } finally { setIsProcessing(false); }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,7 +367,10 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
       <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-4 py-4 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0 flex gap-3">
           <button onClick={onBack} className="flex-1 h-12 bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-widest rounded-xl border border-slate-200 active:scale-95 transition-all">Quay lại</button>
           {isManager && !isApproved && (
-              <button onClick={() => setShowManagerModal(true)} className="flex-[2] h-12 bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">Phê duyệt IQC</button>
+              <>
+                <button onClick={handleManagerReject} className="flex-1 h-12 bg-red-50 text-red-600 font-black uppercase text-[10px] tracking-widest rounded-xl border border-red-200 hover:bg-red-100 shadow-sm active:scale-95 transition-all">Từ chối</button>
+                <button onClick={() => setShowManagerModal(true)} className="flex-[2] h-12 bg-emerald-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">Phê duyệt IQC</button>
+              </>
           )}
       </div>
 

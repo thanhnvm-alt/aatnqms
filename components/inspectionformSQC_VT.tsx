@@ -461,7 +461,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.images?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} />
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} referrerPolicy="no-referrer" />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, images: prev.images?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -478,7 +478,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.deliveryNoteImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.deliveryNoteImages!, i, { type: 'DELIVERY' })} />
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.deliveryNoteImages!, i, { type: 'DELIVERY' })} referrerPolicy="no-referrer" />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -495,7 +495,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.reportImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.reportImages!, i, { type: 'REPORT' })} />
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.reportImages!, i, { type: 'REPORT' })} referrerPolicy="no-referrer" />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -780,7 +780,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                     {(item.images || []).map((img, i) => (
                                                         <div key={i} className="relative group shrink-0">
                                                             <div className="cursor-zoom-in" onClick={() => handleEditImage(item.images || [], i, { type: 'ITEM', matIdx, itemIdx })}>
-                                                                <img src={getProxyImageUrl(img)} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 object-cover shadow-sm" />
+                                                                <img src={getProxyImageUrl(img)} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 object-cover shadow-sm" referrerPolicy="no-referrer" />
                                                             </div>
                                                             <button onClick={() => {
                                                                 const nextMats = [...(formData.materials || [])];
@@ -827,6 +827,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                     src={getProxyImageUrl(img)} 
                                                     className="w-14 h-14 rounded-xl border border-slate-200 object-cover cursor-zoom-in shadow-md" 
                                                     onClick={() => handleEditImage(mat.images!, i, { type: 'MATERIAL', matIdx })} 
+                                                    referrerPolicy="no-referrer"
                                                 />
                                                 <button
                                                     onClick={() => {

@@ -50,7 +50,9 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 ten_ct = EXCLUDED.ten_ct,
                 ma_nha_may = EXCLUDED.ma_nha_may,
                 ten_hang_muc = EXCLUDED.ten_hang_muc,
-                workshop = EXCLUDED.workshop
+                workshop = EXCLUDED.workshop,
+                created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by),
+                created_at = CASE WHEN ${SCHEMA}."inspections".created_at = 0 THEN EXCLUDED.created_at ELSE ${SCHEMA}."inspections".created_at END
         `, sanitizeArgs([
             inspection.id, 
             inspection.type, 
@@ -73,13 +75,17 @@ async function syncToInspectionsTable(inspection: Inspection) {
 const parseTS = (val: any): number => {
     if (!val) return Math.floor(Date.now() / 1000);
     if (typeof val === 'number') {
+        if (isNaN(val) || val <= 0) return Math.floor(Date.now() / 1000);
         // If it's milliseconds (length > 11), convert to seconds
         if (val > 100000000000) return Math.floor(val / 1000);
-        return val;
+        return Math.floor(val);
     }
     const strVal = String(val).trim();
+    if (!strVal || strVal === "0" || strVal === "undefined" || strVal === "null") return Math.floor(Date.now() / 1000);
+    
     if (/^\d+$/.test(strVal)) {
         const n = parseInt(strVal, 10);
+        if (isNaN(n) || n <= 0) return Math.floor(Date.now() / 1000);
         if (n > 100000000000) return Math.floor(n / 1000);
         return n;
     }
@@ -93,11 +99,10 @@ const parseTS = (val: any): number => {
     }
 
     const parsed = Date.parse(strVal);
-    // If it's milliseconds (length > 11), convert to seconds
-    if (!isNaN(parsed) && parsed > 100000000000) {
+    if (!isNaN(parsed)) {
         return Math.floor(parsed / 1000);
     }
-    return isNaN(parsed) ? Math.floor(Date.now() / 1000) : parsed;
+    return Math.floor(Date.now() / 1000);
 };
 
 /**
@@ -218,6 +223,23 @@ export async function saveLayoutPin(pin: LayoutPin) {
 
 export async function saveInspection(inspection: Inspection) {
   const table = getTableName(inspection.type);
+  
+  // Auto-fill project info if missing, especially for "Dùng Chung" cases
+  if (!inspection.ma_ct || !inspection.ten_ct) {
+    let source: any[] = [];
+    if (inspection.type === 'IQC' && typeof inspection.materials_json === 'string') {
+        try { source = JSON.parse(inspection.materials_json); } catch(e) {}
+    } else if (typeof inspection.items_json === 'string') {
+        try { source = JSON.parse(inspection.items_json); } catch(e) {}
+    }
+
+    if (source && source.length > 0) {
+        const first = source[0];
+        if (!inspection.ma_ct) inspection.ma_ct = first.projectCode || first.ma_ct || '';
+        if (!inspection.ten_ct) inspection.ten_ct = first.projectName || first.ten_ct || '';
+    }
+  }
+
   const existing = await getInspectionById(inspection.id);
   const oldValue = existing ? { ...existing } : null;
 
@@ -395,6 +417,7 @@ export async function saveInspection(inspection: Inspection) {
   
   // Sync to centralized inspections table
   await syncToInspectionsTable(inspection);
+  await refreshDailyStatsMV();
 
   if (oldValue && oldValue.status !== inspection.status) {
     await logStatusChange('inspection', inspection.id, oldValue.status, inspection.status, inspection.inspectorName || 'SYSTEM');
@@ -419,13 +442,7 @@ export async function saveInspection(inspection: Inspection) {
   }
 }
 
-/**
- * Aggregates inspections from the centralized 'inspections' table.
- */
-export async function getInspectionsList(filters: any = {}, page: number = 1, limit: number = 1000000): Promise<{ items: Inspection[], total: number }> {
-    const offset = (page - 1) * limit;
-    
-    // Build filter clauses
+function buildBaseWhere(filters: any) {
     let whereClause = 'WHERE 1=1';
     const subArgs: any[] = [];
     
@@ -471,29 +488,104 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         subArgs.push(...projects);
     }
 
-    // NEW: Auto-filter last 30 days for Mobile if no specific start date is provided
-    if (filters.isMobile === 'true' && !filters.startDate) {
-        const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
-        const idx = subArgs.length + 1;
-        whereClause += ` AND created_at >= $${idx}`;
-        subArgs.push(thirtyDaysAgo);
-    }
-
-    if (filters.startDate) {
+    if (filters.startDate && filters.startDate !== 'undefined') {
         const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
-        const idx = subArgs.length + 1;
-        whereClause += ` AND created_at >= $${idx}`;
-        subArgs.push(ts);
+        if (!isNaN(ts)) {
+            const idx = subArgs.length + 1;
+            whereClause += ` AND created_at >= $${idx}`;
+            subArgs.push(ts);
+        }
     }
 
-    if (filters.endDate) {
+    if (filters.endDate && filters.endDate !== 'undefined') {
         const d = new Date(filters.endDate);
         d.setHours(23, 59, 59, 999);
         const ts = Math.floor(d.getTime() / 1000);
-        const idx = subArgs.length + 1;
-        whereClause += ` AND created_at <= $${idx}`;
-        subArgs.push(ts);
+        if (!isNaN(ts)) {
+            const idx = subArgs.length + 1;
+            whereClause += ` AND created_at <= $${idx}`;
+            subArgs.push(ts);
+        }
     }
+
+    if (filters.unixStart && filters.unixStart !== 'NaN' && filters.unixStart !== 'undefined') {
+        const ts = parseInt(filters.unixStart, 10);
+        if (!isNaN(ts)) {
+            const idx = subArgs.length + 1;
+            whereClause += ` AND created_at >= $${idx}`;
+            subArgs.push(ts);
+        }
+    }
+    
+    if (filters.unixEnd && filters.unixEnd !== 'NaN' && filters.unixEnd !== 'undefined') {
+        const ts = parseInt(filters.unixEnd, 10);
+        if (!isNaN(ts)) {
+            const idx = subArgs.length + 1;
+            whereClause += ` AND created_at <= $${idx}`;
+            subArgs.push(ts);
+        }
+    }
+
+    return { whereClause, subArgs };
+}
+
+export async function getInspectionsDatesList(filters: any = {}): Promise<{ date: string, count: number }[]> {
+    const { whereClause, subArgs } = buildBaseWhere(filters);
+    
+    // If no specific filters, use the optimized materialized view
+    if (whereClause === 'WHERE 1=1' || Object.keys(filters).length === 0) {
+        try {
+            const res = await query(`SELECT date_str as date, total_count as count FROM ${SCHEMA}."inspections_daily_stats_mv"`);
+            return res.rows.map((r: any) => ({
+                date: r.date,
+                count: Number(r.count)
+            }));
+        } catch (e) {
+            console.warn("Materialized view fallback:", e);
+            // Fallback to real table if view fails
+        }
+    }
+
+    const q = `
+        SELECT 
+            to_char(to_timestamp(created_at) AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS date_str,
+            COUNT(*) as total_count
+        FROM ${SCHEMA}."inspections" ${whereClause}
+        GROUP BY 1
+    `;
+    try {
+        const res = await query(q, subArgs);
+        return res.rows.map((r: any) => ({
+            date: r.date_str,
+            count: Number(r.total_count)
+        }));
+    } catch (e) {
+        console.error("ISO-DB: getInspectionsDatesList failed", e);
+        return [];
+    }
+}
+
+export async function getInspectionsProjectsList(filters: any = {}): Promise<{ ma_ct: string, ten_ct: string, count: number }[]> {
+    const { whereClause, subArgs } = buildBaseWhere(filters);
+    // Group by to get unique projects and their count
+    const q = `SELECT ma_ct, MAX(ten_ct) as ten_ct, COUNT(*) as count FROM ${SCHEMA}."inspections" ${whereClause} GROUP BY ma_ct`;
+    try {
+        const res = await query(q, subArgs);
+        return res.rows.map((r: any) => ({ ...r, count: Number(r.count) }));
+    } catch (e) {
+        console.error("ISO-DB: getInspectionsProjectsList failed", e);
+        return [];
+    }
+}
+
+/**
+ * Aggregates inspections from the centralized 'inspections' table.
+ */
+export async function getInspectionsList(filters: any = {}, page: number = 1, limit?: number): Promise<{ items: Inspection[], total: number }> {
+    const offsetLimit = limit || 1000000;
+    const offset = (page - 1) * offsetLimit;
+    
+    const { whereClause, subArgs } = buildBaseWhere(filters);
 
     const limitIdx = subArgs.length + 1;
     const offsetIdx = subArgs.length + 2;
@@ -505,33 +597,28 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
-        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+        ${limit ? `LIMIT $${limitIdx} OFFSET $${offsetIdx}` : ''}
     `;
 
     const countQuery = `SELECT COUNT(*) as total FROM ${SCHEMA}."inspections" ${whereClause}`;
 
     try {
+        const queryArgs = limit ? [...subArgs, limit, offset] : subArgs;
         const [res, countRes] = await Promise.all([
-            query(finalQuery, [...subArgs, limit, offset]),
+            query(finalQuery, queryArgs),
             query(countQuery, subArgs)
         ]);
 
         const items = res.rows.map((row: any) => ({
             ...row,
+            inspectorName: row.created_by,
             date: (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
                   (row.updated_at && Number(row.updated_at) > 1000000000) ? row.updated_at : 
                   row.created_at,
             updatedAt: row.updated_at,
-            materials: [], 
-            images: [],    
-            so_luong_ipo: 0, // Simplified for list view
-            inspectedQuantity: 0,
-            passedQuantity: 0,
-            failedQuantity: 0,
             isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
             hasNcr: row.status === 'FLAGGED',
-            isCond: row.status === 'CONDITIONAL',
-            dvt: ''
+            isCond: row.status === 'CONDITIONAL'
         })) as unknown as Inspection[];
 
         return { 
@@ -541,6 +628,118 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     } catch (e) {
         console.error("ISO-DB: getInspectionsList failed", e);
         return { items: [], total: 0 };
+    }
+}
+
+/**
+ * Fetches the year/month structure of inspections for hierarchical loading.
+ */
+export async function getInspectionsHierarchy(filters: any = {}) {
+    let whereClause = ' WHERE 1=1';
+    const subArgs: any[] = [];
+
+    if (filters.search) {
+        const idx = subArgs.length + 1;
+        whereClause += ` AND (ten_hang_muc ILIKE $${idx} OR ma_ct ILIKE $${idx} OR ten_ct ILIKE $${idx})`;
+        subArgs.push(`%${filters.search}%`);
+    }
+
+    if (filters.type && filters.type !== 'ALL') {
+        const types = filters.type.split(',').map((s: string) => s.trim());
+        const placeholders = types.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND type IN (${placeholders})`;
+        subArgs.push(...types);
+    }
+
+    if (filters.qc && filters.qc !== 'ALL') {
+        const qcs = filters.qc.split(',').map((s: string) => s.trim());
+        const placeholders = qcs.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND created_by IN (${placeholders})`;
+        subArgs.push(...qcs);
+    }
+
+    if (filters.workshop && filters.workshop !== 'ALL') {
+        const workshops = filters.workshop.split(',').map((s: string) => s.trim());
+        const placeholders = workshops.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND workshop IN (${placeholders})`;
+        subArgs.push(...workshops);
+    }
+
+    if (filters.project && filters.project !== 'ALL') {
+        const projects = filters.project.split(',').map((s: string) => s.trim());
+        const placeholders = projects.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND ma_ct IN (${placeholders})`;
+        subArgs.push(...projects);
+    }
+
+    const queryStr = `
+        SELECT 
+            EXTRACT(YEAR FROM TO_TIMESTAMP(created_at)) as year,
+            EXTRACT(MONTH FROM TO_TIMESTAMP(created_at)) as month,
+            COUNT(*) as count
+        FROM ${SCHEMA}."inspections"
+        ${whereClause}
+        GROUP BY year, month
+        ORDER BY year DESC, month DESC
+    `;
+    
+    try {
+        const res = await query(queryStr, subArgs);
+        return res.rows.map((row: any) => ({
+            year: parseInt(row.year, 10),
+            month: parseInt(row.month, 10),
+            count: parseInt(row.count, 10)
+        }));
+    } catch (e) {
+        console.error("ISO-DB: getInspectionsHierarchy failed", e);
+        return [];
+    }
+}
+
+/**
+ * Fetches projects and their inspection counts for a specific month.
+ */
+export async function getInspectionsProjectsByMonth(year: number, month: number, filters: any = {}) {
+    let whereClause = ' WHERE 1=1';
+    const subArgs: any[] = [year, month];
+
+    whereClause += ` AND EXTRACT(YEAR FROM TO_TIMESTAMP(created_at)) = $1`;
+    whereClause += ` AND EXTRACT(MONTH FROM TO_TIMESTAMP(created_at)) = $2`;
+
+    if (filters.search) {
+        const idx = subArgs.length + 1;
+        whereClause += ` AND (ten_hang_muc ILIKE $${idx} OR ma_ct ILIKE $${idx} OR ten_ct ILIKE $${idx})`;
+        subArgs.push(`%${filters.search}%`);
+    }
+
+    if (filters.type && filters.type !== 'ALL') {
+        const types = filters.type.split(',').map((s: string) => s.trim());
+        const placeholders = types.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND type IN (${placeholders})`;
+        subArgs.push(...types);
+    }
+
+    const queryStr = `
+        SELECT 
+            ma_ct, 
+            ten_ct,
+            COUNT(*) as count
+        FROM ${SCHEMA}."inspections"
+        ${whereClause}
+        GROUP BY ma_ct, ten_ct
+        ORDER BY count DESC
+    `;
+    
+    try {
+        const res = await query(queryStr, subArgs);
+        return res.rows.map((row: any) => ({
+            ma_ct: row.ma_ct,
+            ten_ct: row.ten_ct,
+            count: parseInt(row.count, 10)
+        }));
+    } catch (e) {
+        console.error("ISO-DB: getInspectionsProjectsByMonth failed", e);
+        return [];
     }
 }
 
@@ -625,6 +824,7 @@ export async function deleteInspection(id: string) {
     // Also remove from centralized inspections table
     try {
         await query(`DELETE FROM ${SCHEMA}."inspections" WHERE id = $1`, [id]);
+        await refreshDailyStatsMV();
     } catch (e) {}
 
     await logAudit(inspection.inspectorName || 'SYSTEM', 'DELETE_INSPECTION', 'inspection', id, inspection, null);
@@ -1003,8 +1203,9 @@ export async function saveNcrMapped(inspection_id: string, ncr: NCR, createdBy: 
     return ncr.id;
 }
 
-export async function getNcrs(filters: any = {}, page: number = 1, limit: number = 20): Promise<{ items: NCR[], total: number }> {
-    const offset = (page - 1) * limit;
+export async function getNcrs(filters: any = {}, page: number = 1, limit?: number): Promise<{ items: NCR[], total: number }> {
+    const offsetLimit = limit || 1000000;
+    const offset = (page - 1) * offsetLimit;
     
     // Union of all inspection tables to get project info
     const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
@@ -1049,8 +1250,11 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit: number
         args.push(p);
     }
 
+    const finalSql = sql + where + (limit ? ` ORDER BY n.created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}` : ` ORDER BY n.created_at DESC`);
+    const finalArgs = limit ? [...args, limit, offset] : args;
+
     const [res, countRes] = await Promise.all([
-        query(sql + where + ` ORDER BY n.created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
+        query(finalSql, finalArgs),
         query(`SELECT COUNT(*) as total FROM ${SCHEMA}.ncrs n LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id WHERE n.deleted_at IS NULL` + where, args)
     ]);
 
@@ -1159,8 +1363,9 @@ export async function saveTemplate(moduleId: string, items: CheckItem[]) {
 
 // --- PROJECTS ---
 
-export async function getProjectsPaginated(search: string = '', page: number = 1, limit: number = 20) {
-    const offset = (page - 1) * limit;
+export async function getProjectsPaginated(search: string = '', page: number = 1, limit?: number) {
+    const offsetLimit = limit || 1000000;
+    const offset = (page - 1) * offsetLimit;
     
     // Group by Ma_Tender from ipo table and join with projects table for details
     let sql = `
@@ -1195,8 +1400,11 @@ export async function getProjectsPaginated(search: string = '', page: number = 1
     
     const countSql = `SELECT COUNT(DISTINCT "Ma_Tender") as total FROM ${SCHEMA}.ipo WHERE "Ma_Tender" IS NOT NULL AND "Ma_Tender" != '' ${search ? 'AND ("Ma_Tender" ILIKE $1 OR "Project_name" ILIKE $1)' : ''}`;
     
+    const finalSql = sql + (limit ? ` ORDER BY updated_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}` : ` ORDER BY updated_at DESC`);
+    const finalArgs = limit ? [...args, limit, offset] : args;
+
     const [res, countRes] = await Promise.all([
-        query(sql + ` ORDER BY updated_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
+        query(finalSql, finalArgs),
         query(countSql, args)
     ]);
     
@@ -1383,8 +1591,9 @@ export async function deleteUser(id: string) {
 
 // --- MATERIALS ---
 
-export async function getMaterialsPaginated(search: string = '', page: number = 1, limit: number = 20) {
-    const offset = (page - 1) * limit;
+export async function getMaterialsPaginated(search: string = '', page: number = 1, limit?: number) {
+    const offsetLimit = limit || 1000000;
+    const offset = (page - 1) * offsetLimit;
     let sql = `SELECT id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "createdAt" FROM ${SCHEMA}.material`;
     let args: any[] = [];
     let where = '';
@@ -1393,8 +1602,11 @@ export async function getMaterialsPaginated(search: string = '', page: number = 
         args.push(`%${search}%`);
     }
     
+    const finalSql = sql + where + (limit ? ` ORDER BY "createdAt" DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}` : ` ORDER BY "createdAt" DESC`);
+    const finalArgs = limit ? [...args, limit, offset] : args;
+
     const [res, countRes] = await Promise.all([
-        query(sql + where + ` ORDER BY "createdAt" DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
+        query(finalSql, finalArgs),
         query(`SELECT COUNT(*) as total FROM ${SCHEMA}.material` + where, args)
     ]);
     
@@ -1494,3 +1706,12 @@ export async function hardDeleteInspection(id: string) {
 export async function testConnection(): Promise<boolean> {
     try { await query("SELECT 1"); return true; } catch (e) { return false; }
 }
+
+async function refreshDailyStatsMV() {
+    try {
+        await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${SCHEMA}."inspections_daily_stats_mv"`);
+    } catch (e) {
+        console.warn('Failed to refresh inspections_daily_stats_mv:', e);
+    }
+}
+

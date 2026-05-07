@@ -44,10 +44,30 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
       if (!managerSig) return alert("Vui lòng ký tên xác nhận.");
       setIsProcessing(true);
       try {
-          if (onApprove) await onApprove(inspection.id, managerSig, { managerName: user.name });
+          if (onApprove) await onApprove(inspection.id, managerSig, { 
+              managerName: user.name,
+              managerSignature: managerSig,
+              status: InspectionStatus.APPROVED
+          });
           setShowManagerModal(false);
-          onBack();
       } catch (e) { alert("Lỗi phê duyệt."); } finally { setIsProcessing(false); }
+  };
+
+  const handleManagerReject = async () => {
+      const reason = window.prompt("Nhập lý do từ chối hồ sơ SITE QC này:");
+      if (reason === null) return;
+      if (!reason.trim()) return alert("Vui lòng nhập lý do từ chối.");
+
+      setIsProcessing(true);
+      try { 
+          if (onApprove) await onApprove(inspection.id, "", { 
+              status: InspectionStatus.REJECTED,
+              summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason 
+          }); 
+      } 
+      catch (e: any) { 
+          alert("Lỗi từ chối: " + (e.message || "Unknown Error")); 
+      } finally { setIsProcessing(false); }
   };
 
   const handlePostComment = async () => {
@@ -229,7 +249,10 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
       <div className="sticky bottom-0 z-[110] bg-white/95 backdrop-blur-xl border-t border-slate-200 px-4 py-4 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0 flex gap-3">
           <button onClick={onBack} className="flex-1 h-14 bg-slate-100 text-slate-500 font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl border border-slate-200 active:scale-95 transition-all">Quay lại</button>
           {isManager && !isApproved && (
-              <button onClick={() => setShowManagerModal(true)} className="flex-[2] h-14 bg-amber-600 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 transition-all">PHÊ DUYỆT SITE QC</button>
+              <>
+                <button onClick={handleManagerReject} className="flex-1 h-14 bg-red-50 text-red-600 font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl border border-red-200 shadow-sm active:scale-95 transition-all">TỪ CHỐI</button>
+                <button onClick={() => setShowManagerModal(true)} className="flex-[2] h-14 bg-amber-600 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 transition-all">PHÊ DUYỆT SITE QC</button>
+              </>
           )}
       </div>
 
