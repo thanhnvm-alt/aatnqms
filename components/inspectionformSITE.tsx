@@ -167,16 +167,57 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     if (!formData.signature) { alert("Yêu cầu chữ ký QC."); return; }
     setIsSaving(true);
     try {
+        const entityId = formData.id || 'new';
+        
+        // Helper to upload if it's base64
+        const uploadIfBase64 = async (url: string | undefined, role: string) => {
+            if (!url) return '';
+            if (url.startsWith('data:')) {
+                return await uploadQMSImage(url, { entityId, type: 'SITE' as ModuleId, role });
+            }
+            return url;
+        };
+
+        // 1. Process Main Images sequentially
+        const processedImages: string[] = [];
+        for (const img of (formData.images || [])) {
+            processedImages.push(await uploadIfBase64(img, 'MAIN'));
+        }
+
+        // 2. Process Item Images sequentially
+        const processedItems = [];
+        for (const item of (formData.items || [])) {
+            const itemImages: string[] = [];
+            for (const img of (item.images || [])) {
+                itemImages.push(await uploadIfBase64(img, 'ITEM'));
+            }
+            processedItems.push({ ...item, images: itemImages });
+        }
+
+        // 3. Process Signature
+        const processedSignature = await uploadIfBase64(formData.signature, 'SIGNATURE_QC');
+
         // If status wasn't changed by user (still DRAFT), apply auto-status logic.
-        // Otherwise, use user-selected status.
         let statusToSave = formData.status;
         if (statusToSave === InspectionStatus.DRAFT) {
-            const hasFail = formData.items?.some(it => it.status === CheckStatus.FAIL);
+            const hasFail = processedItems.some(it => it.status === CheckStatus.FAIL);
             statusToSave = hasFail ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
         }
 
-        await onSave({ ...formData, status: statusToSave, updatedAt: new Date().toISOString() } as Inspection);
-    } catch (e) { alert("Lỗi lưu phiếu."); } finally { setIsSaving(false); }
+        await onSave({ 
+            ...formData, 
+            status: statusToSave, 
+            images: processedImages,
+            items: processedItems,
+            signature: processedSignature,
+            updatedAt: new Date().toISOString() 
+        } as Inspection);
+    } catch (e: any) { 
+        console.error("ISO-SAVE-SITE:", e);
+        alert(`Lỗi lưu phiếu: ${e.message || "Không thể tải ảnh lên"}`); 
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   return (

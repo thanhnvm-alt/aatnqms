@@ -22,7 +22,7 @@ interface InspectionDetailProps {
 }
 
 import { SignaturePad } from './SignaturePad';
-import { getProxyImageUrl } from '../src/utils';
+import { getProxyImageUrl, compressImage } from '../src/utils';
 
 export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
@@ -81,7 +81,8 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
       try {
           const { uploadQMSImage } = await import('../services/apiService');
           const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-              return await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+              const compressed = await compressImage(f, 500);
+              return await uploadQMSImage(compressed, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
           }));
           setCommentAttachments(prev => [...prev, ...processed]);
       } catch (err) {

@@ -338,28 +338,50 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         const entityId = formData.id || 'new';
         
         // Helper to upload if it's base64
-        const uploadIfBase64 = async (url: string, role: string) => {
+        const uploadIfBase64 = async (url: string | undefined, role: string) => {
+            if (!url) return '';
             if (url.startsWith('data:')) {
                 return await uploadQMSImage(url, { entityId, type: 'IQC', role });
             }
             return url;
         };
 
-        // 1. Process Main Images
-        const processedImages = await Promise.all((formData.images || []).map(img => uploadIfBase64(img, 'MAIN')));
-        const processedDelivery = await Promise.all((formData.deliveryNoteImages || []).map(img => uploadIfBase64(img, 'DELIVERY')));
-        const processedReport = await Promise.all((formData.reportImages || []).map(img => uploadIfBase64(img, 'REPORT')));
+        // 1. Process Main Images sequentially
+        const processedImages: string[] = [];
+        for (const img of (formData.images || [])) {
+            processedImages.push(await uploadIfBase64(img, 'MAIN'));
+        }
+
+        const processedDelivery: string[] = [];
+        for (const img of (formData.deliveryNoteImages || [])) {
+            processedDelivery.push(await uploadIfBase64(img, 'DELIVERY'));
+        }
+
+        const processedReport: string[] = [];
+        for (const img of (formData.reportImages || [])) {
+            processedReport.push(await uploadIfBase64(img, 'REPORT'));
+        }
+
         const processedSignature = await uploadIfBase64(formData.signature || '', 'SIGNATURE_QC');
 
-        // 2. Process Material Item Images
-        const processedMaterials = await Promise.all((formData.materials || []).map(async (mat) => {
-            const nextItems = await Promise.all((mat.items || []).map(async (item) => {
-                const itemImages = await Promise.all((item.images || []).map(img => uploadIfBase64(img, 'ITEM')));
-                return { ...item, images: itemImages };
-            }));
-            const matImages = await Promise.all((mat.images || []).map(img => uploadIfBase64(img, 'MATERIAL')));
-            return { ...mat, items: nextItems, images: matImages };
-        }));
+        // 2. Process Material Item Images sequentially
+        const processedMaterials = [];
+        for (const mat of (formData.materials || [])) {
+            const nextItems = [];
+            for (const item of (mat.items || [])) {
+                const itemImages: string[] = [];
+                for (const img of (item.images || [])) {
+                    itemImages.push(await uploadIfBase64(img, 'ITEM'));
+                }
+                nextItems.push({ ...item, images: itemImages });
+            }
+
+            const matImages: string[] = [];
+            for (const img of (mat.images || [])) {
+                matImages.push(await uploadIfBase64(img, 'MATERIAL'));
+            }
+            processedMaterials.push({ ...mat, items: nextItems, images: matImages });
+        }
 
         const finalData = { 
             ...formData, 
@@ -375,7 +397,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         await onSave(finalData as Inspection);
     } catch (e: any) { 
         console.error("ISO-SAVE: Error uploading images or saving", e);
-        alert("Lỗi lưu báo cáo IQC (có thể do lỗi tải ảnh lên)."); 
+        alert(`Lỗi lưu báo cáo IQC: ${e.message || "Không thể tải ảnh lên"}`); 
     } finally { 
         setIsSaving(false); 
     }

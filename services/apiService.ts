@@ -119,21 +119,31 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     
     if (typeof file === 'string') {
         if (file.startsWith('http') || file.startsWith('/uploads/')) return file;
-        const res = await fetch(file);
-        fileToUpload = await res.blob();
+        try {
+            const res = await fetch(file);
+            fileToUpload = await res.blob();
+        } catch (e) {
+            console.error("Failed to fetch blob from string", e);
+            throw new Error("Failed to process image data");
+        }
     } else {
+        fileToUpload = file;
+    }
+
+    // Always attempt compression for images
+    if (fileToUpload.type && fileToUpload.type.startsWith('image/')) {
         try {
             const options = {
-                maxSizeMB: 0.7, // Target ~700KB for better performance
-                maxWidthOrHeight: 1600, // Sufficient for ISO inspection detail
+                maxSizeMB: 0.7, // Target ~700KB
+                maxWidthOrHeight: 1600,
                 useWebWorker: true,
                 fileType: 'image/jpeg',
                 initialQuality: 0.8
             };
-            fileToUpload = await imageCompression(file, options);
+            const compressed = await imageCompression(fileToUpload as File, options);
+            fileToUpload = compressed;
         } catch (error) {
-            console.warn("Image compression failed, using original file", error);
-            fileToUpload = file;
+            console.warn("Image compression failed, using original", error);
         }
     }
 
@@ -147,12 +157,14 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     });
     
     if (!response.ok) {
-        let errorMsg = `Upload failed with status ${response.status}`;
-        if (response.status === 413) {
-            errorMsg = "File is too large, even after compression.";
-        } else {
-            const errorData = await response.json().catch(() => null);
+        let errorMsg = `Upload failed (${response.status})`;
+        try {
+            const errorData = await response.json();
             if (errorData && errorData.error) errorMsg = errorData.error;
+        } catch (e) {}
+        
+        if (response.status === 413) {
+            errorMsg = "Ảnh quá lớn để tải lên server (Giới hạn 10MB).";
         }
         throw new Error(errorMsg);
     }

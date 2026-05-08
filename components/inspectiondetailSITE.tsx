@@ -1,5 +1,4 @@
-import { getProxyImageUrl } from '../src/utils';
-
+import { getProxyImageUrl, compressImage } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, NCR } from '../types';
@@ -34,6 +33,25 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
   
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [commentAttachments, setCommentAttachments] = useState<{ id: string; url: string; compressedUrl: string }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      
+      try {
+          const { uploadQMSImage } = await import('../services/apiService');
+          const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+              const compressedBase64 = await compressImage(f, 500);
+              const result = await uploadQMSImage(compressedBase64, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+              return { id: Math.random().toString(36).substring(7), url: result, compressedUrl: compressedBase64 };
+          }));
+          setCommentAttachments(prev => [...prev, ...processed]);
+      } catch (err) {
+          alert('Failed to upload images');
+      }
+  };
 
   const isApproved = inspection.status === InspectionStatus.APPROVED;
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -71,7 +89,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
   };
 
   const handlePostComment = async () => {
-    if (!newComment.trim() || !onPostComment) return;
+    if ((!newComment.trim() && commentAttachments.length === 0) || !onPostComment) return;
     setIsSubmittingComment(true);
     try {
         await onPostComment(inspection.id, { 
@@ -80,9 +98,11 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
             userName: user.name, 
             userAvatar: user.avatar, 
             content: newComment, 
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            attachments: commentAttachments.map(a => a.url)
         } as NCRComment);
         setNewComment('');
+        setCommentAttachments([]);
     } finally { setIsSubmittingComment(false); }
   };
 
@@ -232,13 +252,39 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                                     <span className="font-black text-slate-800 text-[11px] uppercase">{comment.userName}</span>
                                     <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
                                 </div>
-                                <div className="bg-slate-50 p-4 rounded-2xl rounded-tl-none border border-slate-100 text-[12px] text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">{comment.content}</div>
+                                <div className="bg-slate-50 p-4 rounded-2xl rounded-tl-none border border-slate-100 text-[12px] text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">
+                                    <p>{comment.content}</p>
+                                    {comment.attachments && comment.attachments.length > 0 && (
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
+                                            {comment.attachments.map((url, i) => (
+                                                <img key={i} src={getProxyImageUrl(url)} className="rounded-lg w-full aspect-square object-cover" alt="attachment" />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}
+                    {commentAttachments.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 py-2">
+                            {commentAttachments.map((att, i) => (
+                                <div key={att.id} className="relative aspect-square">
+                                    <img 
+                                        src={att.compressedUrl} 
+                                        className="rounded-lg w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" 
+                                        alt="attachment" 
+                                        onClick={() => setLightboxState({ images: commentAttachments.map(a => a.compressedUrl), index: i })}
+                                    />
+                                    <button onClick={() => setCommentAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="w-3 h-3"/></button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <div className="flex gap-3 items-end pt-4">
+                        <input type="file" multiple accept="image/*" onChange={handleImageChange} className="hidden" ref={fileInputRef} />
+                        <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-slate-100 text-slate-500 rounded-[2rem] hover:bg-slate-200 transition-all"><Camera className="w-6 h-6"/></button>
                         <textarea value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Phản hồi ý kiến về chất lượng lắp đặt..." className="flex-1 pl-5 pr-5 py-4 bg-white border border-slate-200 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-amber-100 outline-none resize-none min-h-[60px] shadow-inner transition-all" />
-                        <button onClick={handlePostComment} disabled={isSubmittingComment || !newComment.trim()} className="w-14 h-14 bg-amber-600 text-white rounded-[1.5rem] shadow-xl shadow-amber-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-amber-700"><Send className="w-6 h-6" /></button>
+                        <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-amber-600 text-white rounded-[1.5rem] shadow-xl shadow-amber-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-amber-700"><Send className="w-6 h-6" /></button>
                     </div>
                 </div>
             </section>

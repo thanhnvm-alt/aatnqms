@@ -1,4 +1,4 @@
-import { getProxyImageUrl } from '../src/utils';
+import { getProxyImageUrl, compressImage } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, User, Workshop, CheckStatus } from '../types';

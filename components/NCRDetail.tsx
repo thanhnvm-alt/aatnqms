@@ -12,7 +12,7 @@ import {
 import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage, createNotification, fetchUsers } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { getProxyImageUrl } from '../src/utils';
+import { getProxyImageUrl, compressImage } from '../src/utils';
 
 interface NCRDetailProps {
   ncr: NCR;
@@ -91,15 +91,24 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           const entityId = formData.id || 'new';
           
           // Helper to upload if it's base64
-          const uploadIfBase64 = async (url: string, role: string) => {
+          const uploadIfBase64 = async (url: string | undefined, role: string) => {
+              if (!url) return '';
               if (url.startsWith('data:')) {
                   return await uploadQMSImage(url, { entityId, type: 'NCR', role });
               }
               return url;
           };
 
-          const processedBefore = await Promise.all((formData.imagesBefore || []).map(img => uploadIfBase64(img, 'BEFORE')));
-          const processedAfter = await Promise.all((formData.imagesAfter || []).map(img => uploadIfBase64(img, 'AFTER')));
+          // Sequential Processing
+          const processedBefore: string[] = [];
+          for (const img of (formData.imagesBefore || [])) {
+              processedBefore.push(await uploadIfBase64(img, 'BEFORE'));
+          }
+
+          const processedAfter: string[] = [];
+          for (const img of (formData.imagesAfter || [])) {
+              processedAfter.push(await uploadIfBase64(img, 'AFTER'));
+          }
 
           const oldStatus = ncr.status;
           let finalStatus = formData.status;
@@ -198,14 +207,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       
       try {
           const base64Images = await Promise.all(
-              Array.from(files).map((file: File) => {
-                  return new Promise<string>((resolve, reject) => {
-                      const reader = new FileReader();
-                      reader.onload = () => resolve(reader.result as string);
-                      reader.onerror = reject;
-                      reader.readAsDataURL(file);
-                  });
-              })
+              Array.from(files).map((file: File) => compressImage(file, 500))
           );
           
           if (type === 'COMMENT') {
@@ -257,7 +259,10 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               return url;
           };
 
-          const processedAttachments = await Promise.all(commentAttachments.map(img => uploadIfBase64(img, 'COMMENT')));
+          const processedAttachments: string[] = [];
+          for (const img of commentAttachments) {
+              processedAttachments.push(await uploadIfBase64(img, 'COMMENT'));
+          }
 
           const newCommentObj: NCRComment = {
               id: `cmt_${Date.now()}`,

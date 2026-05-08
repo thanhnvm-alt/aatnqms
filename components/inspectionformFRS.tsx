@@ -44,10 +44,11 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
     setIsProcessingImages(true);
     const { type, itemIdx } = activeUploadContext;
     try {
-        const uploadPromises = Array.from(files).map(file => 
-            uploadQMSImage(file, formData.id || 'temp', 'FRS', user.role)
-        );
-        const uploadedUrls = await Promise.all(uploadPromises);
+        const uploadedUrls: string[] = [];
+        for (const file of Array.from(files)) {
+            const url = await uploadQMSImage(file, formData.id || 'temp', 'FRS', user.role);
+            uploadedUrls.push(url);
+        }
 
         setFormData(prev => {
             if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...uploadedUrls] };

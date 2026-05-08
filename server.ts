@@ -161,7 +161,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // --- PDF Upload for Procedures ---
-app.post("/api/procedures/upload", memoryUpload.single('file'), async (req, res) => {
+app.post("/api/procedures/upload", memoryUpload.single('image'), async (req, res) => {
     try {
         if (!req.file || req.file.mimetype !== 'application/pdf') {
             return res.status(400).json({ error: 'Please upload a PDF file' });
@@ -234,7 +234,7 @@ app.get("/display-image/:fileId", authenticate, streamGoogleDriveImage);
 app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
 // API routes
-  app.post("/api/upload", authenticate, upload.single('file'), async (req, res) => {
+  app.post("/api/upload", authenticate, memoryUpload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -261,7 +261,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       const driveRes = await drive.files.create({
         requestBody: fileMetadata,
         media: media,
-        fields: 'id, webViewLink'
+        fields: 'id, webViewLink',
+        supportsAllDrives: true
       });
 
       const fileId = driveRes.data.id;

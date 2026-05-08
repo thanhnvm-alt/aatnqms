@@ -519,24 +519,61 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         const entityId = formData.id || 'new';
         
         // Helper to upload if it's base64
-        const uploadIfBase64 = async (url: string, role: string) => {
+        const uploadIfBase64 = async (url: string | undefined, role: string) => {
+            if (!url) return '';
             if (url.startsWith('data:')) {
-                // uploadQMSImage expects a Blob or File for PQC/Inspection types
-                // But IQC uses the same service. Let's see if it handles base64 directly or needs conversion.
-                // IQC uses base64 strings if the image source starts with 'data:'.
                 return await uploadQMSImage(url, { entityId, type: 'INSPECTION', role });
             }
             return url;
         };
 
         // 1. Process Main Images
-        const processedImages = await Promise.all((formData.images || []).map(img => uploadIfBase64(img, 'MAIN')));
+        const processedImages: string[] = [];
+        for (const img of (formData.images || [])) {
+            const uploadedUrl = await uploadIfBase64(img, 'MAIN');
+            processedImages.push(uploadedUrl);
+        }
 
-        // 2. Process Item Images
-        const processedItems = await Promise.all((formData.items || []).map(async (item) => {
-            const itemImages = await Promise.all((item.images || []).map(img => uploadIfBase64(img, 'ITEM')));
-            return { ...item, images: itemImages };
-        }));
+        // 2. Process Item Images & NCR Images
+        const processedItems = [];
+        for (const item of (formData.items || [])) {
+            // Item-level images
+            const itemImages: string[] = [];
+            for (const img of (item.images || [])) {
+                const uploadedUrl = await uploadIfBase64(img, 'ITEM');
+                itemImages.push(uploadedUrl);
+            }
+
+            // NCR images (if any)
+            let processedNcr = item.ncr;
+            if (item.ncr) {
+                const ncrBefore: string[] = [];
+                for (const img of (item.ncr.imagesBefore || [])) {
+                    ncrBefore.push(await uploadIfBase64(img, 'NCR_BEFORE'));
+                }
+
+                const ncrAfter: string[] = [];
+                for (const img of (item.ncr.imagesAfter || [])) {
+                    ncrAfter.push(await uploadIfBase64(img, 'NCR_AFTER'));
+                }
+
+                processedNcr = {
+                    ...item.ncr,
+                    imagesBefore: ncrBefore,
+                    imagesAfter: ncrAfter
+                };
+            }
+
+            processedItems.push({
+                ...item,
+                images: itemImages,
+                ncr: processedNcr
+            });
+        }
+
+        // 3. Process Signatures
+        const processedSignature = await uploadIfBase64(formData.signature, 'SIGNATURE_QC');
+        const processedProdSignature = await uploadIfBase64(formData.productionSignature, 'SIGNATURE_PROD');
 
         const itemsToSave = processedItems.filter(it => it.stage === formData.inspectionStage || !it.stage);
         const hasIssues = itemsToSave.some(it => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
@@ -546,13 +583,21 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             ...formData, 
             items: itemsToSave, 
             images: processedImages,
+            signature: processedSignature,
+            productionSignature: processedProdSignature,
             status: finalStatus, 
             inspectorName: user.name, 
             updatedAt: new Date().toISOString() 
         } as Inspection);
     } catch (e: any) { 
         console.error("ISO-SAVE: Error uploading images or saving", e);
-        alert("Lỗi lưu báo cáo PQC (có thể do lỗi tải ảnh lên)."); 
+        // If it's a JSON string of error info (our FirestoreError format), try to parse it
+        let message = e.message;
+        try {
+            const parsed = JSON.parse(e.message);
+            if (parsed.error) message = parsed.error;
+        } catch {}
+        alert(`Lỗi lưu báo cáo: ${message || "Không xác định"}`); 
     } finally { 
         setIsSaving(false); 
     }
