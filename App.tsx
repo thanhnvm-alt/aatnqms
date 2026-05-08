@@ -350,7 +350,20 @@ const App = () => {
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-x-hidden overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0 px-2 md:px-6 safe-pb no-scrollbar" id="main-scroll-container">
             <Suspense fallback={<LoadingFallback />}>
-                {view === 'DASHBOARD' && <Dashboard inspections={inspections} user={user} onNavigate={setView} onViewInspection={handleSelectInspection} />}
+                {view === 'DASHBOARD' && (
+                    <Dashboard 
+                        inspections={inspections} 
+                        user={user} 
+                        users={users}
+                        workshops={workshops}
+                        onNavigate={setView} 
+                        onViewInspection={handleSelectInspection} 
+                        onFilterChange={(filters) => {
+                            setInspectionFilters(filters);
+                            setInspectionsPage(1);
+                        }}
+                    />
+                )}
                 
                 <div className={view === 'LIST' ? "contents" : "hidden"}>
                     <InspectionList 

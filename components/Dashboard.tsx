@@ -1,21 +1,26 @@
 
-import React, { useMemo } from 'react';
-import { Inspection, InspectionStatus, Priority, User, ViewState } from '../types';
+import React, { useMemo, useState } from 'react';
+import { Inspection, InspectionStatus, Priority, User, ViewState, Workshop } from '../types';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { 
   ClipboardCheck, AlertTriangle, CheckCircle2, Flag, 
   Activity, Clock, AlertOctagon,
-  ArrowRight, ShieldCheck, UserCircle
+  ArrowRight, ShieldCheck, UserCircle, Filter, X, Search, RotateCcw
 } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
+import { DateRangePicker } from './DateRangePicker';
 
 interface DashboardProps {
   inspections: Inspection[];
   user?: User;
+  users?: User[];
+  workshops?: Workshop[];
   onLogout?: () => void;
   onNavigate?: (view: ViewState) => void;
   onViewInspection?: (id: string) => void;
+  onFilterChange?: (filters: any) => void;
 }
 
 const COLORS = {
@@ -26,26 +31,87 @@ const COLORS = {
   blue: '#3b82f6',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogout, onNavigate, onViewInspection }) => {
+const MODULE_CONFIG: Record<string, { label: string }> = {
+    'IQC': { label: 'IQC' },
+    'PQC': { label: 'PQC' },
+    'SQC_MAT': { label: 'SQC-VT' },
+    'SQC_VT': { label: 'SQC-VT' },
+    'SQC_BTP': { label: 'SQC-BTP' },
+    'FQC': { label: 'FQC' },
+    'SITE': { label: 'SITE' },
+    'SPR': { label: 'SPR' },
+    'STEP': { label: 'STEP' },
+    'FSR': { label: 'FSR' }
+};
+
+export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users = [], workshops = [], onLogout, onNavigate, onViewInspection, onFilterChange }) => {
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filterQC, setFilterQC] = useState<string[]>([]);
+  const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterType, setFilterType] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filterOptions = useMemo(() => ({
+    inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
+    workshops: Array.from(new Set(workshops.map(w => w.name))),
+    types: Object.keys(MODULE_CONFIG),
+    statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
+  }), [user, users, workshops]);
+
+  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '' || searchTerm !== '';
+
+  const handleApplyFilters = () => {
+    if (onFilterChange) {
+      onFilterChange({
+        qc: filterQC.join(','),
+        workshop: filterWorkshop.join(','),
+        status: filterStatus.join(','),
+        type: filterType.join(','),
+        startDate,
+        endDate,
+        search: searchTerm
+      });
+    }
+  };
+
+  const clearFilters = () => {
+    setFilterQC([]);
+    setFilterWorkshop([]);
+    setFilterStatus([]);
+    setFilterType([]);
+    setStartDate('');
+    setEndDate('');
+    setSearchTerm('');
+    if (onFilterChange) onFilterChange({});
+  };
+
   const safeInspections = useMemo(() => (Array.isArray(inspections) ? inspections : []).filter(i => i !== null), [inspections]);
 
   const stats = useMemo(() => {
     const total = safeInspections.length;
-    const completed = safeInspections.filter(i => i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED).length;
-    const flagged = safeInspections.filter(i => i.status === InspectionStatus.FLAGGED).length;
+    const nonDraftItems = safeInspections.filter(i => i.status !== InspectionStatus.DRAFT);
     const drafts = safeInspections.filter(i => i.status === InspectionStatus.DRAFT).length;
     const highPriority = safeInspections.filter(i => i.priority === Priority.HIGH).length;
     
-    const finishedTotal = completed + flagged;
-    const passRate = finishedTotal > 0 ? Math.round((completed / finishedTotal) * 100) : 0;
+    // Requirement 2: % Đạt = trung bình cộng tl đạt của tất cả các phiếu
+    const avgSuccessRate = nonDraftItems.length > 0 
+      ? Math.round(nonDraftItems.reduce((acc, curr) => acc + (curr.score || 0), 0) / nonDraftItems.length) 
+      : 0;
 
-    return { total, completed, flagged, drafts, highPriority, passRate };
+    // Requirement 3: % Lỗi = trung bình cộng tl lỗi của tất cả các phiếu
+    const avgErrorRate = nonDraftItems.length > 0 
+      ? Math.round(nonDraftItems.reduce((acc, curr) => acc + (100 - (curr.score || 0)), 0) / nonDraftItems.length) 
+      : 0;
+
+    return { total, drafts, highPriority, avgSuccessRate, avgErrorRate, nonDraftCount: nonDraftItems.length };
   }, [safeInspections]);
 
   const statusData = [
-    { name: 'Đạt', value: stats.completed, color: COLORS.pass },
-    { name: 'Lỗi', value: stats.flagged, color: COLORS.fail },
-    { name: 'Nháp', value: stats.drafts, color: COLORS.draft },
+    { name: '% Đạt', value: stats.avgSuccessRate, color: COLORS.pass },
+    { name: '% Lỗi', value: stats.avgErrorRate, color: COLORS.fail },
   ].filter(item => item.value > 0);
 
   const projectData = useMemo(() => {
@@ -92,11 +158,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
   return (
     <div className="h-full overflow-y-auto no-scrollbar bg-slate-50 flex flex-col no-scroll-x">
       <div className="p-4 space-y-5 max-w-7xl mx-auto w-full pb-28">
+        
+        {/* Filter Section */}
+        <div className="bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <Filter className="w-4 h-4" /> BỘ LỌC DỮ LIỆU
+                </h3>
+                {isFilterActive && (
+                    <button 
+                        onClick={clearFilters}
+                        className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+                    >
+                        Xóa tất cả
+                    </button>
+                )}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tìm kiếm</label>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Mã/Tên dự án, Hạng mục..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onBlur={handleApplyFilters}
+                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 h-[42px]"
+                        />
+                    </div>
+                </div>
+                <SearchableSelect 
+                    label="Loại phiếu"
+                    values={filterType}
+                    options={filterOptions.types}
+                    onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), startDate, endDate, search: searchTerm }); }}
+                    optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
+                />
+                <SearchableSelect 
+                    label="QC Kiểm tra"
+                    values={filterQC}
+                    options={filterOptions.inspectors}
+                    onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate, search: searchTerm }); }}
+                />
+                <DateRangePicker 
+                    label="Khoảng ngày"
+                    startDate={startDate}
+                    endDate={endDate}
+                    onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate: d, endDate, search: searchTerm }); }}
+                    onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate: d, search: searchTerm }); }}
+                />
+            </div>
+        </div>
+
         {/* Top Stat Grid */}
         <div className="grid grid-cols-2 gap-3">
             <StatCard title="TỔNG PHIẾU" value={stats.total} icon={ClipboardCheck} colorHex="#3b82f6" subtitle={`${stats.drafts} bản nháp`} />
-            <StatCard title="TỶ LỆ ĐẠT" value={`${stats.passRate}%`} icon={CheckCircle2} colorHex="#10b981" subtitle="KPI: >90%" />
-            <StatCard title="LỖI/KPH" value={stats.flagged} icon={AlertTriangle} colorHex="#ef4444" subtitle="Đã phát hiện" />
+            <StatCard title="TỶ LỆ ĐẠT AVG" value={`${stats.avgSuccessRate}%`} icon={CheckCircle2} colorHex="#10b981" subtitle="KPI: >90%" />
+            <StatCard title="% LỖI AVG" value={`${stats.avgErrorRate}%`} icon={AlertTriangle} colorHex="#ef4444" subtitle="Trung bình/Phiếu" />
             <StatCard title="CẤP BÁCH" value={stats.highPriority} icon={Flag} colorHex="#f59e0b" subtitle="Ưu tiên cao" />
         </div>
 
@@ -104,7 +225,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
         <div className="grid grid-cols-1 gap-4">
             {/* Status Pie */}
             <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col items-center">
-               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TRẠNG THÁI</h3>
+               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TỶ LỆ (%)</h3>
                <div className="w-full h-40 relative min-h-[160px]">
                   <ResponsiveContainer width="99%" height={160}>
                     <PieChart>
@@ -125,15 +246,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, onLogou
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                     <p className="text-xl font-black text-slate-800 leading-none">{stats.completed + stats.flagged}</p>
-                     <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5">HOÀN TẤT</p>
+                     <p className="text-xl font-black text-slate-800 leading-none">{stats.avgSuccessRate}%</p>
+                     <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5">TRUNG BÌNH</p>
                   </div>
                </div>
                <div className="flex flex-wrap gap-3 mt-2 justify-center">
                   {statusData.map((entry, idx) => (
                       <div key={idx} className="flex items-center gap-1">
                           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase whitespace-nowrap">{entry.name}: {entry.value}</p>
+                          <p className="text-[8px] font-black text-slate-400 uppercase whitespace-nowrap">{entry.name}: {entry.value}%</p>
                       </div>
                   ))}
                </div>

@@ -6,6 +6,7 @@ import { exportInspections, deleteInspection, importInspectionsFile, fetchInspec
 import { ProxyImage } from '../src/components/ProxyImage';
 import { formatDisplayDate } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
+import { SearchableSelect } from './SearchableSelect';
 import { 
   Search, RefreshCw, FolderOpen, Clock, Upload,
   Loader2, X, ChevronDown, ChevronRight, ChevronLeft, Maximize2,
@@ -33,6 +34,7 @@ interface InspectionListProps {
   user: User;
 }
 
+// MODULE_CONFIG stays here because it's used for styling icons
 const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
     'IQC': { label: 'IQC', color: 'text-blue-600', bg: 'bg-blue-50', icon: PackageCheck },
     'PQC': { label: 'PQC', color: 'text-purple-600', bg: 'bg-purple-50', icon: Factory },
@@ -46,110 +48,7 @@ const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; 
     'FSR': { label: 'FSR', color: 'text-orange-600', bg: 'bg-orange-50', icon: FolderOpen }
 };
 
-interface SearchableSelectProps {
-  label: string;
-  values: string[];
-  options: string[];
-  onChange: (vals: string[]) => void;
-  placeholder?: string;
-  className?: string;
-}
-
-const SearchableSelect: React.FC<SearchableSelectProps & { optionLabels?: Record<string, string> }> = ({ label, values, options, onChange, placeholder = '- TẤT CẢ -', className, optionLabels }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const getLabel = (opt: string) => optionLabels?.[opt] || opt;
-
-  const filteredOptions = useMemo(() => {
-    if (!search) return options;
-    return options.filter(opt => 
-      opt.toLowerCase().includes(search.toLowerCase()) || 
-      getLabel(opt).toLowerCase().includes(search.toLowerCase())
-    );
-  }, [options, search, optionLabels]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleToggle = (opt: string) => {
-    if (values.includes(opt)) {
-      onChange(values.filter(v => v !== opt));
-    } else {
-      onChange([...values, opt]);
-    }
-  };
-
-  const displayValue = values.length > 0 ? (values.length === 1 ? getLabel(values[0]) : `${values.length} mục đã chọn`) : placeholder;
-
-  return (
-    <div className={`space-y-1 relative ${className}`} ref={containerRef}>
-      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</label>
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-all h-[38px]"
-      >
-        <span className={`truncate ${values.length > 0 ? 'text-slate-900' : 'text-slate-400'}`}>
-          {displayValue}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </div>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] max-h-64 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-          <div className="p-2 border-b border-slate-100 bg-slate-50">
-            <div className="relative flex gap-2">
-              <div className="relative flex-1">
-                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                 <input 
-                   autoFocus
-                   type="text"
-                   value={search}
-                   onChange={(e) => setSearch(e.target.value)}
-                   placeholder="Tìm nhanh..."
-                   className="w-full pl-8 pr-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-100"
-                   onClick={(e) => e.stopPropagation()}
-                 />
-              </div>
-            </div>
-          </div>
-          <div className="overflow-y-auto flex-1 no-scrollbar p-1">
-            <div 
-              onClick={(e) => { e.stopPropagation(); onChange([]); }}
-              className={`px-3 py-2 text-sm font-medium rounded-lg cursor-pointer hover:bg-blue-50 transition-all mb-1 ${values.length === 0 ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
-            >
-              - TẤT CẢ -
-            </div>
-            <div className="h-px bg-slate-100 mb-1 mx-2" />
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map(opt => (
-                <div 
-                  key={opt}
-                  onClick={(e) => { e.stopPropagation(); handleToggle(opt); }}
-                  className={`px-3 py-2 text-sm font-medium flex items-center justify-between rounded-lg cursor-pointer hover:bg-blue-50 transition-all ${values.includes(opt) ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
-                >
-                  <span className="truncate">{getLabel(opt)}</span>
-                  {values.includes(opt) && <CheckSquare className="w-4 h-4 text-blue-600 shrink-0" />}
-                </div>
-              ))
-            ) : (
-              <div className="p-4 text-center text-xs font-medium text-slate-400">Không tìm thấy</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
+// Removed local SearchableSelect
 export const InspectionList: React.FC<InspectionListProps> = ({ 
   inspections: propsInspections, isLoading: propsIsLoading, onSelect, workshops = [], users = [], onRefresh, onSearch, onFilterChange, total = 0, page = 1, onPageChange, user
 }) => {
@@ -159,6 +58,25 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
+
+  const handleCommitSearch = () => {
+    if (searchInput !== searchTerm) {
+      setSearchTerm(searchInput);
+      if (onSearch) onSearch(searchInput);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setSearchTerm('');
+    if (onSearch) onSearch('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommitSearch();
+    }
+  };
 
   const [selectedMonthDesktop, setSelectedMonthDesktop] = useState<{year: number, month: number} | null>(null);
   const [selectedDateDesktop, setSelectedDateDesktop] = useState<string | null>(null);
@@ -192,18 +110,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleCommitSearch = () => {
-    setSearchTerm(searchInput);
-    if (onSearch) {
-        onSearch(searchInput);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleCommitSearch();
-    }
-  };
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set([new Date().getFullYear().toString()]));
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set([`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2, '0')}`]));
@@ -308,8 +214,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, startDate, endDate, selectedMonthDesktop, selectedProjectDesktop]);
 
   const filterOptions = useMemo(() => ({
-      inspectors: user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []),
-      workshops: workshops.map(w => w.name),
+      inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
+      workshops: Array.from(new Set(workshops.map(w => w.name))),
       projects: Array.from(new Set([
           ...projects.map(p => p.ma_ct),
           ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
@@ -499,17 +405,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
   // 2. Fetch projects when date/month selected
   useEffect(() => {
-    if (!selectedDateDesktop && !selectedMonthDesktop && !startDate && !endDate) return;
+    if (!searchTerm && !selectedDateDesktop && !selectedMonthDesktop && !startDate && !endDate) return;
 
     loadProjects(getFilterArgs(), selectedDateDesktop, selectedMonthDesktop);
   }, [selectedDateDesktop, selectedMonthDesktop, filterQC, filterWorkshop, filterStatus, filterType, startDate, endDate, searchTerm]);
 
-  // 3. Trigger Item load when Project is selected (Desktop)
+  // 3. Trigger Item load when Project is selected OR when searching (Global Search Mode)
   useEffect(() => {
       // Clear selected item when project changes to avoid stale detail view
       setSelectedItemDesktop(null);
 
-      if (!selectedProjectDesktop || selectedProjectDesktop === 'ALL') {
+      if (!searchTerm && (!selectedProjectDesktop || selectedProjectDesktop === 'ALL')) {
           setLazyLoadedItems([]);
           return;
       }
@@ -519,7 +425,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       const args = getFilterArgs();
       
       // Pass project filter correctly
-      args.project = selectedProjectDesktop;
+      if (selectedProjectDesktop && selectedProjectDesktop !== 'ALL') {
+        args.project = selectedProjectDesktop;
+      }
       
       if (selectedDateDesktop && selectedDateDesktop !== 'ALL') {
              const [d, m, y] = selectedDateDesktop.split('/');
@@ -602,13 +510,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               <div className="relative flex-1">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
                   <input 
-                    type="text" placeholder="Tìm Dự án, Sản phẩm..." 
+                    type="text" placeholder="Dự án, Sản phẩm, Inspector, Headcode, Nhà máy..." 
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     onBlur={handleCommitSearch}
                     onKeyDown={handleKeyDown}
-                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    className="w-full pl-11 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                   />
+                  {searchInput && (
+                    <button 
+                      onClick={handleClearSearch}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
               </div>
               
               <button 
@@ -843,18 +759,20 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                 )}
                 {mobileViewStep === 3 && (
                     <div className="p-3 w-full animate-in fade-in slide-in-from-right-4 duration-300">
-                        {isItemsLoading ? (
+                        {isItemsLoading && desktopItems.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                             </div>
-                        ) : (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
+                        ) : !searchTerm && (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                                 <Building2 className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Dự Án</strong> ở bước 2</p>
                                 <button onClick={() => setMobileViewStep(2)} className="mt-4 px-4 py-2 bg-blue-100 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Dự Án</button>
                             </div>
                         ) : desktopItems.length === 0 ? (
-                            <div className="p-8 text-center text-sm text-slate-500 font-medium bg-white rounded-2xl border border-slate-200 shadow-sm">Không có hạng mục nào</div>
+                            <div className="p-8 text-center text-sm text-slate-500 font-medium bg-white rounded-2xl border border-slate-200 shadow-sm">
+                                {searchTerm ? `Không tìm thấy hạng mục nào cho "${searchTerm}"` : 'Không có hạng mục nào'}
+                            </div>
                         ) : (
                             <div className="space-y-3 pb-2">
                                 {desktopItems.map((item) => {
@@ -1061,11 +979,13 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     onMouseDown={startDrag(2)}
                 />
                 <div className="px-4 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">3. Hạng Mục - {desktopItems.length} Phiếu</h3>
+                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">
+                        {searchTerm ? 'Kết quả tìm kiếm' : '3. Hạng Mục'} - {desktopItems.length} Phiếu
+                    </h3>
                     {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-0">
-                    {(selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
+                    {!searchTerm && (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
                             <Building2 className="w-8 h-8 mb-2 opacity-20" />
                             <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Công trình / Dự án</strong></p>

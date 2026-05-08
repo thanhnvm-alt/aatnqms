@@ -39,9 +39,9 @@ async function syncToInspectionsTable(inspection: Inspection) {
         await query(`
             INSERT INTO ${SCHEMA}."inspections" (
                 id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
-                workshop, status, score, created_at, updated_at, created_by
+                workshop, status, score, created_at, updated_at, created_by, headcode
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10::bigint, $11::bigint, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10::bigint, $11::bigint, $12, $13)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 score = EXCLUDED.score,
@@ -51,6 +51,7 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 ma_nha_may = EXCLUDED.ma_nha_may,
                 ten_hang_muc = EXCLUDED.ten_hang_muc,
                 workshop = EXCLUDED.workshop,
+                headcode = EXCLUDED.headcode,
                 created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by),
                 created_at = CASE WHEN ${SCHEMA}."inspections".created_at = 0 THEN EXCLUDED.created_at ELSE ${SCHEMA}."inspections".created_at END
         `, sanitizeArgs([
@@ -65,7 +66,8 @@ async function syncToInspectionsTable(inspection: Inspection) {
             inspection.score || 0,
             createdAt,
             updatedAt,
-            inspection.inspectorName || 'SYSTEM'
+            inspection.inspectorName || 'SYSTEM',
+            inspection.headcode
         ]));
     } catch (e) {
         console.error(`❌ ISO-DB: Sync to inspections table failed for ${inspection.id}:`, e);
@@ -492,7 +494,7 @@ function buildBaseWhere(filters: any) {
     if (filters.search) {
         const searchPattern = `%${filters.search}%`;
         const searchIdx = subArgs.length + 1;
-        whereClause += ` AND (ma_ct ILIKE $${searchIdx} OR ten_ct ILIKE $${searchIdx} OR ten_hang_muc ILIKE $${searchIdx} OR created_by ILIKE $${searchIdx} OR id ILIKE $${searchIdx})`;
+        whereClause += ` AND (ma_ct ILIKE $${searchIdx} OR ten_ct ILIKE $${searchIdx} OR ten_hang_muc ILIKE $${searchIdx} OR created_by ILIKE $${searchIdx} OR id ILIKE $${searchIdx} OR ma_nha_may ILIKE $${searchIdx} OR headcode ILIKE $${searchIdx})`;
         subArgs.push(searchPattern);
     }
 
@@ -672,35 +674,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
  * Fetches the year/month structure of inspections for hierarchical loading.
  */
 export async function getInspectionsHierarchy(filters: any = {}) {
-    let whereClause = ' WHERE 1=1';
-    const subArgs: any[] = [];
-
-    if (filters.search) {
-        const idx = subArgs.length + 1;
-        whereClause += ` AND (ten_hang_muc ILIKE $${idx} OR ma_ct ILIKE $${idx} OR ten_ct ILIKE $${idx})`;
-        subArgs.push(`%${filters.search}%`);
-    }
-
-    if (filters.type && filters.type !== 'ALL') {
-        const types = filters.type.split(',').map((s: string) => s.trim());
-        const placeholders = types.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
-        whereClause += ` AND type IN (${placeholders})`;
-        subArgs.push(...types);
-    }
-
-    if (filters.qc && filters.qc !== 'ALL') {
-        const qcs = filters.qc.split(',').map((s: string) => s.trim());
-        const placeholders = qcs.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
-        whereClause += ` AND created_by IN (${placeholders})`;
-        subArgs.push(...qcs);
-    }
-
-    if (filters.workshop && filters.workshop !== 'ALL') {
-        const workshops = filters.workshop.split(',').map((s: string) => s.trim());
-        const placeholders = workshops.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
-        whereClause += ` AND workshop IN (${placeholders})`;
-        subArgs.push(...workshops);
-    }
+    let { whereClause, subArgs } = buildBaseWhere(filters);
 
     if (filters.project && filters.project !== 'ALL') {
         const projects = filters.project.split(',').map((s: string) => s.trim());
