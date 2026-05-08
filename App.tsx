@@ -304,7 +304,7 @@ const App = () => {
         notifyUsers(['MANAGER', 'ADMIN'], 'Phiếu báo cáo mới', `QC ${user.name} vừa gửi phiếu ${newInspection.type} cho dự án ${newInspection.ten_ct}`, { view: 'DETAIL', id: newInspection.id }, user.id);
       }
       
-      setView('LIST'); loadInspections(); 
+      setView('LIST'); loadInspections(inspectionsPage, inspectionFilters); 
   };
 
   const startCreateInspection = async (moduleId: ModuleId) => {

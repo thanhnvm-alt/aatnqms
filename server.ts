@@ -253,9 +253,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         parents: folderId ? [folderId] : []
       };
 
+      const fileStream = req.file.path ? fs.createReadStream(req.file.path) : Readable.from(req.file.buffer);
       const media = {
         mimeType: req.file.mimetype,
-        body: fs.createReadStream(req.file.path)
+        body: fileStream
       };
 
       const driveRes = await drive.files.create({
@@ -283,10 +284,12 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       );
 
       // Clean up local temp file
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (err) {
-        console.error("Failed to delete temp file:", err);
+      if (req.file.path) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (err) {
+          console.error("Failed to delete temp file:", err);
+        }
       }
 
       res.json({ 
