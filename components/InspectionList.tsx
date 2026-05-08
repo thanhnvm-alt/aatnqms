@@ -548,8 +548,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const { desktopProjectsList, desktopItems } = useMemo(() => {
       let itemsForProject = lazyLoadedItems;
       
-      if (selectedProjectDesktop && selectedProjectDesktop !== 'ALL') {
-          itemsForProject = itemsForProject.filter(i => (i.ma_ct || 'DÙNG CHUNG') === selectedProjectDesktop);
+      if (selectedProjectDesktop !== null && selectedProjectDesktop !== 'ALL') {
+          itemsForProject = itemsForProject.filter(i => (i.ma_ct || '') === (selectedProjectDesktop || ''));
       }
       
       // Apply Date/Month filtering on top of lazyLoadedItems
@@ -710,7 +710,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     {(selectedDateDesktop || selectedMonthDesktop) && (
                         <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Dự Án {desktopProjectsList.length > 0 && `(${desktopProjectsList.length})`}</button>
                     )}
-                    {(selectedProjectDesktop && selectedProjectDesktop !== 'ALL') && (
+                    {(selectedProjectDesktop !== null && selectedProjectDesktop !== 'ALL') && (
                         <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Hạng Mục {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
                     )}
                 </div>
@@ -831,8 +831,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500/20' : 'bg-white border-slate-200'}`}
                                     >
                                         <div className="flex flex-col min-w-0 pr-4">
-                                            <span className={`text-[14px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-800'}`}>{p.ten_ct}</span>
-                                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">{p.ma_ct}</span>
+                                            <span className={`text-[14px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-800'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
                                         </div>
                                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{p.count}</span>
                                     </button>
@@ -847,7 +847,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             <div className="flex flex-col items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                             </div>
-                        ) : (!selectedProjectDesktop || selectedProjectDesktop === 'ALL') ? (
+                        ) : (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                                 <Building2 className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Dự Án</strong> ở bước 2</p>
@@ -1041,8 +1041,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     >
                                         <div className="flex items-center justify-between w-full">
                                             <div className="flex flex-col min-w-0 pr-2">
-                                                <span className={`text-[13px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-700'}`}>{p.ten_ct}</span>
-                                                <span className="text-[10px] text-slate-500 font-medium">{p.ma_ct}</span>
+                                                <span className={`text-[13px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-700'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                                <span className="text-[10px] text-slate-500 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
                                             </div>
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{p.count}</span>
                                         </div>
@@ -1065,7 +1065,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-0">
-                    {(!selectedProjectDesktop || selectedProjectDesktop === 'ALL') ? (
+                    {(selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
                             <Building2 className="w-8 h-8 mb-2 opacity-20" />
                             <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Công trình / Dự án</strong></p>

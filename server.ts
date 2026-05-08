@@ -1956,15 +1956,15 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         }
 
         for (const [typeStr, items] of itemsByType.entries()) {
-           let tableName = `forms_${typeStr}`;
-           if (typeStr === 'step_vecni' || typeStr === 'step') tableName = 'forms_step';
+           const fullTableName = (db as any).getTableName(typeStr);
 
            const CHUNK_SIZE = 1000;
            for (let i = 0; i < items.length; i += CHUNK_SIZE) {
                const chunk = items.slice(i, i + CHUNK_SIZE);
                const ids = chunk.map(it => it.id);
                try {
-                  const detailRes = await query(`SELECT * FROM "${schema}"."${tableName}" WHERE id = ANY($1::text[])`, [ids]);
+                  // db.getTableName returns '"schema"."tablename"' so we use it directly
+                  const detailRes = await query(`SELECT * FROM ${fullTableName} WHERE id = ANY($1::text[])`, [ids]);
                   const detailMap = new Map(detailRes.rows.map((r: any) => [r.id, r]));
                   for (const item of chunk) {
                       const d = detailMap.get(item.id);
@@ -2206,7 +2206,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
                 const id = getCol(['mã hồ sơ', 'id', 'mã']);
                 const ma_ct = getCol(['mã dự án', 'ma_ct', 'mã công trình', 'project code', 'ma_du_an']);
-                if (!ma_ct) continue; // Skip empty rows silently or log if needed
+                const type = getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC';
+                const isSharedType = ['IQC', 'SQC_VT', 'SQC_MAT', 'SQM_MAT'].includes(String(type).toUpperCase());
+                
+                if (!ma_ct && !isSharedType) continue; // Skip empty rows silently or log if needed
 
                 const inspection_date_raw = getVal(['ngày thực hiện', 'ngày thực', 'date']);
                 let updatedAt = Math.floor(Date.now() / 1000);
@@ -2263,7 +2266,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
                 const inspection: any = {
                     id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                    type: getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC',
+                    type: type,
                     ma_ct,
                     ten_ct: getCol(['tên dự án', 'ten_ct', 'tên công trình', 'project name']),
                     ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc', 'item name', 'hang_muc', 'ten_hang_muc']),

@@ -122,7 +122,7 @@ export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'sqc
 /**
  * Get the table name based on inspection type
  */
-const getTableName = (type: string = 'PQC'): string => {
+export const getTableName = (type: string = 'PQC'): string => {
     const t = String(type || 'PQC').trim().toUpperCase();
     
     if (t === 'SQC' || t === 'SQC_VT' || t === 'SQC-VT' || t === 'VẬT TƯ' || t === 'VAT TU') return `${SCHEMA}."forms_sqc_vt"`;
@@ -227,17 +227,37 @@ export async function saveInspection(inspection: Inspection) {
   // Auto-fill project info if missing, especially for "Dùng Chung" cases
   if (!inspection.ma_ct || !inspection.ten_ct) {
     let source: any[] = [];
-    if (inspection.type === 'IQC' && typeof inspection.materials_json === 'string') {
-        try { source = JSON.parse(inspection.materials_json); } catch(e) {}
-    } else if (typeof inspection.items_json === 'string') {
-        try { source = JSON.parse(inspection.items_json); } catch(e) {}
+    if (Array.isArray(inspection.materials) && inspection.materials.length > 0) {
+        source = inspection.materials;
+    } else if (Array.isArray(inspection.items) && inspection.items.length > 0) {
+        source = inspection.items;
     }
 
     if (source && source.length > 0) {
         const first = source[0];
-        if (!inspection.ma_ct) inspection.ma_ct = first.projectCode || first.ma_ct || '';
+        if (!inspection.ma_ct) inspection.ma_ct = first.projectCode || first.Ma_Tender || first.ma_ct || '';
         if (!inspection.ten_ct) inspection.ten_ct = first.projectName || first.ten_ct || '';
     }
+  }
+
+  // Final forced check for Shared materials (Vật tư dùng chung)
+  const tUpper = String(inspection.type || '').trim().toUpperCase();
+  const isSharedType = tUpper === 'IQC' || tUpper.includes('SQC_VT') || tUpper.includes('SQC_MAT') || tUpper.includes('SQC-VT') || tUpper.includes('SQC-MAT');
+  
+  if (isSharedType) {
+      const maCtClean = String(inspection.ma_ct || '').trim().toUpperCase();
+      const isActuallyShared = !maCtClean || 
+                              maCtClean === 'DÙNG CHUNG' || 
+                              maCtClean === 'DUNG CHUNG' || 
+                              maCtClean === 'SHARED' || 
+                              maCtClean === 'DC' ||
+                              maCtClean === 'VẬT TƯ DÙNG CHUNG' ||
+                              maCtClean === 'VAT TU DUNG CHUNG';
+
+      if (isActuallyShared) {
+          inspection.ma_ct = 'DÙNG CHUNG';
+          inspection.ten_ct = 'VẬT TƯ KHO DÙNG CHUNG';
+      }
   }
 
   const existing = await getInspectionById(inspection.id);
