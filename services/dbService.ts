@@ -408,58 +408,74 @@ export async function saveInspection(inspection: Inspection) {
       ]));
     }
 
-  // Log Audit & Status Change
+  // --- PREPARE SIDE TASKS ---
+  const sideTasks: Promise<any>[] = [];
+  
+  // Save NCRs (Parallelized)
+  const ncrTasks: Promise<any>[] = [];
   const inspectorName = inspection.inspectorName || 'SYSTEM';
 
-  // --- SAVE NCRs FROM INSPECTION ITEMS ---
   if (Array.isArray(inspection.items)) {
     for (const item of inspection.items) {
       if (item.ncr && typeof item.ncr === 'object' && item.ncr.id) {
-        await saveNcrMapped(inspection.id, item.ncr, inspectorName);
+        ncrTasks.push(saveNcrMapped(inspection.id, item.ncr, inspectorName));
       }
     }
   }
 
-  // --- SAVE NCRs FROM MATERIAL ITEMS (IQC/SQC-VT) ---
   if (Array.isArray(inspection.materials)) {
     for (const mat of inspection.materials) {
       if (Array.isArray(mat.items)) {
         for (const item of mat.items) {
           if (item.ncr && typeof item.ncr === 'object' && item.ncr.id) {
-            await saveNcrMapped(inspection.id, item.ncr, inspectorName);
+            ncrTasks.push(saveNcrMapped(inspection.id, item.ncr, inspectorName));
           }
         }
       }
     }
   }
 
-  await logAudit(inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection);
-  
-  // Sync to centralized inspections table
-  await syncToInspectionsTable(inspection);
-  await refreshDailyStatsMV();
+  sideTasks.push(Promise.all(ncrTasks));
+  sideTasks.push(logAudit(inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection));
+  sideTasks.push(syncToInspectionsTable(inspection));
 
-  if (oldValue && oldValue.status !== inspection.status) {
-    await logStatusChange('inspection', inspection.id, oldValue.status, inspection.status, inspection.inspectorName || 'SYSTEM');
-    
-    if (inspection.status === InspectionStatus.SUBMITTED) {
-        const project = await getProjectByCode(inspection.ma_ct);
-        if (project) {
-            if (project.pm) await addNotification(project.pm, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id });
-            if (project.qa) await addNotification(project.qa, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id });
+  // Run initial side tasks in parallel
+  await Promise.all(sideTasks);
+
+  // Background Tasks (Don't wait for these to respond to UI)
+  (async () => {
+    try {
+        await refreshDailyStatsMV();
+
+        if (oldValue && oldValue.status !== inspection.status) {
+            await logStatusChange('inspection', inspection.id, oldValue.status, inspection.status, inspection.inspectorName || 'SYSTEM');
+            
+            if (inspection.status === InspectionStatus.SUBMITTED) {
+                const project = await getProjectByCode(inspection.ma_ct);
+                if (project) {
+                    const notifyPromises = [];
+                    if (project.pm) notifyPromises.push(addNotification(project.pm, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
+                    if (project.qa) notifyPromises.push(addNotification(project.qa, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
+                    await Promise.all(notifyPromises);
+                }
+            }
+        } else if (!oldValue) {
+            await logStatusChange('inspection', inspection.id, null, inspection.status, inspection.inspectorName || 'SYSTEM');
+            
+            if (inspection.status === InspectionStatus.SUBMITTED) {
+                const project = await getProjectByCode(inspection.ma_ct);
+                if (project) {
+                    const notifyPromises = [];
+                    if (project.pm) notifyPromises.push(addNotification(project.pm, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
+                    if (project.qa) notifyPromises.push(addNotification(project.qa, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
+                    await Promise.all(notifyPromises);
+                }
+            }
         }
+    } catch (bgError) {
+        console.error("❌ ISO-DB: Background task error:", bgError);
     }
-  } else if (!oldValue) {
-    await logStatusChange('inspection', inspection.id, null, inspection.status, inspection.inspectorName || 'SYSTEM');
-    
-    if (inspection.status === InspectionStatus.SUBMITTED) {
-        const project = await getProjectByCode(inspection.ma_ct);
-        if (project) {
-            if (project.pm) await addNotification(project.pm, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id });
-            if (project.qa) await addNotification(project.qa, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id });
-        }
-    }
-  }
+  })();
 }
 
 function buildBaseWhere(filters: any) {

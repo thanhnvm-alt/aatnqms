@@ -45,6 +45,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   const [committedHeadcode, setCommittedHeadcode] = useState<string | null>(null);
   
@@ -165,53 +166,87 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const handleSubmit = async () => {
     if (!formData.ma_ct) { alert("Thiếu mã công trình."); return; }
     if (!formData.signature) { alert("Yêu cầu chữ ký QC."); return; }
+    
     setIsSaving(true);
+    setUploadProgress(0);
     try {
         const entityId = formData.id || 'new';
         
-        // Helper to upload if it's base64
-        const uploadIfBase64 = async (url: string | undefined, role: string) => {
-            if (!url) return '';
-            if (url.startsWith('data:')) {
-                return await uploadQMSImage(url, { entityId, type: 'SITE' as ModuleId, role });
-            }
-            return url;
+        interface UploadTask {
+            url: string;
+            role: string;
+            path: 'MAIN' | 'ITEM' | 'SIGNATURE';
+            itemId?: string;
+            originalIndex?: number;
+        }
+
+        const tasks: UploadTask[] = [];
+
+        // 1. Identify all base64 images
+        (formData.images || []).forEach((img, idx) => {
+            if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx });
+        });
+
+        (formData.items || []).forEach((item) => {
+            (item.images || []).forEach((img, idx) => {
+                if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', itemId: item.id, originalIndex: idx });
+            });
+        });
+
+        if (formData.signature?.startsWith('data:')) {
+            tasks.push({ url: formData.signature, role: 'SIGNATURE_QC', path: 'SIGNATURE' });
+        }
+
+        const totalTasks = tasks.length;
+        let completedCount = 0;
+
+        // Function to update formData state and free memory
+        const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
+            setFormData(prev => {
+                const next = { ...prev };
+                if (task.path === 'MAIN' && task.originalIndex !== undefined) {
+                    const nextImgs = [...(next.images || [])];
+                    nextImgs[task.originalIndex] = serverUrl;
+                    next.images = nextImgs;
+                } else if (task.path === 'ITEM' && task.itemId) {
+                    next.items = (next.items || []).map(it => it.id === task.itemId 
+                        ? { ...it, images: (it.images || []).map((img, i) => i === task.originalIndex ? serverUrl : img) }
+                        : it
+                    );
+                } else if (task.path === 'SIGNATURE') {
+                    next.signature = serverUrl;
+                }
+                return next;
+            });
         };
 
-        // 1. Process Main Images sequentially
-        const processedImages: string[] = [];
-        for (const img of (formData.images || [])) {
-            processedImages.push(await uploadIfBase64(img, 'MAIN'));
+        // Execute uploads in parallel
+        if (totalTasks > 0) {
+            await Promise.all(tasks.map(async (task) => {
+                const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'SITE', role: task.role });
+                updateStateWithUrl(task, serverUrl);
+                completedCount++;
+                setUploadProgress(Math.round((completedCount / totalTasks) * 100));
+            }));
         }
 
-        // 2. Process Item Images sequentially
-        const processedItems = [];
-        for (const item of (formData.items || [])) {
-            const itemImages: string[] = [];
-            for (const img of (item.images || [])) {
-                itemImages.push(await uploadIfBase64(img, 'ITEM'));
+        // Final save with fresh state
+        setFormData(finalForm => {
+            const hasFail = (finalForm.items || []).some(it => it.status === CheckStatus.FAIL);
+            let statusToSave = finalForm.status;
+            if (statusToSave === InspectionStatus.DRAFT) {
+                statusToSave = hasFail ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
             }
-            processedItems.push({ ...item, images: itemImages });
-        }
 
-        // 3. Process Signature
-        const processedSignature = await uploadIfBase64(formData.signature, 'SIGNATURE_QC');
+            onSave({ 
+                ...finalForm, 
+                status: statusToSave, 
+                updatedAt: new Date().toISOString() 
+            } as Inspection);
+            
+            return finalForm;
+        });
 
-        // If status wasn't changed by user (still DRAFT), apply auto-status logic.
-        let statusToSave = formData.status;
-        if (statusToSave === InspectionStatus.DRAFT) {
-            const hasFail = processedItems.some(it => it.status === CheckStatus.FAIL);
-            statusToSave = hasFail ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
-        }
-
-        await onSave({ 
-            ...formData, 
-            status: statusToSave, 
-            images: processedImages,
-            items: processedItems,
-            signature: processedSignature,
-            updatedAt: new Date().toISOString() 
-        } as Inspection);
     } catch (e: any) { 
         console.error("ISO-SAVE-SITE:", e);
         alert(`Lỗi lưu phiếu: ${e.message || "Không thể tải ảnh lên"}`); 
@@ -224,9 +259,31 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       {(isProcessingImages || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
-              <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">{isSaving ? 'ĐANG LƯU HỒ SƠ...' : 'ĐANG XỬ LÝ HÌNH ÁNH...'}</p>
+              <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
+                  <div className="relative flex items-center justify-center">
+                      <Loader2 className="w-16 h-16 text-blue-600 animate-spin opacity-20" />
+                      {isSaving && (
+                          <div className="absolute flex flex-col items-center justify-center">
+                              <span className="text-xl font-black text-blue-600 font-mono tracking-tighter">{uploadProgress}%</span>
+                          </div>
+                      )}
+                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 animate-spin" />}
+                  </div>
+                  
+                  <div className="w-full space-y-2">
+                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest text-center">
+                        {isSaving ? "Đang tải hồ sơ & ảnh lên server..." : "Đang xử lý hình ảnh..."}
+                    </p>
+                    
+                    {isSaving && (
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                            <div 
+                                className="h-full bg-blue-600 transition-all duration-300 ease-out" 
+                                style={{ width: `${uploadProgress}%` }}
+                            />
+                        </div>
+                    )}
+                  </div>
               </div>
           </div>
       )}

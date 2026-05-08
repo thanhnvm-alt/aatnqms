@@ -28,6 +28,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,7 +80,6 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const handleSaveChanges = async () => {
       if (isLocked) return;
       
-      // ISO-SAFETY: Đảm bảo có inspection_id
       const targetId = formData.inspection_id || ncr.inspection_id;
       if (!targetId) {
           alert("Lỗi: Không tìm thấy liên kết tới Phiếu kiểm tra gốc.");
@@ -87,68 +87,104 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       }
 
       setIsSaving(true);
+      setUploadProgress(0);
       try {
           const entityId = formData.id || 'new';
           
-          // Helper to upload if it's base64
-          const uploadIfBase64 = async (url: string | undefined, role: string) => {
-              if (!url) return '';
-              if (url.startsWith('data:')) {
-                  return await uploadQMSImage(url, { entityId, type: 'NCR', role });
-              }
-              return url;
-          };
-
-          // Sequential Processing
-          const processedBefore: string[] = [];
-          for (const img of (formData.imagesBefore || [])) {
-              processedBefore.push(await uploadIfBase64(img, 'BEFORE'));
+          interface UploadTask {
+            url: string;
+            role: string;
+            path: 'BEFORE' | 'AFTER';
+            originalIndex: number;
           }
 
-          const processedAfter: string[] = [];
-          for (const img of (formData.imagesAfter || [])) {
-              processedAfter.push(await uploadIfBase64(img, 'AFTER'));
-          }
+          const tasks: UploadTask[] = [];
+          (formData.imagesBefore || []).forEach((img, idx) => {
+              if (img.startsWith('data:')) tasks.push({ url: img, role: 'BEFORE', path: 'BEFORE', originalIndex: idx });
+          });
+          (formData.imagesAfter || []).forEach((img, idx) => {
+              if (img.startsWith('data:')) tasks.push({ url: img, role: 'AFTER', path: 'AFTER', originalIndex: idx });
+          });
 
-          const oldStatus = ncr.status;
-          let finalStatus = formData.status;
-          if (finalStatus !== 'CLOSED') {
-              finalStatus = (processedAfter && processedAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
-          }
-          
-          const dataToSave = { 
-              ...formData, 
-              status: finalStatus, 
-              inspection_id: targetId,
-              imagesBefore: processedBefore,
-              imagesAfter: processedAfter
-          };
-          await saveNcrMapped(targetId, dataToSave, ncr.createdBy || user.name);
-          
-          // Notify if closed
-          if (finalStatus === 'CLOSED' && oldStatus !== 'CLOSED') {
-            const users = await fetchUsers();
-            const creator = users.find((u: any) => u.name === ncr.createdBy);
-            if (creator && creator.id !== user.id) {
-              await createNotification({
-                userId: creator.id,
-                type: 'NCR',
-                title: 'NCR đã đóng',
-                message: `NCR ${ncr.id} đã được đóng bởi ${user.name}`,
-                link: { view: 'NCR_LIST' as any, id: ncr.id }
+          const totalTasks = tasks.length;
+          let completedCount = 0;
+
+          // Function to update local formData state to reflect server URLs as they finish
+          const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
+              setFormData(prev => {
+                  const next = { ...prev };
+                  if (task.path === 'BEFORE') {
+                      const nextImgs = [...(next.imagesBefore || [])];
+                      nextImgs[task.originalIndex] = serverUrl;
+                      next.imagesBefore = nextImgs;
+                  } else {
+                      const nextImgs = [...(next.imagesAfter || [])];
+                      nextImgs[task.originalIndex] = serverUrl;
+                      next.imagesAfter = nextImgs;
+                  }
+                  return next;
               });
-            }
+          };
+
+          if (totalTasks > 0) {
+              await Promise.all(tasks.map(async (task) => {
+                  const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'NCR', role: task.role });
+                  updateStateWithUrl(task, serverUrl);
+                  completedCount++;
+                  setUploadProgress(Math.round((completedCount / totalTasks) * 100));
+              }));
           }
 
-          setNcr(dataToSave);
-          setFormData(dataToSave);
-          setIsEditing(false);
-          if (onUpdate) onUpdate();
-          alert("Đã lưu thay đổi thành công.");
+          // Use the latest state for final save
+          setFormData(finalForm => {
+              const oldStatus = ncr.status;
+              let finalStatus = finalForm.status;
+              if (finalStatus !== 'CLOSED') {
+                  finalStatus = (finalForm.imagesAfter && finalForm.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
+              }
+              
+              const dataToSave = { 
+                  ...finalForm, 
+                  status: finalStatus, 
+                  inspection_id: targetId,
+                  updatedAt: new Date().toISOString()
+              };
+
+              (async () => {
+                  try {
+                      await saveNcrMapped(targetId, dataToSave, ncr.createdBy || user.name);
+                      
+                      if (finalStatus === 'CLOSED' && oldStatus !== 'CLOSED') {
+                          const users = await fetchUsers();
+                          const creator = users.find((u: any) => u.name === ncr.createdBy);
+                          if (creator && creator.id !== user.id) {
+                            await createNotification({
+                              userId: creator.id,
+                              type: 'NCR',
+                              title: 'NCR đã đóng',
+                              message: `NCR ${ncr.id} đã được đóng bởi ${user.name}`,
+                              link: { view: 'NCR_LIST' as any, id: ncr.id }
+                            });
+                          }
+                      }
+                      setNcr(dataToSave);
+                      setIsEditing(false);
+                      if (onUpdate) onUpdate();
+                      alert("Đã lưu thay đổi thành công.");
+                  } catch (e: any) {
+                      alert("Lỗi khi lưu dữ liệu lên server: " + e.message);
+                  } finally {
+                      setIsSaving(false);
+                  }
+              })();
+
+              return finalForm;
+          });
       } catch (error: any) { 
           console.error("Save Error:", error);
-          alert("Lỗi khi lưu NCR: Cơ sở dữ liệu từ chối yêu cầu (Kiểm tra lại kết nối hoặc ảnh tải lên)."); 
-      } finally { setIsSaving(false); }
+          alert("Lỗi khi tải ảnh hoặc lưu dữ liệu."); 
+          setIsSaving(false);
+      }
   };
 
   const handleApprove = async () => {
@@ -250,18 +286,21 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       if (!newComment.trim() && commentAttachments.length === 0) return;
       const targetId = formData.inspection_id || ncr.inspection_id || '';
       setIsSubmitting(true);
+      setUploadProgress(0);
       try {
           const entityId = formData.id || 'new';
-          const uploadIfBase64 = async (url: string, role: string) => {
-              if (url.startsWith('data:')) {
-                  return await uploadQMSImage(url, { entityId, type: 'NCR', role });
-              }
-              return url;
-          };
-
+          
           const processedAttachments: string[] = [];
-          for (const img of commentAttachments) {
-              processedAttachments.push(await uploadIfBase64(img, 'COMMENT'));
+          if (commentAttachments.length > 0) {
+              await Promise.all(commentAttachments.map(async (img, idx) => {
+                  if (img.startsWith('data:')) {
+                      const url = await uploadQMSImage(img, { entityId, type: 'NCR', role: 'COMMENT' });
+                      processedAttachments[idx] = url;
+                  } else {
+                      processedAttachments[idx] = img;
+                  }
+                  setUploadProgress(Math.round(((idx + 1) / commentAttachments.length) * 100));
+              }));
           }
 
           const newCommentObj: NCRComment = {
@@ -271,7 +310,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               userAvatar: user.avatar,
               content: newComment,
               createdAt: new Date().toISOString(),
-              attachments: processedAttachments
+              attachments: processedAttachments.filter(Boolean)
           };
           const updatedComments = [...(formData.comments || []), newCommentObj];
           const updatedNcr = { ...formData, comments: updatedComments, inspection_id: targetId };
@@ -333,6 +372,36 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {(isAiLoading || isSaving || isSubmitting) && (
+          <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6 text-center">
+              <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-full max-w-sm border border-white/20 animate-in zoom-in duration-300">
+                  <div className="relative flex items-center justify-center">
+                      <Loader2 className="w-16 h-16 text-blue-600 animate-spin opacity-20" />
+                      {(isSaving || isSubmitting) && (
+                          <div className="absolute flex flex-col items-center justify-center">
+                              <span className="text-xl font-black text-blue-600 font-mono tracking-tighter">{uploadProgress}%</span>
+                          </div>
+                      )}
+                      {isAiLoading && <Loader2 className="absolute w-8 h-8 text-blue-600 animate-spin" />}
+                  </div>
+                  
+                  <div className="w-full space-y-2">
+                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">
+                        {isAiLoading ? "AI đang phân tích dữ liệu..." : (isSaving || isSubmitting) ? "Đang tải dữ liệu & ảnh lên server..." : "Đang xử lý..."}
+                    </p>
+                    
+                    {(isSaving || isSubmitting) && (
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                            <div 
+                                className="h-full bg-blue-600 transition-all duration-300 ease-out" 
+                                style={{ width: `${uploadProgress}%` }}
+                            />
+                        </div>
+                    )}
+                  </div>
+              </div>
+          </div>
+      )}
       {/* HEADER ACTION BAR */}
       <div className="bg-white border-b border-slate-200 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex items-center gap-3 w-full">
           <div className="flex items-center gap-2 shrink-0">

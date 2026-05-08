@@ -65,6 +65,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [newDocName, setNewDocName] = useState('');
   const [matSearch, setMatSearch] = useState('');
@@ -334,74 +335,119 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (invalidMat) { alert(`Vật tư "${invalidMat.name}" có số lượng kiểm tra không hợp lệ (phải > 0 và <= SL Giao).`); return; }
     
     setIsSaving(true);
+    setUploadProgress(0);
     try {
         const entityId = formData.id || 'new';
         
-        // Helper to upload if it's base64
-        const uploadIfBase64 = async (url: string | undefined, role: string) => {
-            if (!url) return '';
-            if (url.startsWith('data:')) {
-                return await uploadQMSImage(url, { entityId, type: 'IQC', role });
-            }
-            return url;
-        };
-
-        // 1. Process Main Images sequentially
-        const processedImages: string[] = [];
-        for (const img of (formData.images || [])) {
-            processedImages.push(await uploadIfBase64(img, 'MAIN'));
+        // Helper to prepare upload tasks
+        interface UploadTask {
+            url: string;
+            role: string;
+            path: string;
+            matIndex?: number;
+            itemIndex?: number;
+            originalIndex?: number;
         }
 
-        const processedDelivery: string[] = [];
-        for (const img of (formData.deliveryNoteImages || [])) {
-            processedDelivery.push(await uploadIfBase64(img, 'DELIVERY'));
-        }
+        const tasks: UploadTask[] = [];
 
-        const processedReport: string[] = [];
-        for (const img of (formData.reportImages || [])) {
-            processedReport.push(await uploadIfBase64(img, 'REPORT'));
-        }
+        // 1. Identify all base64 images
+        (formData.images || []).forEach((img, idx) => {
+            if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx });
+        });
+        (formData.deliveryNoteImages || []).forEach((img, idx) => {
+            if (img.startsWith('data:')) tasks.push({ url: img, role: 'DELIVERY', path: 'DELIVERY', originalIndex: idx });
+        });
+        (formData.reportImages || []).forEach((img, idx) => {
+            if (img.startsWith('data:')) tasks.push({ url: img, role: 'REPORT', path: 'REPORT', originalIndex: idx });
+        });
+        if (formData.signature?.startsWith('data:')) tasks.push({ url: formData.signature, role: 'SIGNATURE_QC', path: 'SIGNATURE' });
 
-        const processedSignature = await uploadIfBase64(formData.signature || '', 'SIGNATURE_QC');
+        (formData.materials || []).forEach((mat, mIdx) => {
+            (mat.images || []).forEach((img, idx) => {
+                if (img.startsWith('data:')) tasks.push({ url: img, role: 'MATERIAL', path: 'MATERIAL', matIndex: mIdx, originalIndex: idx });
+            });
+            (mat.items || []).forEach((item, iIdx) => {
+                (item.images || []).forEach((img, idx) => {
+                    if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', matIndex: mIdx, itemIndex: iIdx, originalIndex: idx });
+                });
+            });
+        });
 
-        // 2. Process Material Item Images sequentially
-        const processedMaterials = [];
-        for (const mat of (formData.materials || [])) {
-            const nextItems = [];
-            for (const item of (mat.items || [])) {
-                const itemImages: string[] = [];
-                for (const img of (item.images || [])) {
-                    itemImages.push(await uploadIfBase64(img, 'ITEM'));
+        const totalTasks = tasks.length;
+        let completedCount = 0;
+
+        // Function to update formData state and free memory
+        const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
+            setFormData(prev => {
+                const next = { ...prev };
+                if (task.path === 'MAIN' && task.originalIndex !== undefined) {
+                    const nextImgs = [...(next.images || [])];
+                    nextImgs[task.originalIndex] = serverUrl;
+                    next.images = nextImgs;
+                } else if (task.path === 'DELIVERY' && task.originalIndex !== undefined) {
+                    const nextImgs = [...(next.deliveryNoteImages || [])];
+                    nextImgs[task.originalIndex] = serverUrl;
+                    next.deliveryNoteImages = nextImgs;
+                } else if (task.path === 'REPORT' && task.originalIndex !== undefined) {
+                    const nextImgs = [...(next.reportImages || [])];
+                    nextImgs[task.originalIndex] = serverUrl;
+                    next.reportImages = nextImgs;
+                } else if (task.path === 'SIGNATURE') {
+                    next.signature = serverUrl;
+                } else if (task.path === 'MATERIAL' && task.matIndex !== undefined && task.originalIndex !== undefined) {
+                    const nextMats = [...(next.materials || [])];
+                    const mat = { ...nextMats[task.matIndex] };
+                    const matImgs = [...(mat.images || [])];
+                    matImgs[task.originalIndex] = serverUrl;
+                    mat.images = matImgs;
+                    nextMats[task.matIndex] = mat;
+                    next.materials = nextMats;
+                } else if (task.path === 'ITEM' && task.matIndex !== undefined && task.itemIndex !== undefined && task.originalIndex !== undefined) {
+                    const nextMats = [...(next.materials || [])];
+                    const mat = { ...nextMats[task.matIndex] };
+                    const nextItems = [...(mat.items || [])];
+                    const item = { ...nextItems[task.itemIndex] };
+                    const itemImgs = [...(item.images || [])];
+                    itemImgs[task.originalIndex] = serverUrl;
+                    item.images = itemImgs;
+                    nextItems[task.itemIndex] = item;
+                    mat.items = nextItems;
+                    nextMats[task.matIndex] = mat;
+                    next.materials = nextMats;
                 }
-                nextItems.push({ ...item, images: itemImages });
-            }
-
-            const matImages: string[] = [];
-            for (const img of (mat.images || [])) {
-                matImages.push(await uploadIfBase64(img, 'MATERIAL'));
-            }
-            processedMaterials.push({ ...mat, items: nextItems, images: matImages });
-        }
-
-        const totalInspected = processedMaterials.reduce((acc, mat) => acc + (Number(mat.inspectQty) || 0), 0);
-        const totalPassed = processedMaterials.reduce((acc, mat) => acc + (Number(mat.passQty) || 0), 0);
-        const totalFailed = processedMaterials.reduce((acc, mat) => acc + (Number(mat.failQty) || 0), 0);
-
-        const finalData = { 
-            ...formData, 
-            status: InspectionStatus.PENDING, 
-            updatedAt: new Date().toISOString(),
-            images: processedImages,
-            deliveryNoteImages: processedDelivery,
-            reportImages: processedReport,
-            signature: processedSignature,
-            materials: processedMaterials,
-            inspectedQuantity: totalInspected,
-            passedQuantity: totalPassed,
-            failedQuantity: totalFailed
+                return next;
+            });
         };
 
-        await onSave(finalData as Inspection);
+        // Execute uploads in parallel but track progress
+        if (totalTasks > 0) {
+            await Promise.all(tasks.map(async (task) => {
+                const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'IQC', role: task.role });
+                updateStateWithUrl(task, serverUrl);
+                completedCount++;
+                setUploadProgress(Math.round((completedCount / totalTasks) * 100));
+            }));
+        }
+
+        // Final snap for saving
+        setFormData(finalForm => {
+            const totalInspected = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
+            const totalPassed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
+            const totalFailed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
+
+            onSave({ 
+                ...finalForm,
+                status: InspectionStatus.PENDING,
+                inspectedQuantity: totalInspected,
+                passedQuantity: totalPassed,
+                failedQuantity: totalFailed,
+                updatedAt: new Date().toISOString() 
+            } as Inspection);
+            
+            return finalForm;
+        });
+
     } catch (e: any) { 
         console.error("ISO-SAVE: Error uploading images or saving", e);
         alert(`Lỗi lưu báo cáo IQC: ${e.message || "Không thể tải ảnh lên"}`); 
@@ -412,11 +458,33 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-      {(isProcessingImages || isLookupLoading) && (
+      {(isProcessingImages || isLookupLoading || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
-              <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                  <p className="text-xs font-black text-slate-700 uppercase tracking-widest">{isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : "Đang tải hình ảnh lên..."}</p>
+              <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
+                  <div className="relative flex items-center justify-center">
+                      <Loader2 className="w-16 h-16 text-blue-600 animate-spin opacity-20" />
+                      {isSaving && (
+                          <div className="absolute flex flex-col items-center justify-center">
+                              <span className="text-xl font-black text-blue-600 font-mono tracking-tighter">{uploadProgress}%</span>
+                          </div>
+                      )}
+                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 animate-spin" />}
+                  </div>
+                  
+                  <div className="w-full space-y-2">
+                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest text-center">
+                        {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : isSaving ? "Đang tải dữ liệu & ảnh lên server..." : "Đang xử lý hình ảnh..."}
+                    </p>
+                    
+                    {isSaving && (
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                            <div 
+                                className="h-full bg-blue-600 transition-all duration-300 ease-out" 
+                                style={{ width: `${uploadProgress}%` }}
+                            />
+                        </div>
+                    )}
+                  </div>
               </div>
           </div>
       )}

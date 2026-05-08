@@ -878,8 +878,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         </span>
                                                     </div>
                                                     <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                                                        item.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                                                        item.status === 'FLAGGED' ? 'bg-red-100 text-red-700' :
+                                                        item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
+                                                        item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
                                                         'bg-slate-100 text-slate-600'
                                                     }`}>
                                                         {item.status}

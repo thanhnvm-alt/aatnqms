@@ -1967,7 +1967,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                   const detailRes = await query(`SELECT * FROM ${fullTableName} WHERE id = ANY($1::text[])`, [ids]);
                   const detailMap = new Map(detailRes.rows.map((r: any) => [r.id, r]));
                   for (const item of chunk) {
-                      const d = detailMap.get(item.id);
+                      const d = detailMap.get(item.id) as any;
                       if (d) {
                          for (const key of Object.keys(d)) {
                             if (key !== 'id' && key !== 'type' && d[key] !== null && d[key] !== undefined) {
@@ -1977,7 +1977,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                       }
                   }
                } catch (e: any) {
-                  console.warn(`Failed to fetch details for table ${tableName} in export:`, e.message);
+                  console.warn(`Failed to fetch details for table ${fullTableName} in export:`, e.message);
                }
            }
         }
