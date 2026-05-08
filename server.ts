@@ -2089,10 +2089,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
             const siteImages = allImages.join('\n');
 
-            const so_luong_ipo = Number((item as any).so_luong_ipo || 0);
-            const inspectedQuantity = Number((item as any).inspectedQuantity || 0);
-            const passedQuantity = Number((item as any).passedQuantity || 0);
-            const failedQuantity = Number((item as any).failedQuantity || 0);
+            const so_luong_ipo = Number((item as any).so_luong_ipo || (item as any).sl_ipo || (item as any).qty_ipo || 0);
+            const inspectedQuantity = Number((item as any).inspectedQuantity || (item as any).inspected_qty || (item as any).qty_total || 0);
+            const passedQuantity = Number((item as any).passedQuantity || (item as any).passed_qty || (item as any).qty_pass || 0);
+            const failedQuantity = Number((item as any).failedQuantity || (item as any).failed_qty || (item as any).qty_fail || 0);
             
             let passedPercentage = '';
             let failedPercentage = '';
@@ -2111,7 +2111,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 headcode: String(item.headcode || ''),
                 inspectorName: String(item.inspectorName || ''),
                 workshop: String(item.workshop || ''),
-                inspectionStage: String(item.inspectionStage || ''),
+                inspectionStage: String(item.inspectionStage || (item as any).stage || ''),
                 date: rowDate,
                 status: String(item.status || ''),
                 so_luong_ipo: so_luong_ipo,
