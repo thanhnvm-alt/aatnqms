@@ -6,13 +6,15 @@ import {
   Save, X, Camera, Image as ImageIcon, ChevronDown, 
   MapPin, Box, AlertTriangle, Trash2, LayoutList, 
   QrCode, PenTool, Eraser, Loader2, 
-  AlertOctagon, Locate, History, Clock
+  AlertOctagon, Locate, History, Clock, AlertCircle
 } from 'lucide-react';
 import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 // Added missing QRScannerModal import
 import { QRScannerModal } from './QRScannerModal';
 import { SITE_TEMPLATES } from '../constants';
+import { compressImage } from '../services/imageService';
+import { PersistenceService } from '../services/persistenceService';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -46,6 +48,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [hasDraft, setHasDraft] = useState(false);
   
   const [committedHeadcode, setCommittedHeadcode] = useState<string | null>(null);
   
@@ -80,6 +83,29 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const [showScanner, setShowScanner] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<keyof typeof SITE_TEMPLATES>('BAN');
 
+  useEffect(() => {
+    PersistenceService.hasDraft('SITE', user.id).then(setHasDraft);
+  }, []);
+
+  useEffect(() => {
+    if (formData.ma_ct || formData.headcode || (formData.items && formData.items.length > 0)) {
+        PersistenceService.saveDraft('SITE', user.id, formData);
+    }
+  }, [formData]);
+
+  const recoverDraft = async () => {
+    const saved = await PersistenceService.getDraft('SITE', user.id);
+    if (saved) {
+      setFormData(saved as Inspection);
+      setHasDraft(false);
+    }
+  };
+
+  const clearDraft = () => {
+    PersistenceService.clearDraft('SITE', user.id);
+    setHasDraft(false);
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
@@ -107,20 +133,28 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        const uploadedUrls = await Promise.all(
+        const compressedBase64s = await Promise.all(
             Array.from(files).map(async (file: File) => {
-                return await uploadQMSImage(file, { 
-                    entityId: formData.id || 'new', 
-                    type: 'SITE', 
-                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        try {
+                            const compressed = await compressImage(reader.result as string);
+                            resolve(compressed);
+                        } catch (e) {
+                            resolve(reader.result as string); // Fallback
+                        }
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
                 });
             })
         );
-        if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
-        else setFormData(prev => ({ ...prev, items: prev.items?.map(it => it.id === activeUploadId ? { ...it, images: [...(it.images || []), ...uploadedUrls] } : it) }));
+        if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedBase64s] }));
+        else setFormData(prev => ({ ...prev, items: prev.items?.map(it => it.id === activeUploadId ? { ...it, images: [...(it.images || []), ...compressedBase64s] } : it) }));
     } catch (err) {
-        console.error("ISO-UPLOAD: Failed", err);
-        alert("Lỗi tải ảnh lên.");
+        console.error("ISO-COMPRESS: Failed", err);
+        alert("Lỗi nén ảnh.");
     } finally { setIsProcessingImages(false); e.target.value = ''; }
   };
 
@@ -133,17 +167,13 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     setIsProcessingImages(true);
     try {
         const { context } = editorState;
-        // Upload edited image
-        const newUrl = await uploadQMSImage(updatedImg, { 
-            entityId: formData.id || 'new', 
-            type: 'SITE', 
-            role: context.itemId === 'MAIN' ? 'MAIN' : 'ITEM' 
-        });
+        // Compress edited image
+        const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
 
         if (context.itemId === 'MAIN') {
             setFormData(prev => {
                 const next = [...(prev.images || [])];
-                next[idx] = newUrl;
+                next[idx] = finalImg;
                 return { ...prev, images: next };
             });
         } else {
@@ -151,7 +181,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                 ...prev,
                 items: prev.items?.map(it => it.id === context.itemId ? {
                     ...it,
-                    images: it.images?.map((img, i) => i === idx ? newUrl : img)
+                    images: it.images?.map((img, i) => i === idx ? finalImg : img)
                 } : it)
             }));
         }
@@ -244,6 +274,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                 updatedAt: new Date().toISOString() 
             } as Inspection);
             
+            clearDraft();
             return finalForm;
         });
 
@@ -257,6 +288,25 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
 
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {hasDraft && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
+              <div className="bg-white/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                      <div className="bg-amber-100 p-1.5 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Phát hiện bản nháp</span>
+                          <span className="text-[8px] text-slate-500 font-bold">Dữ liệu SITE bạn đang nhập chưa được lưu.</span>
+                      </div>
+                  </div>
+                  <div className="flex gap-2">
+                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button>
+                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-amber-200 active:scale-95 transition-all">Khôi phục</button>
+                  </div>
+              </div>
+          </div>
+      )}
       {(isProcessingImages || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">

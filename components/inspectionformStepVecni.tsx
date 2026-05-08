@@ -1,9 +1,13 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, NCR } from '../types';
-import { Save, X, Camera, Image as ImageIcon, ChevronDown, MapPin, Box, AlertTriangle, Trash2, LayoutList, FileText, QrCode, PenTool, Eraser, Loader2 } from 'lucide-react';
+import { 
+  Save, X, Camera, Image as ImageIcon, ChevronDown, MapPin, Box, AlertTriangle, Trash2, LayoutList, FileText, QrCode, PenTool, Eraser, Loader2, AlertCircle
+} from 'lucide-react';
 import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
+import { compressImage } from '../services/imageService';
+import { PersistenceService } from '../services/persistenceService';
 import { getProxyImageUrl } from '../src/utils';
 
 interface InspectionFormProps {
@@ -28,10 +32,34 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [hasDraft, setHasDraft] = useState(false);
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'MAIN' | 'ITEM', itemIdx?: number } | null>(null);
+
+  useEffect(() => {
+    PersistenceService.hasDraft('STEP', user.id).then(setHasDraft);
+  }, []);
+
+  useEffect(() => {
+    if (formData.ma_ct || (formData.items && formData.items.length > 0)) {
+        PersistenceService.saveDraft('STEP', user.id, formData);
+    }
+  }, [formData]);
+
+  const recoverDraft = async () => {
+    const saved = await PersistenceService.getDraft('STEP', user.id);
+    if (saved) {
+      setFormData(saved as Inspection);
+      setHasDraft(false);
+    }
+  };
+
+  const clearDraft = () => {
+    PersistenceService.clearDraft('STEP', user.id);
+    setHasDraft(false);
+  };
 
   const handleInputChange = (field: keyof Inspection, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
   const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
@@ -45,24 +73,36 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
     setIsProcessingImages(true);
     const { type, itemIdx } = activeUploadContext;
     try {
-        const uploadedUrls: string[] = [];
-        for (const file of Array.from(files)) {
-            const url = await uploadQMSImage(file, formData.id || 'temp', 'STEP', user.role);
-            uploadedUrls.push(url);
-        }
+        const compressedBase64s = await Promise.all(
+            Array.from(files).map(async (file: File) => {
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        try {
+                            const compressed = await compressImage(reader.result as string);
+                            resolve(compressed);
+                        } catch (e) {
+                            resolve(reader.result as string);
+                        }
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            })
+        );
 
         setFormData(prev => {
-            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...uploadedUrls] };
+            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...compressedBase64s] };
             if (type === 'ITEM' && itemIdx !== undefined) {
                 const items = [...(prev.items || [])];
-                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...uploadedUrls] };
+                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...compressedBase64s] };
                 return { ...prev, items };
             }
             return prev;
         });
     } catch (err) { 
         console.error(err); 
-        alert("Lỗi khi tải ảnh lên máy chủ.");
+        alert("Lỗi khi xử lý hình ảnh.");
     } finally { 
         setIsProcessingImages(false); 
         e.target.value = ''; 
@@ -77,20 +117,20 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
       
       setIsProcessingImages(true);
       try {
-          const uploadedUrl = await uploadQMSImage(updatedImg, formData.id || 'temp', 'STEP', user.role);
+          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
           
           setFormData(prev => {
-              if (type === 'MAIN') { const next = [...(prev.images || [])]; next[idx] = uploadedUrl; return { ...prev, images: next }; }
+              if (type === 'MAIN') { const next = [...(prev.images || [])]; next[idx] = finalImg; return { ...prev, images: next }; }
               if (type === 'ITEM' && itemIdx !== undefined) {
                   const items = [...(prev.items || [])];
-                  items[itemIdx].images![idx] = uploadedUrl;
+                  items[itemIdx].images![idx] = finalImg;
                   return { ...prev, items };
               }
               return prev;
           });
       } catch (err) {
           console.error(err);
-          alert("Lỗi khi lưu ảnh đã chỉnh sửa.");
+          alert("Lỗi khi nén ảnh.");
       } finally {
           setIsProcessingImages(false);
       }
@@ -163,6 +203,7 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
                 status: InspectionStatus.PENDING, 
                 updatedAt: new Date().toISOString() 
             } as Inspection);
+            clearDraft();
             return finalForm;
         });
 
@@ -176,6 +217,25 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
 
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {hasDraft && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
+              <div className="bg-white/80 backdrop-blur-md border border-blue-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                      <div className="bg-blue-100 p-1.5 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Phát hiện bản nháp</span>
+                          <span className="text-[8px] text-slate-500 font-bold">Dữ liệu Step Vecni bạn đang nhập chưa được lưu.</span>
+                      </div>
+                  </div>
+                  <div className="flex gap-2">
+                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button>
+                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-200 active:scale-95 transition-all">Khôi phục</button>
+                  </div>
+              </div>
+          </div>
+      )}
       {(isProcessingImages || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">

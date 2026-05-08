@@ -11,6 +11,8 @@ import {
 import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans, uploadQMSImage, fetchMaterials } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
+import { compressImage } from '../services/imageService';
+import { PersistenceService } from '../services/persistenceService';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -67,6 +69,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   const [newDocName, setNewDocName] = useState('');
   const [matSearch, setMatSearch] = useState('');
   const [matSearchInput, setMatSearchInput] = useState('');
@@ -85,6 +88,29 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'MAIN' | 'DELIVERY' | 'REPORT' | 'ITEM' | 'MATERIAL', matIdx?: number, itemIdx?: number } | null>(null);
+
+  useEffect(() => {
+    PersistenceService.hasDraft('IQC', user.id).then(setHasDraft);
+  }, []);
+
+  useEffect(() => {
+    if (formData.po_number || (formData.materials && formData.materials.length > 0)) {
+      PersistenceService.saveDraft('IQC', user.id, formData);
+    }
+  }, [formData]);
+
+  const recoverDraft = async () => {
+    const saved = await PersistenceService.getDraft('IQC', user.id);
+    if (saved) {
+      setFormData(saved as Inspection);
+      setHasDraft(false);
+    }
+  };
+
+  const clearDraft = () => {
+    PersistenceService.clearDraft('IQC', user.id);
+    setHasDraft(false);
+  };
 
   const iqcGroups = useMemo(() => {
       const iqcTpl = templates['IQC'] || [];
@@ -261,11 +287,18 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsProcessingImages(true);
     const { type, matIdx, itemIdx } = activeUploadContext;
     try {
-        const base64Images = await Promise.all(
-            Array.from(files).map((file: File) => {
+        const compressedBase64s = await Promise.all(
+            Array.from(files).map(async (file: File) => {
                 return new Promise<string>((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
+                    reader.onload = async () => {
+                        try {
+                            const compressed = await compressImage(reader.result as string);
+                            resolve(compressed);
+                        } catch (e) {
+                            resolve(reader.result as string); // Fallback
+                        }
+                    };
                     reader.onerror = reject;
                     reader.readAsDataURL(file);
                 });
@@ -273,19 +306,19 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         );
         
         setFormData(prev => {
-            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...base64Images] };
-            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...base64Images] };
-            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...base64Images] };
+            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...compressedBase64s] };
+            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...compressedBase64s] };
+            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...compressedBase64s] };
             if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
                 const nextMats = [...(prev.materials || [])];
                 const items = [...nextMats[matIdx].items];
-                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...base64Images] };
+                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...compressedBase64s] };
                 nextMats[matIdx] = { ...nextMats[matIdx], items };
                 return { ...prev, materials: nextMats };
             }
             if (type === 'MATERIAL' && matIdx !== undefined) {
                 const nextMats = [...(prev.materials || [])];
-                nextMats[matIdx] = { ...nextMats[matIdx], images: [...(nextMats[matIdx].images || []), ...base64Images] };
+                nextMats[matIdx] = { ...nextMats[matIdx], images: [...(nextMats[matIdx].images || []), ...compressedBase64s] };
                 return { ...prev, materials: nextMats };
             }
             return prev;
@@ -303,6 +336,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       if (!editorState) return;
       const { type, matIdx, itemIdx } = editorState.context;
       
+      const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
+
       // Store the edited data URL directly in local state
       setFormData(prev => {
           if (type === 'MAIN') { const newImgs = [...(prev.images || [])]; newImgs[idx] = updatedImg; return { ...prev, images: newImgs }; }
@@ -445,6 +480,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 updatedAt: new Date().toISOString() 
             } as Inspection);
             
+            clearDraft();
             return finalForm;
         });
 
@@ -458,6 +494,25 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {hasDraft && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
+              <div className="bg-white/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                      <div className="bg-amber-100 p-1.5 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Phát hiện bản nháp</span>
+                          <span className="text-[8px] text-slate-500 font-bold">Dữ liệu IQC bạn đang nhập chưa được lưu.</span>
+                      </div>
+                  </div>
+                  <div className="flex gap-2">
+                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button>
+                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-amber-200 active:scale-95 transition-all">Khôi phục</button>
+                  </div>
+              </div>
+          </div>
+      )}
       {(isProcessingImages || isLookupLoading || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">

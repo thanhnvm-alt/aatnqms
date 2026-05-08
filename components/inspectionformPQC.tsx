@@ -10,12 +10,14 @@ import {
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, BookOpen, Search,
   Loader2, Sparkles, CheckCircle2, ArrowLeft, History, Clock,
-  Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck, CheckCircle
+  Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, fetchPlans, saveDefectLibraryItem } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
+import { compressImage } from '../services/imageService';
+import { PersistenceService } from '../services/persistenceService';
 
 import { SignaturePad } from './SignaturePad';
 
@@ -79,7 +81,21 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
         try {
             const uploadedUrls = await Promise.all(
                 Array.from(files).map(async (file: File) => {
-                    return await uploadQMSImage(file, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget });
+                    return new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                            try {
+                                const compressed = await compressImage(reader.result as string);
+                                const compressedFile = await fetch(compressed).then(r => r.blob()).then(b => new File([b], file.name, { type: 'image/jpeg' }));
+                                const url = await uploadQMSImage(compressedFile, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget });
+                                resolve(url);
+                            } catch (e) {
+                                uploadQMSImage(file, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget }).then(resolve).catch(reject);
+                            }
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
                 })
             );
             
@@ -322,6 +338,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   
@@ -333,6 +350,29 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+
+  useEffect(() => {
+    PersistenceService.hasDraft('PQC', user.id).then(setHasDraft);
+  }, []);
+
+  useEffect(() => {
+    if (formData.ma_nha_may || formData.headcode || (formData.items && formData.items.length > 0)) {
+        PersistenceService.saveDraft('PQC', user.id, formData);
+    }
+  }, [formData]);
+
+  const recoverDraft = async () => {
+    const saved = await PersistenceService.getDraft('PQC', user.id);
+    if (saved) {
+      setFormData(saved as Inspection);
+      setHasDraft(false);
+    }
+  };
+
+  const clearDraft = () => {
+    PersistenceService.clearDraft('PQC', user.id);
+    setHasDraft(false);
+  };
 
   const availableStages = useMemo(() => { 
       const wsCode = formData.workshop || formData.ma_nha_may;
@@ -615,6 +655,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 updatedAt: new Date().toISOString() 
             } as Inspection);
             
+            clearDraft();
             return finalForm;
         });
 
@@ -637,11 +678,18 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        const base64Images = await Promise.all(
-            Array.from(files).map((file: File) => {
+        const compressedBase64s = await Promise.all(
+            Array.from(files).map(async (file: File) => {
                 return new Promise<string>((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
+                    reader.onload = async () => {
+                        try {
+                            const compressed = await compressImage(reader.result as string);
+                            resolve(compressed);
+                        } catch (e) {
+                            resolve(reader.result as string); // Fallback
+                        }
+                    };
                     reader.onerror = reject;
                     reader.readAsDataURL(file);
                 });
@@ -649,13 +697,13 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         );
         
         if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...base64Images] }));
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedBase64s] }));
         } else {
             setFormData(prev => ({ 
                 ...prev, 
                 items: prev.items?.map(i => 
                     i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...base64Images] } 
+                        ? { ...i, images: [...(i.images || []), ...compressedBase64s] } 
                         : i
                 ) 
             }));
@@ -676,8 +724,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       
       setIsProcessingImages(true);
       try {
-          // Convert base64 to File for upload
-          const res = await fetch(updatedImg);
+          // Compress edited image
+          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
+          
+          // Convert to File for upload
+          const res = await fetch(finalImg);
           const blob = await res.blob();
           const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
           
@@ -709,6 +760,25 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      {hasDraft && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
+              <div className="bg-white/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                      <div className="bg-amber-100 p-1.5 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Phát hiện bản nháp</span>
+                          <span className="text-[8px] text-slate-500 font-bold">Dữ liệu PQC bạn đang nhập chưa được lưu.</span>
+                      </div>
+                  </div>
+                  <div className="flex gap-2">
+                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button>
+                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-amber-200 active:scale-95 transition-all">Khôi phục</button>
+                  </div>
+              </div>
+          </div>
+      )}
       {(isProcessingImages || isLookupLoading || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
