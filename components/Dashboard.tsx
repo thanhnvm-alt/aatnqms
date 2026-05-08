@@ -63,9 +63,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
 
   const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '' || searchTerm !== '';
 
-  const handleApplyFilters = (customFilters?: any) => {
+  const handleApplyFilters = () => {
     if (onFilterChange) {
-      onFilterChange(customFilters || {
+      onFilterChange({
         qc: filterQC.join(','),
         workshop: filterWorkshop.join(','),
         status: filterStatus.join(','),
@@ -185,7 +185,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                             placeholder="Mã/Tên dự án, Hạng mục..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            onBlur={() => handleApplyFilters()}
+                            onBlur={handleApplyFilters}
                             className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 h-[42px]"
                         />
                     </div>
@@ -194,33 +194,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                     label="Loại phiếu"
                     values={filterType}
                     options={filterOptions.types}
-                    onChange={(vals) => { setFilterType(vals); handleApplyFilters({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), startDate, endDate, search: searchTerm }); }}
+                    onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), startDate, endDate, search: searchTerm }); }}
                     optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
                 />
                 <SearchableSelect 
                     label="QC Kiểm tra"
                     values={filterQC}
                     options={filterOptions.inspectors}
-                    onChange={(vals) => { setFilterQC(vals); handleApplyFilters({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate, search: searchTerm }); }}
-                />
-                <SearchableSelect 
-                    label="Trạng thái"
-                    values={filterStatus}
-                    options={filterOptions.statuses}
-                    onChange={(vals) => { setFilterStatus(vals); handleApplyFilters({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: vals.join(','), type: filterType.join(','), startDate, endDate, search: searchTerm }); }}
-                />
-                <SearchableSelect 
-                    label="Xưởng/Nhà máy"
-                    values={filterWorkshop}
-                    options={filterOptions.workshops}
-                    onChange={(vals) => { setFilterWorkshop(vals); handleApplyFilters({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate, search: searchTerm }); }}
+                    onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate, search: searchTerm }); }}
                 />
                 <DateRangePicker 
                     label="Khoảng ngày"
                     startDate={startDate}
                     endDate={endDate}
-                    onStartDateChange={(d) => { setStartDate(d); handleApplyFilters({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate: d, endDate, search: searchTerm }); }}
-                    onEndDateChange={(d) => { setEndDate(d); handleApplyFilters({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate: d, search: searchTerm }); }}
+                    onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate: d, endDate, search: searchTerm }); }}
+                    onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate: d, search: searchTerm }); }}
                 />
             </div>
         </div>

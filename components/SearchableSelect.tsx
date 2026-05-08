@@ -20,17 +20,12 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const getLabel = (opt: string) => optionLabels?.[opt] || opt;
-  const normalize = (s: string) => s.normalize('NFC').trim();
 
   const filteredOptions = useMemo(() => {
-    // Ensure uniqueness and normalization of input options
-    const uniqueOptions = Array.from(new Set(options.map(normalize)));
-    if (!search) return uniqueOptions;
-    
-    const searchLower = search.toLowerCase();
-    return uniqueOptions.filter(opt => 
-      opt.toLowerCase().includes(searchLower) || 
-      getLabel(opt).toLowerCase().includes(searchLower)
+    if (!search) return options;
+    return options.filter(opt => 
+      opt.toLowerCase().includes(search.toLowerCase()) || 
+      getLabel(opt).toLowerCase().includes(search.toLowerCase())
     );
   }, [options, search, optionLabels]);
 

@@ -74,36 +74,7 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create audit_logs: ${e.message}`);
     }
 
-    // 3. Centralized Inspections Table
-    try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS "${schema}"."inspections" (
-            "id" TEXT PRIMARY KEY,
-            "type" TEXT NOT NULL,
-            "ma_ct" TEXT,
-            "ten_ct" TEXT,
-            "ma_nha_may" TEXT,
-            "ten_hang_muc" TEXT,
-            "workshop" TEXT,
-            "status" TEXT,
-            "score" DOUBLE PRECISION DEFAULT 0,
-            "created_at" BIGINT DEFAULT 0,
-            "updated_at" BIGINT DEFAULT 0,
-            "created_by" TEXT,
-            "headcode" TEXT
-        );
-      `);
-      migrationLogs.push(`✅ Ensured table inspections exists in ${schema}`);
-      await addColumn('inspections', 'headcode', 'TEXT');
-      await addColumn('inspections', 'workshop', 'TEXT');
-      await addColumn('inspections', 'created_by', 'TEXT');
-      await addColumn('inspections', 'score', 'DOUBLE PRECISION DEFAULT 0');
-    } catch (e: any) {
-      console.warn(`⚠️ Could not create inspections table:`, e.message);
-      migrationLogs.push(`⚠️ Could not create inspections table: ${e.message}`);
-    }
-
-    // 4. Status History
+    // 3. Status History
     try {
       await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."status_history" (
@@ -570,57 +541,6 @@ export async function runMigrations() {
     } catch (e: any) {
       console.warn(`⚠️ Could not create ipo tables:`, e.message);
       migrationLogs.push(`⚠️ Could not create ipo tables: ${e.message}`);
-    }
-
-    // 15. Indexes for Performance Optimization
-    try {
-      const indexQueries = [
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_updated_at" ON "${schema}"."inspections" ("updated_at" DESC)`,
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_created_at" ON "${schema}"."inspections" ("created_at" DESC)`,
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_status" ON "${schema}"."inspections" ("status")`,
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_type" ON "${schema}"."inspections" ("type")`,
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_ma_ct" ON "${schema}"."inspections" ("ma_ct")`,
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_created_by" ON "${schema}"."inspections" ("created_by")`,
-        `CREATE INDEX IF NOT EXISTS "idx_inspections_workshop" ON "${schema}"."inspections" ("workshop")`,
-        `CREATE INDEX IF NOT EXISTS "idx_audit_logs_timestamp" ON "${schema}"."audit_logs" ("timestamp" DESC)`,
-        `CREATE INDEX IF NOT EXISTS "idx_audit_logs_entity" ON "${schema}"."audit_logs" ("entity_type", "entity_id")`,
-        `CREATE INDEX IF NOT EXISTS "idx_ncrs_inspection_id" ON "${schema}"."ncrs" ("inspection_id")`,
-        `CREATE INDEX IF NOT EXISTS "idx_ncrs_status" ON "${schema}"."ncrs" ("status")`
-      ];
-
-      for (const q of indexQueries) {
-        await query(q);
-      }
-      migrationLogs.push(`✅ Performance indexes ensured in ${schema}`);
-    } catch (e: any) {
-      console.warn(`⚠️ Could not create indexes:`, e.message);
-      migrationLogs.push(`⚠️ Could not create indexes: ${e.message}`);
-    }
-
-    // 16. Materialized Views for Dashboard
-    try {
-      await query(`
-        CREATE MATERIALIZED VIEW IF NOT EXISTS "${schema}"."inspections_daily_stats_mv" AS
-        SELECT 
-            to_char(to_timestamp(created_at) AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS date_str,
-            COUNT(*) as total_count
-        FROM "${schema}"."inspections"
-        GROUP BY 1
-        WITH NO DATA;
-      `);
-      
-      await query(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_daily_stats_mv_date" ON "${schema}"."inspections_daily_stats_mv" (date_str)`);
-      
-      // Attempt to refresh it (might be empty initially)
-      await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY "${schema}"."inspections_daily_stats_mv"`).catch(() => {
-        // Fallback if concurrent not possible (e.g. no index)
-        return query(`REFRESH MATERIALIZED VIEW "${schema}"."inspections_daily_stats_mv"`);
-      });
-      
-      migrationLogs.push(`✅ Dashboard materialized views ensured in ${schema}`);
-    } catch (e: any) {
-      console.warn(`⚠️ Could not create materialized views:`, e.message);
-      migrationLogs.push(`⚠️ Could not create materialized views: ${e.message}`);
     }
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);

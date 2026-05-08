@@ -1,14 +1,17 @@
 import dotenv from 'dotenv';
 dotenv.config();
 let pool: any = null;
+let poolPromise: Promise<any> | null = null;
 
 /**
- * Polymorphic query function that works on both server and client.
+ * Ensures the database pool is initialized only once.
  */
-export const query = async (text: string, params?: any[]): Promise<any> => {
-  if (typeof window === 'undefined') {
-    // Server-side logic
-    if (!pool) {
+const getPool = async (): Promise<any> => {
+  if (pool) return pool;
+  if (poolPromise) return poolPromise;
+
+  poolPromise = (async () => {
+    try {
       const pgModule = await import('pg');
       const Pool = pgModule.Pool || (pgModule.default && pgModule.default.Pool);
       
@@ -21,14 +24,11 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
         throw new Error('DATABASE_URL environment variable is missing');
       }
 
-      // Detect if SSL is needed
       const useSSL = process.env.DB_SSL === 'true' || 
                      rawConnectionString.includes('sslmode=require') || 
                      rawConnectionString.includes('sslmode=verify-full') ||
                      rawConnectionString.includes('ssl=true');
 
-      // Strip SSL parameters from connection string to prevent them from overriding the ssl object
-      // This is crucial because 'sslmode=verify-full' in the URL can override rejectUnauthorized: false
       let connectionString = rawConnectionString;
       try {
         const url = new URL(rawConnectionString);
@@ -40,28 +40,51 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
       }
 
       console.log('Initializing database pool...', { useSSL });
-      pool = new Pool({
+      const newPool = new Pool({
         connectionString,
-        // Force rejectUnauthorized: false for cloud DBs with self-signed certs
         ssl: useSSL ? { rejectUnauthorized: false } : false,
-        max: 10,
+        max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 30000,
+        connectionTimeoutMillis: 60000,
+        query_timeout: 60000,
       });
 
-      pool.on('error', (err: any) => {
+      newPool.on('error', (err: any) => {
         console.error('Unexpected error on idle database client', err);
-        pool = null; // Reset pool on fatal error
+        pool = null;
+        poolPromise = null;
       });
-    }
 
-    try {
+      pool = newPool;
+      return pool;
+    } catch (error) {
+      poolPromise = null;
+      throw error;
+    }
+  })();
+
+  return poolPromise;
+};
+
+/**
+ * Polymorphic query function that works on both server and client.
+ */
+export const query = async (text: string, params?: any[]): Promise<any> => {
+  if (typeof window === 'undefined') {
+    // Server-side logic
+    const currentPool = await getPool();
+
+    const executeQuery = async () => {
       const start = Date.now();
       console.log(`Executing query: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
-      const res = await pool.query(text, params);
+      const res = await currentPool.query(text, params);
       const duration = Date.now() - start;
       console.log('Executed query successfully', { duration, rows: res.rowCount });
       return res;
+    };
+
+    try {
+      return await executeQuery();
     } catch (error: any) {
       const position = parseInt(error.position, 10);
       let queryContext = '';
@@ -82,16 +105,24 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
         where: error.where,
         query: text.substring(0, 500) + (text.length > 500 ? '...' : '')
       };
+      
       console.error(`Database query error details:${queryContext}`, errorDetails);
       console.error('Full error object:', error);
+
       // If the connection is terminated or timed out, reset the pool so the next request starts fresh
       if (error.message.includes('terminated') || error.message.includes('timeout') || error.message.includes('Connection') || error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
         console.log('Resetting pool due to connection or SSL error');
-        if (error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-          console.warn('SSL Certificate error detected. Ensure DB_SSL=true or sslmode=require is in DATABASE_URL.');
-        }
         pool = null;
+        poolPromise = null;
       }
+      
+      // Auto-retry once for transient connection issues
+      if (error.message.includes('timeout') || error.message.includes('Connection failed')) {
+        console.log('Retrying query due to timeout...');
+        const retryPool = await getPool();
+        return await retryPool.query(text, params);
+      }
+
       throw error;
     }
   } else {
