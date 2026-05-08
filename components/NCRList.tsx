@@ -33,8 +33,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, optio
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   const filteredOptions = useMemo(() => {
-    if (!search) return options;
-    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+    const uniqueOptions = Array.from(new Set(options.map(o => o.normalize('NFC').trim())));
+    if (!search) return uniqueOptions;
+    const searchLower = search.toLowerCase();
+    return uniqueOptions.filter(opt => opt.toLowerCase().includes(searchLower));
   }, [options, search]);
 
   useEffect(() => {

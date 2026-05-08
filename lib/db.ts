@@ -44,9 +44,9 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
         connectionString,
         // Force rejectUnauthorized: false for cloud DBs with self-signed certs
         ssl: useSSL ? { rejectUnauthorized: false } : false,
-        max: 1,
-        idleTimeoutMillis: 10000,
-        connectionTimeoutMillis: 10000,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 30000,
       });
 
       pool.on('error', (err: any) => {
