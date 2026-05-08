@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useInspectionContext } from '../src/context/InspectionContext';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
-import { getProxyImageUrl } from '../src/utils';
+import { ProxyImage } from '../src/components/ProxyImage';
 import { formatDisplayDate } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
 import { 
@@ -871,37 +871,33 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color} uppercase border shadow-sm tracking-tight`}>{cfg.label}</span>
                                                         <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md uppercase">
                                                             {
-                                                                (item.type === 'PQC') ? (item.inspectionStage || `---`) :
-                                                                (item.type === 'SQC_BTP' || item.type === 'IQC' || item.type === 'SQC_VT') ? (item.materials?.[0]?.category || item.ten_hang_muc || '---') :
-                                                                `#${item.id.split('-').pop()}`
+                                                                (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
+                                                                (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
+                                                                (item.ma_nha_may || item.headcode || '---')
                                                             }
                                                         </span>
                                                     </div>
                                                     <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                                                        item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
-                                                        item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
+                                                        item.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                                        item.status === 'FLAGGED' ? 'bg-red-100 text-red-700' :
                                                         'bg-slate-100 text-slate-600'
                                                     }`}>
                                                         {item.status}
                                                     </span>
                                                 </div>
-                                                <h4 className="text-[14px] font-bold text-slate-800 leading-snug group-hover:text-blue-700 transition-colors line-clamp-3">
-                                                    {
-                                                        (item.type === 'IQC' || item.type === 'SQC_VT') 
-                                                            ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                            : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                    }
+                                                <h4 className="text-[14px] font-bold text-slate-800 leading-snug pr-6 group-hover:text-blue-700 transition-colors line-clamp-3">
+                                                    {item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}
                                                 </h4>
                                             </div>
                                             
                                             <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-4 border-t border-slate-100/80">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100">
+                                                    <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0">
                                                         <UserIcon className="w-3 h-3 text-blue-500" />
                                                     </div>
-                                                    <span className="text-[12px] font-semibold text-slate-600">{item.inspectorName || '---'}</span>
+                                                    <span className="text-[12px] font-semibold text-slate-600 truncate">{item.inspectorName || item.created_by || '---'}</span>
                                                 </div>
-                                                <span className="text-[11px] font-bold text-slate-400">
+                                                <span className="text-[11px] font-bold text-slate-400 shrink-0">
                                                     {formatDisplayDate(item.date)}
                                                 </span>
                                             </div>
@@ -1094,21 +1090,31 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                 ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                 : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
                                         </h4>
-                                        <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600">
-                                            {item.status === InspectionStatus.FLAGGED ? <AlertTriangle className="w-4 h-4"/> : <CheckSquare className="w-4 h-4 text-blue-600"/>}
+                                    </div>
+                                    <div className="flex flex-col gap-1 mt-2 text-[11px] text-slate-500 font-medium">
+                                        <div className="flex items-center gap-1">
+                                            <span className="font-mono text-slate-700 bg-slate-100 px-1 rounded">{
+                                                (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
+                                                (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
+                                                (item.ma_nha_may || item.headcode || '---')
+                                            }</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-blue-600 font-bold">{item.inspectorName || item.created_by || '---'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                                                item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
+                                                item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
+                                                'bg-slate-100 text-slate-600'
+                                            }`}>
+                                                {item.status}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className="flex justify-between items-center mt-2 text-[11px] text-slate-500 font-mono">
-                                        <span>
-                                            {(item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
-                                            (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
-                                            (item.ma_nha_may || item.headcode || '---')}
-                                        </span>
-                                        <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3"/> {formatDisplayDate(item.date)}</span>
-                                    </div>
-                                    <div className="mt-2 flex gap-2 items-center">
-                                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
-                                         <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{item.inspectorName || '---'}</span>
+                                    <div className="mt-2 flex gap-2 items-center justify-between">
+                                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
+                                          <span className="text-[10px] text-slate-400 font-medium">{formatDisplayDate(item.date)}</span>
                                     </div>
                                 </div>
                             ))}
@@ -1235,24 +1241,22 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                 <div className="pt-4 border-t border-slate-100">
                                     <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm ({selectedItemDesktop.images.length})</label>
                                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                                        {selectedItemDesktop.images.map((img: any, i: number) => {
-                                            const src = typeof img === 'string' ? img : (img.url_hd || img.url_thumbnail || img.file_url);
-                                            const proxySrc = getProxyImageUrl(src);
-                                            return (
-                                                <div key={i} className="relative group cursor-pointer shrink-0" onClick={() => {
-                                                    const formattedImages = selectedItemDesktop.images?.map((im: any) => {
-                                                        const imSrc = typeof im === 'string' ? im : (im.url_hd || im.url_thumbnail || im.file_url);
-                                                        return getProxyImageUrl(imSrc);
-                                                    }) || [];
-                                                    setLightboxState({ images: formattedImages, index: i });
-                                                }}>
-                                                    <img loading="lazy" src={proxySrc} className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" referrerPolicy="no-referrer" />
-                                                    <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                                                        <Maximize2 className="w-5 h-5 text-white" />
+                                            {selectedItemDesktop.images.map((img: any, i: number) => {
+                                                const src = typeof img === 'string' ? img : (img.url_hd || img.url_thumbnail || img.file_url);
+                                                return (
+                                                    <div key={i} className="relative group cursor-pointer shrink-0" onClick={() => {
+                                                        const formattedImages = selectedItemDesktop.images?.map((im: any) => {
+                                                            return typeof im === 'string' ? im : (im.url_hd || im.url_thumbnail || im.file_url);
+                                                        }) || [];
+                                                        setLightboxState({ images: formattedImages, index: i });
+                                                    }}>
+                                                        <ProxyImage src={src} alt="Product image" className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" />
+                                                        <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                                            <Maximize2 className="w-5 h-5 text-white" />
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })}
                                     </div>
                                 </div>
                             ) : (

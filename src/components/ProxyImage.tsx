@@ -21,6 +21,10 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({
 }) => {
   const [error, setError] = React.useState(false);
 
+  React.useEffect(() => {
+    setError(false);
+  }, [src]);
+
   // Handle broken links or restricted access gracefully
   const handleError = () => {
     setError(true);

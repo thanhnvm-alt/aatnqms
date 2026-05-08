@@ -611,7 +611,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
 
         const items = res.rows.map((row: any) => ({
             ...row,
-            inspectorName: row.created_by,
+            inspectorName: row.inspectorName || row.created_by,
+            created_by: row.created_by || row.inspectorName,
             date: (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
                   (row.updated_at && Number(row.updated_at) > 1000000000) ? row.updated_at : 
                   row.created_at,

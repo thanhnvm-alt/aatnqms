@@ -1946,6 +1946,43 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
         const result = await db.getInspectionsList(filters, 1, 50000);
         
+        // --- FETCH DETAILS BATCHING ---
+        const schema = process.env.DB_SCHEMA || 'appQAQC';
+        const itemsByType = new Map<string, any[]>();
+        for (const item of result.items) {
+           const typeStr = item.type ? item.type.toLowerCase() : 'pqc';
+           if (!itemsByType.has(typeStr)) itemsByType.set(typeStr, []);
+           itemsByType.get(typeStr)!.push(item);
+        }
+
+        for (const [typeStr, items] of itemsByType.entries()) {
+           let tableName = `forms_${typeStr}`;
+           if (typeStr === 'step_vecni' || typeStr === 'step') tableName = 'forms_step';
+
+           const CHUNK_SIZE = 1000;
+           for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+               const chunk = items.slice(i, i + CHUNK_SIZE);
+               const ids = chunk.map(it => it.id);
+               try {
+                  const detailRes = await query(`SELECT * FROM "${schema}"."${tableName}" WHERE id = ANY($1::text[])`, [ids]);
+                  const detailMap = new Map(detailRes.rows.map((r: any) => [r.id, r]));
+                  for (const item of chunk) {
+                      const d = detailMap.get(item.id);
+                      if (d) {
+                         for (const key of Object.keys(d)) {
+                            if (key !== 'id' && key !== 'type' && d[key] !== null && d[key] !== undefined) {
+                                (item as any)[key] = d[key];
+                            }
+                         }
+                      }
+                  }
+               } catch (e: any) {
+                  console.warn(`Failed to fetch details for table ${tableName} in export:`, e.message);
+               }
+           }
+        }
+        // --- END FETCH DETAILS BATCHING ---
+
         const filename = `AATN_Inspections_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -2009,15 +2046,53 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 if (isNaN(rowUpdated.getTime())) rowUpdated = null;
             }
 
-            // Extract images joining with new lines or commas
-            const siteImages = (item.images && Array.isArray(item.images)) 
-                ? item.images.join(', ') 
-                : '';
+            const formatImageLinks = (imgs: any) => {
+                if (!imgs) return [];
+                let arr: string[] = [];
+                if (typeof imgs === 'string') {
+                    try { arr = JSON.parse(imgs); } catch(e) { arr = [imgs]; }
+                } else if (Array.isArray(imgs)) {
+                    arr = imgs;
+                }
+                return arr.filter(Boolean).map(id => id.startsWith('http') ? id : `https://drive.google.com/open?id=${id}`);
+            };
 
-            const so_luong_ipo = Number(item.so_luong_ipo || 0);
-            const inspectedQuantity = Number(item.inspectedQuantity || 0);
-            const passedQuantity = Number(item.passedQuantity || 0);
-            const failedQuantity = Number(item.failedQuantity || 0);
+            let allImages: string[] = [];
+            allImages.push(...formatImageLinks((item as any).images));
+            allImages.push(...formatImageLinks((item as any).reportImages));
+            allImages.push(...formatImageLinks((item as any).deliveryNoteImages));
+
+            if ((item as any).items_json) {
+                try {
+                    const itemsArr = typeof (item as any).items_json === 'string' ? JSON.parse((item as any).items_json) : (item as any).items_json;
+                    if (Array.isArray(itemsArr)) {
+                        itemsArr.forEach(i => {
+                            if (i.images) allImages.push(...formatImageLinks(i.images));
+                        });
+                    }
+                } catch(e) {}
+            }
+            if ((item as any).materials_json) {
+                try {
+                    const matArr = typeof (item as any).materials_json === 'string' ? JSON.parse((item as any).materials_json) : (item as any).materials_json;
+                    if (Array.isArray(matArr)) {
+                        matArr.forEach(m => {
+                            if (m.items && Array.isArray(m.items)) {
+                                m.items.forEach((i: any) => {
+                                    if (i.images) allImages.push(...formatImageLinks(i.images));
+                                });
+                            }
+                        });
+                    }
+                } catch(e) {}
+            }
+
+            const siteImages = allImages.join('\n');
+
+            const so_luong_ipo = Number((item as any).so_luong_ipo || 0);
+            const inspectedQuantity = Number((item as any).inspectedQuantity || 0);
+            const passedQuantity = Number((item as any).passedQuantity || 0);
+            const failedQuantity = Number((item as any).failedQuantity || 0);
             
             let passedPercentage = '';
             let failedPercentage = '';
@@ -2029,29 +2104,32 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             const row = sheet.addRow({
                 id: String(item.id || ''),
                 type: item.type || '',
-                ma_ct: item.ma_ct || '',
-                ten_ct: item.ten_ct || '',
-                ten_hang_muc: item.ten_hang_muc || '',
-                ma_nha_may: item.ma_nha_may || '',
-                headcode: item.headcode || '',
-                inspectorName: item.inspectorName || '',
-                workshop: item.workshop || '',
-                inspectionStage: item.inspectionStage || '',
+                ma_ct: String(item.ma_ct || ''),
+                ten_ct: String(item.ten_ct || ''),
+                ten_hang_muc: String(item.ten_hang_muc || ''),
+                ma_nha_may: String(item.ma_nha_may || ''),
+                headcode: String(item.headcode || ''),
+                inspectorName: String(item.inspectorName || ''),
+                workshop: String(item.workshop || ''),
+                inspectionStage: String(item.inspectionStage || ''),
                 date: rowDate,
-                status: item.status || '',
+                status: String(item.status || ''),
                 so_luong_ipo: so_luong_ipo,
                 inspectedQuantity: inspectedQuantity,
                 passedQuantity: passedQuantity,
                 passedPercentage: passedPercentage,
                 failedQuantity: failedQuantity,
                 failedPercentage: failedPercentage,
-                summary: item.summary || '',
+                summary: String((item as any).summary || ''),
                 siteImages: siteImages,
-                dvt: item.dvt || ''
+                dvt: String((item as any).dvt || '')
             });
 
             row.eachCell((cell, colNumber) => {
               cell.protection = { locked: false };
+              if (colNumber === 20) { // siteImages is the 20th column
+                  cell.alignment = { wrapText: true };
+              }
               // date is col index 11, updatedAt is 21
               if ((colNumber === 11 || colNumber === 21) && cell.value instanceof Date) {
                  cell.numFmt = 'yyyy-mm-dd hh:mm:ss';

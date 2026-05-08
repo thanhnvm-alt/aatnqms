@@ -12,7 +12,7 @@ export const getProxyImageUrl = (url: string | undefined | null): string => {
   const tokenParam = token ? `token=${token}` : '';
   
   // If it's already using our proxy, we might need to append the token if it's missing
-  if (url.includes('/display-image/') || url.includes('/api/image/') || url.includes('/api/proxy-image')) {
+  if (url.includes('/display-image/') || url.includes('/api/image/') || url.includes('/api/proxy-image') || url.includes('/api/media/image/') || url.includes('/media/stream/')) {
       if (token && !url.includes('token=')) {
           return url.includes('?') ? `${url}&${tokenParam}` : `${url}?${tokenParam}`;
       }

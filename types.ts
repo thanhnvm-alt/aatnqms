@@ -262,6 +262,7 @@ export interface Inspection {
   image_refs?: string[]; 
   images?: string[];
   summary?: string;
+  created_by?: string;
   workshop?: string;
   inspectionStage?: string;
   dvt?: string;
