@@ -293,6 +293,41 @@ export async function runMigrations() {
         await addColumn(table, 'supporting_docs_json', 'TEXT');
     }
 
+    // 7.5 Centralized inspections table
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."inspections" (
+            "id" TEXT PRIMARY KEY,
+            "type" TEXT,
+            "ma_ct" TEXT,
+            "ten_ct" TEXT,
+            "ma_nha_may" TEXT,
+            "ten_hang_muc" TEXT,
+            "workshop" TEXT,
+            "status" TEXT,
+            "score" DOUBLE PRECISION DEFAULT 0,
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "created_by" TEXT,
+            "headcode" TEXT,
+            "stage" TEXT,
+            "inspected_qty" NUMERIC,
+            "passed_qty" NUMERIC,
+            "failed_qty" NUMERIC,
+            "so_luong_ipo" NUMERIC
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table inspections exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create inspections:`, e.message);
+      migrationLogs.push(`⚠️ Could not create inspections: ${e.message}`);
+    }
+    await addColumn('inspections', 'stage', 'TEXT');
+    await addColumn('inspections', 'inspected_qty', 'NUMERIC');
+    await addColumn('inspections', 'passed_qty', 'NUMERIC');
+    await addColumn('inspections', 'failed_qty', 'NUMERIC');
+    await addColumn('inspections', 'so_luong_ipo', 'NUMERIC');
+
     // 8. Defect Library
     try {
       await query(`
@@ -475,6 +510,32 @@ export async function runMigrations() {
     await addColumn('projects', 'startDate', 'TEXT');
     await addColumn('projects', 'endDate', 'TEXT');
 
+    // 13.5 Project Documents
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."project_documents" (
+            "id" TEXT PRIMARY KEY,
+            "project_id" TEXT,
+            "ma_ct" TEXT,
+            "name" TEXT,
+            "version" TEXT,
+            "issue_date" TEXT,
+            "update_date" TEXT,
+            "file_url" TEXT,
+            "description" TEXT,
+            "created_by" TEXT,
+            "created_at" BIGINT,
+            "updated_at" BIGINT,
+            "deleted_at" BIGINT,
+            "data" TEXT
+        );
+      `);
+      migrationLogs.push(`✅ Ensured table project_documents exists in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create project_documents:`, e.message);
+      migrationLogs.push(`⚠️ Could not create project_documents: ${e.message}`);
+    }
+
     // 14. IPO Drawing List & Details
     try {
       await query(`
@@ -541,6 +602,26 @@ export async function runMigrations() {
     } catch (e: any) {
       console.warn(`⚠️ Could not create ipo tables:`, e.message);
       migrationLogs.push(`⚠️ Could not create ipo tables: ${e.message}`);
+    }
+
+    // Tối ưu hóa Database: Giải pháp 2 (Sử dụng Materialized View cho projects)
+    try {
+      await query(`
+        CREATE MATERIALIZED VIEW IF NOT EXISTS "${schema}"."ipo_projects_mv" AS
+        SELECT 
+            "Ma_Tender" as ma_ct,
+            MAX("Project_name") as name
+        FROM "${schema}"."ipo"
+        WHERE "Ma_Tender" IS NOT NULL AND "Ma_Tender" != ''
+        GROUP BY "Ma_Tender";
+      `);
+      await query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "ipo_projects_mv_ma_ct_uidx" ON "${schema}"."ipo_projects_mv" ("ma_ct");
+      `);
+      migrationLogs.push(`✅ Ensured Materialized View ipo_projects_mv exists in ${schema}`);
+    } catch (mvErr: any) {
+      console.warn(`⚠️ Could not create ipo_projects_mv Materialized View:`, mvErr.message);
+      migrationLogs.push(`⚠️ Could not create ipo_projects_mv Materialized View: ${mvErr.message}`);
     }
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);

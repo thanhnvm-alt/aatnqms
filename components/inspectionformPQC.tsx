@@ -319,7 +319,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     type: 'PQC',
     ma_nha_may: initialData?.ma_nha_may || '',
     headcode: initialData?.headcode || '',
-    workshop: initialData?.workshop || initialData?.ma_nha_may || '',
+    workshop: initialData?.workshop || '',
     so_luong_ipo: initialData?.so_luong_ipo || 0,
     ma_ct: initialData?.ma_ct || '',
     ten_ct: initialData?.ten_ct || '',
@@ -375,11 +375,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const availableStages = useMemo(() => { 
-      const wsCode = formData.workshop || formData.ma_nha_may;
+      const wsCode = formData.workshop;
       if (!wsCode) return []; 
       const selectedWorkshop = workshops.find(ws => ws.code === wsCode); 
       return selectedWorkshop?.stages || []; 
-  }, [formData.workshop, formData.ma_nha_may, workshops]);
+  }, [formData.workshop, workshops]);
 
   const visibleItems = useMemo(() => { 
       if (!formData.inspectionStage) return []; 
@@ -423,7 +423,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     so_luong_ipo: Number(match.Quantity_IPO || 0), 
                     ma_nha_may: match.ID_Factory_Order || '', 
                     headcode: match.ID_Factory_Order || '', 
-                    workshop: match.ID_Factory_Order || '',
+                    workshop: '', // Do NOT auto-assign factory order to workshop
                     inspectedQuantity: 0,
                     passedQuantity: 0,
                     failedQuantity: 0
@@ -457,7 +457,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 so_luong_ipo: match.so_luong_ipo, 
                 ma_nha_may: match.ma_nha_may, 
                 headcode: match.ma_nha_may,
-                workshop: match.ma_nha_may,
+                workshop: '', // Do NOT auto-assign factory order to workshop
                 inspectedQuantity: 0,
                 passedQuantity: 0,
                 failedQuantity: 0
@@ -550,7 +550,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     const ins = formData.inspectedQuantity || 0;
     const ipo = formData.so_luong_ipo || 0;
 
-    if (!formData.ma_ct || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin và chọn công đoạn."); return; }
+    if (!formData.ma_ct || !formData.workshop || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin xưởng và chọn công đoạn."); return; }
     
     if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
     if (ins > ipo) { alert("Số lượng kiểm tra không được vượt quá số lượng IPO."); return; }

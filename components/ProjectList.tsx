@@ -131,13 +131,37 @@ export const ProjectList: React.FC<ProjectListProps> = ({
     });
   };
 
+  // Pre-calculate inspection stats per project to avoid O(Projects * Inspections) search nested in render loops
+  const inspectionStatsMap = useMemo(() => {
+    const map = new Map<string, { total: number; open: number; closed: number }>();
+    if (!inspections || inspections.length === 0) return map;
+    
+    for (let i = 0; i < inspections.length; i++) {
+      const insp = inspections[i];
+      const origCode = insp.ma_ct;
+      if (!origCode) continue;
+      
+      const key = String(origCode).toUpperCase();
+      let stats = map.get(key);
+      if (!stats) {
+        stats = { total: 0, open: 0, closed: 0 };
+        map.set(key, stats);
+      }
+      
+      stats.total += 1;
+      const status = insp.status;
+      if (status === 'flagged' || status === 'pending' || status === 'submitted') {
+        stats.open += 1;
+      } else if (status === 'approved' || status === 'completed' || status === 'verified' || status === 'locked') {
+        stats.closed += 1;
+      }
+    }
+    return map;
+  }, [inspections]);
+
   const getStats = (maCt: string) => {
-    const pInsps = inspections.filter(i => String(i.ma_ct).toUpperCase() === String(maCt).toUpperCase());
-    return {
-      total: pInsps.length,
-      open: pInsps.filter(i => i.status === InspectionStatus.FLAGGED || i.status === InspectionStatus.PENDING).length,
-      closed: pInsps.filter(i => i.status === InspectionStatus.APPROVED || i.status === InspectionStatus.COMPLETED).length
-    };
+    const key = String(maCt || '').toUpperCase();
+    return inspectionStatsMap.get(key) || { total: 0, open: 0, closed: 0 };
   };
 
   return (

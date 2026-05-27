@@ -79,12 +79,14 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
         {/* Header with Logo */}
         <div className="bg-white p-8 pb-4 text-center flex flex-col items-center border-b border-slate-50">
             {/* Logo Container */}
-            <div className="mb-4 relative w-full flex justify-center">
+            <div className="mb-2 relative w-full flex justify-center">
                 <div className="flex flex-col items-center">
-                    <h1 className="text-5xl font-bold text-red-600 tracking-tighter" style={{ fontFamily: 'serif' }}>AA</h1>
-                    <span className="text-xl font-bold text-slate-800">Corporation</span>
-                        <div className="h-1 w-16 bg-orange-500 rounded-full my-2"></div>
-                        <span className="text-xs text-slate-500 uppercase tracking-widest">Interior Solutions Since 1989</span>
+                    <img 
+                        src={getProxyImageUrl("https://lh3.googleusercontent.com/d/1bDMxj465lBlBF0IJY7R-93MxkulDeMND")} 
+                        alt="AA Corporation Logo" 
+                        className="h-24 object-contain" 
+                        referrerPolicy="no-referrer"
+                    />
                 </div>
             </div>
             

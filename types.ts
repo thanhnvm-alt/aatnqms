@@ -339,6 +339,22 @@ export interface Project {
   smartGoals?: SmartGoal[];
 }
 
+export interface ProjectDocument {
+  id: string;
+  projectId: string;
+  ma_ct: string;
+  name: string;
+  version: string;
+  issueDate: string;
+  updateDate: string;
+  fileUrl?: string;
+  description?: string;
+  createdBy: string;
+  createdAt?: number;
+  updatedAt?: number;
+  deletedAt?: number | null;
+}
+
 export interface Defect {
   id: string;
   inspectionId: string;

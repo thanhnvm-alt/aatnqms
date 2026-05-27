@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState, Workshop } from '../types';
 import { 
-  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip
+  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ComposedChart, Line, CartesianGrid, Legend
 } from 'recharts';
 import { 
   ClipboardCheck, AlertTriangle, CheckCircle2, Flag, 
@@ -52,7 +52,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
   const [filterType, setFilterType] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
 
   const filterOptions = useMemo(() => ({
     inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
@@ -61,7 +60,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
     statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
   }), [user, users, workshops]);
 
-  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '' || searchTerm !== '';
+  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
 
   const handleApplyFilters = () => {
     if (onFilterChange) {
@@ -71,8 +70,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
         status: filterStatus.join(','),
         type: filterType.join(','),
         startDate,
-        endDate,
-        search: searchTerm
+        endDate
       });
     }
   };
@@ -84,7 +82,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
     setFilterType([]);
     setStartDate('');
     setEndDate('');
-    setSearchTerm('');
     if (onFilterChange) onFilterChange({});
   };
 
@@ -96,15 +93,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
     const drafts = safeInspections.filter(i => i.status === InspectionStatus.DRAFT).length;
     const highPriority = safeInspections.filter(i => i.priority === Priority.HIGH).length;
     
-    // Requirement 2: % Đạt = trung bình cộng tl đạt của tất cả các phiếu
-    const avgSuccessRate = nonDraftItems.length > 0 
-      ? Math.round(nonDraftItems.reduce((acc, curr) => acc + (curr.score || 0), 0) / nonDraftItems.length) 
-      : 0;
+    let totalInspected = 0;
+    let totalPassed = 0;
+    let totalFailed = 0;
+    let fallbackScoreSum = 0;
+    let hasQuantities = false;
 
-    // Requirement 3: % Lỗi = trung bình cộng tl lỗi của tất cả các phiếu
-    const avgErrorRate = nonDraftItems.length > 0 
-      ? Math.round(nonDraftItems.reduce((acc, curr) => acc + (100 - (curr.score || 0)), 0) / nonDraftItems.length) 
-      : 0;
+    nonDraftItems.forEach(i => {
+      const inspected = Number(i.inspectedQuantity || 0);
+      const passed = Number(i.passedQuantity || 0);
+      const failed = Number(i.failedQuantity || 0);
+      
+      if (inspected > 0) {
+        hasQuantities = true;
+        totalInspected += inspected;
+        totalPassed += passed;
+        totalFailed += failed;
+      }
+      fallbackScoreSum += Number(i.score || 0); 
+    });
+
+    let avgSuccessRate = 0;
+    let avgErrorRate = 0;
+
+    if (hasQuantities && totalInspected > 0) {
+      avgSuccessRate = parseFloat(((totalPassed / totalInspected) * 100).toFixed(2));
+      avgErrorRate = parseFloat(((totalFailed / totalInspected) * 100).toFixed(2));
+    } else if (nonDraftItems.length > 0) {
+      // Fallback for types that only use 'score'
+      avgSuccessRate = parseFloat((fallbackScoreSum / nonDraftItems.length).toFixed(2));
+      avgErrorRate = parseFloat((100 - avgSuccessRate).toFixed(2));
+    }
 
     return { total, drafts, highPriority, avgSuccessRate, avgErrorRate, nonDraftCount: nonDraftItems.length };
   }, [safeInspections]);
@@ -114,21 +133,69 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
     { name: '% Lỗi', value: stats.avgErrorRate, color: COLORS.fail },
   ].filter(item => item.value > 0);
 
-  const projectData = useMemo(() => {
-    const projectScores: Record<string, { total: number; count: number }> = {};
+  const workshopData = useMemo(() => {
+    const wsMap: Record<string, { inspected: number; passed: number; fallbackScore: number; count: number }> = {};
+    
     safeInspections.forEach(i => {
       if (!i || i.status === InspectionStatus.DRAFT) return;
-      const project = String(i.ma_ct || 'Unknown');
-      if (!projectScores[project]) projectScores[project] = { total: 0, count: 0 };
-      projectScores[project].total += (i.score || 0);
-      projectScores[project].count += 1;
+      const ws = String(i.ma_xuong || i.workshop || 'Chưa xác định');
+      if (!wsMap[ws]) wsMap[ws] = { inspected: 0, passed: 0, fallbackScore: 0, count: 0 };
+      
+      wsMap[ws].inspected += Number(i.inspectedQuantity || 0);
+      wsMap[ws].passed += Number(i.passedQuantity || 0);
+      wsMap[ws].fallbackScore += Number(i.score || 0);
+      wsMap[ws].count += 1;
     });
 
-    return Object.keys(projectScores)
-      .map(key => ({
-        name: key,
-        score: Math.round(projectScores[key].total / projectScores[key].count)
-      }))
+    return Object.keys(wsMap)
+      .map(key => {
+        const item = wsMap[key];
+        let passRate = 0;
+        if (item.inspected > 0) {
+          passRate = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
+        } else if (item.count > 0) {
+          passRate = parseFloat((item.fallbackScore / item.count).toFixed(2));
+        }
+        
+        return {
+          name: key,
+          passRate: passRate,
+          failRate: parseFloat((100 - passRate).toFixed(2))
+        };
+      })
+      .sort((a, b) => b.passRate - a.passRate)
+      .slice(0, 10);
+  }, [safeInspections]);
+
+  const projectData = useMemo(() => {
+    const projMap: Record<string, { inspected: number; passed: number; fallbackScore: number; count: number }> = {};
+    
+    safeInspections.forEach(i => {
+      if (!i || i.status === InspectionStatus.DRAFT) return;
+      const project = String(i.ma_ct || 'Không xác định');
+      if (!projMap[project]) projMap[project] = { inspected: 0, passed: 0, fallbackScore: 0, count: 0 };
+      
+      projMap[project].inspected += Number(i.inspectedQuantity || 0);
+      projMap[project].passed += Number(i.passedQuantity || 0);
+      projMap[project].fallbackScore += Number(i.score || 0);
+      projMap[project].count += 1;
+    });
+
+    return Object.keys(projMap)
+      .map(key => {
+        const item = projMap[key];
+        let score = 0;
+        if (item.inspected > 0) {
+          score = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
+        } else if (item.count > 0) {
+          score = parseFloat((item.fallbackScore / item.count).toFixed(2));
+        }
+        
+        return {
+          name: key,
+          score: score
+        };
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
   }, [safeInspections]);
@@ -176,39 +243,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tìm kiếm</label>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Mã/Tên dự án, Hạng mục..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            onBlur={handleApplyFilters}
-                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 h-[42px]"
-                        />
-                    </div>
-                </div>
                 <SearchableSelect 
                     label="Loại phiếu"
                     values={filterType}
                     options={filterOptions.types}
-                    onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), startDate, endDate, search: searchTerm }); }}
+                    onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), startDate, endDate }); }}
                     optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
+                />
+                <SearchableSelect 
+                    label="Xưởng Sản Xuất"
+                    values={filterWorkshop}
+                    options={filterOptions.workshops}
+                    onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate }); }}
                 />
                 <SearchableSelect 
                     label="QC Kiểm tra"
                     values={filterQC}
                     options={filterOptions.inspectors}
-                    onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate, search: searchTerm }); }}
+                    onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate }); }}
                 />
                 <DateRangePicker 
                     label="Khoảng ngày"
                     startDate={startDate}
                     endDate={endDate}
-                    onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate: d, endDate, search: searchTerm }); }}
-                    onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate: d, search: searchTerm }); }}
+                    onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate: d, endDate }); }}
+                    onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate: d }); }}
                 />
             </div>
         </div>
@@ -281,6 +340,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                         ))}
                       </Bar>
                     </BarChart>
+                  </ResponsiveContainer>
+               </div>
+            </div>
+
+            {/* Workshop Quality Chart */}
+            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
+               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2 flex items-center justify-between">
+                  CHẤT LƯỢNG XƯỞNG SẢN XUẤT
+               </h3>
+               <div className="h-64 w-full min-h-[256px]">
+                  <ResponsiveContainer width="99%" height={256}>
+                    <ComposedChart data={workshopData} margin={{ top: 20, right: 0, left: -20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}} 
+                        angle={-45}
+                        textAnchor="end"
+                      />
+                      <YAxis 
+                        yAxisId="left"
+                        domain={[0, 100]} 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}}
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        domain={[0, 'auto']} 
+                        hide
+                      />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                        labelStyle={{ fontSize: '11px', fontWeight: '900', color: '#1e293b', marginBottom: '4px' }}
+                      />
+                      <Legend 
+                        iconType="circle" 
+                        wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} 
+                      />
+                      <Bar yAxisId="left" dataKey="passRate" name="Tỷ Lệ Đạt %" fill={COLORS.pass} barSize={24} radius={[4, 4, 0, 0]}>
+                        {workshopData.map((entry, index) => (
+                           <Cell key={`cell-${index}`} fill={COLORS.pass} />
+                        ))}
+                      </Bar>
+                      <Line yAxisId="right" type="monotone" dataKey="failRate" name="Tỷ Lệ Lỗi %" stroke={COLORS.fail} strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                </div>
             </div>

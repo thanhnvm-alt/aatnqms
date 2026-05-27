@@ -2,7 +2,7 @@
 import { query } from "../lib/db.js";
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import { NCR, Inspection, IPOItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, Material } from "../types.js";
+import { NCR, Inspection, IPOItem, User, Workshop, CheckItem, QMSImage, Project, Role, Defect, DefectLibraryItem, Notification, NCRComment, InspectionStatus, MaterialIQC, CheckStatus, ModuleId, Supplier, FloorPlan, LayoutPin, Material, ProjectDocument } from "../types.js";
 
 const SALT_ROUNDS = 10;
 
@@ -39,9 +39,14 @@ async function syncToInspectionsTable(inspection: Inspection) {
         await query(`
             INSERT INTO ${SCHEMA}."inspections" (
                 id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
-                workshop, status, score, created_at, updated_at, created_by, headcode
+                workshop, status, score, created_at, updated_at, created_by, headcode,
+                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10::bigint, $11::bigint, $12, $13)
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, 
+                $9::double precision, $10::bigint, $11::bigint, $12, $13,
+                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric
+            )
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 score = EXCLUDED.score,
@@ -52,6 +57,11 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 ten_hang_muc = EXCLUDED.ten_hang_muc,
                 workshop = EXCLUDED.workshop,
                 headcode = EXCLUDED.headcode,
+                stage = EXCLUDED.stage,
+                inspected_qty = EXCLUDED.inspected_qty,
+                passed_qty = EXCLUDED.passed_qty,
+                failed_qty = EXCLUDED.failed_qty,
+                so_luong_ipo = EXCLUDED.so_luong_ipo,
                 created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by),
                 created_at = CASE WHEN ${SCHEMA}."inspections".created_at = 0 THEN EXCLUDED.created_at ELSE ${SCHEMA}."inspections".created_at END
         `, sanitizeArgs([
@@ -67,7 +77,12 @@ async function syncToInspectionsTable(inspection: Inspection) {
             createdAt,
             updatedAt,
             inspection.inspectorName || 'SYSTEM',
-            inspection.headcode
+            inspection.headcode,
+            inspection.inspectionStage || (inspection as any).stage,
+            inspection.inspectedQuantity || 0,
+            inspection.passedQuantity || 0,
+            inspection.failedQuantity || 0,
+            inspection.so_luong_ipo || 0
         ]));
     } catch (e) {
         console.error(`❌ ISO-DB: Sync to inspections table failed for ${inspection.id}:`, e);
@@ -244,6 +259,22 @@ export async function saveInspection(inspection: Inspection) {
 
   // Final forced check for Shared materials (Vật tư dùng chung)
   const tUpper = String(inspection.type || '').trim().toUpperCase();
+  
+  // Set accurate workshop values automatically based on type/id
+  if (tUpper === 'IQC' || tUpper === 'SQC_MAT') {
+      inspection.workshop = 'VẬT TƯ';
+  } else if (tUpper === 'SQC_BTP') {
+      inspection.workshop = 'GCN';
+  } else if (tUpper === 'SITE') {
+      inspection.workshop = 'LẮP ĐẶT';
+  } else if (tUpper === 'SQC') {
+      if (String(inspection.id || '').toUpperCase().startsWith('SQC-VT-')) {
+          inspection.workshop = 'VẬT TƯ';
+      } else if (String(inspection.id || '').toUpperCase().startsWith('SQC-BTP-')) {
+          inspection.workshop = 'GCN';
+      }
+  }
+
   const isSharedType = tUpper === 'IQC' || tUpper.includes('SQC_VT') || tUpper.includes('SQC_MAT') || tUpper.includes('SQC-VT') || tUpper.includes('SQC-MAT');
   
   if (isSharedType) {
@@ -631,7 +662,10 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
     const finalQuery = `
         SELECT 
             id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
-            workshop, status, score, created_at, updated_at, created_by as "inspectorName"
+            workshop, status, score, created_at, updated_at, created_by as "inspectorName",
+            stage as "inspectionStage", inspected_qty as "inspectedQuantity",
+            passed_qty as "passedQuantity", failed_qty as "failedQuantity",
+            so_luong_ipo
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
@@ -657,7 +691,12 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             updatedAt: row.updated_at,
             isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
             hasNcr: row.status === 'FLAGGED',
-            isCond: row.status === 'CONDITIONAL'
+            isCond: row.status === 'CONDITIONAL',
+            inspectionStage: row.inspectionStage,
+            inspectedQuantity: row.inspectedQuantity !== null ? Number(row.inspectedQuantity) : undefined,
+            passedQuantity: row.passedQuantity !== null ? Number(row.passedQuantity) : undefined,
+            failedQuantity: row.failedQuantity !== null ? Number(row.failedQuantity) : undefined,
+            so_luong_ipo: row.so_luong_ipo !== null ? Number(row.so_luong_ipo) : 0
         })) as unknown as Inspection[];
 
         return { 
@@ -1230,6 +1269,7 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
         SELECT 
             n.id, n.inspection_id, n.item_id, n.defect_code, n.severity, n.status, n.description, 
             n.responsible_person, n.deadline, n.created_by, n.created_at,
+            n.images_before_json as "imagesBeforeJson", n.images_after_json as "imagesAfterJson",
             i.ma_ct as "maCt", i.ten_ct as "tenCt", i.ten_hang_muc as "tenHangMuc", i.workshop as "workshop", i."inspectorName" as "inspectorName"
         FROM ${SCHEMA}.ncrs n
         LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id
@@ -1283,6 +1323,8 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
             createdBy: r.created_by, 
             createdAt: r.created_at,
             createdDate: r.created_at ? (typeof r.created_at === 'number' ? new Date(r.created_at * 1000).toISOString() : new Date(Number(r.created_at) * 1000).toISOString()) : new Date().toISOString(),
+            imagesBefore: safeJsonParse(r.imagesBeforeJson, []),
+            imagesAfter: safeJsonParse(r.imagesAfterJson, []),
             ma_ct: r.maCt,
             ten_ct: r.tenCt,
             ten_hang_muc: r.tenHangMuc,
@@ -1294,7 +1336,22 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
 }
 
 export async function getNcrById(id: string): Promise<NCR | null> {
-    const res = await query(`SELECT * FROM ${SCHEMA}.ncrs WHERE id = $1 AND deleted_at IS NULL`, [id]);
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tableQueries = tables.map(t => {
+        const workshopCol = (t === 'forms_pqc') ? 'workshop::text' : 'NULL::text as workshop';
+        return `SELECT id::text, ma_ct::text, ten_ct::text, ten_hang_muc::text, ${workshopCol}, inspector::text as "inspectorName" FROM ${SCHEMA}."${t}"`;
+    });
+    const inspectionUnion = tableQueries.join(' UNION ALL ');
+
+    const res = await query(`
+        SELECT 
+            n.*,
+            i.ma_ct as "maCt", i.ten_ct as "tenCt", i.ten_hang_muc as "tenHangMuc", i.workshop as "workshop", i."inspectorName" as "inspectorName"
+        FROM ${SCHEMA}.ncrs n
+        LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id
+        WHERE n.id = $1 AND n.deleted_at IS NULL
+    `, [id]);
+
     if (res.rows.length === 0) return null;
     const r = res.rows[0];
     return {
@@ -1304,7 +1361,12 @@ export async function getNcrById(id: string): Promise<NCR | null> {
         deadline: r.deadline, imagesBefore: safeJsonParse(r.images_before_json, []), imagesAfter: safeJsonParse(r.images_after_json, []),
         createdBy: r.created_by, 
         createdDate: r.created_at ? (typeof r.created_at === 'number' ? new Date(r.created_at * 1000).toISOString() : new Date(Number(r.created_at) * 1000).toISOString()) : new Date().toISOString(),
-        comments: safeJsonParse(r.comments_json, [])
+        comments: safeJsonParse(r.comments_json, []),
+        ma_ct: r.maCt,
+        ten_ct: r.tenCt,
+        ten_hang_muc: r.tenHangMuc,
+        workshop: r.workshop,
+        inspectorName: r.inspectorName
     } as unknown as NCR;
 }
 
@@ -1374,42 +1436,55 @@ export async function saveTemplate(moduleId: string, items: CheckItem[]) {
 
 // --- PROJECTS ---
 
+export async function refreshProjectsMV() {
+    try {
+        await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${SCHEMA}.ipo_projects_mv`);
+        console.log("✅ Successfully refreshed ipo_projects_mv materialized view");
+    } catch (err: any) {
+        console.warn("⚠️ Failed to refresh concurrently, trying default refresh:", err.message);
+        try {
+            await query(`REFRESH MATERIALIZED VIEW ${SCHEMA}.ipo_projects_mv`);
+            console.log("✅ Successfully refreshed ipo_projects_mv materialized view (non-concurrent)");
+        } catch (err2: any) {
+            console.error("❌ Failed to refresh ipo_projects_mv materialized view", err2);
+        }
+    }
+}
+
 export async function getProjectsPaginated(search: string = '', page: number = 1, limit?: number) {
     const offsetLimit = limit || 1000000;
     const offset = (page - 1) * offsetLimit;
     
-    // Group by Ma_Tender from ipo table and join with projects table for details
+    // Query directly from materialized view and left join with projects table
     let sql = `
         SELECT 
-            i."Ma_Tender" as ma_ct, 
-            MAX(i."Project_name") as name,
-            MAX(i."Project_name") as ten_ct,
-            i."Ma_Tender" as id,
-            COALESCE(MAX(p.status), 'Planning') as status,
-            MAX(p.pm) as pm,
-            MAX(p.pc) as pc,
-            MAX(p.qa) as qa,
-            COALESCE(MAX(p.progress), 0) as progress,
-            MAX(p.start_date) as start_date,
-            MAX(p.end_date) as end_date,
-            MAX(p.location) as location,
-            MAX(p.thumbnail) as thumbnail,
-            COALESCE(MAX(p.updated_at), 0) as updated_at
-        FROM ${SCHEMA}.ipo i
-        LEFT JOIN ${SCHEMA}.projects p ON i."Ma_Tender" = p.ma_ct
-        WHERE i."Ma_Tender" IS NOT NULL AND i."Ma_Tender" != ''
+            i.ma_ct, 
+            i.name as name,
+            i.name as ten_ct,
+            i.ma_ct as id,
+            COALESCE(p.status, 'Planning') as status,
+            p.pm as pm,
+            p.pc as pc,
+            p.qa as qa,
+            COALESCE(p.progress, 0) as progress,
+            p.start_date as start_date,
+            p.end_date as end_date,
+            p.location as location,
+            p.thumbnail as thumbnail,
+            COALESCE(p.updated_at, 0) as updated_at
+        FROM ${SCHEMA}.ipo_projects_mv i
+        LEFT JOIN ${SCHEMA}.projects p ON i.ma_ct = p.ma_ct
+        WHERE i.ma_ct IS NOT NULL AND i.ma_ct != ''
         AND (p.deleted_at IS NULL OR p.id IS NULL)
     `;
     
     const args: any[] = [];
     if (search) {
-        sql += ` AND (i."Ma_Tender" ILIKE $1 OR i."Project_name" ILIKE $1)`;
+        sql += ` AND (i.ma_ct ILIKE $1 OR i.name ILIKE $1)`;
         args.push(`%${search}%`);
     }
     
-    sql += ` GROUP BY i."Ma_Tender"`;
-    
-    const countSql = `SELECT COUNT(DISTINCT "Ma_Tender") as total FROM ${SCHEMA}.ipo WHERE "Ma_Tender" IS NOT NULL AND "Ma_Tender" != '' ${search ? 'AND ("Ma_Tender" ILIKE $1 OR "Project_name" ILIKE $1)' : ''}`;
+    const countSql = `SELECT COUNT(*) as total FROM ${SCHEMA}.ipo_projects_mv i ${search ? 'WHERE (i.ma_ct ILIKE $1 OR i.name ILIKE $1)' : ''}`;
     
     const finalSql = sql + (limit ? ` ORDER BY updated_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}` : ` ORDER BY updated_at DESC`);
     const finalArgs = limit ? [...args, limit, offset] : args;
@@ -1433,27 +1508,26 @@ export async function getProjectsPaginated(search: string = '', page: number = 1
 export async function getProjectByCode(code: string): Promise<Project | null> {
     const res = await query(`
         SELECT 
-            i."Ma_Tender" as ma_ct, 
-            MAX(i."Project_name") as name,
-            MAX(i."Project_name") as ten_ct,
-            i."Ma_Tender" as id,
-            i."Ma_Tender" as code,
-            COALESCE(MAX(p.status), 'Planning') as status,
-            MAX(p.pm) as pm,
-            MAX(p.pc) as pc,
-            MAX(p.qa) as qa,
-            COALESCE(MAX(p.progress), 0) as progress,
-            MAX(p.start_date) as start_date,
-            MAX(p.end_date) as end_date,
-            MAX(p.location) as location,
-            MAX(p.description) as description,
-            MAX(p.thumbnail) as thumbnail,
-            MAX(p.data) as data,
-            COALESCE(MAX(p.updated_at), 0) as updated_at
-        FROM ${SCHEMA}.ipo i
-        LEFT JOIN ${SCHEMA}.projects p ON i."Ma_Tender" = p.ma_ct
-        WHERE i."Ma_Tender" = $1
-        GROUP BY i."Ma_Tender"
+            i.ma_ct, 
+            i.name as name,
+            i.name as ten_ct,
+            i.ma_ct as id,
+            i.ma_ct as code,
+            COALESCE(p.status, 'Planning') as status,
+            p.pm as pm,
+            p.pc as pc,
+            p.qa as qa,
+            COALESCE(p.progress, 0) as progress,
+            p.start_date as start_date,
+            p.end_date as end_date,
+            p.location as location,
+            p.description as description,
+            p.thumbnail as thumbnail,
+            p.data as data,
+            COALESCE(p.updated_at, 0) as updated_at
+        FROM ${SCHEMA}.ipo_projects_mv i
+        LEFT JOIN ${SCHEMA}.projects p ON i.ma_ct = p.ma_ct
+        WHERE i.ma_ct = $1
     `, [code]);
     
     if (res.rows.length === 0) return null;
@@ -1653,7 +1727,18 @@ export async function deleteDefectLibraryItem(id: string) {
 
 export async function getRoles(): Promise<Role[]> {
     const res = await query(`SELECT * FROM ${SCHEMA}.roles ORDER BY name ASC`);
-    return res.rows.map((r: any) => ({ ...r, ...safeJsonParse((r as any).data, {}) })) as unknown as Role[];
+    return res.rows.map((r: any) => {
+        const parsed = safeJsonParse((r as any).data, {}) as any;
+        const roleId = r.id || r.name || '';
+        const isSystem = r.isSystem || parsed.isSystem || ['admin', 'root', 'member', 'adminQAQC'].includes(roleId.toLowerCase());
+        return {
+            ...r,
+            ...parsed,
+            id: roleId,
+            name: r.name || parsed.name || roleId,
+            isSystem: !!isSystem
+        };
+    }) as unknown as Role[];
 }
 
 export async function saveRole(role: Role) {
@@ -1670,6 +1755,73 @@ export async function saveRole(role: Role) {
 
 export async function deleteRole(id: string) {
     await query(`DELETE FROM ${SCHEMA}.roles WHERE id = $1`, [id]);
+}
+
+// --- PROJECT DOCUMENTS ---
+
+export async function getProjectDocuments(projectId: string): Promise<ProjectDocument[]> {
+    const res = await query(
+        `SELECT * FROM ${SCHEMA}.project_documents WHERE (project_id = $1 OR ma_ct = $1) AND deleted_at IS NULL ORDER BY created_at DESC`,
+        [projectId]
+    );
+    return res.rows.map((r: any) => ({
+        id: r.id,
+        projectId: r.project_id,
+        ma_ct: r.ma_ct,
+        name: r.name,
+        version: r.version,
+        issueDate: r.issue_date,
+        updateDate: r.update_date,
+        fileUrl: r.file_url,
+        description: r.description,
+        createdBy: r.created_by,
+        createdAt: r.created_at ? Number(r.created_at) : undefined,
+        updatedAt: r.updated_at ? Number(r.updated_at) : undefined,
+        ...safeJsonParse((r as any).data, {})
+    })) as unknown as ProjectDocument[];
+}
+
+export async function saveProjectDocument(doc: ProjectDocument): Promise<void> {
+    const now = Date.now();
+    await query(`
+        INSERT INTO ${SCHEMA}.project_documents (
+            id, project_id, ma_ct, name, version, issue_date, update_date, file_url, description, created_by, created_at, updated_at, deleted_at, data
+        ) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
+        ON CONFLICT(id) DO UPDATE SET 
+            name = EXCLUDED.name, 
+            version = EXCLUDED.version, 
+            issue_date = EXCLUDED.issue_date,
+            update_date = EXCLUDED.update_date,
+            file_url = EXCLUDED.file_url,
+            description = EXCLUDED.description,
+            updated_at = EXCLUDED.updated_at,
+            deleted_at = EXCLUDED.deleted_at,
+            data = EXCLUDED.data
+    `, sanitizeArgs([
+        doc.id, 
+        doc.projectId, 
+        doc.ma_ct, 
+        doc.name, 
+        doc.version, 
+        doc.issueDate, 
+        doc.updateDate, 
+        doc.fileUrl || null, 
+        doc.description || null, 
+        doc.createdBy, 
+        doc.createdAt || now, 
+        doc.updatedAt || now, 
+        doc.deletedAt || null, 
+        doc
+    ]));
+}
+
+export async function deleteProjectDocument(docId: string, deletedAt: number = Date.now()): Promise<void> {
+    await query(`
+        UPDATE ${SCHEMA}.project_documents 
+        SET deleted_at = $1 
+        WHERE id = $2
+    `, [deletedAt, docId]);
 }
 
 /**

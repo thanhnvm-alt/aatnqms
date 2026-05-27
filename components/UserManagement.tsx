@@ -2,7 +2,7 @@ import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { User, UserRole, ModuleId } from '../types';
+import { User, UserRole, ModuleId, Role } from '../types';
 import { ALL_MODULES } from '../constants';
 import { Button } from './Button';
 import { 
@@ -36,13 +36,14 @@ import {
 interface UserManagementProps {
   currentUser: User;
   users: User[];
+  roles?: Role[];
   onAddUser: (user: User) => Promise<void>;
   onUpdateUser: (user: User) => Promise<void>;
   onDeleteUser: (id: string) => Promise<void>;
   onImportUsers?: (users: User[]) => Promise<void>;
 }
 
-export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, onAddUser, onUpdateUser, onDeleteUser, onImportUsers }) => {
+export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, users, roles = [], onAddUser, onUpdateUser, onDeleteUser, onImportUsers }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -98,6 +99,24 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
       case 'QC': return 'bg-emerald-500 shadow-emerald-100';
       default: return 'bg-rose-500 shadow-rose-100';
     }
+  };
+
+  const getRoleDisplayName = (rVal: string) => {
+    const match = roles?.find(r => r.id === rVal || r.name === rVal);
+    if (match) return match.name;
+    if (rVal === 'ADMIN') return 'SYSTEM ADMIN';
+    if (rVal === 'MANAGER') return 'MANAGER';
+    if (rVal === 'QA') return 'QA STAFF';
+    if (rVal === 'QC') return 'QC INSPECTOR';
+    return rVal;
+  };
+
+  const getRoleBadgeStyle = (rVal: string) => {
+    if (rVal === 'ADMIN') return 'bg-purple-100 text-purple-700 border-purple-200';
+    if (rVal === 'MANAGER') return 'bg-blue-600 text-white border-blue-600';
+    if (rVal === 'QA') return 'bg-teal-500 text-white border-teal-600';
+    if (rVal === 'QC') return 'bg-emerald-500 text-white border-emerald-600';
+    return 'bg-blue-50 text-blue-700 border-blue-200';
   };
 
   const filteredUsers = useMemo(() => {
@@ -348,12 +367,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                               </p>
                           </td>
                           <td className="px-6 py-5 text-center">
-                              <span className={`inline-block px-4 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${
-                                  u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700 border-purple-200' :
-                                  u.role === 'MANAGER' ? 'bg-blue-600 text-white border-blue-600' :
-                                  'bg-slate-100 text-slate-500 border-slate-200'
-                              }`}>
-                                  {u.role}
+                              <span className={`inline-block px-4 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getRoleBadgeStyle(u.role as string)}`}>
+                                  {getRoleDisplayName(u.role as string)}
                               </span>
                           </td>
                           <td className="px-6 py-5 text-center">
@@ -413,9 +428,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Trạng thái</label>
                                       <select value={formData.status || 'Đang làm việc'} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100">
-                                          <option value="Đang làm việc">Đang làm việc</option>
-                                          <option value="Nghỉ phép">Nghỉ phép</option>
-                                          <option value="Đã nghỉ việc">Đã nghỉ việc</option>
+                                          <option key="status-working" value="Đang làm việc">Đang làm việc</option>
+                                          <option key="status-leave" value="Nghỉ phép">Nghỉ phép</option>
+                                          <option key="status-quit" value="Đã nghỉ việc">Đã nghỉ việc</option>
                                       </select>
                                   </div>
                               </div>
@@ -448,12 +463,40 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   <input value={formData.workLocation || ''} onChange={e => setFormData({...formData, workLocation: e.target.value})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="Nhà máy / Hiện trường" />
                               </div>
                               <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vai trò hệ thống</label>
-                                  <select value={formData.role || 'QC'} onChange={e => setFormData({...formData, role: e.target.value as any})} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-xs uppercase outline-none shadow-sm appearance-none cursor-pointer">
-                                      <option value="QC">QC Inspector</option>
-                                      <option value="QA">QA Staff</option>
-                                      <option value="MANAGER">Manager</option>
-                                      <option value="ADMIN">System Admin</option>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vai trò hệ thống & Custom</label>
+                                  <select 
+                                      value={formData.role || 'QC'} 
+                                      onChange={e => {
+                                          const val = e.target.value;
+                                          const foundRole = roles?.find(r => r.id === val || r.name === val);
+                                          if (foundRole) {
+                                              setFormData({
+                                                  ...formData,
+                                                  role: val,
+                                                  allowedModules: foundRole.allowedModules || []
+                                              });
+                                          } else {
+                                              setFormData({
+                                                  ...formData,
+                                                  role: val
+                                              });
+                                          }
+                                      }} 
+                                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-black text-xs uppercase outline-none shadow-sm appearance-none cursor-pointer"
+                                  >
+                                      <optgroup key="role-group-system" label="Vai trò Hệ thống">
+                                          <option key="role-QC" value="QC">QC Inspector</option>
+                                          <option key="role-QA" value="QA">QA Staff</option>
+                                          <option key="role-MANAGER" value="MANAGER">Manager</option>
+                                          <option key="role-ADMIN" value="ADMIN">System Admin</option>
+                                      </optgroup>
+                                      {roles && roles.length > 0 && (
+                                          <optgroup key="role-group-custom" label="Vai trò Custom">
+                                              {roles.filter(r => !r.isSystem).map(r => (
+                                                  <option key={`role-custom-${r.id || r.name || 'unspecified'}`} value={r.id || r.name || ''}>{r.name}</option>
+                                              ))}
+                                          </optgroup>
+                                      )}
                                   </select>
                               </div>
                               <div className="space-y-1">

@@ -65,18 +65,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
 
   return (
     <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-56'}`}>
-      <div className="px-4 py-6 flex items-center justify-between h-20">
+      <div className="px-4 py-4 flex items-center justify-between h-24">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
-              <span className="text-white font-bold text-sm">AA</span>
+            <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-md shrink-0">
+              <img 
+                src={getProxyImageUrl("https://lh3.googleusercontent.com/d/1bDMxj465lBlBF0IJY7R-93MxkulDeMND")} 
+                alt="Logo" 
+                className="w-full h-full object-contain" 
+                referrerPolicy="no-referrer"
+              />
             </div>
             <span className="font-bold text-white text-lg tracking-tight">AATN QC</span>
           </div>
         )}
         {collapsed && (
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center mx-auto shadow-lg">
-              <span className="text-white font-bold text-xs">AA</span>
+            <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center p-1.5 mx-auto shadow-md shrink-0">
+              <img 
+                src={getProxyImageUrl("https://lh3.googleusercontent.com/d/1bDMxj465lBlBF0IJY7R-93MxkulDeMND")} 
+                alt="Logo" 
+                className="w-full h-full object-contain" 
+                referrerPolicy="no-referrer"
+              />
             </div>
         )}
         {!collapsed && (

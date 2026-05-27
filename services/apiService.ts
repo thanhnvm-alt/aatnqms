@@ -1,5 +1,5 @@
 
-import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin } from '../types';
+import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin, ProjectDocument } from '../types';
 import imageCompression from 'browser-image-compression';
 
 // Helper to get auth headers from localStorage
@@ -293,6 +293,24 @@ export const saveUser = async (user: User) => apiFetch('/api/users', {
     body: JSON.stringify(user)
 });
 export const deleteUser = async (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' });
+
+export const fetchProjectDocuments = async (projectId: string): Promise<ProjectDocument[]> => {
+    return apiFetch(`/api/projects/${projectId}/documents`);
+};
+
+export const saveProjectDocument = async (doc: ProjectDocument): Promise<any> => {
+    return apiFetch('/api/projects/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doc)
+    });
+};
+
+export const deleteProjectDocument = async (id: string): Promise<any> => {
+    return apiFetch(`/api/projects/documents/${id}`, {
+        method: 'DELETE'
+    });
+};
 
 export const verifyUserCredentials = async (username: string, password: string): Promise<{ user: User, token: string } | null> => {
     return apiFetch('/api/auth/login', {

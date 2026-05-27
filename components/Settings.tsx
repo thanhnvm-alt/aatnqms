@@ -191,7 +191,7 @@ export const Settings: React.FC<SettingsProps> = ({
                     </div>
                 )}
                 {activeTab === 'USERS' && isAdminOrManager && (
-                    <UserManagement currentUser={currentUser} users={users} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} onImportUsers={onImportUsers} />
+                    <UserManagement currentUser={currentUser} users={users} roles={roles} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} onImportUsers={onImportUsers} />
                 )}
                 {activeTab === 'ROLES' && isAdminOrManager && (
                     <RoleManagement roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} onDeleteRole={handleDeleteRole} />

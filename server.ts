@@ -953,6 +953,45 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  // --- PROJECT DOCUMENTS ---
+  app.get("/api/projects/:projectId/documents", authenticate, async (req, res) => {
+    try {
+      const result = await db.getProjectDocuments(req.params.projectId as string);
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to fetch project documents:', error);
+      res.status(500).json({ error: 'Failed to fetch project documents' });
+    }
+  });
+
+  app.post("/api/projects/documents", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const doc = {
+        ...req.body,
+        createdBy: user.name || user.username
+      };
+      await db.saveProjectDocument(doc);
+      await logAudit(user.id, 'ADD_PROJECT_DOCUMENT', 'project_document', doc.id, null, doc);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Failed to save project document:', error);
+      res.status(500).json({ error: 'Failed to save project document', details: error.message });
+    }
+  });
+
+  app.delete("/api/projects/documents/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      await db.deleteProjectDocument(req.params.id as string);
+      await logAudit(user.id, 'DELETE_PROJECT_DOCUMENT', 'project_document', req.params.id as string, null, { deletedBy: user.name });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Failed to delete project document:', error);
+      res.status(500).json({ error: 'Failed to delete project document' });
+    }
+  });
+
   // --- NOTIFICATIONS ---
   app.get("/api/notifications/:userId", async (req, res) => {
     try {
@@ -1255,7 +1294,39 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // Image Proxy API
-  app.get("/api/proxy-image", authenticate, async (req, res) => {
+  app.get("/api/proxy-image", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    let token = '';
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query.token) {
+      token = req.query.token as string;
+    } else if (req.cookies && req.cookies['aatn_qms_token']) {
+      token = req.cookies['aatn_qms_token'];
+    }
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        (req as any).user = decoded;
+        return next();
+      } catch (err) {
+        // Continue to check if public safe URL
+      }
+    }
+
+    const imageUrl = req.query.url as string;
+    if (imageUrl && (
+        imageUrl.includes('googleusercontent.com') ||
+        imageUrl.includes('drive.google.com') ||
+        imageUrl.includes('unsplash.com') ||
+        imageUrl.includes('google.com')
+    )) {
+      return next();
+    }
+
+    return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+  }, async (req, res) => {
     try {
       const imageUrl = req.query.url as string;
       if (!imageUrl) return res.status(400).send('Missing url');
@@ -1924,6 +1995,11 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
               errorLogs.push({ row_index: rowIndex, error_message: err.message });
             }
         }
+        
+        if (validResults.length > 0) {
+            await db.refreshProjectsMV();
+        }
+        
         res.json({ success: true, count: validResults.length, errors: errorLogs });
     } catch (error) {
         console.error('Error importing IPO data:', error);

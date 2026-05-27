@@ -12,6 +12,7 @@ import {
 import { DateRangePicker } from './DateRangePicker';
 import { NCRDetail } from './NCRDetail';
 import { exportNcrs, importNcrsFile } from '../services/apiService';
+import { getProxyImageUrl } from '../src/utils';
 
 interface NCRListProps {
   currentUser: User;
@@ -136,8 +137,9 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   // DESKTOP LAYOUT STATES
   const [selectedMonthDesktop, setSelectedMonthDesktop] = useState<string | 'ALL'>('ALL');
   const [selectedDateDesktop, setSelectedDateDesktop] = useState<string>('ALL');
-  const [selectedProjectDesktop, setSelectedProjectDesktop] = useState<string>('ALL');
+  const [selectedProjectDesktop, setSelectedProjectDesktop] = useState<string>('');
   const [selectedNcrDesktop, setSelectedNcrDesktop] = useState<NCR | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [colSizes, setColSizes] = useState([260, 260, 280, 500]);
   const [mobileViewStep, setMobileViewStep] = useState<1 | 2 | 3>(1);
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set([new Date().getFullYear().toString()]));
@@ -214,8 +216,19 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
     }
   };
 
-  const handleSelectNcrDesktop = (ncr: NCR) => {
+  const handleSelectNcrDesktop = async (ncr: NCR) => {
     setSelectedNcrDesktop(ncr);
+    setIsPreviewLoading(true);
+    try {
+        const fullNcr = await fetchNcrById(ncr.id);
+        if (fullNcr) {
+            setSelectedNcrDesktop(fullNcr);
+        }
+    } catch (e) {
+        console.error("Failed to load details for desktop preview:", e);
+    } finally {
+        setIsPreviewLoading(false);
+    }
   };
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -385,6 +398,9 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   }, [filteredNcrs, selectedDateDesktop, selectedMonthDesktop]);
 
   const desktopItems = useMemo(() => {
+      if (!selectedProjectDesktop) {
+          return [];
+      }
       return filteredNcrs.filter(ncr => {
           const dateKey = ncr.createdDate ? ncr.createdDate.split('T')[0].split('-').reverse().join('/') : '---';
           const projectKey = ncr.ma_ct || '---';
@@ -412,10 +428,13 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   }, []);
 
   useEffect(() => {
-      if (selectedDateDesktop !== 'ALL' && !sortedDatesList.includes(selectedDateDesktop)) {
-          setSelectedDateDesktop('ALL');
-          setSelectedProjectDesktop('ALL');
-          setSelectedNcrDesktop(null);
+      if (selectedDateDesktop !== 'ALL') {
+          const lookupDate = selectedDateDesktop === '---' ? '---' : selectedDateDesktop.split('/').reverse().join('-');
+          if (!sortedDatesList.includes(lookupDate)) {
+              setSelectedDateDesktop('ALL');
+              setSelectedProjectDesktop('');
+              setSelectedNcrDesktop(null);
+          }
       }
   }, [sortedDatesList, selectedDateDesktop]);
 
@@ -587,7 +606,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                               });
                                                               setSelectedDateDesktop('ALL');
                                                               setSelectedMonthDesktop(`${month}/${year}`);
-                                                              setSelectedProjectDesktop('ALL');
+                                                              setSelectedProjectDesktop('');
                                                               setSelectedNcrDesktop(null);
                                                               if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                                           }}
@@ -608,7 +627,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                                   onClick={() => {
                                                                       setSelectedDateDesktop(dateKey);
                                                                       setSelectedMonthDesktop('ALL');
-                                                                      setSelectedProjectDesktop('ALL');
+                                                                      setSelectedProjectDesktop('');
                                                                       setSelectedNcrDesktop(null);
                                                                       if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                                                   }}
@@ -632,7 +651,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                       onClick={() => {
                                           setSelectedDateDesktop(dateKey);
                                           setSelectedMonthDesktop('ALL');
-                                          setSelectedProjectDesktop('ALL');
+                                          setSelectedProjectDesktop('');
                                           setSelectedNcrDesktop(null);
                                           if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                       }}
@@ -658,7 +677,20 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                           <div className="py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Không có dự án nào</div>
                       ) : (
                           desktopProjects.map(pKey => {
-                              const count = desktopItems.filter(i => (i.ma_ct || '---') === pKey).length;
+                              const prjName = pKey === '---' ? '' : (filteredNcrs.find(n => n.ma_ct === pKey)?.ten_ct || '');
+                              const count = filteredNcrs.filter(n => {
+                                  const dateKey = n.createdDate ? n.createdDate.split('T')[0].split('-').reverse().join('/') : '---';
+                                  let dateMatch = true;
+                                  if (selectedDateDesktop !== 'ALL') {
+                                      dateMatch = dateKey === selectedDateDesktop;
+                                  } else if (selectedMonthDesktop && selectedMonthDesktop !== 'ALL') {
+                                      const [m, y] = (selectedMonthDesktop as string).split('/');
+                                      const [ny, nm] = (n.createdDate ? n.createdDate.split('T')[0] : '---').split('-');
+                                      dateMatch = ny === y && nm.padStart(2, '0') === m.padStart(2, '0');
+                                  }
+                                  return dateMatch && (n.ma_ct || '---') === pKey;
+                              }).length;
+
                               return (
                                   <button 
                                       key={pKey}
@@ -666,16 +698,23 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           setSelectedProjectDesktop(pKey);
                                           if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
                                       }}
-                                      className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[13px] font-bold transition-colors ${selectedProjectDesktop === pKey ? 'bg-blue-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-800'}`}
+                                      className={`w-full flex flex-col items-start px-4 py-3 rounded-xl transition-colors border ${selectedProjectDesktop === pKey ? 'bg-blue-500 text-white border-blue-600 shadow-md' : 'bg-white border-slate-200 text-slate-800'}`}
                                   >
-                                      <span>{pKey}</span>
-                                      <div className="flex items-center gap-2">
-                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedProjectDesktop === pKey ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                                          <ChevronRight className={`w-4 h-4 ${selectedProjectDesktop === pKey ? 'text-white' : 'text-slate-400'}`} />
+                                      <div className="flex items-center justify-between w-full">
+                                          <span className="text-[13px] font-bold">{pKey}</span>
+                                          <div className="flex items-center gap-2">
+                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedProjectDesktop === pKey ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                              <ChevronRight className={`w-4 h-4 ${selectedProjectDesktop === pKey ? 'text-white' : 'text-slate-400'}`} />
+                                          </div>
                                       </div>
+                                      {prjName && (
+                                          <span className={`text-[11px] font-semibold leading-normal mt-1 line-clamp-1 text-left ${selectedProjectDesktop === pKey ? 'text-blue-100' : 'text-slate-500'}`}>
+                                              {prjName}
+                                          </span>
+                                      )}
                                   </button>
                               );
-                          })
+                           })
                       )}
                   </div>
               )}
@@ -749,7 +788,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                   <button 
-                      onClick={() => { setSelectedDateDesktop('ALL'); setSelectedMonthDesktop('ALL'); setSelectedProjectDesktop('ALL'); setSelectedNcrDesktop(null); }}
+                      onClick={() => { setSelectedDateDesktop('ALL'); setSelectedMonthDesktop('ALL'); setSelectedProjectDesktop(''); setSelectedNcrDesktop(null); }}
                       className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold transition-colors ${selectedDateDesktop === 'ALL' && selectedMonthDesktop === 'ALL' ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'}`}
                   >
                       Tất cả ({total})
@@ -789,7 +828,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                 });
                                                 setSelectedDateDesktop('ALL');
                                                 setSelectedMonthDesktop(`${month}/${year}`);
-                                                setSelectedProjectDesktop('ALL');
+                                                setSelectedProjectDesktop('');
                                                 setSelectedNcrDesktop(null);
                                             }}
                                             className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[12px] font-bold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'}`}
@@ -809,7 +848,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                     onClick={() => {
                                                         setSelectedDateDesktop(dateKey);
                                                         setSelectedMonthDesktop('ALL');
-                                                        setSelectedProjectDesktop('ALL');
+                                                        setSelectedProjectDesktop('');
                                                         setSelectedNcrDesktop(null);
                                                     }}
                                                     className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-3 rounded-lg text-[11px] font-bold transition-colors ${isDateSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -846,6 +885,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       Tất cả dự án ({desktopProjects.length})
                   </button>
                   {desktopProjects.map(pKey => {
+                      const prjName = pKey === '---' ? '' : (filteredNcrs.find(n => n.ma_ct === pKey)?.ten_ct || '');
                       let count = 0;
                       filteredNcrs.forEach(n => {
                           const dateKey = n.createdDate ? n.createdDate.split('T')[0].split('-').reverse().join('/') : '---';
@@ -876,6 +916,11 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                               <span className={`text-[12px] font-bold ${selectedProjectDesktop === pKey ? 'text-blue-800' : 'text-slate-700'}`}>{pKey}</span>
                               <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{count}</span>
                           </div>
+                          {prjName && (
+                              <span className={`text-[11px] font-medium leading-normal mt-1 line-clamp-1 text-left ${selectedProjectDesktop === pKey ? 'text-blue-600' : 'text-slate-500'}`}>
+                                  {prjName}
+                              </span>
+                          )}
                       </button>
                   )})}
               </div>
@@ -894,8 +939,18 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   </h3>
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
-                  {desktopItems.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-xs font-medium">Không tìm thấy phiếu nào</div>
+                  {!selectedProjectDesktop ? (
+                      <div className="flex flex-col items-center justify-center p-8 text-center h-64">
+                          <div className="relative mb-3">
+                              <div className="absolute inset-0 bg-blue-50 rounded-full blur-xl block opacity-60"></div>
+                              <Layers className="w-10 h-10 text-blue-500 relative z-10 animate-pulse" />
+                          </div>
+                          <p className="text-[11px] font-black tracking-wider uppercase text-slate-400 max-w-[200px] leading-relaxed">
+                              Vui lòng chọn Dự Án ở cột 2 để hiển thị danh sách lỗi
+                          </p>
+                      </div>
+                  ) : desktopItems.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-xs font-medium uppercase tracking-widest">Không tìm thấy phiếu nào</div>
                   ) : (
                       <div className="divide-y divide-slate-100">
                           {desktopItems.map(item => (
@@ -1007,26 +1062,35 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                {(selectedNcrDesktop.imagesBefore && selectedNcrDesktop.imagesBefore.length > 0) && (
-                                    <div className="p-4 bg-white rounded-2xl border border-red-100 shadow-sm space-y-3">
-                                        <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> HIỆN TRẠNG (BEFORE)</div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedNcrDesktop.imagesBefore.map((img, i) => (
-                                                <img key={i} src={img} className="w-16 h-16 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
-                                            ))}
-                                        </div>
+                                {isPreviewLoading ? (
+                                    <div className="col-span-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex items-center justify-center gap-2 py-8">
+                                        <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Đang tải nhanh hình ảnh...</span>
                                     </div>
-                                )}
+                                ) : (
+                                    <>
+                                        {(selectedNcrDesktop.imagesBefore && selectedNcrDesktop.imagesBefore.length > 0) && (
+                                            <div className="p-4 bg-white rounded-2xl border border-red-100 shadow-sm space-y-3">
+                                                <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> HIỆN TRẠNG (BEFORE)</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedNcrDesktop.imagesBefore.map((img, i) => (
+                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
 
-                                {(selectedNcrDesktop.imagesAfter && selectedNcrDesktop.imagesAfter.length > 0) && (
-                                    <div className="p-4 bg-white rounded-2xl border border-green-100 shadow-sm space-y-3">
-                                        <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> XỬ LÝ (AFTER)</div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedNcrDesktop.imagesAfter.map((img, i) => (
-                                                <img key={i} src={img} className="w-16 h-16 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
-                                            ))}
-                                        </div>
-                                    </div>
+                                        {(selectedNcrDesktop.imagesAfter && selectedNcrDesktop.imagesAfter.length > 0) && (
+                                            <div className="p-4 bg-white rounded-2xl border border-green-100 shadow-sm space-y-3">
+                                                <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> XỬ LÝ (AFTER)</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedNcrDesktop.imagesAfter.map((img, i) => (
+                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                       </div>
