@@ -213,9 +213,23 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     }
   }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, startDate, endDate, selectedMonthDesktop, selectedProjectDesktop]);
 
+  const workshopLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    workshops.forEach(w => {
+      map[w.code] = `${w.name} (${w.code})`;
+    });
+    map['VẬT TƯ'] = 'Vật Tư (VẬT TƯ)';
+    map['GCN'] = 'GCN (Gia Công Ngoài)';
+    map['LẮP ĐẶT'] = 'Lắp Đặt (SITE)';
+    return map;
+  }, [workshops]);
+
   const filterOptions = useMemo(() => ({
       inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
-      workshops: Array.from(new Set(workshops.map(w => w.name))),
+      workshops: Array.from(new Set([
+          ...workshops.map(w => w.code),
+          'VẬT TƯ', 'GCN', 'LẮP ĐẶT'
+      ])),
       projects: Array.from(new Set([
           ...projects.map(p => p.ma_ct),
           ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
@@ -566,6 +580,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             values={filterWorkshop} 
                             options={filterOptions.workshops} 
                             onChange={vals => setFilterWorkshop(vals)} 
+                            optionLabels={workshopLabels}
                           />
                           <SearchableSelect 
                             label="MÃ DỰ ÁN" 
@@ -1092,7 +1107,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Xưởng Sản Xuất:</label>
-                                        <p className="text-[14px] font-medium text-slate-800">{selectedItemDesktop.workshop || '---'}</p>
+                                        <p className="text-[14px] font-medium text-slate-800">{workshopLabels[selectedItemDesktop.workshop || ''] || selectedItemDesktop.workshop || '---'}</p>
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Công Đoạn Kiểm Tra:</label>

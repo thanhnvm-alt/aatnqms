@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState, Workshop } from '../types';
 import { 
-  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ComposedChart, Line, CartesianGrid, Legend
+  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ComposedChart, Line, CartesianGrid, Legend, LabelList
 } from 'recharts';
 import { 
   ClipboardCheck, AlertTriangle, CheckCircle2, Flag, 
@@ -17,6 +17,7 @@ interface DashboardProps {
   user?: User;
   users?: User[];
   workshops?: Workshop[];
+  filters?: any;
   onLogout?: () => void;
   onNavigate?: (view: ViewState) => void;
   onViewInspection?: (id: string) => void;
@@ -44,18 +45,32 @@ const MODULE_CONFIG: Record<string, { label: string }> = {
     'FSR': { label: 'FSR' }
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users = [], workshops = [], onLogout, onNavigate, onViewInspection, onFilterChange }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users = [], workshops = [], filters, onLogout, onNavigate, onViewInspection, onFilterChange }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filterQC, setFilterQC] = useState<string[]>([]);
-  const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterType, setFilterType] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [filterQC, setFilterQC] = useState<string[]>(() => filters?.qc ? filters.qc.split(',').filter(Boolean) : []);
+  const [filterWorkshop, setFilterWorkshop] = useState<string[]>(() => filters?.workshop ? filters.workshop.split(',').filter(Boolean) : []);
+  const [filterStatus, setFilterStatus] = useState<string[]>(() => filters?.status ? filters.status.split(',').filter(Boolean) : []);
+  const [filterType, setFilterType] = useState<string[]>(() => filters?.type ? filters.type.split(',').filter(Boolean) : []);
+  const [startDate, setStartDate] = useState(() => filters?.startDate || '');
+  const [endDate, setEndDate] = useState(() => filters?.endDate || '');
+
+  const workshopLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    workshops.forEach(w => {
+      map[w.code] = `${w.name} (${w.code})`;
+    });
+    map['VẬT TƯ'] = 'Vật Tư (VẬT TƯ)';
+    map['GCN'] = 'GCN (Gia Công Ngoài)';
+    map['LẮP ĐẶT'] = 'Lắp Đặt (SITE)';
+    return map;
+  }, [workshops]);
 
   const filterOptions = useMemo(() => ({
     inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
-    workshops: Array.from(new Set(workshops.map(w => w.name))),
+    workshops: Array.from(new Set([
+      ...workshops.map(w => w.code),
+      'VẬT TƯ', 'GCN', 'LẮP ĐẶT'
+    ])),
     types: Object.keys(MODULE_CONFIG),
     statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
   }), [user, users, workshops]);
@@ -157,14 +172,60 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
           passRate = parseFloat((item.fallbackScore / item.count).toFixed(2));
         }
         
+        // Translate raw code/value to readable Name
+        const wsObj = workshops.find(w => w.code === key);
+        const displayName = wsObj ? wsObj.name : (workshopLabels[key] || key);
+
+        return {
+          code: key,
+          name: displayName,
+          passRate: passRate,
+          failRate: parseFloat((100 - passRate).toFixed(2))
+        };
+      })
+      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+      .slice(0, 15);
+  }, [safeInspections, workshops, workshopLabels]);
+
+  const stageData = useMemo(() => {
+    const stageMap: Record<string, { inspected: number; passed: number; count: number }> = {};
+    
+    safeInspections.forEach(i => {
+      if (!i || i.status === InspectionStatus.DRAFT || i.type !== 'PQC') return;
+      
+      let stageName = String(i.stage || i.inspectionStage || '').trim();
+      if (!stageName) return;
+
+      // Ensure formatting as "Pxx"
+      const numericMatches = stageName.match(/\d+/);
+      if (numericMatches) {
+        stageName = `P${numericMatches[0]}`;
+      } else if (!stageName.startsWith('P')) {
+        stageName = `P${stageName}`;
+      }
+
+      if (!stageMap[stageName]) stageMap[stageName] = { inspected: 0, passed: 0, count: 0 };
+      
+      stageMap[stageName].inspected += Number(i.inspectedQuantity || 0);
+      stageMap[stageName].passed += Number(i.passedQuantity || 0);
+      stageMap[stageName].count += 1;
+    });
+
+    return Object.keys(stageMap)
+      .map(key => {
+        const item = stageMap[key];
+        let passRate = 100;
+        if (item.inspected > 0) {
+          passRate = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
+        }
+        
         return {
           name: key,
           passRate: passRate,
           failRate: parseFloat((100 - passRate).toFixed(2))
         };
       })
-      .sort((a, b) => b.passRate - a.passRate)
-      .slice(0, 10);
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   }, [safeInspections]);
 
   const projectData = useMemo(() => {
@@ -255,6 +316,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                     values={filterWorkshop}
                     options={filterOptions.workshops}
                     onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate }); }}
+                    optionLabels={workshopLabels}
                 />
                 <SearchableSelect 
                     label="QC Kiểm tra"
@@ -324,7 +386,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
                <div className="h-48 w-full min-h-[192px]">
                   <ResponsiveContainer width="99%" height={192}>
-                    <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 10 }}>
+                    <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 35 }}>
                       <XAxis type="number" domain={[0, 100]} hide />
                       <YAxis 
                         dataKey="name" 
@@ -338,6 +400,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                         {projectData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.score >= 90 ? COLORS.pass : COLORS.blue} />
                         ))}
+                        <LabelList dataKey="score" position="right" style={{ fill: '#475569', fontSize: 9, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -387,12 +450,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                         {workshopData.map((entry, index) => (
                            <Cell key={`cell-${index}`} fill={COLORS.pass} />
                         ))}
+                        <LabelList dataKey="passRate" position="insideTop" style={{ fill: '#fff', fontSize: 8, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
                       </Bar>
-                      <Line yAxisId="right" type="monotone" dataKey="failRate" name="Tỷ Lệ Lỗi %" stroke={COLORS.fail} strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="failRate" name="Tỷ Lệ Lỗi %" stroke={COLORS.fail} strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }}>
+                        <LabelList dataKey="failRate" position="top" offset={10} style={{ fill: '#dc2626', fontSize: 9, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
+                      </Line>
                     </ComposedChart>
                   </ResponsiveContainer>
                </div>
             </div>
+
+            {/* Stage Quality Chart (PQC) */}
+            {stageData.length > 0 && (
+              <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
+                 <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">
+                    HIỆU SUẤT THEO CÔNG ĐOẠN PQC (%)
+                 </h3>
+                 <div className="h-64 w-full min-h-[256px]">
+                    <ResponsiveContainer width="99%" height={256}>
+                      <ComposedChart data={stageData} margin={{ top: 20, right: 0, left: -20, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}}
+                        />
+                        <YAxis domain={[0, 100]} hide />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                          itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                          labelStyle={{ fontSize: '11px', fontWeight: '900', color: '#1e293b' }}
+                        />
+                        <Bar dataKey="passRate" name="Tỷ Lệ Đạt %" fill={COLORS.pass} barSize={24} radius={[4, 4, 0, 0]}>
+                           <LabelList dataKey="passRate" position="insideTop" style={{ fill: '#fff', fontSize: 8, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
+                        </Bar>
+                        <Line type="monotone" dataKey="failRate" name="Tỷ Lệ Lỗi %" stroke={COLORS.fail} strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }}>
+                           <LabelList dataKey="failRate" position="top" offset={10} style={{ fill: '#dc2626', fontSize: 9, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
+                        </Line>
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                 </div>
+              </div>
+            )}
         </div>
 
         {/* Critical Issues Section */}

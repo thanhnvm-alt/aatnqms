@@ -356,6 +356,7 @@ const App = () => {
                         user={user} 
                         users={users}
                         workshops={workshops}
+                        filters={inspectionFilters}
                         onNavigate={setView} 
                         onViewInspection={handleSelectInspection} 
                         onFilterChange={(filters) => {
