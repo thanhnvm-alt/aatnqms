@@ -20,11 +20,12 @@ interface InspectionDetailProps {
   onDelete: (id: string) => void;
   onApprove?: (id: string, signature: string, extraInfo?: any) => Promise<void>;
   onPostComment?: (id: string, comment: NCRComment) => Promise<void>;
+  onViewOnPlan?: (inspection: Inspection) => void;
 }
 
 import { SignaturePad } from './SignaturePad';
 
-export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
+export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment, onViewOnPlan }) => {
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [managerSig, setManagerSig] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -157,7 +158,14 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                                 <p className="text-[11px] font-bold text-slate-500">X: {inspection.coord_x.toFixed(1)}% | Y: {inspection.coord_y?.toFixed(1)}%</p>
                             </div>
                         </div>
-                        <div className="px-3 py-1 bg-white rounded-lg border border-blue-200 text-[10px] font-black text-blue-600 uppercase shadow-sm">Verified On Plan</div>
+                        <button 
+                            type="button"
+                            onClick={() => onViewOnPlan?.(inspection)}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-[10px] font-black text-white uppercase shadow-sm cursor-pointer rounded-xl flex items-center gap-1.5 transition-all"
+                        >
+                            <Map className="w-3.5 h-3.5" />
+                            <span>Verified On Plan</span>
+                        </button>
                     </div>
                 )}
             </div>

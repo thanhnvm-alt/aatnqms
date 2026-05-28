@@ -182,48 +182,118 @@ app.post("/api/procedures/upload", memoryUpload.single('image'), async (req, res
     }
 });
 
+// --- Robust Public Google Drive File Downloader (with Large File Bypass) ---
+async function fetchGoogleDrivePublicFile(fileId: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const fallbacks = [
+    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+    `https://lh3.googleusercontent.com/d/${fileId}=w1600`,
+    `https://lh3.googleusercontent.com/d/${fileId}`,
+    `https://docs.google.com/uc?export=download&id=${fileId}`,
+    `https://drive.google.com/uc?export=download&id=${fileId}`,
+    `https://drive.google.com/uc?export=view&id=${fileId}`,
+    `https://lh3.googleusercontent.com/u/0/d/${fileId}`
+  ];
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache'
+  };
+
+  for (const publicUrl of fallbacks) {
+    try {
+      const response = await fetch(publicUrl, { headers });
+      
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        
+        // If Google Drive returns HTML, it could be a warning/confirmation page for virus scan
+        if (contentType.includes('text/html')) {
+          const html = await response.text();
+          // Extract confirmation token if it's a "large file virus scan" dialog page
+          const confirmMatch = html.match(/[&?]confirm=([a-zA-Z0-9_-]+)/);
+          if (confirmMatch && confirmMatch[1]) {
+            const confirmToken = confirmMatch[1];
+            const confirmedUrl = `https://docs.google.com/uc?export=download&id=${fileId}&confirm=${confirmToken}`;
+            const confirmedRes = await fetch(confirmedUrl, { headers });
+            if (confirmedRes.ok) {
+              const resContentType = confirmedRes.headers.get('content-type') || '';
+              if (!resContentType.includes('text/html')) {
+                const arrayBuffer = await confirmedRes.arrayBuffer();
+                return {
+                  buffer: Buffer.from(arrayBuffer),
+                  contentType: resContentType || 'image/jpeg'
+                };
+              }
+            }
+          }
+          continue; // skip if it's just a general HTML error/sign-in page
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        return {
+          buffer: Buffer.from(arrayBuffer),
+          contentType: contentType
+        };
+      }
+    } catch (pubErr) {
+      console.warn(`[Drive Proxy] Fallback fetch error for ${publicUrl}:`, pubErr);
+    }
+  }
+  return null;
+}
+
 // --- Optimized Google Drive Image Streaming Handler ---
 const streamGoogleDriveImage = async (req: express.Request, res: express.Response) => {
-  const { fileId } = req.params;
+  const { fileId } = req.params as { fileId: string };
   
-  if (!drive) {
-    return res.status(503).json({ error: "Google Drive service not configured" });
+  if (drive) {
+    try {
+      // Single API call: Fetch the file content as a stream directly
+      const response = await drive.files.get(
+        { fileId, alt: 'media', supportsAllDrives: true },
+        { responseType: 'stream' }
+      );
+
+      // Forward the Content-Type precisely natively from Google API
+      const rawContentType = response.headers['content-type'];
+      const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || 'image/jpeg';
+      
+      // Set headers (NO redirects, NO google locations)
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Access-Control-Allow-Origin', '*'); 
+      res.setHeader('Cache-Control', 'private, max-age=604800'); // 7 Days Cache 
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      
+      // Efficiently pipe using native Node.js stream pipeline (prevents memory leaks on interrupt)
+      await pipelineAsync(response.data, res);
+      return;
+
+    } catch (error: any) {
+      const status = error.response?.status || error.code || 500;
+      console.warn(`[Drive Stream Proxy Error] File ${fileId}: ${status} - ${error.message}. Checking public fallback...`);
+    }
   }
 
+  // Fallback to public downloader if not configured OR if Google Drive Auth API fails
   try {
-    // Single API call: Fetch the file content as a stream directly
-    const response = await drive.files.get(
-      { fileId, alt: 'media', supportsAllDrives: true },
-      { responseType: 'stream' }
-    );
-
-    // Forward the Content-Type precisely natively from Google API
-    const contentType = response.headers['content-type'] || 'image/jpeg';
-    
-    // Set headers (NO redirects, NO google locations)
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Access-Control-Allow-Origin', '*'); 
-    res.setHeader('Cache-Control', 'private, max-age=604800'); // 7 Days Cache 
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    
-    // Efficiently pipe using native Node.js stream pipeline (prevents memory leaks on interrupt)
-    await pipelineAsync(response.data, res);
-
-  } catch (error: any) {
-    // If it's a stream error post-header, pipeline destroys it safely.
-    if (!res.headersSent) {
-      const status = error.response?.status || error.code || 500;
-      console.warn(`[Drive Stream Proxy Error] File ${fileId}: ${status} - ${error.message}`);
-      
-      if (status === 404) {
-        res.status(404).json({ error: 'Image not found' });
-      } else if (status === 401 || status === 403) {
-        // Token revoked or expired
-        res.status(401).json({ error: 'Upstream OAuth access denied' });
-      } else {
-        res.status(500).json({ error: 'Error streaming image from upstream' });
-      }
+    const fallbackData = await fetchGoogleDrivePublicFile(fileId);
+    if (fallbackData) {
+      res.setHeader('Content-Type', fallbackData.contentType);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'private, max-age=604800');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.send(fallbackData.buffer);
+      return;
     }
+  } catch (pubFallbackErr: any) {
+    console.error(`[Drive Stream Proxy Fallback Error] File ${fileId}:`, pubFallbackErr);
+  }
+
+  // Final failure response
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Error streaming image from upstream' });
   }
 };
 
@@ -1360,7 +1430,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                   supportsAllDrives: true
               }, { responseType: 'stream' });
               
-              const contentType = response.headers['content-type'] || 'image/jpeg';
+              const rawContentType = response.headers['content-type'];
+              const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || 'image/jpeg';
               res.set('Content-Type', contentType);
               res.set('Access-Control-Allow-Origin', '*');
               res.set('Cache-Control', 'public, max-age=31536000');
@@ -1394,33 +1465,13 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
           }
 
           // Attempt 2: Public fallback (for files shared as "Anyone with link")
-          const fallbacks = [
-            `https://drive.google.com/uc?export=view&id=${fileId}`,
-            `https://drive.google.com/uc?export=download&id=${fileId}`,
-            `https://lh3.googleusercontent.com/u/0/d/${fileId}`
-          ];
-
-          for (const publicUrl of fallbacks) {
-            try {
-              const response = await fetch(publicUrl);
-              
-              if (response.ok) {
-                  const contentType = response.headers.get('content-type') || 'image/jpeg';
-                  // Ignore common "rejection" contents like HTML sign-in pages
-                  if (contentType.includes('text/html')) {
-                      continue;
-                  }
-
-                  const buffer = await response.arrayBuffer();
-                  res.set('Content-Type', contentType);
-                  res.set('Access-Control-Allow-Origin', '*');
-                  res.set('Cache-Control', 'public, max-age=31536000');
-                  res.send(Buffer.from(buffer));
-                  return;
-              }
-            } catch (pubErr) {
-              console.warn(`[Drive Proxy] Fallback fetch error for ${publicUrl}:`, pubErr);
-            }
+          const fallbackData = await fetchGoogleDrivePublicFile(fileId);
+          if (fallbackData) {
+              res.set('Content-Type', fallbackData.contentType);
+              res.set('Access-Control-Allow-Origin', '*');
+              res.set('Cache-Control', 'public, max-age=31536000');
+              res.send(fallbackData.buffer);
+              return;
           }
 
           // Attempt 3: Final fallback to redirect to the original URL if proxy fails entirely.

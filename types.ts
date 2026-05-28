@@ -77,6 +77,8 @@ export interface LayoutPin {
   y: number; // percentage 0-100
   label?: string;
   status: InspectionStatus | 'NEW';
+  headcode?: string;
+  type?: string;
 }
 
 // Added Workshop interface to fix module export error
@@ -264,7 +266,9 @@ export interface Inspection {
   summary?: string;
   created_by?: string;
   workshop?: string;
+  ma_xuong?: string;
   inspectionStage?: string;
+  stage?: string;
   dvt?: string;
   so_luong_ipo: number;
   inspectedQuantity?: number;

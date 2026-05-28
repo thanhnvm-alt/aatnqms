@@ -123,6 +123,7 @@ const App = () => {
   const [projectsPage, setProjectsPage] = useState(1);
   const [projectsSearch, setProjectsSearch] = useState('');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [projectInitialFocusedPinId, setProjectInitialFocusedPinId] = useState<string | undefined>(undefined);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
   const [inspectionFilters, setInspectionFilters] = useState<any>({});
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -484,6 +485,18 @@ const App = () => {
                     } catch (error) {
                       alert("Lỗi bình luận: " + (error instanceof Error ? error.message : "Thất bại"));
                     }
+                  },
+                  onViewOnPlan: (insp: Inspection) => {
+                    const matchingProj = projects.find(p => p.ma_ct === insp.ma_ct);
+                    if (matchingProj) {
+                      setActiveProject(matchingProj);
+                      setProjectInitialFocusedPinId(insp.id);
+                      setView('PROJECT_DETAIL');
+                    } else {
+                      setActiveProject({ ma_ct: insp.ma_ct || 'unknown', name: insp.ten_ct || 'Dự án' } as any);
+                      setProjectInitialFocusedPinId(insp.id);
+                      setView('PROJECT_DETAIL');
+                    }
                   }
                 }) : null)}
                 {view === 'PROJECTS' && (
@@ -500,7 +513,21 @@ const App = () => {
                         onPageChange={setProjectsPage}
                     />
                 )}
-                {view === 'PROJECT_DETAIL' && activeProject && <ProjectDetail project={activeProject} inspections={inspections} user={user} onBack={() => setView('PROJECTS')} onViewInspection={handleSelectInspection} onUpdate={() => loadProjects()} onNavigate={setView} />}
+                {view === 'PROJECT_DETAIL' && activeProject && (
+                    <ProjectDetail 
+                        project={activeProject} 
+                        inspections={inspections} 
+                        user={user} 
+                        onBack={() => {
+                            setProjectInitialFocusedPinId(undefined);
+                            setView('PROJECTS');
+                        }} 
+                        onViewInspection={handleSelectInspection} 
+                        onUpdate={() => loadProjects()} 
+                        onNavigate={setView} 
+                        initialFocusedPinId={projectInitialFocusedPinId}
+                    />
+                )}
                 {view === 'IPO' && <IPOPage user={user} />}
                 {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
                 {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}

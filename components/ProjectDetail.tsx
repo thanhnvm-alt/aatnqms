@@ -37,6 +37,7 @@ interface ProjectDetailProps {
   onUpdate?: () => void; 
   onViewInspection: (id: string) => void;
   onNavigate?: (view: ViewState) => void;
+  initialFocusedPinId?: string;
 }
 
 const DETAIL_MAP: Record<string, any> = {
@@ -54,7 +55,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     onBack, 
     onUpdate, 
     onViewInspection,
-    onNavigate 
+    onNavigate,
+    initialFocusedPinId
 }) => {
   const [project, setProject] = useState(initialProject);
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'LAYOUTS' | 'DOCUMENTS'>('OVERVIEW');
@@ -102,9 +104,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [fullDetailId, setFullDetailId] = useState<string | null>(null);
   const [fullDetailData, setFullDetailData] = useState<Inspection | null>(null);
   const [isLoadingFullDetail, setIsLoadingFullDetail] = useState(false);
+  const [focusedPinId, setFocusedPinId] = useState<string | undefined>(initialFocusedPinId);
 
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const docFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialFocusedPinId) {
+      setFocusedPinId(initialFocusedPinId);
+    }
+  }, [initialFocusedPinId]);
+
+  useEffect(() => {
+    if (focusedPinId && inspections.length > 0 && floorPlans.length > 0) {
+      const targetInsp = inspections.find(i => i.id === focusedPinId);
+      if (targetInsp && targetInsp.floor_plan_id) {
+        const foundPlan = floorPlans.find(fp => fp.id === targetInsp.floor_plan_id);
+        if (foundPlan) {
+          handleSelectPlan(foundPlan);
+        }
+      }
+    }
+  }, [focusedPinId, inspections, floorPlans]);
 
   useEffect(() => {
       loadFloorPlans();
@@ -853,13 +874,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* --- OVERLAYS --- */}
       {selectedPlan && (
           <div className="absolute inset-0 z-[140] bg-white flex flex-col animate-in fade-in duration-300">
-            <LayoutManager floorPlan={selectedPlan} pins={pins} onBack={() => setSelectedPlan(null)} onAddPin={handleAddPin} onViewFullDetail={handleOpenFullDetail} currentUser={user} />
+            <LayoutManager 
+              floorPlan={selectedPlan} 
+              pins={pins} 
+              onBack={() => { setSelectedPlan(null); setFocusedPinId(undefined); }} 
+              onAddPin={handleAddPin} 
+              onViewFullDetail={handleOpenFullDetail} 
+              currentUser={user} 
+              initialFocusedPinId={focusedPinId}
+            />
           </div>
       )}
 
       {fullDetailId && (
           <div className="absolute inset-0 z-[150] bg-white flex flex-col animate-in slide-in-from-bottom duration-300 shadow-2xl">
-              {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4"/><p className="text-[10px] font-black text-slate-700 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (sig || extra.managerSignature) { updated.status = InspectionStatus.APPROVED; updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await saveInspectionToSheet(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await saveInspectionToSheet(updated); setFullDetailData(updated); }} />; })() : null}
+              {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4"/><p className="text-[10px] font-black text-slate-700 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (sig || extra.managerSignature) { updated.status = InspectionStatus.APPROVED; updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await saveInspectionToSheet(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await saveInspectionToSheet(updated); setFullDetailData(updated); }} onViewOnPlan={(insp: Inspection) => { setFullDetailId(null); setFullDetailData(null); setFocusedPinId(insp.id); if (insp.floor_plan_id) { const foundPlan = floorPlans.find(fp => fp.id === insp.floor_plan_id); if (foundPlan) { handleSelectPlan(foundPlan); } } }} />; })() : null}
           </div>
       )}
 

@@ -220,7 +220,26 @@ export async function deleteFloorPlan(id: string) {
 
 export async function getLayoutPins(floorPlanId: string): Promise<LayoutPin[]> {
     const res = await query(`SELECT * FROM ${SCHEMA}."layout_pins" WHERE floor_plan_id = $1`, [floorPlanId]);
-    return res.rows as unknown as LayoutPin[];
+    const pins = res.rows as any[];
+    for (const pin of pins) {
+        if (pin.inspection_id) {
+            const tables = ['forms_site', 'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr'];
+            for (const table of tables) {
+                try {
+                    const rowRes = await query(`SELECT headcode, type, status FROM ${SCHEMA}."${table}" WHERE id = $1`, [pin.inspection_id]);
+                    if (rowRes.rows.length > 0) {
+                        pin.headcode = rowRes.rows[0].headcode || '';
+                        pin.type = rowRes.rows[0].type || '';
+                        if (rowRes.rows[0].status) {
+                            pin.status = rowRes.rows[0].status;
+                        }
+                        break;
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+    return pins as LayoutPin[];
 }
 
 export async function saveLayoutPin(pin: LayoutPin) {

@@ -29,11 +29,15 @@ interface LayoutManagerProps {
     onAddPin: (x: number, y: number) => void;
     onViewFullDetail: (id: string) => void;
     currentUser: User;
+    initialFocusedPinId?: string;
 }
 
 // Custom Pin Icon SVG based on the user's image
 const CustomPinIcon = ({ color, isSelected }: { color: string, isSelected?: boolean }) => (
-    <div className={`relative transition-transform duration-300 ${isSelected ? 'scale-125 z-50' : 'scale-100 z-40'}`}>
+    <div className={`relative transition-transform duration-300 ${isSelected ? 'scale-125 z-55' : 'scale-100 z-40'}`}>
+        {isSelected && (
+            <div className="absolute inset-0 rounded-full bg-blue-500/30 scale-[2.2] animate-ping pointer-events-none -z-10"></div>
+        )}
         <svg width="28" height="35" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-lg">
             <path 
                 d="M12 0C5.37 0 0 5.37 0 12C0 21 12 30 12 30C12 30 24 21 24 12C24 5.37 18.63 0 12 0Z" 
@@ -54,7 +58,7 @@ const CustomPinIcon = ({ color, isSelected }: { color: string, isSelected?: bool
 );
 
 export const LayoutManager: React.FC<LayoutManagerProps> = ({ 
-    floorPlan, pins: initialPins, onBack, onAddPin, onViewFullDetail, currentUser
+    floorPlan, pins: initialPins, onBack, onAddPin, onViewFullDetail, currentUser, initialFocusedPinId
 }) => {
     const [pins, setPins] = useState<LayoutPin[]>(initialPins);
     const [scale, setScale] = useState(1);
@@ -109,17 +113,17 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
     useEffect(() => { setPins(initialPins); }, [initialPins]);
 
-    const handleSelectPin = async (pin: LayoutPin) => {
+    const handleSelectPin = async (pin: LayoutPin, forceQuickReview: boolean = false) => {
         if (!pin.inspection_id) return;
         
-        // ISO-MOBILE UX: Trên thiết bị di động, ưu tiên mở Full Detail ngay lập tức
-        if (window.innerWidth < 640) {
+        // ISO-MOBILE UX: Trên thiết bị di động, ưu tiên mở Full Detail ngay lập tức TRỪ KHI ép mở Quick Review
+        if (window.innerWidth < 640 && !forceQuickReview) {
             setSelectedPin(pin);
             onViewFullDetail(pin.inspection_id);
             return;
         }
 
-        // Trên Desktop: Chỉ thực hiện nếu không đang trong quá trình kéo Pin
+        // Trên Desktop hoặc khi ép Quick Review: Chỉ thực hiện nếu không đang trong quá trình kéo Pin
         if (draggingPinId) return;
 
         setSelectedPin(pin);
@@ -133,6 +137,15 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
             setIsLoadingQuickDetail(false);
         }
     };
+
+    useEffect(() => {
+        if (initialFocusedPinId && pins.length > 0) {
+            const found = pins.find(p => p.id === initialFocusedPinId || p.inspection_id === initialFocusedPinId);
+            if (found) {
+                handleSelectPin(found, true);
+            }
+        }
+    }, [initialFocusedPinId, pins]);
 
     const handleQuickStatusUpdate = async (newStatus: InspectionStatus) => {
         if (!quickDetail) return;
@@ -326,7 +339,26 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         }
 
         if (!isDragging || scale === 1) return;
-        setOffset({ x: clientX - startDrag.x, y: clientY - offset.y });
+        
+        let nextX = clientX - startDrag.x;
+        let nextY = clientY - startDrag.y;
+
+        // Dynamic boundary calculation to keep the layout within the frame smoothly
+        if (containerRef.current && imgRef.current) {
+            const containerWidth = containerRef.current.clientWidth;
+            const containerHeight = containerRef.current.clientHeight;
+            const imgWidth = imgRef.current.clientWidth * scale;
+            const imgHeight = imgRef.current.clientHeight * scale;
+
+            // Allow dragging up to some buffer to prevent dragging completely out of view
+            const limitX = Math.max(0, (imgWidth - containerWidth) / 2 + 150);
+            const limitY = Math.max(0, (imgHeight - containerHeight) / 2 + 150);
+
+            nextX = Math.min(Math.max(nextX, -limitX), limitX);
+            nextY = Math.min(Math.max(nextY, -limitY), limitY);
+        }
+
+        setOffset({ x: nextX, y: nextY });
     };
 
     const handleMouseUp = async () => {
@@ -369,9 +401,15 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         setHoverCoord(null);
     };
 
-    // ISO Colors: Approved = Green, Others = Orange
+    // ISO Colors: Approved, Verified, Locked = Green, Others = Orange
     const getPinColorHex = (status: string) => {
-        if (status === InspectionStatus.APPROVED) return '#10b981'; // Green
+        if (
+            status === InspectionStatus.APPROVED || 
+            status === InspectionStatus.VERIFIED || 
+            status === InspectionStatus.LOCKED
+        ) {
+            return '#16a34a'; // Green
+        }
         return '#f97316'; // Orange
     };
 
@@ -485,7 +523,12 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                         {isAddingMode && hoverCoord && (
                             <div 
                                 className="absolute pointer-events-none z-50 flex flex-col items-center"
-                                style={{ left: `${hoverCoord.x}%`, top: `${hoverCoord.y}%`, transform: 'translate(-50%, -50%)' }}
+                                style={{ 
+                                    left: `${hoverCoord.x}%`, 
+                                    top: `${hoverCoord.y}%`, 
+                                    transform: `translate(-50%, -50%) scale(${1 / scale})`,
+                                    transformOrigin: 'center'
+                                }}
                             >
                                 <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-blue-500 border-dashed animate-spin duration-3000"></div>
                                 <div className="absolute inset-0 flex items-center justify-center">
@@ -512,14 +555,25 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                         e.stopPropagation(); 
                                         handleSelectPin(pin); 
                                     }}
-                                    className={`absolute cursor-pointer transform -translate-x-1/2 -translate-y-[calc(100%-5px)]`}
-                                    style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                                    className="absolute cursor-pointer group"
+                                    style={{ 
+                                        left: `${pin.x}%`, 
+                                        top: `${pin.y}%`,
+                                        transform: `translate(-50%, calc(-100% + 5px)) scale(${1 / scale})`,
+                                        transformOrigin: 'bottom center'
+                                    }}
                                 >
                                     <CustomPinIcon color={color} isSelected={isSelected} />
                                     
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden md:group-hover:block bg-slate-900 text-white text-[7px] font-black px-2 py-0.5 rounded whitespace-nowrap shadow-xl z-[60] uppercase tracking-widest pointer-events-none">
-                                        {pin.label || 'Incomplete'}
-                                    </div>
+                                    {pin.headcode ? (
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 bg-slate-900/90 border border-slate-700/50 shadow-lg text-white px-1.5 py-0.5 rounded-md text-[7.5px] font-black font-mono whitespace-nowrap z-[45] tracking-wider pointer-events-none">
+                                            {pin.headcode}
+                                        </div>
+                                    ) : (
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block bg-slate-950/90 text-white text-[7px] font-mono px-2 py-0.5 rounded-md whitespace-nowrap shadow-xl z-[50] uppercase tracking-widest pointer-events-none">
+                                            {pin.label || 'Incomplete'}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -532,8 +586,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 </div>
             </div>
 
-            {/* --- QUICK REVIEW OVERLAY (Desktop Only) --- */}
-            {selectedPin && window.innerWidth >= 640 && (
+            {/* --- QUICK REVIEW OVERLAY --- */}
+            {selectedPin && (
                 <div className="absolute inset-0 sm:left-auto sm:right-0 sm:w-[400px] bg-white flex flex-col z-[100] shadow-[-20px_0_60px_rgba(0,0,0,0.15)] animate-in slide-in-from-bottom sm:slide-in-from-right duration-300">
                     {isLoadingQuickDetail ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white">
