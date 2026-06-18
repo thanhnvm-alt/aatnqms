@@ -269,12 +269,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
   }, [safeInspections]);
 
   const StatCard = ({ title, value, icon: Icon, colorHex, subtitle }: any) => (
-    <div className="bg-white p-4 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
+    <div className="bg-white dark:bg-slate-900 p-4 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
       <div className="flex justify-between items-start">
         <div className="space-y-0.5">
-          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
-          <h3 className="text-xl font-black text-slate-900 leading-tight">{value}</h3>
-          <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">{subtitle}</p>
+          <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{title}</p>
+          <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 leading-tight">{value}</h3>
+          <p className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{subtitle}</p>
         </div>
         <div className={`p-2 rounded-xl shrink-0`} style={{ backgroundColor: `${colorHex}15`, color: colorHex }}>
           <Icon className="w-4 h-4" />
@@ -284,19 +284,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
   );
 
   return (
-    <div className="h-full overflow-y-auto no-scrollbar bg-slate-50 flex flex-col no-scroll-x">
+    <div className="h-full overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/50 flex flex-col no-scroll-x">
       <div className="p-4 space-y-5 max-w-7xl mx-auto w-full pb-28">
         
         {/* Filter Section */}
-        <div className="bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <Filter className="w-4 h-4" /> BỘ LỌC DỮ LIỆU
                 </h3>
                 {isFilterActive && (
                     <button 
                         onClick={clearFilters}
-                        className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+                        className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
                     >
                         Xóa tất cả
                     </button>
@@ -345,8 +345,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
         {/* Charts Row */}
         <div className="grid grid-cols-1 gap-4">
             {/* Status Pie */}
-            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col items-center">
-               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TỶ LỆ (%)</h3>
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center">
+               <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 w-full text-center border-b border-slate-50 pb-2">PHÂN BỔ TỶ LỆ (%)</h3>
                <div className="w-full h-40 relative min-h-[160px]">
                   <ResponsiveContainer width="99%" height={160}>
                     <PieChart>
@@ -367,23 +367,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                     <p className="text-xl font-black text-slate-800 leading-none">{stats.avgSuccessRate}%</p>
-                     <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5">TRUNG BÌNH</p>
+                     <p className="text-xl font-black text-slate-800 dark:text-slate-200 leading-none">{stats.avgSuccessRate}%</p>
+                     <p className="text-[7px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">TRUNG BÌNH</p>
                   </div>
                </div>
                <div className="flex flex-wrap gap-3 mt-2 justify-center">
                   {statusData.map((entry, idx) => (
                       <div key={idx} className="flex items-center gap-1">
                           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase whitespace-nowrap">{entry.name}: {entry.value}%</p>
+                          <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase whitespace-nowrap">{entry.name}: {entry.value}%</p>
                       </div>
                   ))}
                </div>
             </div>
 
             {/* Top Project Bar */}
-            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
-               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+               <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
                <div className="h-48 w-full min-h-[192px]">
                   <ResponsiveContainer width="99%" height={192}>
                     <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 35 }}>
@@ -408,8 +408,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
             </div>
 
             {/* Workshop Quality Chart */}
-            <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
-               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2 flex items-center justify-between">
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+               <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2 flex items-center justify-between">
                   CHẤT LƯỢNG XƯỞNG SẢN XUẤT
                </h3>
                <div className="h-64 w-full min-h-[256px]">
@@ -462,8 +462,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
 
             {/* Stage Quality Chart (PQC) */}
             {stageData.length > 0 && (
-              <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col">
-                 <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+                 <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">
                     HIỆU SUẤT THEO CÔNG ĐOẠN PQC (%)
                  </h3>
                  <div className="h-64 w-full min-h-[256px]">
@@ -496,19 +496,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
         </div>
 
         {/* Critical Issues Section */}
-        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-red-50/20">
-                <h3 className="text-[9px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-red-50 dark:bg-red-900/20/20">
+                <h3 className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest flex items-center gap-2">
                     <AlertOctagon className="w-4 h-4" /> PHIẾU CẦN XỬ LÝ LỖI
                 </h3>
              </div>
-             <div className="divide-y divide-slate-100">
+             <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {recentCritical.length > 0 ? (
                     recentCritical.map((item) => (
                         <div 
                           key={item.id} 
                           onClick={() => onViewInspection?.(item.id)}
-                          className="p-4 active:bg-slate-50 transition-all flex items-center justify-between group cursor-pointer"
+                          className="p-4 active:bg-slate-50 dark:bg-slate-800/50 transition-all flex items-center justify-between group cursor-pointer"
                         >
                             <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
                                 <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex flex-col items-center justify-center font-black shrink-0 shadow-md">
@@ -516,15 +516,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                                     <span className="text-[6px] uppercase opacity-60">PTS</span>
                                 </div>
                                 <div className="min-w-0 overflow-hidden">
-                                    <h4 className="font-black text-slate-800 text-[11px] truncate uppercase tracking-tight mb-0.5">{item.ten_hang_muc}</h4>
-                                    <div className="flex items-center gap-2 text-[7px] text-slate-400 font-black uppercase tracking-tighter">
+                                    <h4 className="font-black text-slate-800 dark:text-slate-200 text-[11px] truncate uppercase tracking-tight mb-0.5">{item.ten_hang_muc}</h4>
+                                    <div className="flex items-center gap-2 text-[7px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-tighter">
                                         <span className="truncate max-w-[60px]">{item.ma_ct}</span>
                                         <span className="text-slate-300">|</span>
                                         <span>{item.date}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-300 active:scale-90 shrink-0">
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-300 active:scale-90 shrink-0">
                                 <ArrowRight className="w-3.5 h-3.5" />
                             </div>
                         </div>
@@ -532,12 +532,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                 ) : (
                     <div className="py-12 text-center flex flex-col items-center justify-center space-y-2">
                         <CheckCircle2 className="w-8 h-8 text-green-200" />
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Hệ thống không ghi nhận lỗi mới</p>
+                        <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Hệ thống không ghi nhận lỗi mới</p>
                     </div>
                 )}
              </div>
-             <div className="p-3 bg-slate-50 border-t border-slate-100">
-                <button onClick={() => onNavigate?.('LIST')} className="w-full py-2.5 bg-white border border-slate-200 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 shadow-sm active:scale-95 transition-all">Xem tất cả báo cáo</button>
+             <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
+                <button onClick={() => onNavigate?.('LIST')} className="w-full py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 dark:text-slate-500 shadow-sm active:scale-95 transition-all">Xem tất cả báo cáo</button>
              </div>
         </div>
       </div>

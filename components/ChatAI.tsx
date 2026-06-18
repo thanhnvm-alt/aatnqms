@@ -101,7 +101,7 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                             initial={{ opacity: 0, y: 100, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 100, scale: 0.95 }}
-                            className="bg-white/95 backdrop-blur-xl w-full sm:w-[420px] h-[90svh] sm:h-[600px] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl border border-white/20 flex flex-col overflow-hidden pointer-events-auto"
+                            className="bg-white dark:bg-slate-900/95 backdrop-blur-xl w-full sm:w-[420px] h-[90svh] sm:h-[600px] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl border border-white/20 flex flex-col overflow-hidden pointer-events-auto"
                         >
                             {/* Header */}
                             <header className="bg-slate-900 text-white p-5 sm:p-6 flex justify-between items-center shrink-0">
@@ -114,20 +114,20 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                                             AA QMS Assistant
                                             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shrink-0"></span>
                                         </h3>
-                                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight truncate">AI TRỢ LÝ ISO & DỮ LIỆU</p>
+                                        <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tight truncate">AI TRỢ LÝ ISO & DỮ LIỆU</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <button 
                                         onClick={clearChat}
-                                        className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 transition-colors"
+                                        className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 dark:text-slate-500 transition-colors"
                                         title="Xóa cuộc hội thoại"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                     <button 
                                         onClick={() => setIsMinimized(true)}
-                                        className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 transition-colors"
+                                        className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 dark:text-slate-500 transition-colors"
                                     >
                                         <Minimize2 className="w-4 h-4" />
                                     </button>
@@ -141,15 +141,15 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                             </header>
 
                             {/* Messages Area */}
-                            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 no-scrollbar bg-slate-50/50">
+                            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 no-scrollbar bg-slate-50 dark:bg-slate-800/50/50">
                                 {messages.length === 0 && (
                                     <div className="h-full flex flex-col items-center justify-center text-center p-4 sm:p-8 space-y-4">
-                                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 animate-bounce cursor-default">
+                                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-50 dark:bg-slate-800/80 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 animate-bounce cursor-default">
                                             <Bot className="w-8 h-8 sm:w-10 sm:h-10" />
                                         </div>
                                         <div>
-                                            <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">Xin chào {user.name.split(' ').pop()}!</h4>
-                                            <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-[280px]">
+                                            <h4 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest mb-2">Xin chào {user.name.split(' ').pop()}!</h4>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium leading-relaxed max-w-[280px]">
                                                 Tôi có thể giúp bạn kiểm tra tình trạng phiếu, thống kê NCR hoặc giải đáp các quy trình ISO 9001. Bạn muốn hỏi gì không?
                                             </p>
                                         </div>
@@ -162,7 +162,7 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                                                 <button 
                                                     key={i}
                                                     onClick={() => setInput(q)}
-                                                    className="p-3 text-[10px] font-black text-slate-600 uppercase tracking-widest bg-white border border-slate-100 rounded-2xl hover:bg-blue-50 hover:border-blue-200 transition-all text-left"
+                                                    className="p-3 text-[10px] font-black text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl hover:bg-blue-50 dark:bg-slate-800/80 hover:border-blue-200 dark:border-slate-700 transition-all text-left"
                                                 >
                                                     {q}
                                                 </button>
@@ -182,7 +182,7 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                                             <div className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl shadow-sm border ${
                                                 msg.role === 'user' 
                                                     ? 'bg-slate-900 text-white border-slate-800 rounded-tr-none' 
-                                                    : 'bg-white text-slate-800 border-slate-100 rounded-tl-none font-medium'
+                                                    : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-100 dark:border-slate-800 rounded-tl-none font-medium'
                                             }`}>
                                                 <div className="prose prose-sm max-w-none prose-slate markdown-body text-[13px] leading-relaxed">
                                                     <ReactMarkdown>
@@ -205,9 +205,9 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                                             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
                                                 <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                             </div>
-                                            <div className="bg-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-100 flex items-center gap-2">
-                                                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 animate-spin" />
-                                                <p className="text-[10px] sm:text-[11px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Đang truy xuất dữ liệu...</p>
+                                            <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                                                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                                                <p className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest animate-pulse">Đang truy xuất dữ liệu...</p>
                                             </div>
                                         </div>
                                     </div>
@@ -216,8 +216,8 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                             </div>
 
                             {/* Input Area */}
-                            <footer className="p-4 sm:p-6 bg-white border-t border-slate-100 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                                <div className="relative flex items-end gap-2 bg-slate-50 rounded-[1.5rem] sm:rounded-[2rem] p-1.5 sm:p-2 border border-slate-100 focus-within:border-blue-300 focus-within:bg-white transition-all shadow-inner">
+                            <footer className="p-4 sm:p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                                <div className="relative flex items-end gap-2 bg-slate-50 dark:bg-slate-800/50 rounded-[1.5rem] sm:rounded-[2rem] p-1.5 sm:p-2 border border-slate-100 dark:border-slate-800 focus-within:border-blue-300 focus-within:bg-white dark:bg-slate-900 transition-all shadow-inner">
                                     <textarea
                                         ref={inputRef}
                                         rows={1}
@@ -225,7 +225,7 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                                         onChange={(e) => setInput(e.target.value)}
                                         onKeyDown={handleKeyPress}
                                         placeholder="Hỏi về QMS..."
-                                        className="flex-1 bg-transparent border-none focus:ring-0 text-[14px] sm:text-sm font-medium py-2 sm:py-3 px-3 sm:px-4 resize-none no-scrollbar placeholder:text-slate-400 placeholder:font-black placeholder:uppercase placeholder:tracking-widest"
+                                        className="flex-1 bg-transparent border-none focus:ring-0 text-[14px] sm:text-sm font-medium py-2 sm:py-3 px-3 sm:px-4 resize-none no-scrollbar placeholder:text-slate-400 dark:text-slate-500 placeholder:font-black placeholder:uppercase placeholder:tracking-widest"
                                     />
                                     <button
                                         onClick={handleSend}
@@ -233,13 +233,13 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                                         className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all shadow-lg active:scale-95 ${
                                             input.trim() && !isLoading 
                                                 ? 'bg-blue-600 text-white shadow-blue-200' 
-                                                : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
                                         }`}
                                     >
                                         <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                                     </button>
                                 </div>
-                                <p className="text-center text-[8px] text-slate-400 font-bold uppercase tracking-tighter mt-3 flex items-center justify-center gap-1 opacity-70">
+                                <p className="text-center text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tighter mt-3 flex items-center justify-center gap-1 opacity-70">
                                     <ShieldCheck className="w-2.5 h-2.5" /> ISO 9001 AI ASSISTANT
                                 </p>
                             </footer>
@@ -272,9 +272,9 @@ export const ChatAI: React.FC<ChatAIProps> = ({ user }) => {
                         </div>
                         <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest whitespace-nowrap">Tiếp tục chat</span>
                         <div className="flex gap-0.5 sm:gap-1 ml-1 scale-75 sm:scale-100">
-                            <span className="w-1 h-1 bg-white/30 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                            <span className="w-1 h-1 bg-white/30 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                            <span className="w-1 h-1 bg-white/30 rounded-full animate-bounce"></span>
+                            <span className="w-1 h-1 bg-white dark:bg-slate-900/30 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-1 h-1 bg-white dark:bg-slate-900/30 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-1 h-1 bg-white dark:bg-slate-900/30 rounded-full animate-bounce"></span>
                         </div>
                     </button>
                 )}

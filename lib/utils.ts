@@ -50,6 +50,31 @@ export const formatDisplayDate = (dateVal: string | number | undefined | null): 
 };
 
 /**
+ * Remove Vietnamese accents/tones for accent-insensitive search and normalize NFC/NFD
+ */
+export function removeVietnameseTones(str: string): string {
+    if (!str) return '';
+    let res = str;
+    res = res.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+    res = res.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+    res = res.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+    res = res.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+    res = res.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+    res = res.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+    res = res.replace(/đ/g, "d");
+    res = res.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+    res = res.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+    res = res.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+    res = res.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+    res = res.replace(/Ù|Ú|Ụ|Ủ|Ữ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+    res = res.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
+    res = res.replace(/Đ/g, "D");
+    // Some system encode accents separately (combining diacritical marks)
+    res = res.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return res;
+}
+
+/**
  * Chuyển đổi Unix timestamp sang định dạng ngày Việt Nam (dd/MM/yyyy)
  */
 export const formatUnixDate = (timestamp: number): string => {

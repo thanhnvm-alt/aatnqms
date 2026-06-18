@@ -1,6 +1,6 @@
 {
   "schema": "appQAQC",
-  "timestamp": "2026-04-30T11:03:10.956Z",
+  "timestamp": "2026-06-08T03:08:25.310Z",
   "logs": [
     "✅ Ensured table audit_logs exists in appQAQC",
     "✅ Ensured table status_history exists in appQAQC",
@@ -17,18 +17,23 @@
     "✅ Ensured table forms_fqc exists in appQAQC",
     "✅ Ensured table forms_spr exists in appQAQC",
     "✅ Ensured table forms_site exists in appQAQC",
+    "✅ Ensured table inspections exists in appQAQC",
     "✅ Ensured table defect_library exists in appQAQC",
     "✅ Ensured table floor_plans exists in appQAQC",
     "✅ Ensured table layout_pins exists in appQAQC",
     "✅ Ensured table workshops exists in appQAQC",
     "✅ Ensured table templates exists in appQAQC",
-    "✅ Ensured table roles exists in appQAQC",
+    "✅ Ensured table qms_roles exists in appQAQC",
     "✅ Ensured table procedures exists in appQAQC",
     "✅ Ensured table suppliers exists in appQAQC",
     "✅ Ensured table projects exists in appQAQC",
+    "✅ Ensured table project_documents exists in appQAQC",
     "✅ Ensured table ipo_details exists in appQAQC",
     "✅ Ensured table ipo_drawing_list exists in appQAQC",
     "✅ Ensured table ipo_material_history exists in appQAQC",
-    "✅ Ensured table ipo_sample_history exists in appQAQC"
+    "✅ Ensured table ipo_sample_history exists in appQAQC",
+    "✅ Ensured Materialized View ipo_projects_mv exists in appQAQC",
+    "✅ Ensured table departments exists in appQAQC",
+    "✅ Ensured table tools exists in appQAQC"
   ]
 }

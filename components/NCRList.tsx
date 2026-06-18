@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { NCR, User } from '../types';
+import { removeVietnameseTones } from '../lib/utils';
+import { NCR, User, hasPermission } from '../types';
 import { fetchNcrs, fetchNcrById, deleteNcr } from '../services/apiService';
 import { 
     AlertTriangle, Search, Clock, CheckCircle2, 
@@ -35,7 +36,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, optio
 
   const filteredOptions = useMemo(() => {
     if (!search) return options;
-    return options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()));
+    const cleanSearch = removeVietnameseTones(search.toLowerCase().trim());
+    return options.filter(opt => removeVietnameseTones(opt.toLowerCase()).includes(cleanSearch));
   }, [options, search]);
 
   useEffect(() => {
@@ -50,29 +52,29 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, optio
 
   return (
     <div className={`space-y-1 relative ${className}`} ref={containerRef}>
-      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+      <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{label}</label>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-all border-slate-200 h-[38px]"
+        className="w-full p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-black uppercase flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 transition-all border-slate-200 dark:border-slate-700 h-[38px]"
       >
-        <span className={`truncate ${value && value !== 'ALL' ? 'text-slate-900' : 'text-slate-400'}`}>
+        <span className={`truncate ${value && value !== 'ALL' ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}`}>
           {value && value !== 'ALL' ? value : placeholder}
         </span>
-        <ChevronDown className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] max-h-64 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-          <div className="p-2 border-b border-slate-100 bg-slate-50">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-[100] max-h-64 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 dark:text-slate-500" />
               <input 
                 autoFocus
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Tìm nhanh..."
-                className="w-full pl-7 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full pl-7 pr-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
@@ -80,23 +82,23 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, optio
           <div className="overflow-y-auto flex-1 no-scrollbar p-1">
             <div 
               onClick={(e) => { e.stopPropagation(); onChange('ALL'); setIsOpen(false); setSearch(''); }}
-              className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all mb-1 ${!value || value === 'ALL' ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+              className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all mb-1 ${!value || value === 'ALL' ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}
             >
               - TẤT CẢ -
             </div>
-            <div className="h-px bg-slate-100 mb-1" />
+            <div className="h-px bg-slate-100 dark:bg-slate-800 mb-1" />
             {filteredOptions.length > 0 ? (
               filteredOptions.map(opt => (
                 <div 
                   key={opt}
                   onClick={(e) => { e.stopPropagation(); onChange(opt); setIsOpen(false); setSearch(''); }}
-                  className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 transition-all ${value === opt ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+                  className={`p-2 text-[10px] font-black uppercase rounded-lg cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all ${value === opt ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}
                 >
                   {opt}
                 </div>
               ))
             ) : (
-              <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase">Không tìm thấy</div>
+              <div className="p-4 text-center text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Không tìm thấy</div>
             )}
           </div>
         </div>
@@ -129,7 +131,14 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   const [endDate, setEndDate] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [qcFilter, setQcFilter] = useState('ALL');
-  const [workshopFilter, setWorkshopFilter] = useState('ALL');
+  const [workshopFilter, setWorkshopFilter] = useState(() => {
+    if (currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER' && (currentUser.to_qc || currentUser.toQC)) {
+      if (!hasPermission(currentUser, [], 'NCR_LIST', 'VIEW_ALL')) {
+        return currentUser.to_qc || currentUser.toQC || 'ALL';
+      }
+    }
+    return 'ALL';
+  });
   const [selectedNcr, setSelectedNcr] = useState<NCR | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const limit = 50000;
@@ -307,16 +316,16 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
     switch (severity?.toUpperCase()) {
         case 'CRITICAL': return 'bg-red-600 text-white border-red-700';
         case 'MAJOR': return 'bg-orange-100 text-orange-700 border-orange-200';
-        case 'MINOR': return 'bg-blue-50 text-blue-700 border-blue-100';
-        default: return 'bg-slate-100 text-slate-600 border-slate-200';
+        case 'MINOR': return 'bg-blue-50 dark:bg-slate-800/80 text-blue-700 border-blue-100 dark:border-slate-700';
+        default: return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700';
     }
   };
 
   const getStatusStyle = (status: string) => {
     switch (status?.toUpperCase()) {
-        case 'CLOSED': return 'bg-green-50 text-green-700 border-green-200';
-        case 'IN_PROGRESS': return 'bg-blue-50 text-blue-700 border-blue-200';
-        case 'OPEN': return 'bg-red-50 text-red-700 border-red-200';
+        case 'CLOSED': return 'bg-green-50 dark:bg-green-900/20 text-green-700 border-green-200 dark:border-green-800';
+        case 'IN_PROGRESS': return 'bg-blue-50 dark:bg-slate-800/80 text-blue-700 border-blue-200 dark:border-slate-700';
+        case 'OPEN': return 'bg-red-50 dark:bg-red-900/20 text-red-700 border-red-200';
         default: return 'bg-orange-50 text-orange-700 border-orange-200';
     }
   };
@@ -466,69 +475,81 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative">
       {/* Detail Loader Overlay */}
       {isDetailLoading && (
         <div className="absolute inset-0 z-[200] bg-slate-900/20 backdrop-blur-[2px] flex flex-col items-center justify-center">
-            <div className="bg-white p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200">
-                <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Đang tải chi tiết...</p>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200">
+                <Loader2 className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" />
+                <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">Đang tải chi tiết...</p>
             </div>
         </div>
       )}
 
       {/* Compact Toolbar */}
-      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-50 shadow-sm">
+      <div className="shrink-0 bg-white dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-700 z-50 shadow-sm">
           <div className="max-w-7xl mx-auto flex items-center gap-2">
               {currentUser.role === 'ADMIN' && (
                 <button 
                   onClick={toggleSelectAll}
-                  className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                  className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95"
                 >
-                  {selectedIds.size === ncrs.length && ncrs.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600" /> : <Layers className="w-5 h-5" />}
+                  {selectedIds.size === ncrs.length && ncrs.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <Layers className="w-5 h-5" />}
                 </button>
               )}
               <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400 dark:text-slate-500" />
                   <input 
                     type="text" placeholder="Tìm theo mã, lỗi, người phụ trách..." 
                     value={searchInput}
                     onChange={e => setSearchInput(e.target.value)}
                     onBlur={handleCommitSearch}
                     onKeyDown={handleKeyDown}
-                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    className="w-full pl-11 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-medium text-sm text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                   />
               </div>
 
               <button 
                 onClick={() => setIsFilterOpen(!isFilterOpen)} 
-                className={`p-2.5 rounded-xl border transition-all active:scale-95 relative ${isFilterOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}
+                className={`p-2.5 rounded-xl border transition-all active:scale-95 relative ${isFilterOpen ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'}`}
               >
                 <Filter className="w-5 h-5" />
               </button>
               
               {isFilterOpen && (
-                  <div className="absolute top-16 right-4 w-[320px] bg-white rounded-2xl p-4 border border-slate-200 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="absolute top-16 right-4 w-[320px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
                       <div className="flex justify-between items-center mb-4">
-                        <span className="font-bold text-slate-800">Bộ lọc chi tiết</span>
-                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">Bộ lọc chi tiết</span>
+                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500"><X className="w-4 h-4" /></button>
                       </div>
                       <div className="space-y-3">
                         <SearchableSelect label="TRẠNG THÁI" value={statusFilter} options={['ALL', 'OPEN', 'IN_PROGRESS', 'CLOSED']} onChange={val => setStatusFilter(val as any)} />
                         <SearchableSelect label="MÃ DỰ ÁN" value={projectFilter} options={filterOptions.projects} onChange={val => setProjectFilter(val)} />
                         <SearchableSelect label="QC KIỂM TRA" value={qcFilter} options={filterOptions.qcs} onChange={val => setQcFilter(val)} />
-                        <SearchableSelect label="XƯỞNG SẢN XUẤT" value={workshopFilter} options={filterOptions.workshops} onChange={val => setWorkshopFilter(val)} />
+                        <SearchableSelect 
+                          label="XƯỞNG SẢN XUẤT" 
+                          value={workshopFilter} 
+                          options={filterOptions.workshops} 
+                          onChange={val => setWorkshopFilter(val)} 
+                          className={currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER' && (currentUser.to_qc || currentUser.toQC) && !hasPermission(currentUser, [], 'NCR_LIST', 'VIEW_ALL') ? 'opacity-50 pointer-events-none' : ''}
+                        />
                         <DateRangePicker label="KHOẢNG NGÀY" startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate} />
-                        <button onClick={() => { setQcFilter('ALL'); setWorkshopFilter('ALL'); setStatusFilter('ALL'); setProjectFilter('ALL'); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 transition-colors border border-blue-200">XÓA BỘ LỌC</button>
+                        <button onClick={() => { setQcFilter('ALL'); setWorkshopFilter('ALL'); setStatusFilter('ALL'); setProjectFilter('ALL'); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 dark:bg-blue-900/30 transition-colors border border-blue-200 dark:border-slate-700">XÓA BỘ LỌC</button>
                       </div>
                   </div>
               )}
 
-              {currentUser.role !== 'QC' && (
+              {(hasPermission(currentUser, [], 'NCR_LIST', 'IMPORT') || hasPermission(currentUser, [], 'NCR_LIST', 'EXPORT')) && (
                 <div className="flex items-center gap-1.5">
-                  <button onClick={exportNcrs} title="Xuất Excel" className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"><Download className="w-5 h-5" /></button>
-                  <input type="file" id="ncr-import" className="hidden" onChange={async (e) => { if (e.target.files && e.target.files[0]) { await importNcrsFile(e.target.files[0]); loadNcrs(); } }} />
-                  <label htmlFor="ncr-import" title="Nhập Excel" className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 cursor-pointer"><Upload className="w-5 h-5" /></label>
+                  {hasPermission(currentUser, [], 'NCR_LIST', 'EXPORT') && (
+                    <button onClick={exportNcrs} title="Xuất Excel" className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95"><Download className="w-5 h-5" /></button>
+                  )}
+                  {hasPermission(currentUser, [], 'NCR_LIST', 'IMPORT') && (
+                    <>
+                      <input type="file" id="ncr-import" className="hidden" onChange={async (e) => { if (e.target.files && e.target.files[0]) { await importNcrsFile(e.target.files[0]); loadNcrs(); } }} />
+                      <label htmlFor="ncr-import" title="Nhập Excel" className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95 cursor-pointer"><Upload className="w-5 h-5" /></label>
+                    </>
+                  )}
                 </div>
               )}
           </div>
@@ -550,15 +571,15 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
       {/* Main Content Area */}
       
       {/* MOBILE LIST VIEW */}
-      <div className="md:hidden flex-1 flex flex-col bg-slate-50 overflow-hidden h-full">
-          <div className="px-3 py-3 border-b border-slate-200 bg-white shadow-sm flex items-center shrink-0 z-10">
-              <div className="flex bg-slate-200/60 rounded-lg p-1 w-full relative transition-all gap-1">
-                  <button onClick={() => setMobileViewStep(1)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 1 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Ngày Tháng</button>
+      <div className="md:hidden flex-1 flex flex-col bg-slate-50 dark:bg-slate-800/50 overflow-hidden h-full">
+          <div className="px-3 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center shrink-0 z-10">
+              <div className="flex bg-slate-200 dark:bg-slate-700/60 rounded-lg p-1 w-full relative transition-all gap-1">
+                  <button onClick={() => setMobileViewStep(1)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 1 ? 'bg-white dark:bg-slate-900 text-blue-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>Ngày Tháng</button>
                   {(selectedDateDesktop !== 'ALL' || selectedMonthDesktop !== 'ALL') && (
-                      <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Dự Án {desktopProjects.length > 0 && `(${desktopProjects.length})`}</button>
+                      <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white dark:bg-slate-900 text-blue-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>Dự Án {desktopProjects.length > 0 && `(${desktopProjects.length})`}</button>
                   )}
                   {(selectedProjectDesktop && selectedProjectDesktop !== 'ALL') && (
-                      <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Phiếu NCR {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
+                      <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white dark:bg-slate-900 text-blue-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>Phiếu NCR {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
                   )}
               </div>
           </div>
@@ -568,7 +589,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                   <div className="p-3 space-y-2 animate-in fade-in slide-in-from-left-4 duration-300">
                       {isLoading ? (
                           <div className="flex flex-col items-center justify-center py-20">
-                              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                              <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                           </div>
                       ) : (
                           <>
@@ -582,12 +603,12 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                   if (next.has(year)) next.delete(year); else next.add(year);
                                                   return next;
                                               })}
-                                              className="w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold text-slate-800 bg-white border border-slate-200 shadow-sm transition-colors"
+                                              className="w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm transition-colors"
                                           >
                                               <span>Năm {year}</span>
                                               <div className="flex items-center gap-2">
-                                                  <span className="text-[11px] font-bold bg-slate-100 px-2 py-0.5 rounded-full text-slate-600">{count}</span>
-                                                  <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
+                                                  <span className="text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 dark:text-slate-500">{count}</span>
+                                                  <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
                                               </div>
                                           </button>
                                           
@@ -610,12 +631,12 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                               setSelectedNcrDesktop(null);
                                                               if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                                           }}
-                                                          className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 rounded-xl text-[13px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'text-slate-700 bg-white border border-slate-200 shadow-sm'}`}
+                                                          className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 rounded-xl text-[13px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 border border-blue-200 dark:border-slate-700' : 'text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm'}`}
                                                       >
                                                           <span>Tháng {month}</span>
                                                           <div className="flex items-center gap-2">
-                                                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{count}</span>
-                                                              <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
+                                                              <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
                                                           </div>
                                                       </button>
                                                       
@@ -631,11 +652,11 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                                       setSelectedNcrDesktop(null);
                                                                       if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                                                   }}
-                                                                  className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 ml-4 rounded-xl text-[12px] font-medium transition-colors ${isDateSelected ? 'bg-blue-500 text-white font-bold shadow-md' : 'text-slate-600 bg-white border border-slate-200 shadow-sm'}`}
+                                                                  className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 ml-4 rounded-xl text-[12px] font-medium transition-colors ${isDateSelected ? 'bg-blue-500 text-white font-bold shadow-md' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm'}`}
                                                                   style={{ width: 'calc(100% - 1rem)' }}
                                                               >
                                                                   <span>{dateKey.substring(0, 5)}</span>
-                                                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
                                                               </button>
                                                           );
                                                       })}
@@ -655,10 +676,10 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           setSelectedNcrDesktop(null);
                                           if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                       }}
-                                      className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-500 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}
+                                      className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold transition-colors ${selectedDateDesktop === dateKey ? 'bg-blue-500 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'}`}
                                   >
                                       <span>{dateKey}</span>
-                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedDateDesktop === dateKey ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedDateDesktop === dateKey ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
                                   </button>
                               ))}
                           </>
@@ -669,12 +690,12 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               {mobileViewStep === 2 && (
                   <div className="p-3 space-y-2 animate-in fade-in slide-in-from-right-4 duration-300">
                       <div className="flex items-center gap-2 mb-2">
-                          <button onClick={() => setMobileViewStep(1)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500"><ChevronLeft className="w-4 h-4" /></button>
-                          <h3 className="font-bold text-slate-800 text-xs uppercase">Chọn Dự Án - {selectedDateDesktop !== 'ALL' ? selectedDateDesktop : selectedMonthDesktop}</h3>
+                          <button onClick={() => setMobileViewStep(1)} className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500"><ChevronLeft className="w-4 h-4" /></button>
+                          <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs uppercase">Chọn Dự Án - {selectedDateDesktop !== 'ALL' ? selectedDateDesktop : selectedMonthDesktop}</h3>
                       </div>
                       
                       {desktopProjects.length === 0 ? (
-                          <div className="py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Không có dự án nào</div>
+                          <div className="py-20 text-center text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-widest">Không có dự án nào</div>
                       ) : (
                           desktopProjects.map(pKey => {
                               const prjName = pKey === '---' ? '' : (filteredNcrs.find(n => n.ma_ct === pKey)?.ten_ct || '');
@@ -698,17 +719,17 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           setSelectedProjectDesktop(pKey);
                                           if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
                                       }}
-                                      className={`w-full flex flex-col items-start px-4 py-3 rounded-xl transition-colors border ${selectedProjectDesktop === pKey ? 'bg-blue-500 text-white border-blue-600 shadow-md' : 'bg-white border-slate-200 text-slate-800'}`}
+                                      className={`w-full flex flex-col items-start px-4 py-3 rounded-xl transition-colors border ${selectedProjectDesktop === pKey ? 'bg-blue-500 text-white border-blue-600 shadow-md' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'}`}
                                   >
                                       <div className="flex items-center justify-between w-full">
                                           <span className="text-[13px] font-bold">{pKey}</span>
                                           <div className="flex items-center gap-2">
-                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedProjectDesktop === pKey ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                                              <ChevronRight className={`w-4 h-4 ${selectedProjectDesktop === pKey ? 'text-white' : 'text-slate-400'}`} />
+                                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${selectedProjectDesktop === pKey ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
+                                              <ChevronRight className={`w-4 h-4 ${selectedProjectDesktop === pKey ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
                                           </div>
                                       </div>
                                       {prjName && (
-                                          <span className={`text-[11px] font-semibold leading-normal mt-1 line-clamp-1 text-left ${selectedProjectDesktop === pKey ? 'text-blue-100' : 'text-slate-500'}`}>
+                                          <span className={`text-[11px] font-semibold leading-normal mt-1 line-clamp-1 text-left ${selectedProjectDesktop === pKey ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
                                               {prjName}
                                           </span>
                                       )}
@@ -722,48 +743,48 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               {mobileViewStep === 3 && (
                   <div className="p-3 space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
                       <div className="flex items-center gap-2 mb-2">
-                          <button onClick={() => setMobileViewStep(2)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500"><ChevronLeft className="w-4 h-4" /></button>
-                          <h3 className="font-bold text-slate-800 text-xs uppercase truncate">NCR: {selectedProjectDesktop}</h3>
+                          <button onClick={() => setMobileViewStep(2)} className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500"><ChevronLeft className="w-4 h-4" /></button>
+                          <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs uppercase truncate">NCR: {selectedProjectDesktop}</h3>
                       </div>
                       
                       {desktopItems.length === 0 ? (
-                          <div className="py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Không có phiếu nào</div>
+                          <div className="py-20 text-center text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-widest">Không có phiếu nào</div>
                       ) : (
                           desktopItems.map(ncr => (
                               <div 
                                   key={ncr.id} 
                                   onClick={() => handleSelectNcrItem(ncr.id)}
-                                  className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:border-blue-300 group"
+                                  className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col active:scale-[0.98] transition-all hover:border-blue-300 group"
                               >
                                   <div className="p-3 space-y-3">
                                       <div className="flex items-start justify-between gap-3">
                                           <div className="flex items-center gap-2 min-w-0">
-                                              <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all shrink-0">
+                                              <div className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all shrink-0">
                                                   <AlertTriangle className="w-4 h-4" />
                                               </div>
                                               <div className="min-w-0">
-                                                  <span className="font-black text-slate-900 text-xs tracking-tight block uppercase truncate">{ncr.ten_hang_muc || ncr.issueDescription}</span>
-                                                  <span className="text-[9px] font-bold text-slate-400 font-mono tracking-tighter uppercase">{ncr.id}</span>
+                                                  <span className="font-black text-slate-900 dark:text-slate-100 text-xs tracking-tight block uppercase truncate">{ncr.ten_hang_muc || ncr.issueDescription}</span>
+                                                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 font-mono tracking-tighter uppercase">{ncr.id}</span>
                                               </div>
                                           </div>
                                           <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm shrink-0 ${getSeverityStyle(ncr.severity || 'MINOR')}`}>
                                               {ncr.severity || 'MINOR'}
                                           </span>
                                       </div>
-                                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 uppercase tracking-tighter overflow-hidden">
-                                          <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200 shrink-0">{ncr.workshop || '---'}</span>
+                                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter overflow-hidden">
+                                          <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 shrink-0">{ncr.workshop || '---'}</span>
                                           <span>•</span>
                                           <span className="truncate">{ncr.inspectorName || '---'}</span>
                                       </div>
-                                      <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 line-clamp-2 text-[10px] font-bold text-slate-600 italic">
+                                      <div className="bg-slate-50 dark:bg-slate-800/10 p-2 rounded-lg border border-slate-105 dark:border-slate-800 line-clamp-2 text-[10px] font-bold text-slate-600 dark:text-slate-400 dark:text-slate-550 italic">
                                           "{ncr.issueDescription}"
                                       </div>
                                   </div>
-                                  <div className={`px-3 py-2 border-t flex items-center justify-between ${ncr.status === 'CLOSED' ? 'bg-green-50/50 border-green-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                                  <div className={`px-3 py-2 border-t flex items-center justify-between ${ncr.status === 'CLOSED' ? 'bg-green-50 dark:bg-green-900/20/50 border-green-100' : 'bg-slate-50 dark:bg-slate-800/50/50 border-slate-100 dark:border-slate-800'}`}>
                                       <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
                                           {ncr.status}
                                       </span>
-                                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                                      <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                                   </div>
                               </div>
                           ))
@@ -774,22 +795,22 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
       </div>
 
       {/* DESKTOP 4-COLUMN VIEW */}
-      <div className="hidden md:flex flex-1 h-full w-full bg-white divide-x divide-slate-200 overflow-x-auto overflow-y-hidden text-sm">
+      <div className="hidden md:flex flex-1 h-full w-full bg-white dark:bg-slate-900 divide-x divide-slate-200 dark:divide-slate-800 overflow-x-auto overflow-y-hidden text-sm">
           
           {/* COLUMN 1: DATES */}
-          <div className="flex flex-col shrink-0 bg-slate-50/50 relative" style={{ width: colSizes[0] }}>
+          <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50/50 relative" style={{ width: colSizes[0] }}>
               <div 
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(0)}
               />
-              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Thời Gian</h3>
-                  {isLoading && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}
+              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">1. Thời Gian</h3>
+                  {isLoading && <Loader2 className="w-3 h-3 animate-spin text-blue-600 dark:text-blue-400" />}
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                   <button 
                       onClick={() => { setSelectedDateDesktop('ALL'); setSelectedMonthDesktop('ALL'); setSelectedProjectDesktop(''); setSelectedNcrDesktop(null); }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold transition-colors ${selectedDateDesktop === 'ALL' && selectedMonthDesktop === 'ALL' ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'}`}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold transition-colors ${selectedDateDesktop === 'ALL' && selectedMonthDesktop === 'ALL' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800'}`}
                   >
                       Tất cả ({total})
                   </button>
@@ -804,11 +825,11 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                     if (next.has(year)) next.delete(year); else next.add(year);
                                     return next;
                                 })}
-                                className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 hover:bg-slate-200/50 transition-colors"
+                                className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:bg-slate-700/50 transition-colors"
                             >
-                                <span className="flex items-center gap-2"><CalendarDays className="w-3.5 h-3.5 text-blue-600" /> Năm {year}</span>
+                                <span className="flex items-center gap-2"><CalendarDays className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Năm {year}</span>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-bold bg-slate-200 px-1.5 py-0.5 rounded-full text-slate-600">{count}</span>
+                                    <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full text-slate-600 dark:text-slate-400 dark:text-slate-500">{count}</span>
                                     <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
                                 </div>
                             </button>
@@ -831,11 +852,11 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                 setSelectedProjectDesktop('');
                                                 setSelectedNcrDesktop(null);
                                             }}
-                                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[12px] font-bold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            className={`w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[12px] font-bold transition-colors ${isMonthSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800'}`}
                                         >
                                             <span>Tháng {month}</span>
                                             <div className="flex items-center gap-2">
-                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200' : 'bg-slate-100'}`}>{count}</span>
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200' : 'bg-slate-100 dark:bg-slate-800'}`}>{count}</span>
                                                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isMonthExpanded ? 'rotate-90' : ''}`} />
                                             </div>
                                         </button>
@@ -851,11 +872,11 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                                         setSelectedProjectDesktop('');
                                                         setSelectedNcrDesktop(null);
                                                     }}
-                                                    className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-3 rounded-lg text-[11px] font-bold transition-colors ${isDateSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                                                    className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-3 rounded-lg text-[11px] font-bold transition-colors ${isDateSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                                     style={{ width: 'calc(100% - 1rem)' }}
                                                 >
                                                     <span>{dateKey.substring(0, 5)}</span>
-                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-700' : 'bg-slate-100'}`}>{count}</span>
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-700' : 'bg-slate-100 dark:bg-slate-800'}`}>{count}</span>
                                                 </button>
                                             );
                                         })}
@@ -869,18 +890,18 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
           </div>
 
           {/* COLUMN 2: PROJECTS */}
-          <div className="flex flex-col shrink-0 bg-white relative" style={{ width: colSizes[1] }}>
+          <div className="flex flex-col shrink-0 bg-white dark:bg-slate-900 relative" style={{ width: colSizes[1] }}>
               <div 
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(1)}
               />
-              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Dự Án / Công Trình</h3>
+              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">2. Dự Án / Công Trình</h3>
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                   <button 
                       onClick={() => setSelectedProjectDesktop('ALL')}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 text-blue-800 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 font-bold' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800'}`}
                   >
                       Tất cả dự án ({desktopProjects.length})
                   </button>
@@ -910,14 +931,14 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       <button 
                           key={pKey}
                           onClick={() => setSelectedProjectDesktop(pKey)}
-                          className={`w-full flex flex-col items-start px-3 py-2 rounded-lg transition-colors border border-transparent ${selectedProjectDesktop === pKey ? 'bg-blue-50 border-blue-200 shadow-sm' : 'hover:bg-slate-50 border-slate-100'}`}
+                          className={`w-full flex flex-col items-start px-3 py-2 rounded-lg transition-colors border border-transparent ${selectedProjectDesktop === pKey ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 shadow-sm' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}
                       >
                           <div className="flex justify-between items-center w-full">
-                              <span className={`text-[12px] font-bold ${selectedProjectDesktop === pKey ? 'text-blue-800' : 'text-slate-700'}`}>{pKey}</span>
-                              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{count}</span>
+                              <span className={`text-[12px] font-bold ${selectedProjectDesktop === pKey ? 'text-blue-800' : 'text-slate-700 dark:text-slate-300'}`}>{pKey}</span>
+                              <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded">{count}</span>
                           </div>
                           {prjName && (
-                              <span className={`text-[11px] font-medium leading-normal mt-1 line-clamp-1 text-left ${selectedProjectDesktop === pKey ? 'text-blue-600' : 'text-slate-500'}`}>
+                              <span className={`text-[11px] font-medium leading-normal mt-1 line-clamp-1 text-left ${selectedProjectDesktop === pKey ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
                                   {prjName}
                               </span>
                           )}
@@ -927,49 +948,49 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
           </div>
 
           {/* COLUMN 3: ITEMS */}
-          <div className="flex flex-col shrink-0 bg-slate-50/50 relative" style={{ width: colSizes[2] }}>
+          <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50/50 relative" style={{ width: colSizes[2] }}>
               <div 
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(2)}
               />
-              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
-                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase flex justify-between">
+              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase flex justify-between">
                       <span>3. Danh Sách Lỗi (NCR)</span>
-                      <span className="text-slate-400 font-medium">{desktopItems.length} PHIẾU</span>
+                      <span className="text-slate-400 dark:text-slate-500 font-medium">{desktopItems.length} PHIẾU</span>
                   </h3>
               </div>
               <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
                   {!selectedProjectDesktop ? (
                       <div className="flex flex-col items-center justify-center p-8 text-center h-64">
                           <div className="relative mb-3">
-                              <div className="absolute inset-0 bg-blue-50 rounded-full blur-xl block opacity-60"></div>
-                              <Layers className="w-10 h-10 text-blue-500 relative z-10 animate-pulse" />
+                              <div className="absolute inset-0 bg-blue-50 dark:bg-slate-800/80 rounded-full blur-xl block opacity-60"></div>
+                              <Layers className="w-10 h-10 text-blue-500 dark:text-blue-400 relative z-10 animate-pulse" />
                           </div>
-                          <p className="text-[11px] font-black tracking-wider uppercase text-slate-400 max-w-[200px] leading-relaxed">
+                          <p className="text-[11px] font-black tracking-wider uppercase text-slate-400 dark:text-slate-500 max-w-[200px] leading-relaxed">
                               Vui lòng chọn Dự Án ở cột 2 để hiển thị danh sách lỗi
                           </p>
                       </div>
                   ) : desktopItems.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-xs font-medium uppercase tracking-widest">Không tìm thấy phiếu nào</div>
+                      <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs font-medium uppercase tracking-widest">Không tìm thấy phiếu nào</div>
                   ) : (
-                      <div className="divide-y divide-slate-100">
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800">
                           {desktopItems.map(item => (
                               <div 
                                   key={item.id} 
                                   onClick={() => handleSelectNcrDesktop(item)}
-                                  className={`p-4 hover:bg-blue-50/50 cursor-pointer transition-colors relative ${selectedNcrDesktop?.id === item.id ? 'bg-blue-50/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white'}`}
+                                  className={`p-4 hover:bg-blue-50 dark:bg-blue-900/20/50 cursor-pointer transition-colors relative ${selectedNcrDesktop?.id === item.id ? 'bg-blue-50 dark:bg-blue-900/20/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white dark:bg-slate-900'}`}
                               >
                                   <div className="flex items-start justify-between gap-3 mb-2">
                                       <div className="flex items-center gap-2 flex-1 min-w-0">
                                           {(currentUser.role === 'ADMIN' || currentUser.role === 'QA' || currentUser.role === 'MANAGER') && (
                                               <div onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}>
-                                                  <div className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer transition-all ${selectedIds.has(item.id) ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
+                                                  <div className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer transition-all ${selectedIds.has(item.id) ? 'bg-blue-600 border-blue-600' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
                                                       {selectedIds.has(item.id) && <CheckCircle2 className="w-3 h-3 text-white" />}
                                                   </div>
                                               </div>
                                           )}
                                           <div className="flex flex-col min-w-0">
-                                              <p className="font-bold text-slate-800 text-[13px] truncate uppercase">{item.ten_hang_muc || item.issueDescription}</p>
+                                              <p className="font-bold text-slate-800 dark:text-slate-200 text-[13px] truncate uppercase">{item.ten_hang_muc || item.issueDescription}</p>
                                           </div>
                                       </div>
                                       <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border shadow-sm shrink-0 flex items-center gap-1 ${getSeverityStyle(item.severity || 'MINOR')}`}>
@@ -979,19 +1000,19 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                   
                                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                                       <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${getStatusStyle(item.status)}`}>{item.status}</span>
-                                      <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-md font-bold text-slate-500 uppercase">{item.id}</span>
+                                      <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{item.id}</span>
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-y-1 gap-x-4">
-                                      <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                                      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-[11px]">
                                           <UserIcon className="w-3 h-3 shrink-0" />
                                           <span className="truncate">{item.inspectorName || '---'}</span>
                                       </div>
-                                      <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                                      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-[11px]">
                                           <Factory className="w-3 h-3 shrink-0" />
                                           <span className="truncate w-24">{item.workshop || '---'}</span>
                                       </div>
-                                      <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
+                                      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-[11px]">
                                           <Calendar className="w-3 h-3 shrink-0" />
                                           <span>{item.createdDate ? new Date(item.createdDate).toLocaleDateString('vi-VN') : '---'}</span>
                                       </div>
@@ -1004,19 +1025,19 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
           </div>
 
           {/* COLUMN 4: DETAIL PREVIEW */}
-          <div className="flex flex-1 flex-col bg-white overflow-hidden relative shrink-0" style={{ minWidth: colSizes[3] }}>
+          <div className="flex flex-1 flex-col bg-white dark:bg-slate-900 overflow-hidden relative shrink-0" style={{ minWidth: colSizes[3] }}>
               <div 
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(3)}
               />
-              <div className="px-6 py-3 border-b border-slate-200 shrink-0 bg-white flex justify-between items-center bg-slate-50">
-                  <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">4. Chi Tiết Lỗi</h3>
+              <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-900 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">4. Chi Tiết Lỗi</h3>
               </div>
               {selectedNcrDesktop ? (
-                  <div className="flex flex-col h-full bg-slate-50 relative">
-                      <div className="bg-white border-b border-slate-200 p-4 sticky top-0 z-30 shadow-sm flex items-center justify-between">
-                          <h2 className="font-bold text-slate-800 uppercase text-sm tracking-tight flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-blue-600" />
+                  <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 relative">
+                      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm flex items-center justify-between">
+                          <h2 className="font-bold text-slate-800 dark:text-slate-200 uppercase text-sm tracking-tight flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                               Chi tiết NCR
                           </h2>
                           <button onClick={() => handleSelectNcrItem(selectedNcrDesktop.id)} className="px-3 py-1.5 bg-blue-600 text-white text-[11px] font-black uppercase rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-100 active:scale-95 transition-all shadow-sm flex items-center gap-2">
@@ -1025,67 +1046,67 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       </div>
                       
                       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                            <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Mô tả lỗi</div>
-                                        <div className="text-sm font-bold text-slate-800 leading-relaxed uppercase">{selectedNcrDesktop.issueDescription}</div>
+                                        <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Mô tả lỗi</div>
+                                        <div className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-relaxed uppercase">{selectedNcrDesktop.issueDescription}</div>
                                     </div>
                                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase ${getStatusStyle(selectedNcrDesktop.status)}`}>{selectedNcrDesktop.status}</span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Mã Dự Án</div>
-                                        <div className="text-xs font-bold text-slate-800 uppercase">{selectedNcrDesktop.ma_ct || '---'}</div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Mã Dự Án</div>
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{selectedNcrDesktop.ma_ct || '---'}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Hạng mục</div>
-                                        <div className="text-xs font-bold text-slate-800 uppercase">{selectedNcrDesktop.ten_hang_muc || '---'}</div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Hạng mục</div>
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{selectedNcrDesktop.ten_hang_muc || '---'}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Mức độ</div>
-                                        <div className="text-xs font-bold text-slate-800 uppercase">{selectedNcrDesktop.severity}</div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Mức độ</div>
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{selectedNcrDesktop.severity}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Xưởng</div>
-                                        <div className="text-xs font-bold text-slate-800 uppercase">{selectedNcrDesktop.workshop || '---'}</div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Xưởng</div>
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{selectedNcrDesktop.workshop || '---'}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Người phụ trách</div>
-                                        <div className="text-xs font-bold text-slate-800 uppercase">{selectedNcrDesktop.responsiblePerson || '---'}</div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Người phụ trách</div>
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{selectedNcrDesktop.responsiblePerson || '---'}</div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Hạn xử lý</div>
-                                        <div className="text-xs font-bold text-slate-800 uppercase">{selectedNcrDesktop.deadline || 'ASAP'}</div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Hạn xử lý</div>
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{selectedNcrDesktop.deadline || 'ASAP'}</div>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 {isPreviewLoading ? (
-                                    <div className="col-span-2 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex items-center justify-center gap-2 py-8">
-                                        <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Đang tải nhanh hình ảnh...</span>
+                                    <div className="col-span-2 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-center gap-2 py-4">
+                                        <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                                        <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Đang tải nhanh hình ảnh...</span>
                                     </div>
                                 ) : (
                                     <>
                                         {(selectedNcrDesktop.imagesBefore && selectedNcrDesktop.imagesBefore.length > 0) && (
-                                            <div className="p-4 bg-white rounded-2xl border border-red-100 shadow-sm space-y-3">
-                                                <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> HIỆN TRẠNG (BEFORE)</div>
+                                            <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-red-105 shadow-sm space-y-2">
+                                                <div className="text-[10px] font-bold text-red-500 dark:text-red-400 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> HIỆN TRẠNG (BEFORE)</div>
                                                 <div className="flex flex-wrap gap-2">
                                                     {selectedNcrDesktop.imagesBefore.map((img, i) => (
-                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
+                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
                                                     ))}
                                                 </div>
                                             </div>
                                         )}
 
                                         {(selectedNcrDesktop.imagesAfter && selectedNcrDesktop.imagesAfter.length > 0) && (
-                                            <div className="p-4 bg-white rounded-2xl border border-green-100 shadow-sm space-y-3">
-                                                <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> XỬ LÝ (AFTER)</div>
+                                            <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-green-105 shadow-sm space-y-2">
+                                                <div className="text-[10px] font-bold text-green-500 dark:text-green-400 uppercase tracking-widest flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> XỬ LÝ (AFTER)</div>
                                                 <div className="flex flex-wrap gap-2">
                                                     {selectedNcrDesktop.imagesAfter.map((img, i) => (
-                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
+                                                        <img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 object-cover rounded-lg border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
                                                     ))}
                                                 </div>
                                             </div>
@@ -1096,9 +1117,9 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       </div>
                   </div>
               ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-6">
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 space-y-6">
                       <div className="relative">
-                          <div className="absolute inset-0 bg-blue-100/50 rounded-full blur-2xl block"></div>
+                          <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/30/50 rounded-full blur-2xl block"></div>
                           <FileText className="w-20 h-20 text-slate-200 relative z-10" strokeWidth={1} />
                       </div>
                       <p className="text-[11px] font-bold tracking-widest uppercase">Hãy chọn một phiếu NCR để xem tóm tắt</p>
@@ -1108,18 +1129,18 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
       </div>
 
       {/* Pagination Summary Footer */}
-      <div className="bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-[0_-5px_15px_rgba(0,0,0,0.02)] hidden md:flex">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+      <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shrink-0 shadow-[0_-5px_15px_rgba(0,0,0,0.02)] hidden md:flex">
+          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
               HIỂN THỊ {filteredNcrs.length} BẢN GHI NCR
           </p>
           <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest">
               <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]"></div>
-                  <span className="text-slate-500">MỚI: {ncrs.filter(n => n.status !== 'CLOSED').length}</span>
+                  <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500">MỚI: {ncrs.filter(n => n.status !== 'CLOSED').length}</span>
               </div>
               <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
-                  <span className="text-slate-500">ĐÃ ĐÓNG: {ncrs.filter(n => n.status === 'CLOSED').length}</span>
+                  <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500">ĐÃ ĐÓNG: {ncrs.filter(n => n.status === 'CLOSED').length}</span>
               </div>
           </div>
       </div>

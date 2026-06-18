@@ -517,6 +517,12 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
           maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
         });
 
+        // Log Audit Login
+        await db.logAudit(user.id, 'LOGIN', 'user', user.id, null, {
+          ip: req.ip,
+          userAgent: req.headers['user-agent'] || 'unknown'
+        });
+
         // Don't send password back
         const { password: _, ...userWithoutPassword } = user;
         res.json({ user: userWithoutPassword, token });
@@ -603,10 +609,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   });
 
   // --- PLANS ---
-  app.get("/api/plans", async (req, res) => {
+  app.get("/api/plans", authenticate, async (req, res) => {
     try {
       const { search, page = 1, limit = 20 } = req.query;
-      const result = await db.getPlansPaginated(String(search || ''), Number(page), Number(limit));
+      const result = await db.getPlansPaginated(String(search || ''), Number(page), Number(limit), (req as any).user);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch plans' });
@@ -730,6 +736,125 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  // --- TOOLS EQUIPMENT ---
+  app.get("/api/tool-catalogs", authenticate, async (req, res) => {
+    try {
+      const catalogs = await db.getToolCatalogs();
+      res.json(catalogs);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch tool catalogs' });
+    }
+  });
+
+  app.post("/api/tool-catalogs", authenticate, async (req, res) => {
+    try {
+      await db.saveToolCatalog(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/tool-catalogs/:id", authenticate, async (req, res) => {
+    try {
+      await db.deleteToolCatalog(req.params.id as string);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tool-assets", authenticate, async (req, res) => {
+    try {
+      const assets = await db.getToolAssets();
+      res.json(assets);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch tool assets' });
+    }
+  });
+
+  app.get("/api/tool-catalogs/:id/assets", authenticate, async (req, res) => {
+    try {
+      const assets = await db.getToolAssetsByCatalog(req.params.id as string);
+      res.json(assets);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch related tool assets' });
+    }
+  });
+
+  app.post("/api/tool-assets", authenticate, async (req, res) => {
+    try {
+      await db.saveToolAsset(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/tool-assets/:id", authenticate, async (req, res) => {
+    try {
+      await db.deleteToolAsset(req.params.id as string);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tool-assets/:id/transfers", authenticate, async (req, res) => {
+    try {
+      const transfers = await db.getToolTransfers(req.params.id as string);
+      res.json(transfers);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch tool transfers' });
+    }
+  });
+
+  app.post("/api/tool-transfers", authenticate, async (req, res) => {
+    try {
+      if (req.body.tool_asset_id && !req.body.tool_asset_ids) {
+          req.body.tool_asset_ids = [req.body.tool_asset_id];
+      }
+      await db.saveToolTransfer(req.body);
+      if (req.body.status === 'APPROVED' && req.body.to_user_id && req.body.tool_asset_ids?.length > 0) {
+         for (const tId of req.body.tool_asset_ids) {
+            const tool = await db.getToolAssetById(tId);
+            if (tool) {
+              tool.current_user_id = req.body.to_user_id;
+              await db.saveToolAsset(tool);
+            }
+         }
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/tool-assets/:id/calibrations", authenticate, async (req, res) => {
+    try {
+      const calib = await db.getToolCalibrations(req.params.id as string);
+      res.json(calib);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch calibrations' });
+    }
+  });
+
+  app.post("/api/tool-calibrations", authenticate, async (req, res) => {
+    try {
+      await db.saveToolCalibration(req.body);
+      if (req.body.next_calibration_date && req.body.status === 'COMPLETED') {
+         const tool = await db.getToolAssetById(req.body.tool_asset_id);
+         if (tool) {
+           tool.next_calibration_date = req.body.next_calibration_date;
+           await db.saveToolAsset(tool);
+         }
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // --- DEFECTS (NCRs) ---
   app.get("/api/defects", async (req, res) => {
     try {
@@ -758,7 +883,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       // if mobile and no startDate provided, we now allow everything as requested
       const page = Number(req.query.page) || 1;
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
-      const result = await db.getInspectionsList(filters, page, limit);
+      const result = await db.getInspectionsList(filters, page, limit, (req as any).user);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspections' });
@@ -767,7 +892,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.get("/api/inspections/dates", authenticate, async (req, res) => {
     try {
-      const dates = await db.getInspectionsDatesList(req.query);
+      const dates = await db.getInspectionsDatesList(req.query, (req as any).user);
       res.json(dates);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspections dates' });
@@ -776,7 +901,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.get("/api/inspections/projects", authenticate, async (req, res) => {
     try {
-      const projects = await db.getInspectionsProjectsList(req.query);
+      const projects = await db.getInspectionsProjectsList(req.query, (req as any).user);
       res.json(projects);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspections projects' });
@@ -927,6 +1052,146 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete user' });
+    }
+  });
+
+  // --- DEPARTMENTS ---
+  app.get("/api/departments", async (req, res) => {
+    try {
+      const result = await db.getDepartments();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch departments', details: error.message });
+    }
+  });
+
+  app.post("/api/departments", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      }
+      await db.saveDepartment(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to save department', details: error.message });
+    }
+  });
+
+  app.delete("/api/departments/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      }
+      await db.deleteDepartment(req.params.id as string);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to delete department', details: error.message });
+    }
+  });
+
+  // --- DIVISIONS ---
+  app.get("/api/divisions", async (req, res) => {
+    try {
+      const result = await db.getDivisions();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch divisions', details: error.message });
+    }
+  });
+
+  app.post("/api/divisions", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      }
+      await db.saveDivision(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to save division', details: error.message });
+    }
+  });
+
+  app.delete("/api/divisions/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      }
+      await db.deleteDivision(req.params.id as string);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to delete division', details: error.message });
+    }
+  });
+
+  // --- TEAMS ---
+  app.get("/api/teams", async (req, res) => {
+    try {
+      const result = await db.getTeams();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch teams', details: error.message });
+    }
+  });
+
+  app.post("/api/teams", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      }
+      await db.saveTeam(req.body);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to save team', details: error.message });
+    }
+  });
+
+  app.delete("/api/teams/:id", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      }
+      await db.deleteTeam(req.params.id as string);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to delete team', details: error.message });
+    }
+  });
+
+  // --- USER ACTIVITY LOG OPERATIONS ---
+  app.post("/api/user-activity/log", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { action, entityType, entityId, details } = req.body;
+      if (!action) {
+        return res.status(400).json({ error: 'Missing action field' });
+      }
+      await db.logAudit(user.id, action, entityType || 'web_action', entityId || 'na', null, details || {});
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to log user action', details: error.message });
+    }
+  });
+
+  app.get("/api/users/:id/activity", authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const targetUserId = req.params.id as string;
+      
+      // Admin sees everyone, normal users only see themselves
+      if (user.id !== targetUserId && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+        return res.status(403).json({ error: 'Forbidden. You do not have permission to view operations of this user.' });
+      }
+      
+      const stats = await db.getUserActivityStats(targetUserId);
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch user operations activity', details: error.message });
     }
   });
 
@@ -2568,7 +2833,7 @@ app.get('/api/diag/db', async (req, res) => {
     const tables = [
       'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 
       'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo',
-      'defect_library', 'floor_plans', 'layout_pins', 'workshops', 'templates', 'roles', 'audit_logs', 'status_history'
+      'defect_library', 'floor_plans', 'layout_pins', 'workshops', 'templates', 'qms_roles', 'audit_logs', 'status_history'
     ];
     
     const results: any = {};

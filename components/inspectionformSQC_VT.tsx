@@ -516,21 +516,21 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       {hasDraft && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
-              <div className="bg-white/80 backdrop-blur-md border border-blue-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+              <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md border border-blue-200 dark:border-slate-700 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                      <div className="bg-blue-100 p-1.5 rounded-lg">
-                        <AlertCircle className="w-4 h-4 text-blue-600" />
+                      <div className="bg-blue-100 dark:bg-blue-900/30 p-1.5 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Phát hiện bản nháp</span>
-                          <span className="text-[8px] text-slate-500 font-bold">Dữ liệu SQC VT bạn đang nhập chưa được lưu.</span>
+                          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">Phát hiện bản nháp</span>
+                          <span className="text-[8px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold">Dữ liệu SQC VT bạn đang nhập chưa được lưu.</span>
                       </div>
                   </div>
                   <div className="flex gap-2">
-                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button>
+                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 dark:text-red-400">Xóa</button>
                       <button onClick={recoverDraft} className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-200 active:scale-95 transition-all">Khôi phục</button>
                   </div>
               </div>
@@ -538,24 +538,24 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       )}
       {(isProcessingImages || isLookupLoading || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
-              <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
                   <div className="relative flex items-center justify-center">
-                      <Loader2 className="w-16 h-16 text-blue-600 animate-spin opacity-20" />
+                      <Loader2 className="w-16 h-16 text-blue-600 dark:text-blue-400 animate-spin opacity-20" />
                       {isSaving && (
                           <div className="absolute flex flex-col items-center justify-center">
-                              <span className="text-xl font-black text-blue-600 font-mono tracking-tighter">{uploadProgress}%</span>
+                              <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{uploadProgress}%</span>
                           </div>
                       )}
-                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 animate-spin" />}
+                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />}
                   </div>
                   
                   <div className="w-full space-y-2">
-                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest text-center">
+                    <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">
                         {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : isSaving ? "Đang tải dữ liệu & ảnh lên server..." : "Đang xử lý hình ảnh..."}
                     </p>
                     
                     {isSaving && (
-                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
                             <div 
                                 className="h-full bg-blue-600 transition-all duration-300 ease-out" 
                                 style={{ width: `${uploadProgress}%` }}
@@ -569,51 +569,51 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
         {/* I. THÔNG TIN QUẢN LÝ */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-teal-50 pb-2 mb-1">
                 <h3 className="text-teal-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN GIA CÔNG VẬT TƯ</h3>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 hover:bg-teal-100 text-slate-600 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1 shadow-sm" type="button"><History className="w-3 h-3" /> Lịch sử</button>
+                    <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-teal-100 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1 shadow-sm" type="button"><History className="w-3 h-3" /> Lịch sử</button>
                 </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="space-y-1">
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label>
                     <div className="relative flex items-center">
-                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:ring-1 ring-teal-500 outline-none font-bold text-[11px] h-9 shadow-inner" placeholder="Mã PO..."/>
-                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-4 h-4"/></button>
+                        <input value={formData.po_number} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 ring-teal-500 outline-none font-bold text-[11px] h-9 shadow-inner" placeholder="Mã PO..."/>
+                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 dark:text-slate-500" type="button"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Thầu / Cung Cấp *</label>
-                    <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] h-9 uppercase shadow-inner" placeholder="Tên đơn vị..."/>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-1">Nhà Thầu / Cung Cấp *</label>
+                    <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-[11px] h-9 uppercase shadow-inner" placeholder="Tên đơn vị..."/>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ nhà cung cấp</label>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ nhà cung cấp</label>
                     <div className="flex gap-1.5 items-center">
-                        <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="flex-1 px-2 py-1.5 border border-slate-300 rounded-md font-bold text-[11px] h-9 shadow-inner" placeholder="Địa chỉ..."/>
-                        <button onClick={handleGetLocation} disabled={isGettingLocation} className="p-2.5 rounded-lg border bg-slate-50 text-slate-400" type="button"><Locate className="w-4 h-4" /></button>
+                        <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="flex-1 px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-9 shadow-inner" placeholder="Địa chỉ..."/>
+                        <button onClick={handleGetLocation} disabled={isGettingLocation} className="p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500" type="button"><Locate className="w-4 h-4" /></button>
                         {formData.location && (
-                            <a href={`https://www.google.com/maps/search/?api=1&query=${formData.location}`} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-lg border bg-slate-50 text-teal-600">
+                            <a href={`https://www.google.com/maps/search/?api=1&query=${formData.location}`} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-800/50 text-teal-600">
                                 <MapPin className="w-4 h-4" />
                             </a>
                         )}
                     </div>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày kiểm tra *</label>
-                    <input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9 shadow-inner"/>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-1">Ngày kiểm tra *</label>
+                    <input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold outline-none text-[11px] h-9 shadow-inner"/>
                 </div>
             </div>
 
             {/* Evidence Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-50">
-                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
-                    <label className="text-[8px] font-black text-blue-600 uppercase flex items-center justify-between">ẢNH HIỆN TRƯỜNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <label className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between">ẢNH HIỆN TRƯỜNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.images?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} referrerPolicy="no-referrer" />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, images: prev.images?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -625,12 +625,12 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                         ))}
                     </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
                     <label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">PHIẾU GIAO HÀNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.deliveryNoteImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.deliveryNoteImages!, i, { type: 'DELIVERY' })} referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.deliveryNoteImages!, i, { type: 'DELIVERY' })} referrerPolicy="no-referrer" />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -642,12 +642,12 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                         ))}
                     </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
                     <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">BÁO CÁO NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.reportImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.reportImages!, i, { type: 'REPORT' })} referrerPolicy="no-referrer" />
+                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => handleEditImage(formData.reportImages!, i, { type: 'REPORT' })} referrerPolicy="no-referrer" />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
                                     className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -662,18 +662,18 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             </div>
 
             {/* DANH MỤC TÀI LIỆU HỖ TRỢ */}
-            <div className="pt-4 border-t border-slate-100 space-y-3">
-                <h3 className="text-slate-700 font-bold uppercase tracking-widest flex items-center gap-2 text-[10px]"><FileCheck className="w-3.5 h-3.5 text-blue-500"/> DANH MỤC TÀI LIỆU HỖ TRỢ</h3>
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                <h3 className="text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest flex items-center gap-2 text-[10px]"><FileCheck className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400"/> DANH MỤC TÀI LIỆU HỖ TRỢ</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                     {(formData.supportingDocs || []).map(doc => (
-                        <button key={doc.id} onClick={() => toggleDoc(doc.id)} className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left ${doc.verified ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-400'}`} type="button">
+                        <button key={doc.id} onClick={() => toggleDoc(doc.id)} className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left ${doc.verified ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 text-blue-700 shadow-sm' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'}`} type="button">
                             {doc.verified ? <CheckSquare className="w-4 h-4 shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
                             <span className="text-[9px] font-bold uppercase leading-tight">{doc.name}</span>
                         </button>
                     ))}
                 </div>
                 <div className="flex gap-2 pt-2 max-w-2xl">
-                    <input value={newDocName} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100 shadow-inner" placeholder="Thêm tài liệu hỗ trợ khác..."/>
+                    <input value={newDocName} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100 shadow-inner" placeholder="Thêm tài liệu hỗ trợ khác..."/>
                     <button onClick={addCustomDoc} className="px-5 py-2 bg-slate-800 text-white rounded-lg text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-md">Thêm</button>
                 </div>
             </div>
@@ -682,7 +682,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         {/* II. DANH MỤC VẬT TƯ GIA CÔNG */}
         <section className="space-y-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
-                <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 text-xs">
+                <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 text-xs">
                     <ClipboardList className="w-4 h-4 text-teal-600"/> II. DANH MỤC VẬT TƯ GIA CÔNG ({formData.materials?.length || 0})
                 </h3>
                 <div className="flex items-center gap-2">
@@ -694,9 +694,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                             onChange={e => setMatSearchInput(e.target.value)}
                             onBlur={handleCommitMatSearch}
                             onKeyDown={handleKeyDownMatSearch}
-                            className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-teal-100 shadow-sm"
+                            className="pl-8 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-teal-100 shadow-sm"
                         />
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     </div>
                     <button onClick={handleAddMaterial} className="bg-teal-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-4 hover:bg-teal-700" type="button">
                         <Plus className="w-3.5 h-3.5"/> <span className="text-[10px] font-bold uppercase">Thêm Vật Tư</span>
@@ -716,49 +716,49 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                     const allPass = (mat.items?.length || 0) > 0 && mat.items?.every(it => it.status === CheckStatus.PASS);
                     
                     return (
-                    <div key={mat.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${isExp ? 'bg-teal-50/50 border-b border-teal-100' : 'bg-white hover:bg-slate-50'}`} onClick={() => setExpandedMaterial(isExp ? null : mat.id)}>
+                    <div key={mat.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${isExp ? 'bg-teal-50/50 border-b border-teal-100' : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`} onClick={() => setExpandedMaterial(isExp ? null : mat.id)}>
                             <div className="flex items-center gap-3 flex-1 overflow-hidden">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${isExp ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{matIdx + 1}</div>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 shadow-sm ${isExp ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{matIdx + 1}</div>
                                 <div className="flex-1 overflow-hidden">
                                     <div className="flex items-center gap-2">
-                                        <h4 className="font-bold text-slate-800 uppercase tracking-tight truncate text-xs">{mat.name || 'HẠNG MỤC MỚI'}</h4>
+                                        <h4 className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-tight truncate text-xs">{mat.name || 'HẠNG MỤC MỚI'}</h4>
                                         <div className="flex gap-1 shrink-0">
                                             {allPass && <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1"><CheckCircle className="w-2.5 h-2.5"/> ĐẠT</span>}
                                             {hasFail && <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1 animate-pulse"><AlertTriangle className="w-2.5 h-2.5"/> NCR</span>}
                                             {hasCond && <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1"><Info className="w-2.5 h-2.5"/> CĐK</span>}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">SL: {mat.deliveryQty} {mat.unit}</span><span className="text-[9px] font-bold text-green-600 uppercase border border-green-200 bg-green-50 px-1.5 py-0.5 rounded">{passRate}% ĐẠT</span></div>
+                                    <div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">SL: {mat.deliveryQty} {mat.unit}</span><span className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded">{passRate}% ĐẠT</span></div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600 rounded-md" type="button"><Trash2 className="w-4 h-4"/></button>
-                                {isExp ? <ChevronUp className="w-4 h-4 text-teal-500"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
+                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600 dark:text-red-400 rounded-md" type="button"><Trash2 className="w-4 h-4"/></button>
+                                {isExp ? <ChevronUp className="w-4 h-4 text-teal-500"/> : <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500"/>}
                             </div>
                         </div>
                         {isExp && (
-                            <div className="p-4 space-y-4 bg-white border-t border-slate-50">
+                            <div className="p-4 space-y-4 bg-white dark:bg-slate-900 border-t border-slate-50">
                                 {/* CLASSIFICATION MATRIX */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-12 gap-4 shadow-inner">
+                                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-12 gap-4 shadow-inner">
                                     <div className="md:col-span-3 space-y-1.5">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                             PHÂN LOẠI
                                         </label>
                                         <div className="relative">
                                             <select 
                                                 value={mat.scope} 
                                                 onChange={e => updateMaterial(matIdx, 'scope', e.target.value)}
-                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-black text-[11px] h-10 uppercase outline-none focus:ring-2 ring-teal-100 transition-all appearance-none"
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg font-black text-[11px] h-10 uppercase outline-none focus:ring-2 ring-teal-100 transition-all appearance-none"
                                             >
                                                 <option value="COMMON">DÙNG CHUNG</option>
                                                 <option value="PROJECT">CÔNG TRÌNH</option>
                                             </select>
-                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                                         </div>
                                     </div>
                                     <div className="md:col-span-3 space-y-1.5">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                             MÃ DỰ ÁN
                                         </label>
                                         <div className="relative flex items-center">
@@ -767,20 +767,20 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                 onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
                                                 onBlur={() => mat.scope === 'PROJECT' && lookupMaterialProject(mat.projectCode || '', matIdx)}
                                                 disabled={mat.scope === 'COMMON'}
-                                                className={`w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-[11px] h-10 outline-none transition-all shadow-sm ${mat.scope === 'COMMON' ? 'bg-slate-100 text-slate-400' : 'bg-white focus:ring-2 ring-teal-100'}`} 
+                                                className={`w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-[11px] h-10 outline-none transition-all shadow-sm ${mat.scope === 'COMMON' ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : 'bg-white dark:bg-slate-900 focus:ring-2 ring-teal-100'}`} 
                                                 placeholder="Mã CT..."
                                             />
                                         </div>
                                     </div>
                                     <div className="md:col-span-6 space-y-1.5">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                             TÊN CÔNG TRÌNH
                                         </label>
                                         <div className="relative flex items-center">
                                             <input 
                                                 value={mat.projectName || ''} 
                                                 readOnly 
-                                                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-bold text-[11px] h-10 text-slate-500 uppercase truncate" 
+                                                className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-[11px] h-10 text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase truncate" 
                                                 placeholder="..."
                                             />
                                             {isLookupLoading && mat.scope === 'PROJECT' && <Loader2 className="absolute right-3 w-4 h-4 animate-spin text-teal-500" />}
@@ -790,7 +790,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                                   <div className="md:col-span-3">
-                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
+                                      <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
                                       <div className="relative">
                                           <input 
                                               value={mat.category || ''} 
@@ -799,7 +799,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                   updateMaterial(matIdx, 'category', val);
                                               }} 
                                               list={`category-list-${matIdx}`}
-                                              className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold outline-none text-[11px] h-9 bg-white shadow-sm"
+                                              className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold outline-none text-[11px] h-9 bg-white dark:bg-slate-900 shadow-sm"
                                               placeholder="Tìm chủng loại..."
                                           />
                                           <datalist id={`category-list-${matIdx}`}>
@@ -811,31 +811,31 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                       </div>
                                   </div>
                                   <div className="md:col-span-2">
-                                      <label className="text-[9px] font-black text-blue-600 uppercase tracking-widest block mb-1">Loại kiểm</label>
-                                      <select value={mat.inspectType || '100%'} onChange={e => updateMaterial(matIdx, 'inspectType', e.target.value as any)} className="w-full px-2 py-1.5 border border-blue-300 rounded-lg font-black text-[11px] h-9 bg-white outline-none text-blue-700 shadow-sm">
+                                      <label className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-1">Loại kiểm</label>
+                                      <select value={mat.inspectType || '100%'} onChange={e => updateMaterial(matIdx, 'inspectType', e.target.value as any)} className="w-full px-2 py-1.5 border border-blue-300 rounded-lg font-black text-[11px] h-9 bg-white dark:bg-slate-900 outline-none text-blue-700 shadow-sm">
                                           <option value="100%">100%</option>
                                           <option value="AQL">AQL</option>
                                       </select>
                                   </div>
                                   <div className="md:col-span-7">
-                                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Tên Vật Tư Gia Công *</label>
-                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-xs shadow-sm uppercase" placeholder="Tên sản phẩm..."/>
+                                      <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Tên Vật Tư Gia Công *</label>
+                                      <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold focus:ring-1 ring-teal-500 outline-none text-xs shadow-sm uppercase" placeholder="Tên sản phẩm..."/>
                                   </div>
                                 </div>
                                 
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner">
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">SL Giao(DN)</label>
-                                        <input type="number" step="any" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1 border border-slate-300 rounded-md font-bold text-center bg-white text-[11px] h-9 shadow-sm"/>
+                                        <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">SL Giao(DN)</label>
+                                        <input type="number" step="any" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase block text-center">ĐVT</label>
+                                        <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">ĐVT</label>
                                         <div className="relative">
                                             <input 
                                                 list="unit-list" 
                                                 value={mat.unit} 
                                                 onChange={e => updateMaterial(matIdx, 'unit', e.target.value.toUpperCase())} 
-                                                className="w-full px-2 py-1 border border-slate-300 rounded-md font-black text-center bg-white text-[11px] h-9 shadow-sm uppercase" 
+                                                className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-black text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm uppercase" 
                                                 placeholder="Tìm/Thêm..."
                                             />
                                             <datalist id="unit-list">
@@ -845,21 +845,21 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-teal-600 uppercase block text-center">SL Kiểm tra</label>
-                                        <input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1 border border-teal-300 rounded-md font-bold text-center bg-white text-[11px] h-9 shadow-sm text-teal-700"/>
+                                        <input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1 border border-teal-300 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm text-teal-700"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-green-600 uppercase flex items-center justify-between px-1"><span>Đạt</span><span className="text-[8px] bg-green-100 px-1 rounded">{passRate}%</span></label>
-                                        <input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white text-[11px] h-9 shadow-sm"/>
+                                        <label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase flex items-center justify-between px-1"><span>Đạt</span><span className="text-[8px] bg-green-100 dark:bg-green-900/30 px-1 rounded">{passRate}%</span></label>
+                                        <input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-red-600 uppercase flex items-center justify-between px-1"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label>
-                                        <input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white text-[11px] h-9 shadow-sm"/>
+                                        <label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center justify-between px-1"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label>
+                                        <input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
                                     </div>
                                 </div>
 
-                                <div className="space-y-3 mt-4 border-t border-slate-100 pt-4">
+                                <div className="space-y-3 mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
                                     <div className="flex justify-between items-center px-1">
-                                        <h5 className="text-[10px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                                        <h5 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
                                             <CheckSquare className="w-4 h-4 text-teal-600"/> DANH MỤC HẠNG MỤC KIỂM TRA
                                         </h5>
                                         <button 
@@ -884,13 +884,13 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     </div>
 
                                     {(mat.items || []).map((item, itemIdx) => (
-                                        <div key={item.id} className={`bg-white rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-200'}`}>
+                                        <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
                                             <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
                                                 <div className="flex-1 pr-2">
                                                     <input 
                                                         value={item.label || ''} 
                                                         onChange={e => updateMaterialItem(matIdx, itemIdx, 'label', e.target.value)}
-                                                        className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase text-[11px]" 
+                                                        className="w-full font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-[11px]" 
                                                         placeholder="Tên hạng mục..." 
                                                     />
                                                 </div>
@@ -900,7 +900,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                         nextMats[matIdx].items = (nextMats[matIdx].items || []).filter((_, i) => i !== itemIdx);
                                                         setFormData(prev => ({ ...prev, materials: nextMats }));
                                                     }}
-                                                    className="p-1 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50"
+                                                    className="p-1 text-slate-300 hover:text-red-500 dark:text-red-400 rounded-lg hover:bg-red-50 dark:bg-red-900/20"
                                                     type="button"
                                                 >
                                                     <Trash2 className="w-3.5 h-3.5" />
@@ -911,20 +911,20 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                 <textarea 
                                                     value={item.notes || ''}
                                                     onChange={e => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)}
-                                                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] outline-none focus:ring-1 ring-teal-100"
+                                                    className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] outline-none focus:ring-1 ring-teal-100"
                                                     placeholder="Ghi chú kết quả..."
                                                     rows={2}
                                                 />
                                                 
                                                 <div className="flex flex-wrap gap-2 items-center justify-between">
-                                                    <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">
+                                                    <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 dark:border-slate-700 w-fit">
                                                         {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
-                                                            <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'CĐK'}</button>
+                                                            <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm') : 'text-slate-400 dark:text-slate-500 hover:bg-white dark:bg-slate-900'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'CĐK'}</button>
                                                         ))}
                                                     </div>
                                                     <div className="flex items-center gap-1">
-                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-teal-600" type="button"><Camera className="w-4 h-4"/></button>
-                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-teal-600" type="button"><ImageIcon className="w-4 h-4"/></button>
+                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-teal-600" type="button"><Camera className="w-4 h-4"/></button>
+                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-teal-600" type="button"><ImageIcon className="w-4 h-4"/></button>
                                                     </div>
                                                 </div>
                                                 
@@ -932,7 +932,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                                     {(item.images || []).map((img, i) => (
                                                         <div key={i} className="relative group shrink-0">
                                                             <div className="cursor-zoom-in" onClick={() => handleEditImage(item.images || [], i, { type: 'ITEM', matIdx, itemIdx })}>
-                                                                <img src={getProxyImageUrl(img)} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 object-cover shadow-sm" referrerPolicy="no-referrer" />
+                                                                <img src={getProxyImageUrl(img)} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover shadow-sm" referrerPolicy="no-referrer" />
                                                             </div>
                                                             <button onClick={() => {
                                                                 const nextMats = [...(formData.materials || [])];
@@ -950,7 +950,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                 </div>
 
                                 {/* MATERIAL IMAGES SECTION */}
-                                <div className="mt-6 pt-4 border-t border-slate-200 space-y-3">
+                                <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
                                     <div className="flex justify-between items-center px-1">
                                         <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
                                             <ImageIcon className="w-4 h-4"/> HÌNH ẢNH SẢN PHẨM
@@ -958,14 +958,14 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                         <div className="flex gap-2">
                                             <button 
                                                 onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); cameraInputRef.current?.click(); }} 
-                                                className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
+                                                className="p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
                                                 type="button"
                                             >
                                                 <Camera className="w-4 h-4" />
                                             </button>
                                             <button 
                                                 onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); fileInputRef.current?.click(); }} 
-                                                className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
+                                                className="p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
                                                 type="button"
                                             >
                                                 <ImageIcon className="w-4 h-4" />
@@ -977,7 +977,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                             <div key={i} className="relative group shrink-0">
                                                 <img 
                                                     src={getProxyImageUrl(img)} 
-                                                    className="w-14 h-14 rounded-xl border border-slate-200 object-cover cursor-zoom-in shadow-md" 
+                                                    className="w-14 h-14 rounded-xl border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in shadow-md" 
                                                     onClick={() => handleEditImage(mat.images!, i, { type: 'MATERIAL', matIdx })} 
                                                     referrerPolicy="no-referrer"
                                                 />
@@ -997,7 +997,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                             </div>
                                         ))}
                                         {(!mat.images || mat.images.length === 0) && (
-                                            <div className="flex-1 h-14 flex items-center justify-center border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/30">
+                                            <div className="flex-1 h-14 flex items-center justify-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-800/50/30">
                                                 <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">CHƯA CÓ ẢNH SẢN PHẨM</p>
                                             </div>
                                         )}
@@ -1012,9 +1012,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         </section>
 
         {/* III. XÁC NHẬN */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
             <h3 className="text-teal-800 border-b border-teal-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><PenTool className="w-4 h-4"/> III. XÁC NHẬN BÁO CÁO</h3>
-            <textarea value={formData.summary} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:bg-white h-24 resize-none text-[11px] shadow-inner" placeholder="Nhập ghi chú / nhận xét tổng quát của QC..."/>
+            <textarea value={formData.summary} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-medium text-slate-700 dark:text-slate-300 outline-none focus:bg-white dark:bg-slate-900 h-24 resize-none text-[11px] shadow-inner" placeholder="Nhập ghi chú / nhận xét tổng quát của QC..."/>
             <div className="pt-2">
                 <SignaturePad 
                 label={`QC Ký Tên (${user.name})`} 
@@ -1026,8 +1026,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         </section>
       </div>
 
-      <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
-        <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 text-[10px]" type="button">HỦY BỎ</button>
+      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+        <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 rounded-xl transition-all border border-slate-200 dark:border-slate-700 text-[10px]" type="button">HỦY BỎ</button>
         <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="h-[44px] flex-1 bg-teal-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-teal-800 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px] transition-all" type="button">
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
             <span>GỬI DUYỆT SQC-VT</span>

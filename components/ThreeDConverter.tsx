@@ -112,16 +112,16 @@ export const ThreeDConverter: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0 bg-slate-50">
+    <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0 bg-slate-50 dark:bg-slate-800/50">
       {/* Header */}
-      <div className="bg-white p-4 border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 p-4 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg text-white shadow-lg">
             <Box className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800">Chuyển đổi 2D sang 3D</h2>
-            <p className="text-xs text-slate-500">AI Rendering & Phân tách chi tiết (Hỗ trợ Ảnh & PDF)</p>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Chuyển đổi 2D sang 3D</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">AI Rendering & Phân tách chi tiết (Hỗ trợ Ảnh & PDF)</p>
           </div>
         </div>
       </div>
@@ -131,14 +131,14 @@ export const ThreeDConverter: React.FC = () => {
           
           {/* Left Column: Input & Controls */}
           <div className="flex flex-col gap-4">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col h-full">
-              <h3 className="font-bold text-slate-700 mb-4 flex items-center">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col h-full">
+              <h3 className="font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center">
                 <Upload className="w-4 h-4 mr-2" /> 1. Tải lên Bản vẽ 2D
               </h3>
               
               <div 
                 onClick={() => fileInputRef.current?.click()}
-                className={`flex-1 min-h-[200px] max-h-[400px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-colors relative overflow-hidden bg-slate-50 hover:bg-slate-100 ${inputData ? 'border-blue-300' : 'border-slate-300 hover:border-blue-400'}`}
+                className={`flex-1 min-h-[200px] max-h-[400px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-colors relative overflow-hidden bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 ${inputData ? 'border-blue-300' : 'border-slate-300 dark:border-slate-600 hover:border-blue-400'}`}
               >
                 <input 
                   type="file" 
@@ -151,10 +151,10 @@ export const ThreeDConverter: React.FC = () => {
                 {inputData ? (
                   <div className="w-full h-full flex flex-col items-center justify-center relative p-4">
                     {fileType === 'application/pdf' ? (
-                         <div className="flex flex-col items-center justify-center text-red-500">
+                         <div className="flex flex-col items-center justify-center text-red-500 dark:text-red-400">
                              <FileText className="w-20 h-20 mb-4 drop-shadow-sm" />
-                             <p className="text-slate-700 font-bold text-lg text-center break-all px-4">{fileName}</p>
-                             <p className="text-slate-400 text-sm mt-1 uppercase">PDF Document</p>
+                             <p className="text-slate-700 dark:text-slate-300 font-bold text-lg text-center break-all px-4">{fileName}</p>
+                             <p className="text-slate-400 dark:text-slate-500 text-sm mt-1 uppercase">PDF Document</p>
                          </div>
                     ) : (
                         <img src={getProxyImageUrl(inputData)} alt="Input" className="w-full h-full object-contain p-2" />
@@ -166,36 +166,36 @@ export const ThreeDConverter: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-center p-6">
-                    <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <div className="w-16 h-16 bg-blue-50 dark:bg-slate-800/80 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-3">
                       <ImageIcon className="w-8 h-8" />
                     </div>
-                    <p className="font-medium text-slate-700">Tải lên bản vẽ kỹ thuật</p>
-                    <p className="text-sm text-slate-400 mt-1">Hỗ trợ JPG, PNG, PDF (Max 40MB)</p>
+                    <p className="font-medium text-slate-700 dark:text-slate-300">Tải lên bản vẽ kỹ thuật</p>
+                    <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Hỗ trợ JPG, PNG, PDF (Max 40MB)</p>
                   </div>
                 )}
               </div>
 
               <div className="mt-6 space-y-4">
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-2 block">2. Chọn Chế độ tạo</label>
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase ml-1 mb-2 block">2. Chọn Chế độ tạo</label>
                     <div className="grid grid-cols-3 gap-2">
                         <button 
                             onClick={() => setMode('STANDARD')}
-                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'STANDARD' ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'STANDARD' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}
                         >
                             <Cuboid className="w-5 h-5"/>
                             <span>Mặc định</span>
                         </button>
                         <button 
                             onClick={() => setMode('ROTATION')}
-                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'ROTATION' ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'ROTATION' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}
                         >
                             <Rotate3D className="w-5 h-5"/>
                             <span>Xoay 360°</span>
                         </button>
                         <button 
                             onClick={() => setMode('EXPLODED')}
-                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'EXPLODED' ? 'bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'EXPLODED' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}
                         >
                             <Layers className="w-5 h-5"/>
                             <span>Phân tách</span>
@@ -204,12 +204,12 @@ export const ThreeDConverter: React.FC = () => {
                 </div>
 
                 <div>
-                   <label className="text-xs font-bold text-slate-500 uppercase ml-1 block mb-1">Mô tả chi tiết (Optional)</label>
+                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase ml-1 block mb-1">Mô tả chi tiết (Optional)</label>
                    <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Ví dụ: Ghế gỗ sồi, nệm vải màu xám, chân kim loại đen..."
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20 bg-slate-50"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20 bg-slate-50 dark:bg-slate-800/50"
                    />
                 </div>
                 
@@ -236,13 +236,13 @@ export const ThreeDConverter: React.FC = () => {
 
           {/* Right Column: Output */}
           <div className="flex flex-col gap-4">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col h-full relative">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col h-full relative">
               <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-slate-700 flex items-center">
+                  <h3 className="font-bold text-slate-700 dark:text-slate-300 flex items-center">
                     <Box className="w-4 h-4 mr-2" /> Kết quả 3D
                   </h3>
                   {mode === 'ROTATION' && outputImage && (
-                      <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold">
+                      <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 px-2 py-1 rounded-full font-bold">
                           Kéo để xoay
                       </span>
                   )}
@@ -271,7 +271,7 @@ export const ThreeDConverter: React.FC = () => {
                         <Box className="absolute inset-0 m-auto text-white w-8 h-8 animate-pulse" />
                     </div>
                     <p className="text-slate-300 animate-pulse">AI đang dựng hình...</p>
-                    <p className="text-xs text-slate-500 mt-2">Đang chuyển đổi bản vẽ sang {mode.toLowerCase()}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2">Đang chuyển đổi bản vẽ sang {mode.toLowerCase()}</p>
                   </div>
                 ) : outputImage ? (
                     mode === 'ROTATION' ? (
@@ -294,7 +294,7 @@ export const ThreeDConverter: React.FC = () => {
                         <img src={getProxyImageUrl(outputImage)} alt="3D Output" className="w-full h-full object-contain pointer-events-none" />
                     )
                 ) : (
-                  <div className="text-center text-slate-500 p-8 opacity-50">
+                  <div className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500 p-8 opacity-50">
                     <Box className="w-16 h-16 mx-auto mb-3" />
                     <p>Kết quả sẽ hiển thị tại đây</p>
                   </div>
@@ -303,7 +303,7 @@ export const ThreeDConverter: React.FC = () => {
 
               {outputImage && (
                 <div className="mt-4 flex justify-between items-center">
-                   <div className="text-xs text-slate-500 italic">
+                   <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 italic">
                       {mode === 'ROTATION' ? 'Di chuột/ngón tay ngang màn hình để xoay.' : 'Hình ảnh độ phân giải cao.'}
                    </div>
                    <Button onClick={handleDownload} variant="secondary" icon={<Download className="w-4 h-4" />}>

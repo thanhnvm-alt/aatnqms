@@ -420,8 +420,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       {/* HEADER: Clean & Professional Dark Style */}
       <div className="h-14 pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 text-white bg-[#0f172a]/90 backdrop-blur-xl border-b border-white/5 shrink-0 z-[60]">
         <div className="flex items-center gap-3">
-          <button onClick={() => { if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) handleCommitEdit(); else onClose(); }} className="p-3 hover:bg-white/10 rounded-full transition-all active:scale-90"><X className="w-6 h-6" /></button>
-          <div className="h-6 w-px bg-white/10 mx-1"></div>
+          <button onClick={() => { if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) handleCommitEdit(); else onClose(); }} className="p-3 hover:bg-white dark:bg-slate-900/10 rounded-full transition-all active:scale-90"><X className="w-6 h-6" /></button>
+          <div className="h-6 w-px bg-white dark:bg-slate-900/10 mx-1"></div>
           <div>
             <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-white/90 leading-none">
                 {isEditing ? 'ISO EDITOR MODE' : 'REVIEW HD MODE'}
@@ -432,7 +432,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
         <div className="flex items-center gap-2">
           
-          {!isEditing && <button onClick={handleDownload} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5" title="Tải xuống HD"><Download className="w-4 h-4 opacity-70" /></button>}
+          {!isEditing && <button onClick={handleDownload} className="p-2.5 bg-white dark:bg-slate-900/5 hover:bg-white dark:bg-slate-900/10 rounded-xl transition-all border border-white/5" title="Tải xuống HD"><Download className="w-4 h-4 opacity-70" /></button>}
           
           {!readOnly && !isEditing && (
             <button onClick={() => setIsEditing(true)} disabled={!!loadError} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50 transition-all border border-blue-500">
@@ -442,7 +442,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           
           {isEditing && (
             <div className="flex items-center gap-2 animate-in slide-in-from-right-4">
-              <button onClick={handleUndo} disabled={history.length <= 1 || isLoadingImage} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl active:scale-90 transition-all border border-white/10"><Undo2 className="w-4 h-4" /></button>
+              <button onClick={handleUndo} disabled={history.length <= 1 || isLoadingImage} className="p-2.5 bg-white dark:bg-slate-900/5 hover:bg-white dark:bg-slate-900/10 rounded-xl active:scale-90 transition-all border border-white/10"><Undo2 className="w-4 h-4" /></button>
               <button onClick={handleCommitEdit} disabled={isProcessing || isLoadingImage || !!loadError} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-emerald-500/20 active:scale-95 border border-emerald-500">
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4" />} <span className="hidden sm:inline">LƯU THAY ĐỔI</span>
               </button>
@@ -489,8 +489,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             {/* Floating Navigation Controls */}
             {images.length > 1 && (
               <>
-                <button onClick={handlePrev} className="absolute left-6 w-14 h-14 bg-white/5 hover:bg-white/10 rounded-full backdrop-blur-xl z-40 transition-all border border-white/5 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronLeft className="w-8 h-8 text-white/40 group-hover:text-white transition-colors" /></button>
-                <button onClick={handleNext} className="absolute right-6 w-14 h-14 bg-white/5 hover:bg-white/10 rounded-full backdrop-blur-xl z-40 transition-all border border-white/5 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronRight className="w-8 h-8 text-white/40 group-hover:text-white transition-colors" /></button>
+                <button onClick={handlePrev} className="absolute left-6 w-14 h-14 bg-white dark:bg-slate-900/5 hover:bg-white dark:bg-slate-900/10 rounded-full backdrop-blur-xl z-40 transition-all border border-white/5 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronLeft className="w-8 h-8 text-white/40 group-hover:text-white transition-colors" /></button>
+                <button onClick={handleNext} className="absolute right-6 w-14 h-14 bg-white dark:bg-slate-900/5 hover:bg-white dark:bg-slate-900/10 rounded-full backdrop-blur-xl z-40 transition-all border border-white/5 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronRight className="w-8 h-8 text-white/40 group-hover:text-white transition-colors" /></button>
               </>
             )}
 
@@ -500,7 +500,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-2 text-white/40 hover:text-white transition-colors active:scale-90"><ZoomOut className="w-5 h-5"/></button>
                     <button 
                         onClick={() => { setZoom(1); setPan({x:0,y:0}); }}
-                        className="flex flex-col items-center min-w-[60px] hover:bg-white/5 px-2 py-1 rounded-xl transition-colors"
+                        className="flex flex-col items-center min-w-[60px] hover:bg-white dark:bg-slate-900/5 px-2 py-1 rounded-xl transition-colors"
                     >
                         <span className="text-[12px] font-black text-white leading-none">{Math.round(zoom * 100)}%</span>
                         <span className="text-[6px] font-black text-blue-400 uppercase tracking-widest mt-1">Reset</span>
@@ -530,7 +530,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <div className="relative group/canvas overflow-hidden" ref={canvasContainerRef}>
                       <canvas 
                         ref={canvasRef} 
-                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white cursor-crosshair touch-none rounded-sm border-2 border-white/10 max-w-[98vw] max-h-[75vh] w-auto h-auto object-contain"
+                        className="shadow-[0_60px_150px_rgba(0,0,0,0.8)] bg-white dark:bg-slate-900 cursor-crosshair touch-none rounded-sm border-2 border-white/10 max-w-[98vw] max-h-[75vh] w-auto h-auto object-contain"
                         style={{
                             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                             transformOrigin: 'center',
@@ -558,11 +558,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                                             <span>Typing Annotation</span>
                                         </div>
-                                        <button onClick={() => setActiveText(null)} className="hover:bg-white/10 p-1 rounded-lg transition-colors"><X className="w-4 h-4 text-white/40" /></button>
+                                        <button onClick={() => setActiveText(null)} className="hover:bg-white dark:bg-slate-900/10 p-1 rounded-lg transition-colors"><X className="w-4 h-4 text-white/40" /></button>
                                     </div>
                                     <input 
                                         autoFocus
-                                        className="w-full bg-white/10 text-white px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                                        className="w-full bg-white dark:bg-slate-900/10 text-white px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold"
                                         value={activeText.value}
                                         onChange={e => setActiveText({ ...activeText, value: e.target.value })}
                                         onKeyDown={e => {
@@ -580,7 +580,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                         </button>
                                         <button 
                                             onClick={() => setShowQuickLibrary(!showQuickLibrary)}
-                                            className="p-2 bg-white/5 text-white/50 hover:text-white rounded-lg"
+                                            className="p-2 bg-white dark:bg-slate-900/5 text-white/50 hover:text-white rounded-lg"
                                             title="Thư viện chữ mẫu"
                                         >
                                             <MessageSquare className="w-4 h-4" />
@@ -593,7 +593,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
                                                 <input 
                                                     type="text"
-                                                    className="w-full bg-white/5 text-white/70 pl-7 pr-2 py-1.5 rounded-lg text-[9px] font-bold outline-none border border-white/10 focus:border-blue-500/50 transition-all font-sans"
+                                                    className="w-full bg-white dark:bg-slate-900/5 text-white/70 pl-7 pr-2 py-1.5 rounded-lg text-[9px] font-bold outline-none border border-white/10 focus:border-blue-500/50 transition-all font-sans"
                                                     placeholder="TÌM NHANH..."
                                                     value={quickTextSearchInput}
                                                     onChange={e => setQuickTextSearchInput(e.target.value.toUpperCase())}
@@ -606,7 +606,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                                 <button 
                                                     key={`${t}-${idx}`}
                                                     onClick={() => commitTextToCanvas(t)}
-                                                    className="text-left px-2.5 py-2 text-[8px] font-bold text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors uppercase truncate"
+                                                    className="text-left px-2.5 py-2 text-[8px] font-bold text-white/60 hover:text-white hover:bg-white dark:bg-slate-900/10 rounded-lg transition-colors uppercase truncate"
                                                 >
                                                     {t}
                                                 </button>
@@ -637,18 +637,18 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 
                 {/* 1. Mode Selector */}
                 <div className="group/tools">
-                  <div className="flex gap-1.5 bg-white/5 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
-                      <button onClick={() => setMode('draw')} className={`p-2.5 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-4.5 h-4.5" /></button>
-                      <button onClick={() => setMode('text')} className={`p-2.5 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-4.5 h-4.5" /></button>
-                      <button onClick={() => setMode('pan')} className={`p-2.5 rounded-xl transition-all ${mode === 'pan' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Di chuyển"><Move className="w-4.5 h-4.5" /></button>
+                  <div className="flex gap-1.5 bg-white dark:bg-slate-900/5 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
+                      <button onClick={() => setMode('draw')} className={`p-2.5 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white dark:bg-slate-900/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('text')} className={`p-2.5 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white dark:bg-slate-900/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('pan')} className={`p-2.5 rounded-xl transition-all ${mode === 'pan' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white dark:bg-slate-900/10 hover:text-white'}`} title="Di chuyển"><Move className="w-4.5 h-4.5" /></button>
                   </div>
                 </div>
 
-                <div className="w-px h-8 bg-white/10"></div>
+                <div className="w-px h-8 bg-white dark:bg-slate-900/10"></div>
 
                 {/* 2. Color Palette */}
                 <div className="group/colors">
-                  <div className="flex gap-2.5 bg-white/5 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
+                  <div className="flex gap-2.5 bg-white dark:bg-slate-900/5 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
                       {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff', '#000000'].map(c => (
                           <button 
                               key={c} 
@@ -660,17 +660,17 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   </div>
                 </div>
 
-                <div className="w-px h-8 bg-white/10"></div>
+                <div className="w-px h-8 bg-white dark:bg-slate-900/10"></div>
 
                 {/* 3. Controls & Size */}
-                <div className="flex items-center gap-6 flex-1 bg-white/5 p-2 rounded-[1.25rem] border border-white/5 min-w-[240px]">
+                <div className="flex items-center gap-6 flex-1 bg-white dark:bg-slate-900/5 p-2 rounded-[1.25rem] border border-white/5 min-w-[240px]">
                   <div className="flex items-center gap-2 px-1">
                       <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-2 text-white/30 hover:text-blue-400 transition-colors"><ZoomOut className="w-4 h-4"/></button>
-                      <button onClick={() => { setZoom(1); setPan({x:0,y:0}); }} className="text-[10px] font-black text-white px-2 w-12 text-center bg-white/5 rounded-lg py-1">{Math.round(zoom * 100)}%</button>
+                      <button onClick={() => { setZoom(1); setPan({x:0,y:0}); }} className="text-[10px] font-black text-white px-2 w-12 text-center bg-white dark:bg-slate-900/5 rounded-lg py-1">{Math.round(zoom * 100)}%</button>
                       <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-2 text-white/30 hover:text-blue-400 transition-colors"><ZoomIn className="w-4 h-4"/></button>
                   </div>
                   
-                  <div className="w-px h-6 bg-white/10"></div>
+                  <div className="w-px h-6 bg-white dark:bg-slate-900/10"></div>
 
                   <div className="flex items-center gap-4 flex-1">
                     <div className="flex flex-col gap-0.5 shrink-0">
@@ -681,7 +681,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                       type="range" min="2" max="40" 
                       value={brushSize} 
                       onChange={e => setBrushSize(parseInt(e.target.value))} 
-                      className="flex-1 h-1.5 bg-white/10 rounded-full appearance-none accent-blue-500 cursor-pointer overflow-hidden" 
+                      className="flex-1 h-1.5 bg-white dark:bg-slate-900/10 rounded-full appearance-none accent-blue-500 cursor-pointer overflow-hidden" 
                     />
                   </div>
                 </div>
@@ -691,7 +691,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             {/* Status Info */}
             <div className="flex items-center justify-between text-white/30 text-[9px] font-black uppercase tracking-[0.3em] select-none border-t border-white/5 pt-4">
               <div className="flex gap-6">
-                <span className="flex items-center gap-2"><History className="w-3 h-3 text-blue-500/50" /> {history.length - 1} States Saved</span>
+                <span className="flex items-center gap-2"><History className="w-3 h-3 text-blue-500 dark:text-blue-400/50" /> {history.length - 1} States Saved</span>
                 <span className="flex items-center gap-2"><Palette className="w-3 h-3 text-emerald-500/50" /> {color} Active</span>
               </div>
               <div className="flex gap-4">

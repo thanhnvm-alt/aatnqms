@@ -27,26 +27,26 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
         <div className="space-y-4 md:space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                        <Layers className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+                    <h3 className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight flex items-center gap-2">
+                        <Layers className="w-5 h-5 md:w-6 md:h-6 text-blue-600 dark:text-blue-400" />
                         Drawing Library
                     </h3>
-                    <p className="text-[8px] md:text-[10px] text-slate-400 font-bold mt-0.5 md:mt-1 uppercase tracking-widest">
+                    <p className="text-[8px] md:text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-0.5 md:mt-1 uppercase tracking-widest">
                         MANAGE ARCHITECTURAL LEVELS & VERSIONS
                     </p>
                 </div>
 
                 <div className="flex items-center gap-2 w-full md:w-auto">
-                    <div className="hidden sm:flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <div className="hidden sm:flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
                         <button 
                             onClick={() => setViewMode('GRID')}
-                            className={`p-2 rounded-lg transition-all ${viewMode === 'GRID' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                            className={`p-2 rounded-lg transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
                         >
                             <LayoutGrid className="w-4 h-4" />
                         </button>
                         <button 
                             onClick={() => setViewMode('LIST')}
-                            className={`p-2 rounded-lg transition-all ${viewMode === 'LIST' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}
+                            className={`p-2 rounded-lg transition-all ${viewMode === 'LIST' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
                         >
                             <List className="w-4 h-4" />
                         </button>
@@ -62,16 +62,16 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
             </div>
 
             {isLoading ? (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-                    <Loader2 className="w-10 h-10 md:w-12 md:h-12 animate-spin text-blue-600 mb-4" />
+                <div className="py-20 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
+                    <Loader2 className="w-10 h-10 md:w-12 md:h-12 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
                     <p className="font-black uppercase tracking-widest text-[9px] md:text-xs">Loading Drawing Library...</p>
                 </div>
             ) : plans.length === 0 ? (
                 <div 
                     onClick={onUploadPlan}
-                    className="py-16 md:py-24 border-4 border-dashed border-slate-200 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50/50 transition-all cursor-pointer group"
+                    className="py-16 md:py-24 border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:border-blue-300 hover:text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80/50 transition-all cursor-pointer group"
                 >
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-slate-50 flex items-center justify-center mb-4 md:mb-6 group-hover:scale-110 transition-transform">
+                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center mb-4 md:mb-6 group-hover:scale-110 transition-transform">
                         <Upload className="w-8 h-8 md:w-10 md:h-10" />
                     </div>
                     <p className="font-black uppercase tracking-widest text-xs md:text-sm">UPLOAD FIRST FLOOR PLAN</p>
@@ -82,11 +82,11 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                     {plans.map(plan => (
                         <div 
                             key={plan.id}
-                            className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl hover:border-blue-300 transition-all animate-in zoom-in duration-300"
+                            className="bg-white dark:bg-slate-900 rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl hover:border-blue-300 transition-all animate-in zoom-in duration-300"
                         >
                             <div 
                                 onClick={() => onSelectPlan(plan)}
-                                className="aspect-[16/10] sm:aspect-[4/3] bg-slate-100 relative cursor-pointer overflow-hidden border-b border-slate-50"
+                                className="aspect-[16/10] sm:aspect-[4/3] bg-slate-100 dark:bg-slate-800 relative cursor-pointer overflow-hidden border-b border-slate-50"
                             >
                                 <img 
                                     src={getProxyImageUrl(plan.image_url)} 
@@ -94,7 +94,7 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                                     alt={plan.name}
                                 />
                                 <div className="absolute top-3 left-3 md:top-4 md:left-4">
-                                    <span className={`px-2 md:px-2.5 py-1 bg-white/90 backdrop-blur-md rounded-lg text-[8px] font-black uppercase tracking-widest border border-blue-100 shadow-sm ${plan.status === 'ACTIVE' ? 'text-blue-600' : 'text-slate-400'}`}>
+                                    <span className={`px-2 md:px-2.5 py-1 bg-white dark:bg-slate-900/90 backdrop-blur-md rounded-lg text-[8px] font-black uppercase tracking-widest border border-blue-100 dark:border-slate-700 shadow-sm ${plan.status === 'ACTIVE' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>
                                         V{plan.version} • {plan.status}
                                     </span>
                                 </div>
@@ -102,19 +102,19 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
 
                             <div className="p-5 md:p-6 flex-1 flex flex-col justify-between">
                                 <div className="space-y-1.5 md:space-y-2">
-                                    <h4 className="font-black text-slate-800 uppercase text-xs md:text-sm tracking-tight truncate">{plan.name}</h4>
-                                    <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase truncate">ID: {plan.file_name}</p>
+                                    <h4 className="font-black text-slate-800 dark:text-slate-200 uppercase text-xs md:text-sm tracking-tight truncate">{plan.name}</h4>
+                                    <p className="text-[8px] md:text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase truncate">ID: {plan.file_name}</p>
                                 </div>
 
                                 <div className="mt-4 md:mt-6 flex items-center justify-between border-t border-slate-50 pt-3 md:pt-4">
                                     <div className="flex flex-col">
-                                        <div className="flex items-center gap-1.5 text-blue-600">
+                                        <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
                                             <CheckCircle className="w-3.5 h-3.5" />
                                             <span className="text-[9px] md:text-[10px] font-black uppercase">{plan.active_inspections || 0} Points</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete this layout?')) onDeletePlan(plan.id); }} className="p-2 text-slate-300 hover:text-red-500 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete this layout?')) onDeletePlan(plan.id); }} className="p-2 text-slate-300 hover:text-red-500 dark:text-red-400 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
                                         <button onClick={() => onSelectPlan(plan)} className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-slate-900 text-white flex items-center justify-center hover:bg-blue-600 transition-all shadow-lg active:scale-90"><ChevronRight className="w-5 h-5" /></button>
                                     </div>
                                 </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Loader2, Building2, ChevronDown, Download, Upload, Search } from 'lucide-react';
 import { IPODetail } from './IPODetail';
-import { IPOItem, User } from '../types';
+import { IPOItem, User, hasPermission } from '../types';
 import { exportIpoData, importIpoFile } from '../services/apiService';
 
 export default function IPOPage({ user }: { user: User }) {
@@ -142,28 +142,28 @@ export default function IPOPage({ user }: { user: User }) {
       );
   }
 
-  if (loading && data.length === 0) return <div className="flex justify-center p-10"><Loader2 className="animate-spin w-8 h-8 text-blue-500" /></div>;
-  if (error) return <div className="p-4 text-red-500">Error: {error}</div>;
+  if (loading && data.length === 0) return <div className="flex justify-center p-10"><Loader2 className="animate-spin w-8 h-8 text-blue-500 dark:text-blue-400" /></div>;
+  if (error) return <div className="p-4 text-red-500 dark:text-red-400">Error: {error}</div>;
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 font-sans">
-      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-20 shadow-sm">
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-[#0b1120] font-sans transition-colors duration-200">
+      <div className="shrink-0 bg-white dark:bg-[#0f172a] px-4 py-3 border-b border-slate-200 dark:border-slate-800 z-20 shadow-sm transition-colors">
           <div className="max-w-7xl mx-auto flex flex-col gap-3">
             <div className="relative w-full flex items-center justify-between gap-3">
                     <div className="relative flex-1">
                         <input 
                             type="text" 
                             placeholder="Tìm kiếm: Mã FO, Tender, vật tư..." 
-                            className="w-full pl-10 pr-4 h-11 bg-[#f1f5f9] border border-slate-200 rounded-full text-[10px] font-black text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner"
+                            className="w-full pl-10 pr-4 h-11 bg-[#f1f5f9] dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-full text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:bg-white dark:bg-slate-900 dark:focus:bg-slate-800 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/40 transition-all shadow-inner"
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onBlur={handleCommitSearch}
                             onKeyDown={handleKeyDown}
                         />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     </div>
 
-                    {user?.role !== 'QC' && (
+                    {hasPermission(user, [], 'IPO', 'EXPORT') && (
                         <div className="flex gap-2 shrink-0">
                            <button 
                                 onClick={handleExport}
@@ -173,26 +173,30 @@ export default function IPOPage({ user }: { user: User }) {
                             >
                                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                             </button>
-                            <input 
-                                type="file" 
-                                id="ipo-import" 
-                                className="hidden" 
-                                onChange={handleImport}
-                                accept=".xlsx, .xls"
-                            />
-                            <label 
-                                htmlFor="ipo-import"
-                                className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
-                                title="Nhập Excel"
-                            >
-                                <Upload className="w-4 h-4" />
-                            </label>
+                            {hasPermission(user, [], 'IPO', 'IMPORT') && (
+                                <>
+                                    <input 
+                                        type="file" 
+                                        id="ipo-import" 
+                                        className="hidden" 
+                                        onChange={handleImport}
+                                        accept=".xlsx, .xls"
+                                    />
+                                    <label 
+                                        htmlFor="ipo-import"
+                                        className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+                                        title="Nhập Excel"
+                                    >
+                                        <Upload className="w-4 h-4" />
+                                    </label>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
                 
                 <div className="flex items-center justify-between px-2">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                         TỔNG CỘNG: {total} KẾ HOẠCH
                     </p>
                 </div>
@@ -206,28 +210,28 @@ export default function IPOPage({ user }: { user: User }) {
                     const isExpanded = expandedGroups.has(groupKey);
 
                     return (
-                        <div key={groupKey} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-all">
-                            <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50/40 border-b border-blue-100' : 'bg-white hover:bg-slate-50'}`}>
+                        <div key={groupKey} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm transition-all hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-700">
+                            <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20/40 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-800' : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}>
                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
-                                    <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}><Building2 className="w-4.5 h-4.5" /></div>
-                                    <h3 className="font-black text-[11px] uppercase truncate text-slate-800 tracking-tight">{groupKey}</h3>
+                                    <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 dark:bg-blue-600 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}><Building2 className="w-4.5 h-4.5" /></div>
+                                    <h3 className="font-bold text-sm uppercase truncate text-slate-800 dark:text-slate-200 tracking-tight">{groupKey}</h3>
                                 </div>
-                                <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`} />
+                                <ChevronDown className={`w-5 h-5 text-slate-300 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600 dark:text-blue-400' : ''}`} />
                             </div>
                             {isExpanded && (
-                                <div className="p-2.5 space-y-2 bg-slate-50/30 animate-in slide-in-from-top-1">
+                                <div className="p-2.5 space-y-2 bg-slate-50 dark:bg-slate-800/50/30 dark:bg-slate-900 animate-in slide-in-from-top-1">
                                     {groupItems.map((item, idx) => (
                                         <div 
                                             key={idx} 
                                             onClick={() => handleItemClick(item)}
-                                            className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-2 cursor-pointer hover:border-blue-300 transition-all"
+                                            className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2 cursor-pointer hover:border-blue-300 dark:hover:border-blue-500 transition-all"
                                         >
                                             <div className="flex justify-between items-start">
-                                                <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg border border-slate-200 uppercase font-mono">#{item.ID_Factory_Order || 'N/A'}</span>
+                                                <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 uppercase font-mono">#{item.ID_Factory_Order || 'N/A'}</span>
                                             </div>
-                                            <h4 className="text-[12px] font-black text-slate-800 uppercase leading-tight">{item.Material_description}</h4>
-                                            <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">SL: {item.Quantity_IPO} {item.Base_Unit}</span>
+                                            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase leading-tight">{item.Material_description}</h4>
+                                            <div className="flex items-center justify-between pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-tighter">SL: {item.Quantity_IPO} {item.Base_Unit}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -239,22 +243,22 @@ export default function IPOPage({ user }: { user: User }) {
 
                 {/* PAGINATION */}
                 {total > limit && (
-                    <div className="flex items-center justify-between px-4 py-4 border-t border-slate-100 mt-2">
+                    <div className="flex items-center justify-between px-4 py-4 border-t border-slate-100 dark:border-slate-800 mt-2">
                         <button 
                             disabled={page <= 1 || loading}
                             onClick={() => setPage(page - 1)}
-                            className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                            className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-600 dark:text-slate-300 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
                         >
                             Trang trước
                         </button>
                         <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trang {page}</span>
-                            <span className="text-[8px] font-bold text-slate-300 uppercase">Hiển thị {data.length} / {total}</span>
+                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Trang {page}</span>
+                            <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase">Hiển thị {data.length} / {total}</span>
                         </div>
                         <button 
                             disabled={page * limit >= total || loading}
                             onClick={() => setPage(page + 1)}
-                            className="px-6 py-2.5 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-600 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                            className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-600 dark:text-slate-300 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
                         >
                             Trang sau
                         </button>

@@ -107,18 +107,18 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
     return (
         <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center px-1">
-                <label className="text-slate-600 font-bold text-[9px] uppercase tracking-widest">{label}</label>
+                <label className="text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold text-[9px] uppercase tracking-widest">{label}</label>
                 {!readOnly && (
                     <button 
                         onClick={clearSignature} 
-                        className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1 hover:underline" 
+                        className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center gap-1 hover:underline" 
                         type="button"
                     >
                         <Eraser className="w-3 h-3" /> Xóa
                     </button>
                 )}
             </div>
-            <div className="border border-slate-300 rounded-xl bg-white overflow-hidden relative h-28 shadow-sm">
+            <div className="border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 overflow-hidden relative h-28 shadow-sm">
                 <canvas 
                     ref={canvasRef} 
                     width={400} 

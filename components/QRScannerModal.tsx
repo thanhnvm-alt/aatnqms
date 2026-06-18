@@ -120,14 +120,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
       <button 
         onClick={onClose} 
-        className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full active:scale-90 transition-transform z-50"
+        className="absolute top-6 right-6 text-white p-3 bg-white dark:bg-slate-900/10 rounded-full active:scale-90 transition-transform z-50"
       >
         <X className="w-8 h-8"/>
       </button>
 
       <div className="text-center mb-8 max-w-xs">
         <h3 className="text-white font-black text-xl uppercase tracking-widest mb-2">{title}</h3>
-        <p className="text-slate-400 text-xs font-medium leading-relaxed">{subtitle}</p>
+        <p className="text-slate-400 dark:text-slate-500 text-xs font-medium leading-relaxed">{subtitle}</p>
       </div>
 
       <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[3rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_60px_rgba(37,99,235,0.3)]">
@@ -146,7 +146,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
         {isProcessingFile && (
           <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20">
-            <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
+            <Loader2 className="w-10 h-10 text-blue-500 dark:text-blue-400 animate-spin mb-3" />
             <span className="text-white text-[10px] font-black uppercase tracking-widest">Đang xử lý ảnh...</span>
           </div>
         )}
@@ -162,11 +162,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       <div className="mt-10 flex flex-col items-center gap-4 w-full max-w-xs">
         <p className="text-blue-400 font-black text-[10px] uppercase tracking-[0.3em] animate-pulse">Scanning Live...</p>
         
-        <div className="h-px w-full bg-white/10 my-2"></div>
+        <div className="h-px w-full bg-white dark:bg-slate-900/10 my-2"></div>
         
         <button 
           onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center justify-center gap-3 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl border border-white/10 transition-all active:scale-95 group"
+          className="w-full flex items-center justify-center gap-3 py-4 bg-white dark:bg-slate-900/5 hover:bg-white dark:bg-slate-900/10 text-white rounded-2xl border border-white/10 transition-all active:scale-95 group"
         >
           <ImageIcon className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
           <span className="text-xs font-black uppercase tracking-widest">Chọn ảnh từ thiết bị</span>

@@ -556,3 +556,35 @@ export const createNotification = async (params: { userId: string, type: Notific
         body: JSON.stringify(params)
     });
 };
+
+// --- TOOLS EQUIPMENT ---
+export const fetchToolCatalogs = async () => apiFetch('/api/tool-catalogs');
+export const saveToolCatalog = async (catalog: any) => apiFetch('/api/tool-catalogs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(catalog)
+});
+export const deleteToolCatalog = async (id: string) => apiFetch(`/api/tool-catalogs/${id}`, { method: 'DELETE' });
+
+export const fetchToolAssets = async () => apiFetch('/api/tool-assets');
+export const fetchToolAssetsByCatalog = async (catalogId: string) => apiFetch(`/api/tool-catalogs/${catalogId}/assets`);
+export const saveToolAsset = async (asset: any) => apiFetch('/api/tool-assets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(asset)
+});
+export const deleteToolAsset = async (id: string) => apiFetch(`/api/tool-assets/${id}`, { method: 'DELETE' });
+
+export const fetchToolTransfers = async (assetId: string) => apiFetch(`/api/tool-assets/${assetId}/transfers`);
+export const saveToolTransfer = async (transfer: any) => apiFetch('/api/tool-transfers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(transfer)
+});
+
+export const fetchToolCalibrations = async (assetId: string) => apiFetch(`/api/tool-assets/${assetId}/calibrations`);
+export const saveToolCalibration = async (calib: any) => apiFetch('/api/tool-calibrations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(calib)
+});

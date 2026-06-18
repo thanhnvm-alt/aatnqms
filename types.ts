@@ -24,9 +24,12 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH' | 'TOOLS';
 
-export type ModuleId = 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS';
+export type ModuleId = 
+  | 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'TOOLS'
+  | 'DASHBOARD' | 'LIST' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'MATERIALS' | 'IPO' | 'TRASH'
+  | 'SETTINGS_TEMPLATE' | 'SETTINGS_USERS' | 'SETTINGS_ROLES' | 'SETTINGS_WORKSHOPS' | 'SETTINGS_PROFILE' | 'SETTINGS_DEPARTMENTS';
 
 export interface IPOItem {
   id: string;
@@ -145,6 +148,19 @@ export interface User {
   education?: string;
   endDate?: string;
   notes?: string;
+  phong_ban?: string;
+  bo_phan?: string;
+  phongBan?: string;
+  boPhan?: string;
+  to_qc?: string;
+  toQC?: string;
+  la_to_truong?: boolean;
+  laToTruong?: boolean;
+  team_id?: string;
+  department_id?: string;
+  division_id?: string;
+  user_permissions?: any;
+  userPermissions?: any;
 }
 
 export interface NCRComment {
@@ -279,6 +295,9 @@ export interface Inspection {
   manager_signature_ref?: string;
   managerSignature?: string;
   managerName?: string;
+  teamLeadSignature?: string;
+  teamLeadName?: string;
+  teamLeadDate?: string;
   productionSignature?: string;
   productionName?: string;
   productionConfirmedDate?: string;
@@ -387,7 +406,7 @@ export interface Notification {
   link?: { view: ViewState, id: string };
 }
 
-export type PermissionAction = 'VIEW' | 'CREATE' | 'EDIT' | 'DELETE' | 'EXPORT';
+export type PermissionAction = 'VIEW' | 'VIEW_ALL' | 'CREATE' | 'EDIT' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'SIGN1' | 'SIGN2' | 'EDIT_OWN' | 'EDIT_ALL' | 'DELETE_OWN' | 'DELETE_ALL';
 
 export interface ModulePermission {
   moduleId: ModuleId;
@@ -401,6 +420,7 @@ export interface Role {
   permissions: ModulePermission[];
   allowedModules: ModuleId[];
   isSystem?: boolean;
+  isPosition?: boolean;
 }
 
 export interface DefectLibraryItem {
@@ -418,3 +438,230 @@ export interface DefectLibraryItem {
   createdAt?: number;
   createdBy?: string;
 }
+
+export interface ToolCatalog {
+  id: string;
+  code: string;
+  name: string;
+  type?: string;
+  specifications?: string;
+  manual_markdown?: string;
+  manual_pdf_url?: string;
+  created_at: number;
+  updated_at: number;
+  created_by: string;
+}
+
+export interface ToolAsset {
+  id: string;
+  catalog_id: string;
+  asset_code: string;
+  serial_number?: string;
+  current_user_id?: string;
+  next_calibration_date?: number | null;
+  status: 'AVAILABLE' | 'IN_USE' | 'MAINTENANCE' | 'BROKEN' | 'LOST';
+  created_at: number;
+  updated_at: number;
+  created_by: string;
+}
+
+export interface ToolTransfer {
+  id: string;
+  tool_asset_id: string;
+  from_user_id?: string;
+  to_user_id: string;
+  status: 'PENDING' | 'CONFIRMED' | 'APPROVED' | 'REJECTED';
+  request_date: number;
+  receiver_confirm_date?: number | null;
+  receiver_signature?: string;
+  receiver_image?: string;
+  manager_approve_date?: number | null;
+  manager_signature?: string;
+  notes?: string;
+}
+
+export interface ToolCalibration {
+  id: string;
+  tool_asset_id: string;
+  request_date: number;
+  requested_by: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
+  calibration_date?: number | null;
+  next_calibration_date?: number | null;
+  certificate_url?: string;
+  approved_by?: string;
+  notes?: string;
+}
+
+export const canUserModifyInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
+  if (!user) return false;
+  
+  // 1. ADMIN has absolute supreme exemption from all locks, rules, and creator restrictions.
+  if (user.role === 'ADMIN') return true;
+  
+  // 2. Immutable Locked State:
+  // If the coupon has been closed (APPROVED) or verified (team lead signed L1), it is locked immutable.
+  const isLockedStatus = 
+    inspection.status === 'approved' || 
+    inspection.status === 'verified' || 
+    inspection.status === 'completed' || 
+    !!inspection.teamLeadSignature || 
+    !!inspection.managerSignature;
+    
+  if (isLockedStatus) return false;
+  
+  // Department-Lock: Rule 1.2
+  // "chỉ hạn chế quyền Sửa/Ký đối với người phòng ban khác"
+  const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
+  if (cache && Array.isArray(cache)) {
+    const creatorUser = cache.find(u => u.name === inspection.inspectorName || u.name === inspection.created_by);
+    if (creatorUser) {
+      const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
+      const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
+      if (creatorDept && userDept && creatorDept !== userDept) {
+        return false; // restricted for other department
+      }
+    }
+  }
+  
+  // 3. Creator-Only or authorized teammate in same department with EDIT permission
+  const isCreator = inspection.inspectorName === user.name || inspection.created_by === user.username || inspection.createdBy === user.name;
+  const moduleId = (inspection.type || 'PQC') as ModuleId;
+  const globalRoles = typeof window !== 'undefined' ? (window as any).__rolesCache : [];
+
+  // If user has direct module access without custom matrix permissions setup, fallback to old behavior
+  const userPerms = user.userPermissions || user.user_permissions;
+  const hasCustomMatrix = userPerms && Array.isArray(userPerms) && userPerms.length > 0;
+
+  if (!hasCustomMatrix && user.allowedModules?.includes(moduleId)) {
+    return true;
+  }
+
+  if (isCreator) {
+    if (hasPermission(user, globalRoles, moduleId, 'EDIT_OWN') || 
+        hasPermission(user, globalRoles, moduleId, 'EDIT_ALL') || 
+        hasPermission(user, globalRoles, moduleId, 'EDIT')) {
+      return true;
+    }
+  } else {
+    if (hasPermission(user, globalRoles, moduleId, 'EDIT_ALL') || 
+        hasPermission(user, globalRoles, moduleId, 'EDIT')) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+export const canUserDeleteInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
+  if (!user) return false;
+  
+  // 1. ADMIN has absolute supreme exemption
+  if (user.role === 'ADMIN') return true;
+  
+  // 2. Immutable Locked State:
+  const isLockedStatus = 
+    inspection.status === 'approved' || 
+    inspection.status === 'verified' || 
+    inspection.status === 'completed' || 
+    !!inspection.teamLeadSignature || 
+    !!inspection.managerSignature;
+    
+  if (isLockedStatus) return false;
+  
+  // Department check - only members of the same department (or ADMIN) can delete
+  const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
+  if (cache && Array.isArray(cache)) {
+    const creatorUser = cache.find(u => u.name === inspection.inspectorName || u.name === inspection.created_by);
+    if (creatorUser) {
+      const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
+      const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
+      if (creatorDept && userDept && creatorDept !== userDept) {
+        return false;
+      }
+    }
+  }
+  
+  const isCreator = inspection.inspectorName === user.name || inspection.created_by === user.username || inspection.createdBy === user.name;
+  const moduleId = (inspection.type || 'PQC') as ModuleId;
+  const globalRoles = typeof window !== 'undefined' ? (window as any).__rolesCache : [];
+
+  const userPerms = user.userPermissions || user.user_permissions;
+  const hasCustomMatrix = userPerms && Array.isArray(userPerms) && userPerms.length > 0;
+
+  if (!hasCustomMatrix && user.allowedModules?.includes(moduleId)) {
+    return true;
+  }
+
+  if (isCreator) {
+    if (hasPermission(user, globalRoles, moduleId, 'DELETE_OWN') || 
+        hasPermission(user, globalRoles, moduleId, 'DELETE_ALL') || 
+        hasPermission(user, globalRoles, moduleId, 'DELETE')) {
+      return true;
+    }
+  } else {
+    if (hasPermission(user, globalRoles, moduleId, 'DELETE_ALL') || 
+        hasPermission(user, globalRoles, moduleId, 'DELETE')) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+export const hasPermission = (
+  user: any,
+  rolesList: Role[],
+  moduleId: ModuleId,
+  action: PermissionAction = 'VIEW'
+): boolean => {
+  if (!user) return false;
+  
+  // 1. ADMIN has supreme absolute privilege.
+  if (user.role === 'ADMIN' || user.username?.toLowerCase() === 'admin') return true;
+
+  // Let's gather all merged/inherited permissions for this user
+  const matchedPermissions: ModulePermission[] = [];
+
+  // A. Add user-specific custom matrix permissions if available
+  let rawPerms = user.userPermissions || user.user_permissions || user.permissions;
+  let userPerms: any[] = [];
+  if (typeof rawPerms === 'string') {
+      try {
+          userPerms = JSON.parse(rawPerms);
+      } catch (e) {
+          userPerms = [];
+      }
+  } else if (Array.isArray(rawPerms)) {
+      userPerms = rawPerms;
+  }
+
+  if (userPerms && Array.isArray(userPerms)) {
+    matchedPermissions.push(...userPerms);
+  }
+
+  // Evaluate matrix specifically for this module
+  const moduleMatrix = matchedPermissions.filter(
+    p => String(p.moduleId).toLowerCase() === String(moduleId).toLowerCase()
+  );
+
+  if (moduleMatrix.length > 0) {
+    // If matrix entry exists for this module, it is the SOURCE OF TRUTH for actions
+    const hasAction = moduleMatrix.some(p => p.actions && p.actions.includes(action));
+    return hasAction;
+  }
+
+  // If no matrix entry exists for THIS module, fall back to simple allowedModules list
+  const list = user.allowedModules || [];
+  if (list.includes(moduleId)) {
+    if (action === 'VIEW' || action === 'CREATE' || action === 'EDIT') {
+      return true;
+    }
+    if (user.role === 'MANAGER' && (action === 'SIGN1' || action === 'SIGN2')) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+

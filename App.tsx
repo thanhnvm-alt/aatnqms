@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { ViewState, Inspection, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier } from './types';
+import { ViewState, Inspection, CheckItem, User, ModuleId, Workshop, Project, Defect, InspectionStatus, NCRComment, Notification, Supplier, Role, canUserModifyInspection, canUserDeleteInspection, hasPermission } from './types';
 import { InspectionProvider } from './src/context/InspectionContext';
 import { 
   INITIAL_CHECKLIST_TEMPLATE, 
@@ -77,6 +77,7 @@ const DefectDetail = lazy(() => import('./components/DefectDetail').then(m => ({
 const SupplierManagement = lazy(() => import('./components/SupplierManagement').then(m => ({ default: m.SupplierManagement })));
 const SupplierDetail = lazy(() => import('./components/SupplierDetail').then(m => ({ default: m.SupplierDetail })));
 const MaterialManagement = lazy(() => import('./components/MaterialManagement').then(m => ({ default: m.MaterialManagement })));
+const ToolsManagement = lazy(() => import('./components/ToolsManagement').then(m => ({ default: m.ToolsManagement })));
 const Trash = lazy(() => import('./components/Trash').then(m => ({ default: m.Trash })));
 const QRScannerModal = lazy(() => import('./components/QRScannerModal').then(m => ({ default: m.QRScannerModal })));
 
@@ -98,8 +99,8 @@ const DETAIL_COMPONENT_MAP: Record<string, any> = {
 const LoadingFallback = () => (
   <div className="flex items-center justify-center p-8 h-full w-full">
     <div className="flex flex-col items-center gap-3">
-      <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-      <span className="text-xs font-semibold text-slate-500">Đang tải biểu mẫu...</span>
+      <Loader2 className="w-8 h-8 text-blue-500 dark:text-blue-400 animate-spin" />
+      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500">Đang tải biểu mẫu...</span>
     </div>
   </div>
 );
@@ -129,6 +130,7 @@ const App = () => {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   
   const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [templates, setTemplates] = useState<Record<string, CheckItem[]>>({
       'SITE': SITE_TEMPLATES.BAN, 
@@ -169,6 +171,7 @@ const App = () => {
         try {
             setIsDbReady(true);
             loadUsers();
+            loadRoles();
             loadWorkshops();
             loadTemplates();
         } catch (error) { setIsDbReady(true); }
@@ -193,7 +196,8 @@ const App = () => {
     }
   }, [user, isDbReady, view, projectsPage, projectsSearch]);
 
-  const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) setUsers(data); else setUsers(MOCK_USERS); } catch (e) { setUsers(MOCK_USERS); } };
+  const loadUsers = async () => { try { const data = await fetchUsers(); if (data?.length > 0) { setUsers(data); if (typeof window !== 'undefined') (window as any).__usersCache = data; } else { setUsers(MOCK_USERS); if (typeof window !== 'undefined') (window as any).__usersCache = MOCK_USERS; } } catch (e) { setUsers(MOCK_USERS); if (typeof window !== 'undefined') (window as any).__usersCache = MOCK_USERS; } };
+  const loadRoles = async () => { try { const data = await fetchRoles(); if (data?.length > 0) { setRoles(data); if (typeof window !== 'undefined') (window as any).__rolesCache = data; } } catch (e) { console.error("Load roles failed:", e); } };
   const loadWorkshops = async () => { try { const data = await fetchWorkshops(); if (data?.length > 0) setWorkshops(data); else setWorkshops(MOCK_WORKSHOPS); } catch (e) { setWorkshops(MOCK_WORKSHOPS); } };
   const loadTemplates = async () => { try { const data = await fetchTemplates(); if (data && Object.keys(data).length > 0) setTemplates(prev => ({ ...prev, ...data })); } catch (e) {} };
   
@@ -282,12 +286,8 @@ const App = () => {
     try { 
       const fullInspection = await fetchInspectionById(id); 
       if (fullInspection) {
-        const isManagerOrAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
-        const isOwner = fullInspection.inspectorName === user?.name;
-        const isApproved = fullInspection.status === InspectionStatus.APPROVED;
-        
-        if (!isManagerOrAdmin && (!isOwner || isApproved)) {
-            alert("Bạn không có quyền sửa hồ sơ này (Đã khóa hoặc không phải chủ sở hữu).");
+        if (!canUserModifyInspection(fullInspection, user)) {
+            alert("Bạn không có quyền sửa hồ sơ này (Hồ sơ đã được duyệt/ký hoặc không phải do bạn tạo).");
             setIsDetailLoading(false);
             return;
         }
@@ -327,16 +327,16 @@ const App = () => {
 
   return (
     <InspectionProvider>
-      <div className="flex flex-row h-[100dvh] bg-slate-50 overflow-hidden font-sans select-none text-slate-900">
+      <div className="flex flex-row h-[100dvh] bg-slate-50 dark:bg-[#0b1120] overflow-hidden font-sans select-none text-slate-900 dark:text-slate-100 transition-colors duration-200">
         <div className="hidden lg:block h-full shrink-0">
-            <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+            <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} rolesList={roles} />
         </div>
         <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && (
           <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center">
-            <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-200">
-              <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
-              <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Đang tải chi tiết...</p>
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-xl flex flex-col items-center gap-4 animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+              <Loader2 className="w-12 h-12 text-blue-600 dark:text-blue-400 animate-spin" />
+              <p className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">Đang tải chi tiết...</p>
             </div>
           </div>
         )}
@@ -404,11 +404,8 @@ const App = () => {
                   onBack: () => setView(returnView), 
                   onEdit: handleEditInspection, 
                   onDelete: async (id: string) => { 
-                    const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
-                    const isOwner = activeInspection.inspectorName === user.name;
-                    const isApproved = activeInspection.status === InspectionStatus.APPROVED;
-                    if (!isManagerOrAdmin && (!isOwner || isApproved)) {
-                        alert("Bạn không có quyền xóa hồ sơ này.");
+                    if (!canUserDeleteInspection(activeInspection, user)) {
+                        alert("Bạn không có quyền xóa hồ sơ này (Hồ sơ đã được duyệt/ký hoặc bạn chưa được cấp quyền xóa).");
                         return;
                     }
                     if(window.confirm("Xóa phiếu này? Dữ liệu sẽ bị xóa vĩnh viễn khỏi audit log.")){ 
@@ -535,13 +532,30 @@ const App = () => {
                 {view === 'DEFECT_DETAIL' && activeDefect && <DefectDetail defect={activeDefect} user={user} onBack={() => setView('DEFECT_LIST')} onViewInspection={handleSelectInspection} />}
                 {view === 'SUPPLIERS' && <SupplierManagement user={user} onSelectSupplier={s => { setActiveSupplier(s); setView('SUPPLIER_DETAIL'); }} />}
                 {view === 'MATERIALS' && <MaterialManagement user={user} />}
+                {view === 'TOOLS' && <ToolsManagement user={user} />}
                 {view === 'SUPPLIER_DETAIL' && activeSupplier && <SupplierDetail supplier={activeSupplier} user={user} onBack={() => setView('SUPPLIERS')} onViewInspection={handleSelectInspection} />}
                 {view === 'SETTINGS' && (
                     <Settings 
                         currentUser={user} allTemplates={templates} onSaveTemplate={async (id, items) => { await saveTemplate(id, items); loadTemplates(); }}
         users={users} 
         onAddUser={async (u) => { await saveUser(u); loadUsers(); }} 
-        onUpdateUser={async (u) => { await saveUser(u); loadUsers(); }} 
+        onUpdateUser={async (u) => { 
+            await saveUser(u); 
+            if (user && u.id === user.id) {
+                const safeUser = {
+                    ...u,
+                    phong_ban: u.phong_ban || (u as any).phongBan || '',
+                    bo_phan: u.bo_phan || (u as any).boPhan || ''
+                };
+                if (localStorage.getItem(AUTH_STORAGE_KEY)) {
+                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+                } else {
+                    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+                }
+                setUser(safeUser as User);
+            }
+            await loadUsers(); 
+        }} 
         onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
         onImportUsers={async (importedUsers) => {
             for (const u of importedUsers) {
@@ -563,7 +577,7 @@ const App = () => {
             </Suspense>
         </main>
         <Suspense fallback={null}>
-            <MobileBottomBar view={view} onNavigate={setView} user={user} />
+            <MobileBottomBar view={view} onNavigate={setView} user={user} rolesList={roles} />
             <ChatAI user={user} />
             {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         </Suspense>
@@ -571,36 +585,36 @@ const App = () => {
         
         {showModuleSelector && (
             <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-                <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in duration-200">
-                    <header className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                <div className="bg-white dark:bg-[#0f172a] w-full max-w-sm rounded-lg shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+                    <header className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
                         <div className="flex flex-col">
-                            <h3 className="font-bold text-slate-900 uppercase text-xs tracking-wider leading-none">LOẠI KIỂM TRA</h3>
-                            <p className="text-[10px] font-medium text-slate-400 uppercase mt-1">Chọn phiếu để khởi tạo</p>
+                            <h3 className="font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider leading-none">LOẠI KIỂM TRA</h3>
+                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase mt-1">Chọn phiếu để khởi tạo</p>
                         </div>
-                        <button onClick={() => setShowModuleSelector(false)} className="p-2 hover:bg-slate-100 rounded-2xl text-slate-400 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
+                        <button onClick={() => setShowModuleSelector(false)} className="p-1 px-[7px] py-[7px] hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-md text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-4 h-4"/></button>
                     </header>
                     
-                    <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50/30">
+                    <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50 dark:bg-slate-800/50/30">
                         {(ALL_MODULES || [])
-                            .filter(m => (m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.allowedModules?.includes(m.id)))
+                            .filter(m => (m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.allowedModules?.includes(m.id) || hasPermission(user, roles, m.id, 'VIEW') || hasPermission(user, roles, m.id, 'CREATE')))
                             .map(mod => (
                                 <button 
                                     key={mod.id} 
                                     onClick={() => startCreateInspection(mod.id)} 
-                                    className="w-full p-3.5 bg-white border border-slate-100 rounded-2xl flex items-center gap-4 transition-all active:scale-[0.98] hover:border-blue-200 group shadow-sm"
+                                    className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg flex items-center gap-3 transition-all active:scale-[0.98] hover:border-blue-300 dark:border-slate-700 group shadow-sm"
                                 >
-                                    <div className="p-2.5 bg-slate-50 rounded-xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors border border-slate-50 group-hover:border-blue-600">
+                                    <div className="p-1.5 bg-slate-50 dark:bg-slate-800/50 rounded-md text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors border border-slate-50 group-hover:border-blue-600">
                                         <FileText className="w-5 h-5" />
                                     </div>
                                     <div className="flex-1 text-left min-w-0">
                                         <span className="font-bold text-blue-800 text-[13px] tracking-tight truncate block group-hover:text-blue-900">
                                             {mod.label}
                                         </span>
-                                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mt-0.5">
+                                        <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-widest block mt-0.5">
                                             {mod.group} Control
                                         </span>
                                     </div>
-                                    <div className="p-1.5 rounded-lg bg-slate-50 text-slate-300 group-hover:text-blue-50 group-hover:bg-blue-50 transition-colors">
+                                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 group-hover:text-blue-50 group-hover:bg-blue-50 dark:bg-slate-800/80 transition-colors">
                                         <ChevronRight className="w-4 h-4" />
                                     </div>
                                 </button>
@@ -608,10 +622,10 @@ const App = () => {
                         }
                     </div>
                     
-                    <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+                    <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0">
                         <button 
                             onClick={() => setShowModuleSelector(false)}
-                            className="w-full py-3 text-xs font-semibold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                            className="w-full py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"
                         >
                             ĐÓNG DANH SÁCH
                         </button>

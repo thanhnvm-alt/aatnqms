@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useInspectionContext } from '../src/context/InspectionContext';
-import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User } from '../types';
+import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User, hasPermission } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
 import { ProxyImage } from '../src/components/ProxyImage';
 import { formatDisplayDate } from '../lib/utils';
@@ -36,14 +36,14 @@ interface InspectionListProps {
 
 // MODULE_CONFIG stays here because it's used for styling icons
 const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-    'IQC': { label: 'IQC', color: 'text-blue-600', bg: 'bg-blue-50', icon: PackageCheck },
+    'IQC': { label: 'IQC', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-slate-800/80', icon: PackageCheck },
     'PQC': { label: 'PQC', color: 'text-purple-600', bg: 'bg-purple-50', icon: Factory },
     'SQC_MAT': { label: 'SQC-VT', color: 'text-teal-600', bg: 'bg-teal-50', icon: Truck },
     'SQC_VT': { label: 'SQC-VT', color: 'text-teal-600', bg: 'bg-teal-50', icon: Truck },
     'SQC_BTP': { label: 'SQC-BTP', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: Box },
     'FQC': { label: 'FQC', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: ShieldCheck },
     'SITE': { label: 'SITE', color: 'text-amber-600', bg: 'bg-amber-50', icon: MapPin },
-    'SPR': { label: 'SPR', color: 'text-slate-600', bg: 'bg-slate-50', icon: Filter },
+    'SPR': { label: 'SPR', color: 'text-slate-600 dark:text-slate-400 dark:text-slate-500', bg: 'bg-slate-50 dark:bg-slate-800/50', icon: Filter },
     'STEP': { label: 'STEP', color: 'text-rose-600', bg: 'bg-rose-50', icon: SlidersHorizontal },
     'FSR': { label: 'FSR', color: 'text-orange-600', bg: 'bg-orange-50', icon: FolderOpen }
 };
@@ -169,7 +169,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   };
 
   const [filterQC, setFilterQC] = useState<string[]>([]);
-  const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
+  const [filterWorkshop, setFilterWorkshop] = useState<string[]>(() => {
+    // If user is restricted to a team and doesn't have VIEW_ALL for current module (represented by 'LIST' here)
+    if (user && user.role !== 'ADMIN' && user.role !== 'MANAGER' && (user.to_qc || user.toQC)) {
+      if (!hasPermission(user, [], 'LIST', 'VIEW_ALL')) {
+        return [user.to_qc || user.toQC || ''];
+      }
+    }
+    return [];
+  });
   const [filterProject, setFilterProject] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string[]>([]);
@@ -499,8 +507,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     <div className="h-full flex flex-col bg-[#f8fafc] no-scroll-x" style={{ fontFamily: 'Inter, sans-serif' }}>
       {/* BULK ACTION BAR */}
       {user.role === 'ADMIN' && selectedIds.size > 0 && (
-        <div className="fixed bottom-20 left-4 right-4 bg-white border border-slate-200 p-4 rounded-2xl shadow-xl flex items-center justify-between z-50 animate-in slide-in-from-bottom-10">
-          <span className="text-xs font-black text-slate-800 uppercase">Đã chọn {selectedIds.size} phiếu</span>
+        <div className="fixed bottom-20 left-4 right-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl shadow-xl flex items-center justify-between z-50 animate-in slide-in-from-bottom-10">
+          <span className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase">Đã chọn {selectedIds.size} phiếu</span>
           <button 
             onClick={handleBulkDelete}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase hover:bg-red-700 transition-all active:scale-95"
@@ -511,30 +519,30 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       )}
 
       {/* COMPACT TOOLBAR */}
-      <div className="shrink-0 bg-white px-4 py-3 border-b border-slate-200 z-50 shadow-sm">
+      <div className="shrink-0 bg-white dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-700 z-50 shadow-sm">
           <div className="max-w-7xl mx-auto flex items-center gap-2">
               {user.role === 'ADMIN' && (
                 <button 
                   onClick={toggleSelectAll}
-                  className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                  className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95"
                 >
-                  {selectedIds.size === inspections.length && inspections.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600" /> : <LayoutGrid className="w-5 h-5" />}
+                  {selectedIds.size === inspections.length && inspections.length > 0 ? <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <LayoutGrid className="w-5 h-5" />}
                 </button>
               )}
               <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400 dark:text-slate-500" />
                   <input 
                     type="text" placeholder="Dự án, Sản phẩm, Inspector, Headcode, Nhà máy..." 
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     onBlur={handleCommitSearch}
                     onKeyDown={handleKeyDown}
-                    className="w-full pl-11 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    className="w-full pl-11 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-medium text-sm text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                   />
                   {searchInput && (
                     <button 
                       onClick={handleClearSearch}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -543,17 +551,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               
               <button 
                 onClick={() => setIsFilterOpen(!isFilterOpen)} 
-                className={`p-2.5 rounded-xl border transition-all active:scale-95 relative ${isFilterOpen || isFilterActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}
+                className={`p-2.5 rounded-xl border transition-all active:scale-95 relative ${isFilterOpen || isFilterActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'}`}
               >
                 <Filter className="w-5 h-5" />
                 {isFilterActive && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}
               </button>
 
               {isFilterOpen && (
-                  <div className="absolute top-16 right-4 w-[320px] bg-white rounded-2xl p-4 border border-slate-200 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="absolute top-16 right-4 w-[320px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
                       <div className="flex justify-between items-center mb-4">
-                        <span className="font-bold text-slate-800">Bộ lọc</span>
-                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">Bộ lọc</span>
+                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500"><X className="w-4 h-4" /></button>
                       </div>
                       <div className="space-y-3">
                           <SearchableSelect 
@@ -581,6 +589,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             options={filterOptions.workshops} 
                             onChange={vals => setFilterWorkshop(vals)} 
                             optionLabels={workshopLabels}
+                            disabled={!!(user && user.role !== 'ADMIN' && user.role !== 'MANAGER' && (user.to_qc || user.toQC) && !hasPermission(user, [], 'LIST', 'VIEW_ALL'))}
                           />
                           <SearchableSelect 
                             label="MÃ DỰ ÁN" 
@@ -595,7 +604,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             onStartDateChange={setStartDate}
                             onEndDateChange={setEndDate}
                           />
-                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 transition-colors border border-blue-200">XÓA BỘ LỌC</button>
+                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 dark:bg-blue-900/30 transition-colors border border-blue-200 dark:border-slate-700">XÓA BỘ LỌC</button>
                       </div>
                   </div>
               )}
@@ -613,7 +622,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     onClick={handleImportClick}
                     disabled={isImporting}
                     title="Nhập Excel"
-                    className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                    className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95 disabled:opacity-50"
                   >
                     {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
                   </button>
@@ -621,7 +630,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     onClick={handleExport}
                     disabled={isExporting}
                     title="Xuất Excel"
-                    className="p-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+                    className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95 disabled:opacity-50"
                   >
                     {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                   </button>
@@ -634,15 +643,15 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
         
         {/* MOBILE VIEW */}
-        <div className="md:hidden flex-1 flex flex-col bg-slate-50 overflow-hidden h-full">
-            <div className="px-3 py-3 border-b border-slate-200 bg-white shadow-sm flex items-center shrink-0 z-10">
-                <div className="flex bg-slate-200/60 rounded-lg p-1 w-full relative transition-all gap-1">
-                    <button onClick={() => setMobileViewStep(1)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 1 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Ngày Tháng</button>
+        <div className="md:hidden flex-1 flex flex-col bg-slate-50 dark:bg-slate-800/50 overflow-hidden h-full">
+            <div className="px-3 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm flex items-center shrink-0 z-10">
+                <div className="flex bg-slate-200 dark:bg-slate-700/60 rounded-lg p-1 w-full relative transition-all gap-1">
+                    <button onClick={() => setMobileViewStep(1)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 1 ? 'bg-white dark:bg-slate-900 text-blue-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>Ngày Tháng</button>
                     {(selectedDateDesktop || selectedMonthDesktop) && (
-                        <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Dự Án {desktopProjectsList.length > 0 && `(${desktopProjectsList.length})`}</button>
+                        <button onClick={() => setMobileViewStep(2)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 2 ? 'bg-white dark:bg-slate-900 text-blue-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>Dự Án {desktopProjectsList.length > 0 && `(${desktopProjectsList.length})`}</button>
                     )}
                     {(selectedProjectDesktop !== null && selectedProjectDesktop !== 'ALL') && (
-                        <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>Hạng Mục {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
+                        <button onClick={() => setMobileViewStep(3)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-md transition-colors ${mobileViewStep === 3 ? 'bg-white dark:bg-slate-900 text-blue-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>Hạng Mục {desktopItems.length > 0 && `(${desktopItems.length})`}</button>
                     )}
                 </div>
             </div>
@@ -652,7 +661,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <div className="p-3 space-y-2 animate-in fade-in slide-in-from-left-4 duration-300">
                         {isDatesLoading ? (
                             <div className="flex flex-col items-center justify-center py-20">
-                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                             </div>
                         ) : (
                             <>
@@ -666,12 +675,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     if (next.has(year)) next.delete(year); else next.add(year);
                                                     return next;
                                                 })}
-                                                className="w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold text-slate-800 bg-white border border-slate-200 shadow-sm transition-colors"
+                                                className="w-full flex items-center justify-between text-left px-4 py-3 rounded-xl text-[14px] font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm transition-colors"
                                             >
                                                 <span>Năm {year}</span>
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[11px] font-bold bg-slate-100 px-2 py-0.5 rounded-full text-slate-600">{count}</span>
-                                                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
+                                                    <span className="text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 dark:text-slate-500">{count}</span>
+                                                    <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
                                                 </div>
                                             </button>
                                             
@@ -693,12 +702,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                 setSelectedProjectDesktop('ALL');
                                                                 if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                                             }}
-                                                            className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 rounded-xl text-[13px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'text-slate-700 bg-white border border-slate-200 shadow-sm'}`}
+                                                            className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 rounded-xl text-[13px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 border border-blue-200 dark:border-slate-700' : 'text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm'}`}
                                                         >
                                                             <span>Tháng {month}</span>
                                                             <div className="flex items-center gap-2">
-                                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{count}</span>
-                                                                <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isMonthSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
+                                                                <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
                                                             </div>
                                                         </button>
                                                         
@@ -713,11 +722,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                                         setSelectedProjectDesktop('ALL');
                                                                         if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(2), 150);
                                                                     }}
-                                                                    className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 ml-4 rounded-xl text-[12px] font-medium transition-colors ${isDateSelected ? 'bg-blue-500 text-white font-bold shadow-md' : 'text-slate-600 bg-white border border-slate-200 shadow-sm'}`}
+                                                                    className={`w-full flex items-center justify-between text-left px-4 py-2 mt-2 ml-4 rounded-xl text-[12px] font-medium transition-colors ${isDateSelected ? 'bg-blue-500 text-white font-bold shadow-md' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm'}`}
                                                                     style={{ width: 'calc(100% - 1rem)' }}
                                                                 >
                                                                     <span>{dateKey.substring(0, 5)}</span>
-                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isDateSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
                                                                 </button>
                                                             );
                                                         })}
@@ -728,8 +737,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     );
                                 })}
                                 {totalInspectionsCount > 0 && (
-                                    <div className="flex items-center justify-center px-2 py-2 border-t border-slate-200 mt-2">
-                                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Tổng {totalInspectionsCount} phiếu</span>
+                                    <div className="flex items-center justify-center px-2 py-2 border-t border-slate-200 dark:border-slate-700 mt-2">
+                                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tổng {totalInspectionsCount} phiếu</span>
                                     </div>
                                 )}
                             </>
@@ -740,16 +749,16 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <div className="p-3 w-full animate-in fade-in slide-in-from-right-4 duration-300">
                         {isProjectsLoading ? (
                             <div className="flex flex-col items-center justify-center py-20">
-                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                             </div>
                         ) : (!selectedDateDesktop && !selectedMonthDesktop) ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
                                 <CalendarDays className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Ngày / Tháng</strong> ở bước 1</p>
-                                <button onClick={() => setMobileViewStep(1)} className="mt-4 px-4 py-2 bg-blue-100 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Ngày</button>
+                                <button onClick={() => setMobileViewStep(1)} className="mt-4 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Ngày</button>
                             </div>
                         ) : desktopProjectsList.length === 0 ? (
-                            <div className="p-8 text-center text-sm text-slate-500 font-medium bg-white rounded-2xl border border-slate-200 shadow-sm">Không có dự án</div>
+                            <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">Không có dự án</div>
                         ) : (
                             <div className="space-y-2">
                                 {desktopProjectsList.map(p => (
@@ -759,13 +768,13 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                             setSelectedProjectDesktop(p.ma_ct);
                                             if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
                                         }}
-                                        className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500/20' : 'bg-white border-slate-200'}`}
+                                        className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 ring-2 ring-blue-500/20' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}
                                     >
                                         <div className="flex flex-col min-w-0 pr-4">
-                                            <span className={`text-[14px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-800'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
-                                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
+                                            <span className={`text-[14px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-800 dark:text-slate-200'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium mt-0.5">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
                                         </div>
-                                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'}`}>{p.count}</span>
+                                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{p.count}</span>
                                     </button>
                                 ))}
                             </div>
@@ -776,16 +785,16 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     <div className="p-3 w-full animate-in fade-in slide-in-from-right-4 duration-300">
                         {isItemsLoading && desktopItems.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20">
-                                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                             </div>
                         ) : !searchTerm && (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
                                 <Building2 className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Dự Án</strong> ở bước 2</p>
-                                <button onClick={() => setMobileViewStep(2)} className="mt-4 px-4 py-2 bg-blue-100 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Dự Án</button>
+                                <button onClick={() => setMobileViewStep(2)} className="mt-4 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 text-xs font-bold rounded-lg uppercase">Quay lại Chọn Dự Án</button>
                             </div>
                         ) : desktopItems.length === 0 ? (
-                            <div className="p-8 text-center text-sm text-slate-500 font-medium bg-white rounded-2xl border border-slate-200 shadow-sm">
+                            <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 {searchTerm ? `Không tìm thấy hạng mục nào cho "${searchTerm}"` : 'Không có hạng mục nào'}
                             </div>
                         ) : (
@@ -796,13 +805,13 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         <div 
                                             key={item.id}
                                             onClick={() => onSelect(item.id)}
-                                            className="bg-white border hover:border-blue-400 border-slate-200 rounded-2xl p-4 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative"
+                                            className="bg-white dark:bg-slate-900 border hover:border-blue-400 border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative"
                                         >
                                             <div className="flex flex-col gap-2">
                                                 <div className="flex justify-between items-start gap-2">
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color} uppercase border shadow-sm tracking-tight`}>{cfg.label}</span>
-                                                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md uppercase">
+                                                        <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase">
                                                             {
                                                                 (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
                                                                 (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
@@ -811,26 +820,26 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         </span>
                                                     </div>
                                                     <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                                                        item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
+                                                        item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
                                                         item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
-                                                        'bg-slate-100 text-slate-600'
+                                                        'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'
                                                     }`}>
                                                         {item.status}
                                                     </span>
                                                 </div>
-                                                <h4 className="text-[14px] font-bold text-slate-800 leading-snug pr-6 group-hover:text-blue-700 transition-colors line-clamp-3">
+                                                <h4 className="text-[14px] font-bold text-slate-800 dark:text-slate-200 leading-snug pr-6 group-hover:text-blue-700 transition-colors line-clamp-3">
                                                     {item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}
                                                 </h4>
                                             </div>
                                             
-                                            <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-4 border-t border-slate-100/80">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0">
-                                                        <UserIcon className="w-3 h-3 text-blue-500" />
+                                                    <div className="w-6 h-6 rounded-full bg-blue-50 dark:bg-slate-800/80 flex items-center justify-center border border-blue-100 dark:border-slate-700 shrink-0">
+                                                        <UserIcon className="w-3 h-3 text-blue-500 dark:text-blue-400" />
                                                     </div>
-                                                    <span className="text-[12px] font-semibold text-slate-600 truncate">{item.inspectorName || item.created_by || '---'}</span>
+                                                    <span className="text-[12px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 truncate">{item.inspectorName || item.created_by || '---'}</span>
                                                 </div>
-                                                <span className="text-[11px] font-bold text-slate-400 shrink-0">
+                                                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
                                                     {formatDisplayDate(item.date)}
                                                 </span>
                                             </div>
@@ -841,7 +850,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                          type="checkbox"
                                                          checked={selectedIds.has(item.id)}
                                                          onChange={() => toggleSelect(item.id)}
-                                                         className="w-5 h-5 rounded-md border-slate-300 text-blue-600 cursor-pointer shadow-sm"
+                                                         className="w-5 h-5 rounded-md border-slate-300 dark:border-slate-600 text-blue-600 dark:text-blue-400 cursor-pointer shadow-sm"
                                                      />
                                                 </div>
                                             )}
@@ -856,17 +865,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         </div>
 
         {/* DESKTOP 4-COLUMN VIEW */}
-        <div className="hidden md:flex flex-1 h-full w-full bg-white divide-x divide-slate-200 overflow-x-auto overflow-y-hidden text-sm">
+        <div className="hidden md:flex flex-1 h-full w-full bg-white dark:bg-slate-900 divide-x divide-slate-200 dark:divide-slate-800 overflow-x-auto overflow-y-hidden text-sm">
             
             {/* COLUMN 1: DATES */}
-            <div className="flex flex-col shrink-0 bg-slate-50/50 relative" style={{ width: colSizes[0] }}>
+            <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50/50 relative" style={{ width: colSizes[0] }}>
                 <div 
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(0)}
                 />
-                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">1. Ngày Tháng - {totalInspectionsCount}</h3>
-                    {isDatesLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">1. Ngày Tháng - {totalInspectionsCount}</h3>
+                    {isDatesLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                     {nestedDatesTree.tree.map(({ year, count, months }) => {
@@ -879,12 +888,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         if (next.has(year)) next.delete(year); else next.add(year);
                                         return next;
                                     })}
-                                    className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 transition-colors"
+                                    className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 transition-colors"
                                 >
                                     <span>Năm {year}</span>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-[10px] bg-white px-2 py-0.5 rounded text-slate-600">{count}</span>
-                                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
+                                        <span className="text-[10px] bg-white dark:bg-slate-900 px-2 py-0.5 rounded text-slate-600 dark:text-slate-400 dark:text-slate-500">{count}</span>
+                                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-transform ${isYearExpanded ? 'rotate-180' : ''}`} />
                                     </div>
                                 </button>
                                 
@@ -906,12 +915,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     setSelectedProjectDesktop('ALL');
                                                     setSelectedItemDesktop(null);
                                                 }}
-                                                className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 mt-1 rounded-lg text-[12px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 text-blue-800' : 'text-slate-600 bg-white hover:bg-slate-50'}`}
+                                                className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 mt-1 rounded-lg text-[12px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                             >
                                                 <span>Tháng {month}</span>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isMonthSelected ? 'bg-white text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{count}</span>
-                                                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-500' : 'text-slate-400'}`} />
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isMonthSelected ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{count}</span>
+                                                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform ${isMonthExpanded ? 'rotate-90' : ''} ${isMonthSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`} />
                                                 </div>
                                             </button>
                                             
@@ -926,11 +935,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                             setSelectedProjectDesktop('ALL');
                                                             setSelectedItemDesktop(null);
                                                         }}
-                                                        className={`w-full flex items-center justify-between text-left px-3 py-1 ml-6 mt-1 rounded-lg text-[11px] font-medium transition-colors ${isDateSelected ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-500 hover:bg-slate-50'}`}
+                                                        className={`w-full flex items-center justify-between text-left px-3 py-1 ml-6 mt-1 rounded-lg text-[11px] font-medium transition-colors ${isDateSelected ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 font-bold' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                                         style={{ width: 'calc(100% - 1.5rem)' }}
                                                     >
                                                         <span>{dateKey.substring(0, 5)}</span>
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${isDateSelected ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${isDateSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'}`}>{count}</span>
                                                     </button>
                                                 );
                                             })}
@@ -944,18 +953,18 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             </div>
 
             {/* COLUMN 2: PROJECTS */}
-            <div className="flex flex-col shrink-0 bg-white relative" style={{ width: colSizes[1] }}>
+            <div className="flex flex-col shrink-0 bg-white dark:bg-slate-900 relative" style={{ width: colSizes[1] }}>
                 <div 
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(1)}
                 />
-                <div className="px-4 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">2. Công Trình / Dự Án - {desktopProjectsList.length}</h3>
-                    {isProjectsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">2. Công Trình / Dự Án - {desktopProjectsList.length}</h3>
+                    {isProjectsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                     {!selectedDateDesktop && !selectedMonthDesktop && !startDate && !endDate ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 p-4 text-center">
                             <CalendarDays className="w-8 h-8 mb-2 opacity-20" />
                             <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Ngày / Tháng</strong></p>
                         </div>
@@ -963,21 +972,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         <>
                             {(() => {
                                 if (desktopProjectsList.length === 0 && !isProjectsLoading) {
-                                    return <div className="p-4 text-center text-[11px] text-slate-400">Không có dự án</div>;
+                                    return <div className="p-4 text-center text-[11px] text-slate-400 dark:text-slate-500">Không có dự án</div>;
                                 }
 
                                 return desktopProjectsList.map(p => (
                                     <button 
                                         key={p.ma_ct}
                                         onClick={() => setSelectedProjectDesktop(p.ma_ct)}
-                                        className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-100' : 'hover:bg-slate-50'}`}
+                                        className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-100 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                     >
                                         <div className="flex items-center justify-between w-full">
                                             <div className="flex flex-col min-w-0 pr-2">
-                                                <span className={`text-[13px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-700'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
-                                                <span className="text-[10px] text-slate-500 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
+                                                <span className={`text-[13px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
                                             </div>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500'}`}>{p.count}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{p.count}</span>
                                         </div>
                                     </button>
                                 ));
@@ -993,55 +1002,55 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(2)}
                 />
-                <div className="px-4 py-3 border-b border-slate-200 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">
                         {searchTerm ? 'Kết quả tìm kiếm' : '3. Hạng Mục'} - {desktopItems.length} Phiếu
                     </h3>
-                    {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
+                    {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-0">
                     {!searchTerm && (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 p-4 text-center">
                             <Building2 className="w-8 h-8 mb-2 opacity-20" />
                             <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Công trình / Dự án</strong></p>
                         </div>
                     ) : (isItemsLoading && desktopItems.length === 0) ? (
                         <div className="flex flex-col items-center justify-center h-full py-20">
-                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                         </div>
                     ) : desktopItems.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 text-xs">Không có hạng mục nào</div>
+                        <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">Không có hạng mục nào</div>
                     ) : (
-                        <div className="divide-y divide-slate-100">
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
                             {desktopItems.map(item => (
                                 <div 
                                     key={item.id}
                                     onClick={() => handleSelectItemDesktop(item)}
-                                    className={`p-4 hover:bg-blue-50/50 cursor-pointer transition-colors relative ${selectedItemDesktop?.id === item.id ? 'bg-blue-50/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white'}`}
+                                    className={`p-4 hover:bg-blue-50 dark:bg-blue-900/20/50 cursor-pointer transition-colors relative ${selectedItemDesktop?.id === item.id ? 'bg-blue-50 dark:bg-blue-900/20/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white dark:bg-slate-900'}`}
                                 >
                                     <div className="flex justify-between items-start gap-2 mb-2">
-                                        <h4 className="font-bold text-slate-800 text-[13px] leading-snug line-clamp-2 pr-6">
+                                        <h4 className="font-bold text-slate-800 dark:text-slate-200 text-[13px] leading-snug line-clamp-2 pr-6">
                                             {(item.type === 'IQC' || item.type === 'SQC_VT') 
                                                 ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                 : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
                                         </h4>
                                     </div>
-                                    <div className="flex flex-col gap-1 mt-2 text-[11px] text-slate-500 font-medium">
+                                    <div className="flex flex-col gap-1 mt-2 text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">
                                         <div className="flex items-center gap-1">
-                                            <span className="font-mono text-slate-700 bg-slate-100 px-1 rounded">{
+                                            <span className="font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1 rounded">{
                                                 (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
                                                 (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
                                                 (item.ma_nha_may || item.headcode || '---')
                                             }</span>
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            <span className="text-blue-600 font-bold">{item.inspectorName || item.created_by || '---'}</span>
+                                            <span className="text-blue-600 dark:text-blue-400 font-bold">{item.inspectorName || item.created_by || '---'}</span>
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
-                                                item.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' :
+                                                item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
                                                 item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
-                                                'bg-slate-100 text-slate-600'
+                                                'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'
                                             }`}>
                                                 {item.status}
                                             </span>
@@ -1049,7 +1058,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </div>
                                     <div className="mt-2 flex gap-2 items-center justify-between">
                                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
-                                          <span className="text-[10px] text-slate-400 font-medium">{formatDisplayDate(item.date)}</span>
+                                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{formatDisplayDate(item.date)}</span>
                                     </div>
                                 </div>
                             ))}
@@ -1059,45 +1068,45 @@ export const InspectionList: React.FC<InspectionListProps> = ({
             </div>
 
             {/* COLUMN 4: DETAIL */}
-            <div className="flex flex-1 flex-col bg-white overflow-hidden relative shrink-0" style={{ minWidth: colSizes[3] }}>
+            <div className="flex flex-1 flex-col bg-white dark:bg-slate-900 overflow-hidden relative shrink-0" style={{ minWidth: colSizes[3] }}>
                 <div 
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(3)}
                 />
-                <div className="px-6 py-3 border-b border-slate-200 shrink-0 bg-white flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700 tracking-tight text-xs uppercase">4. Chi Tiết Hạng Mục</h3>
+                <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-900 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">4. Chi Tiết Hạng Mục</h3>
                     {selectedItemDesktop && (
-                        <button onClick={() => onSelect(selectedItemDesktop.id)} className="px-3 py-1 bg-blue-100 text-blue-700 text-[11px] font-bold rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1">
+                        <button onClick={() => onSelect(selectedItemDesktop.id)} className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 text-[11px] font-bold rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1">
                             MỞ ĐẦY ĐỦ <ArrowRight className="w-3 h-3" />
                         </button>
                     )}
                 </div>
-                <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-slate-50/30">
+                <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-slate-50 dark:bg-slate-800/50/30">
                     {!selectedItemDesktop ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
                             <Info className="w-12 h-12 mb-4 opacity-20" />
                             <p className="text-sm font-medium">Chọn một hạng mục để xem chi tiết</p>
                         </div>
                     ) : isLoadingDetail ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                            <Loader2 className="w-8 h-8 mb-4 animate-spin text-blue-500" />
-                            <p className="text-sm font-medium text-slate-500">Đang tải dữ liệu chi tiết...</p>
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
+                            <Loader2 className="w-8 h-8 mb-4 animate-spin text-blue-500 dark:text-blue-400" />
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-500">Đang tải dữ liệu chi tiết...</p>
                         </div>
                     ) : (
-                        <div className="max-w-3xl bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-6">
-                            <div className="pb-4 border-b border-slate-100">
-                                <p className="text-[13px] font-bold text-blue-600 uppercase tracking-wide mb-1">
+                        <div className="max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-8 space-y-6">
+                            <div className="pb-4 border-b border-slate-100 dark:border-slate-800">
+                                <p className="text-[13px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">
                                     {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') ? (selectedItemDesktop.materials?.[0]?.projectName || selectedItemDesktop.ten_ct || '---') : (selectedItemDesktop.ten_ct || '---')}
                                 </p>
-                                <h2 className="text-xl font-bold text-slate-900 leading-snug">
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-snug">
                                     {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') 
                                                 ? (selectedItemDesktop.materials?.[0]?.name || selectedItemDesktop.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                 : (selectedItemDesktop.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
                                 </h2>
                                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${selectedItemDesktop.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-700' : selectedItemDesktop.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>{selectedItemDesktop.status}</span>
+                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${selectedItemDesktop.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' : selectedItemDesktop.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{selectedItemDesktop.status}</span>
                                     <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.bg} ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.color}`}>{selectedItemDesktop.type}</span>
-                                    <span className="text-sm font-bold text-slate-700 border-l border-slate-300 pl-2">
+                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300 border-l border-slate-300 dark:border-slate-600 pl-2">
                                         {(selectedItemDesktop.type === 'IQC' || selectedItemDesktop.type === 'SQC_VT') ? (selectedItemDesktop.materials?.[0]?.projectCode || selectedItemDesktop.ma_nha_may || selectedItemDesktop.po_number || selectedItemDesktop.headcode || '---') : (selectedItemDesktop.ma_nha_may || selectedItemDesktop.po_number || selectedItemDesktop.headcode || '---')}
                                     </span>
                                 </div>
@@ -1106,19 +1115,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             <div className="grid grid-cols-1 gap-y-5">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Xưởng Sản Xuất:</label>
-                                        <p className="text-[14px] font-medium text-slate-800">{workshopLabels[selectedItemDesktop.workshop || ''] || selectedItemDesktop.workshop || '---'}</p>
+                                        <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Xưởng Sản Xuất:</label>
+                                        <p className="text-[14px] font-medium text-slate-800 dark:text-slate-200">{workshopLabels[selectedItemDesktop.workshop || ''] || selectedItemDesktop.workshop || '---'}</p>
                                     </div>
                                     <div>
-                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Công Đoạn Kiểm Tra:</label>
-                                        <p className="text-[14px] font-medium text-slate-800">{selectedItemDesktop.inspectionStage || selectedItemDesktop.type || '---'}</p>
+                                        <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Công Đoạn Kiểm Tra:</label>
+                                        <p className="text-[14px] font-medium text-slate-800 dark:text-slate-200">{selectedItemDesktop.inspectionStage || selectedItemDesktop.type || '---'}</p>
                                     </div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Người Kiểm Tra:</label>
-                                        <p className="text-[14px] font-medium text-slate-800">{selectedItemDesktop.inspectorName || '---'}</p>
+                                        <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Người Kiểm Tra:</label>
+                                        <p className="text-[14px] font-medium text-slate-800 dark:text-slate-200">{selectedItemDesktop.inspectorName || '---'}</p>
                                     </div>
                                 </div>
 
@@ -1138,34 +1147,34 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     }
 
                                     return (
-                                        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                                             <div className="min-w-[80px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Đơn Hàng</label>
-                                                <p className="text-[13px] font-medium text-slate-800 truncate">{so_luong_ipo ?? '---'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Đơn Hàng</label>
+                                                <p className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate">{so_luong_ipo ?? '---'}</p>
                                             </div>
                                             <div className="min-w-[40px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">ĐVT</label>
-                                                <p className="text-[13px] font-medium text-slate-800 truncate">{dvt || 'PCS'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">ĐVT</label>
+                                                <p className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate">{dvt || 'PCS'}</p>
                                             </div>
                                             <div className="min-w-[60px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Kiểm</label>
-                                                <p className="text-[13px] font-bold text-blue-600 truncate">{inspectedQuantity ?? '---'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">SL Kiểm</label>
+                                                <p className="text-[13px] font-bold text-blue-600 dark:text-blue-400 truncate">{inspectedQuantity ?? '---'}</p>
                                             </div>
                                             <div className="min-w-[40px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Pass</label>
-                                                <p className="text-[13px] font-bold text-green-600 truncate">{passedQuantity ?? '0'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">Pass</label>
+                                                <p className="text-[13px] font-bold text-green-600 dark:text-green-500 truncate">{passedQuantity ?? '0'}</p>
                                             </div>
                                             <div className="min-w-[40px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">Fail</label>
-                                                <p className="text-[13px] font-bold text-red-600 truncate">{failedQuantity ?? '0'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">Fail</label>
+                                                <p className="text-[13px] font-bold text-red-600 dark:text-red-400 truncate">{failedQuantity ?? '0'}</p>
                                             </div>
                                             <div className="min-w-[50px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Pass</label>
-                                                <p className="text-[13px] font-bold text-green-600 truncate">{parseFloat(inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(passedQuantity?.toString() || '0') / parseFloat(inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">% Pass</label>
+                                                <p className="text-[13px] font-bold text-green-600 dark:text-green-500 truncate">{parseFloat(inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(passedQuantity?.toString() || '0') / parseFloat(inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
                                             </div>
                                             <div className="min-w-[50px]">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 whitespace-nowrap">% Fail</label>
-                                                <p className="text-[13px] font-bold text-red-600 truncate">{parseFloat(inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(failedQuantity?.toString() || '0') / parseFloat(inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
+                                                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1 whitespace-nowrap">% Fail</label>
+                                                <p className="text-[13px] font-bold text-red-600 dark:text-red-400 truncate">{parseFloat(inspectedQuantity?.toString() || '0') > 0 ? ((parseFloat(failedQuantity?.toString() || '0') / parseFloat(inspectedQuantity?.toString() || '0')) * 100).toFixed(1) + '%' : '---'}</p>
                                             </div>
                                         </div>
                                     );
@@ -1173,8 +1182,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             </div>
 
                             {(selectedItemDesktop.images && selectedItemDesktop.images.length > 0) ? (
-                                <div className="pt-4 border-t border-slate-100">
-                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm ({selectedItemDesktop.images.length})</label>
+                                <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm ({selectedItemDesktop.images.length})</label>
                                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
                                             {selectedItemDesktop.images.map((img: any, i: number) => {
                                                 const src = typeof img === 'string' ? img : (img.url_hd || img.url_thumbnail || img.file_url);
@@ -1185,7 +1194,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         }) || [];
                                                         setLightboxState({ images: formattedImages, index: i });
                                                     }}>
-                                                        <ProxyImage src={src} alt="Product image" className="w-24 h-24 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" />
+                                                        <ProxyImage src={src} alt="Product image" className="w-24 h-24 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0" />
                                                         <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
                                                             <Maximize2 className="w-5 h-5 text-white" />
                                                         </div>
@@ -1195,9 +1204,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="pt-4 border-t border-slate-100">
-                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm</label>
-                                    <div className="h-24 rounded-lg border border-dashed border-slate-200 flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+                                <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-3">Hình Ảnh Sản Phẩm</label>
+                                    <div className="h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500">
                                         <ImageIcon className="w-6 h-6 mb-1 opacity-50" />
                                         <span className="text-xs">Không có ảnh</span>
                                     </div>
@@ -1217,19 +1226,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex flex-col transition-all">
               <div className="flex justify-between items-center p-4 text-white/50 shrink-0">
                   <div className="text-xs font-bold tracking-widest">{lightboxState.index + 1} / {lightboxState.images.length}</div>
-                  <button onClick={() => setLightboxState(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <button onClick={() => setLightboxState(null)} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-full transition-colors">
                       <X className="w-6 h-6 text-white"/>
                   </button>
               </div>
               <div className="flex-1 min-h-0 relative flex items-center justify-center p-4">
                   <img src={lightboxState.images[lightboxState.index]} className="max-w-full max-h-full object-contain rounded-lg" referrerPolicy="no-referrer" />
                   {lightboxState.index > 0 && (
-                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index - 1 })} className="absolute left-4 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-colors">
+                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index - 1 })} className="absolute left-4 p-3 bg-black/50 hover:bg-white dark:bg-slate-900/20 text-white rounded-full backdrop-blur-md transition-colors">
                           <ChevronLeft className="w-6 h-6" />
                       </button>
                   )}
                   {lightboxState.index < lightboxState.images.length - 1 && (
-                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index + 1 })} className="absolute right-4 p-3 bg-black/50 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-colors">
+                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index + 1 })} className="absolute right-4 p-3 bg-black/50 hover:bg-white dark:bg-slate-900/20 text-white rounded-full backdrop-blur-md transition-colors">
                           <ChevronRight className="w-6 h-6" />
                       </button>
                   )}

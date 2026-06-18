@@ -63,7 +63,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute inset-0 z-0">
           <img 
@@ -74,10 +74,10 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]"></div>
       </div>
 
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-10 animate-in fade-in zoom-in duration-300">
+      <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden z-10 animate-in fade-in zoom-in duration-300">
         
         {/* Header with Logo */}
-        <div className="bg-white p-8 pb-4 text-center flex flex-col items-center border-b border-slate-50">
+        <div className="bg-white dark:bg-slate-900 p-8 pb-4 text-center flex flex-col items-center border-b border-slate-50">
             {/* Logo Container */}
             <div className="mb-2 relative w-full flex justify-center">
                 <div className="flex flex-col items-center">
@@ -90,27 +90,27 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                 </div>
             </div>
             
-            <h2 className="text-lg font-bold text-slate-600 uppercase tracking-wide mt-2">Hệ thống QA/QC</h2>
+            <h2 className="text-lg font-bold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide mt-2">Hệ thống QA/QC</h2>
         </div>
 
         {/* Form */}
         <div className="p-8 pt-6">
           <form onSubmit={handleSubmit} className="space-y-5">
             {!dbReady && (
-              <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center gap-3 animate-pulse">
-                <Database className="w-5 h-5 text-blue-600" />
+              <div className="bg-blue-50 dark:bg-slate-800/80 border border-blue-100 dark:border-slate-700 p-4 rounded-xl flex items-center gap-3 animate-pulse">
+                <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <div className="flex-1">
                   <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest leading-none">Database Initialization</p>
-                  <p className="text-[10px] text-blue-500 font-bold mt-1">Đang cấu hình dữ liệu ISO... Vui lòng đợi trong giây lát.</p>
+                  <p className="text-[10px] text-blue-500 dark:text-blue-400 font-bold mt-1">Đang cấu hình dữ liệu ISO... Vui lòng đợi trong giây lát.</p>
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Tên đăng nhập</label>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase mb-1.5 ml-1">Tên đăng nhập</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <UserIcon className="h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  <UserIcon className="h-5 w-5 text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:text-blue-400 transition-colors" />
                 </div>
                 <input
                   type="text"
@@ -119,7 +119,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={!dbReady || isLoading}
-                  className="pl-10 block w-full border border-slate-200 bg-slate-50 rounded-lg py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all disabled:opacity-50"
+                  className="pl-10 block w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="Nhập tên đăng nhập..."
                   required
                 />
@@ -127,10 +127,10 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 ml-1">Mật khẩu</label>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase mb-1.5 ml-1">Mật khẩu</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  <Lock className="h-5 w-5 text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:text-blue-400 transition-colors" />
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
@@ -139,14 +139,14 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={!dbReady || isLoading}
-                  className="pl-10 pr-10 block w-full border border-slate-200 bg-slate-50 rounded-lg py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all disabled:opacity-50"
+                  className="pl-10 pr-10 block w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="••••••"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-blue-600 focus:outline-none transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 focus:outline-none transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -158,21 +158,21 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                 className={`flex items-start cursor-pointer group ${(!dbReady || isLoading) ? 'pointer-events-none opacity-50' : ''}`} 
                 onClick={() => dbReady && !isLoading && setRememberMe(!rememberMe)}
             >
-                <div className={`mt-0.5 mr-3 w-5 h-5 rounded border flex items-center justify-center transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white group-hover:border-blue-400'}`}>
+                <div className={`mt-0.5 mr-3 w-5 h-5 rounded border flex items-center justify-center transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-blue-400'}`}>
                     {rememberMe && <CheckSquare className="w-4 h-4 text-white" />}
                 </div>
                 <div className="flex flex-col select-none">
-                    <span className={`text-sm font-bold ${rememberMe ? 'text-blue-700' : 'text-slate-600'}`}>
+                    <span className={`text-sm font-bold ${rememberMe ? 'text-blue-700' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>
                         Ghi nhớ đăng nhập
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
                         Tự động điền thông tin & Giữ phiên đăng nhập
                     </span>
                 </div>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm p-3 rounded-lg flex items-center animate-shake">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg flex items-center animate-shake">
                  <Info className="w-4 h-4 mr-2 flex-shrink-0" />
                  {error}
               </div>

@@ -164,21 +164,21 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-            <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
-                <div className="bg-red-50 p-3 border-b border-red-100 flex justify-between items-center shrink-0">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[95vh]">
+                <div className="bg-red-50 dark:bg-red-900/20 p-3 border-b border-red-100 flex justify-between items-center shrink-0">
                     <h3 className="text-red-700 flex items-center gap-2 font-bold uppercase tracking-wide text-xs"><AlertOctagon className="w-4 h-4" /> Báo cáo sự không phù hợp (NCR)</h3>
-                    <button onClick={onClose} className="p-1.5 hover:bg-red-100 rounded-full transition-colors"><X className="w-4 h-4 text-slate-500"/></button>
+                    <button onClick={onClose} className="p-1.5 hover:bg-red-100 rounded-full transition-colors"><X className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500"/></button>
                 </div>
-                <div className="p-4 space-y-3 overflow-y-auto flex-1 no-scrollbar bg-slate-50/30">
-                    <div className="border border-blue-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                        <button onClick={() => setShowLibrary(!showLibrary)} className="w-full p-2.5 flex justify-between items-center text-blue-700 font-bold bg-blue-50/50 text-[11px]" type="button">
+                <div className="p-4 space-y-3 overflow-y-auto flex-1 no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+                    <div className="border border-blue-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
+                        <button onClick={() => setShowLibrary(!showLibrary)} className="w-full p-2.5 flex justify-between items-center text-blue-700 font-bold bg-blue-50 dark:bg-slate-800/80/50 text-[11px]" type="button">
                             <span className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5"/> Chọn lỗi từ thư viện chuẩn</span>
                             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showLibrary ? 'rotate-180' : ''}`} />
                         </button>
                         {showLibrary && (
-                            <div className="p-2 space-y-2 bg-white border-t border-blue-100 animate-in slide-in-from-top duration-200">
+                            <div className="p-2 space-y-2 bg-white dark:bg-slate-900 border-t border-blue-100 dark:border-slate-700 animate-in slide-in-from-top duration-200">
                                 <div className="relative">
-                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 dark:text-slate-500" />
                                     <input 
                                         value={libSearchInput || ''} 
                                         onChange={e => setLibSearchInput(e.target.value)} 
@@ -190,9 +190,9 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                                 </div>
                                 <div className="max-h-32 overflow-y-auto space-y-1 no-scrollbar">
                                     {filteredLib.map(item => (
-                                        <div key={item.id} onClick={() => { setNcrData({...ncrData, issueDescription: item.description, severity: item.severity as any, defect_code: item.code, solution: item.suggestedAction || ncrData.solution }); setDefectName(item.name); setShowLibrary(false); }} className="p-1.5 border rounded-lg hover:bg-blue-50 cursor-pointer flex justify-between items-center group">
-                                            <div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{item.name}</p><p className="text-[9px] text-slate-500 line-clamp-1">{item.description}</p></div>
-                                            <ChevronDown className="w-3 h-3 text-slate-300 -rotate-90 group-hover:text-blue-500" />
+                                        <div key={item.id} onClick={() => { setNcrData({...ncrData, issueDescription: item.description, severity: item.severity as any, defect_code: item.code, solution: item.suggestedAction || ncrData.solution }); setDefectName(item.name); setShowLibrary(false); }} className="p-1.5 border rounded-lg hover:bg-blue-50 dark:bg-slate-800/80 cursor-pointer flex justify-between items-center group">
+                                            <div className="flex-1 min-w-0"><p className="font-bold text-[10px] truncate">{item.name}</p><p className="text-[9px] text-slate-500 dark:text-slate-400 dark:text-slate-500 line-clamp-1">{item.description}</p></div>
+                                            <ChevronDown className="w-3 h-3 text-slate-300 -rotate-90 group-hover:text-blue-500 dark:text-blue-400" />
                                         </div>
                                     ))}
                                 </div>
@@ -200,23 +200,23 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName || ''} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 italic text-[11px] font-medium" /></div>
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tên lỗi chuẩn</label><input readOnly value={defectName || 'Chưa chọn'} className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-blue-700 font-bold text-[11px]" /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Hạng mục kiểm tra</label><input readOnly value={itemName || ''} className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 dark:text-slate-500 italic text-[11px] font-medium" /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Tên lỗi chuẩn</label><input readOnly value={defectName || 'Chưa chọn'} className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg text-blue-700 font-bold text-[11px]" /></div>
                     </div>
                     <div className="space-y-0.5">
-                        <div className="flex justify-between items-center"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mô tả lỗi chi tiết *</label><button onClick={handleAiAnalysis} disabled={isAiLoading || !ncrData.issueDescription} className="text-[9px] font-bold text-purple-600 uppercase flex items-center gap-1 hover:underline disabled:opacity-30">{isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>} AI Phân tích</button></div>
-                        <textarea className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:ring-1 ring-red-200 bg-white text-[11px]" rows={2} value={ncrData.issueDescription || ''} onChange={e => {
+                        <div className="flex justify-between items-center"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mô tả lỗi chi tiết *</label><button onClick={handleAiAnalysis} disabled={isAiLoading || !ncrData.issueDescription} className="text-[9px] font-bold text-purple-600 uppercase flex items-center gap-1 hover:underline disabled:opacity-30">{isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>} AI Phân tích</button></div>
+                        <textarea className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-1 ring-red-200 bg-white dark:bg-slate-900 text-[11px]" rows={2} value={ncrData.issueDescription || ''} onChange={e => {
                             setNcrData({...ncrData, issueDescription: e.target.value});
                             if (!defectName && !newDefectName) setNewDefectName(e.target.value.substring(0, 50));
                         }} placeholder="Mô tả cụ thể hiện trạng lỗi tại hiện trường..." />
                     </div>
 
                     {!ncrData.defect_code && (
-                        <div className="bg-blue-50/50 p-2 rounded-xl border border-blue-100 space-y-2">
+                        <div className="bg-blue-50 dark:bg-slate-800/80/50 p-2 rounded-xl border border-blue-100 dark:border-slate-700 space-y-2">
                             <label className="flex items-center gap-2 cursor-pointer group">
                                 <input 
                                     type="checkbox" 
-                                    className="w-4 h-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500" 
+                                    className="w-4 h-4 rounded border-blue-300 text-blue-600 dark:text-blue-400 focus:ring-blue-500" 
                                     checked={saveToLibrary} 
                                     onChange={e => setSaveToLibrary(e.target.checked)} 
                                 />
@@ -227,7 +227,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                                 <div className="space-y-1 animate-in zoom-in-95 duration-200">
                                     <label className="text-[8px] font-black text-blue-400 uppercase tracking-widest ml-1">Tên lỗi sẽ hiển thị trong thư viện</label>
                                     <input 
-                                        className="w-full px-2 py-1.5 bg-white border border-blue-200 rounded-lg text-blue-700 font-bold text-[10px]" 
+                                        className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-700 rounded-lg text-blue-700 font-bold text-[10px]" 
                                         value={newDefectName || ''} 
                                         onChange={e => setNewDefectName(e.target.value)}
                                         placeholder="Ví dụ: Trầy xước bề mặt sơn, Cong vênh khung..."
@@ -237,19 +237,19 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-[11px]" value={ncrData.severity || 'MINOR'} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Người phụ trách</label><input className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-[11px]" value={ncrData.responsiblePerson || ''} onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})} placeholder="Tên / Bộ phận..." /></div>
-                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">HẠN XỬ LÝ</label><input type="date" className="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white font-mono text-[11px]" value={ncrData.deadline || ''} onChange={e => setNcrData({...ncrData, deadline: e.target.value})} /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mức độ</label><select className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 font-bold text-[11px]" value={ncrData.severity || 'MINOR'} onChange={e => setNcrData({...ncrData, severity: e.target.value as any})}><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Người phụ trách</label><input className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-[11px]" value={ncrData.responsiblePerson || ''} onChange={e => setNcrData({...ncrData, responsiblePerson: e.target.value})} placeholder="Tên / Bộ phận..." /></div>
+                        <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">HẠN XỬ LÝ</label><input type="date" className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 font-mono text-[11px]" value={ncrData.deadline || ''} onChange={e => setNcrData({...ncrData, deadline: e.target.value})} /></div>
                     </div>
-                    <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (Root Cause)</label><textarea className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-medium italic text-slate-600 text-[11px]" rows={1} value={ncrData.rootCause || ''} onChange={e => setNcrData({...ncrData, rootCause: e.target.value})} placeholder="Phân tích tại sao lỗi xảy ra..." /></div>
-                    <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Biện pháp khắc phục</label><textarea className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-medium text-blue-900 text-[11px]" rows={1} value={ncrData.solution || ''} onChange={e => setNcrData({...ncrData, solution: e.target.value})} placeholder="Hướng xử lý và ngăn chặn lặp lại..." /></div>
+                    <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Nguyên nhân gốc rễ (Root Cause)</label><textarea className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 font-medium italic text-slate-600 dark:text-slate-400 dark:text-slate-500 text-[11px]" rows={1} value={ncrData.rootCause || ''} onChange={e => setNcrData({...ncrData, rootCause: e.target.value})} placeholder="Phân tích tại sao lỗi xảy ra..." /></div>
+                    <div className="space-y-0.5"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Biện pháp khắc phục</label><textarea className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 font-medium text-blue-900 text-[11px]" rows={1} value={ncrData.solution || ''} onChange={e => setNcrData({...ncrData, solution: e.target.value})} placeholder="Hướng xử lý và ngăn chặn lặp lại..." /></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                        <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="space-y-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
                             <div className="flex justify-between items-center border-b border-slate-50 pb-1.5 mb-1.5">
-                                <label className="text-[9px] font-bold text-red-600 uppercase flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Ảnh TRƯỚC xử lý</label>
+                                <label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Ảnh TRƯỚC xử lý</label>
                                 <div className="flex gap-1">
-                                    <button onClick={() => { setUploadTarget('BEFORE'); cameraInputRef.current?.click(); }} className="p-1 bg-red-50 text-red-600 rounded-lg border border-red-100 hover:bg-red-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button>
-                                    <button onClick={() => { setUploadTarget('BEFORE'); fileInputRef.current?.click(); }} className="p-1 bg-slate-50 text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => { setUploadTarget('BEFORE'); cameraInputRef.current?.click(); }} className="p-1 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg border border-red-100 hover:bg-red-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => { setUploadTarget('BEFORE'); fileInputRef.current?.click(); }} className="p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button>
                                 </div>
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
@@ -261,12 +261,12 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                                 ))}
                             </div>
                         </div>
-                        <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="space-y-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
                             <div className="flex justify-between items-center border-b border-green-50 pb-1.5 mb-1.5">
-                                <label className="text-[9px] font-bold text-green-600 uppercase flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/> Ảnh SAU xử lý</label>
+                                <label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/> Ảnh SAU xử lý</label>
                                 <div className="flex gap-1">
-                                    <button onClick={() => { setUploadTarget('AFTER'); cameraInputRef.current?.click(); }} className="p-1 bg-green-50 text-green-600 rounded-lg border border-green-100 hover:bg-green-100 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button>
-                                    <button onClick={() => { setUploadTarget('AFTER'); fileInputRef.current?.click(); }} className="p-1 bg-slate-50 text-slate-400 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => { setUploadTarget('AFTER'); cameraInputRef.current?.click(); }} className="p-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500 rounded-lg border border-green-100 hover:bg-green-100 dark:bg-green-900/30 active:scale-90 transition-all" type="button"><Camera className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => { setUploadTarget('AFTER'); fileInputRef.current?.click(); }} className="p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 active:scale-90 transition-all" type="button"><ImageIcon className="w-3.5 h-3.5"/></button>
                                 </div>
                             </div>
                             <div className="grid grid-cols-4 gap-1.5">
@@ -282,8 +282,8 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                 </div>
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
                 <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
-                <div className="p-3 border-t border-slate-100 bg-white flex justify-end gap-2 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-600 font-bold hover:text-slate-900 uppercase text-[10px] tracking-widest">Hủy bỏ</button>
+                <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-end gap-2 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold hover:text-slate-900 dark:text-slate-100 uppercase text-[10px] tracking-widest">Hủy bỏ</button>
                     <button onClick={handleFinalSave} disabled={!ncrData.issueDescription} className="px-6 py-2 bg-red-600 text-white rounded-lg shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all font-black uppercase text-[10px] tracking-widest disabled:opacity-50">Lưu NCR</button>
                 </div>
             </div>
@@ -759,21 +759,21 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative no-scroll-x" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       {hasDraft && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
-              <div className="bg-white/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+              <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                       <div className="bg-amber-100 p-1.5 rounded-lg">
                         <AlertCircle className="w-4 h-4 text-amber-600" />
                       </div>
                       <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Phát hiện bản nháp</span>
-                          <span className="text-[8px] text-slate-500 font-bold">Dữ liệu PQC bạn đang nhập chưa được lưu.</span>
+                          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">Phát hiện bản nháp</span>
+                          <span className="text-[8px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold">Dữ liệu PQC bạn đang nhập chưa được lưu.</span>
                       </div>
                   </div>
                   <div className="flex gap-2">
-                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button>
+                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 dark:text-red-400">Xóa</button>
                       <button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-amber-200 active:scale-95 transition-all">Khôi phục</button>
                   </div>
               </div>
@@ -781,24 +781,24 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       )}
       {(isProcessingImages || isLookupLoading || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
-              <div className="bg-white p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
                   <div className="relative flex items-center justify-center">
-                      <Loader2 className="w-16 h-16 text-blue-600 animate-spin opacity-20" />
+                      <Loader2 className="w-16 h-16 text-blue-600 dark:text-blue-400 animate-spin opacity-20" />
                       {isSaving && (
                           <div className="absolute flex flex-col items-center justify-center">
-                              <span className="text-xl font-black text-blue-600 font-mono tracking-tighter">{uploadProgress}%</span>
+                              <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{uploadProgress}%</span>
                           </div>
                       )}
-                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 animate-spin" />}
+                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />}
                   </div>
                   
                   <div className="w-full space-y-2">
-                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest text-center">
+                    <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">
                         {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : isSaving ? "Đang tải dữ liệu & ảnh lên server..." : "Đang xử lý hình ảnh..."}
                     </p>
                     
                     {isSaving && (
-                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
                             <div 
                                 className="h-full bg-blue-600 transition-all duration-300 ease-out" 
                                 style={{ width: `${uploadProgress}%` }}
@@ -810,17 +810,17 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 pb-28">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 dark:bg-slate-800/50 pb-28">
         
-        <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1">
                 <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><Box className="w-3.5 h-3.5"/> I. THÔNG TIN SẢN PHẨM</h3>
-                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 hover:bg-blue-100 text-slate-600 rounded-full font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm text-[9px]" type="button"><History className="w-3 h-3" /> Lịch sử ({historicalRecords.length})</button>
+                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:bg-blue-900/30 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-full font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm text-[9px]" type="button"><History className="w-3 h-3" /> Lịch sử ({historicalRecords.length})</button>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="space-y-0.5">
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã định danh (Mã NM)</label>
+                    <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mã định danh (Mã NM)</label>
                     <div className="relative flex items-center">
                         <input 
                             value={searchCode || ''} 
@@ -831,33 +831,33 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             }} 
                             onBlur={() => lookupPlanInfo(searchCode || '')} 
                             onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode || '')}
-                            className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" 
+                            className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" 
                             placeholder="Quét/Nhập mã..."
                         />
-                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-3.5 h-3.5"/></button>
-                        {isLookupLoading && <div className="absolute right-8"><Loader2 className="w-3 h-3 animate-spin text-blue-500" /></div>}
+                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 dark:text-slate-500" type="button"><QrCode className="w-3.5 h-3.5"/></button>
+                        {isLookupLoading && <div className="absolute right-8"><Loader2 className="w-3 h-3 animate-spin text-blue-500 dark:text-blue-400" /></div>}
                     </div>
                 </div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Tên hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner text-[11px]"/></div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner outline-none text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner outline-none text-[11px] h-8 h-auto"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md font-black text-blue-600 dark:text-blue-400 shadow-inner outline-none text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner uppercase text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md font-bold shadow-inner outline-none text-[11px] h-8 h-auto"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner uppercase text-[11px]"/></div>
             </div>
         </section>
 
-        <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
+        <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
             <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ÁNH HIỆN TRƯỜNG</h3>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
-                <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
+                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 dark:bg-slate-800/80 border-blue-200 dark:border-slate-700 rounded-lg flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
+                <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
-                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
+                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 group cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
                             <ProxyImage src={img} alt="Ảnh" className="w-full h-full object-cover" />
                             <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                         </div>
@@ -865,38 +865,38 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
         </section>
 
-        <section className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><MapPin className="w-3.5 h-3.5"/> III. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
             <div className="grid grid-cols-2 gap-2">
                  <div className="space-y-0.5">
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Xưởng sản xuất</label>
-                    <select value={formData.workshop || ''} onChange={e => handleInputChange('workshop', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]">
+                    <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Xưởng sản xuất</label>
+                    <select value={formData.workshop || ''} onChange={e => handleInputChange('workshop', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 font-bold outline-none text-[11px]">
                         <option value="">-- Chọn xưởng --</option>
                         {workshops.map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}
                     </select>
                  </div>
                  <div className="space-y-0.5">
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Công đoạn *</label>
-                    <select value={formData.inspectionStage || ''} onChange={e => handleInputChange('inspectionStage', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]">
+                    <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Công đoạn *</label>
+                    <select value={formData.inspectionStage || ''} onChange={e => handleInputChange('inspectionStage', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 font-bold outline-none text-[11px]">
                         <option value="">-- Chọn giai đoạn --</option>
                         {availableStages.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                  </div>
             </div>
             
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-3">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 space-y-3">
                 <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
                     <div className="space-y-1">
-                        <label className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block leading-none truncate">SL Kiểm tra</label>
+                        <label className="text-[8px] sm:text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center block leading-none truncate">SL Kiểm tra</label>
                         <input 
                             type="number" 
                             step="any" 
                             value={formData.inspectedQuantity ?? ''} 
                             onChange={e => handleInputChange('inspectedQuantity', e.target.value)} 
-                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'}`} 
+                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`} 
                         />
                         {parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) && (
-                            <p className="text-[7px] text-red-500 font-bold uppercase text-center mt-0.5">Vượt SL IPO</p>
+                            <p className="text-[7px] text-red-500 dark:text-red-400 font-bold uppercase text-center mt-0.5">Vượt SL IPO</p>
                         )}
                         {parseFloat(String(formData.inspectedQuantity)) <= 0 && (
                             <p className="text-[7px] text-orange-500 font-bold uppercase text-center mt-0.5 whitespace-nowrap overflow-hidden">Phải &gt; 0</p>
@@ -904,34 +904,34 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     </div>
                     <div className="space-y-1">
                         <div className="flex justify-between items-center px-1">
-                            <label className="text-[8px] sm:text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label>
-                            <span className="text-[7px] sm:text-[8px] font-bold text-green-700 bg-green-50 px-0.5 sm:px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span>
+                            <label className="text-[8px] sm:text-[9px] font-bold text-green-600 dark:text-green-500 uppercase tracking-wider">Đạt</label>
+                            <span className="text-[7px] sm:text-[8px] font-bold text-green-700 bg-green-50 dark:bg-green-900/20 px-0.5 sm:px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span>
                         </div>
                         <input 
                             type="number" 
                             step="any" 
                             value={formData.passedQuantity ?? ''} 
                             onChange={e => handleInputChange('passedQuantity', e.target.value)} 
-                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-green-200 bg-white`} 
+                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-green-200 dark:border-green-800 bg-white dark:bg-slate-900`} 
                         />
                     </div>
                     <div className="space-y-1">
                         <div className="flex justify-between items-center px-1">
-                            <label className="text-[8px] sm:text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label>
-                            <span className="text-[7px] sm:text-[8px] font-bold text-red-700 bg-red-50 px-0.5 sm:px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span>
+                            <label className="text-[8px] sm:text-[9px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">Lỗi</label>
+                            <span className="text-[7px] sm:text-[8px] font-bold text-red-700 bg-red-50 dark:bg-red-900/20 px-0.5 sm:px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span>
                         </div>
                         <input 
                             type="number" 
                             step="any" 
                             value={formData.failedQuantity ?? ''} 
                             onChange={e => handleInputChange('failedQuantity', e.target.value)} 
-                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-red-200 bg-white`} 
+                            className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-red-200 bg-white dark:bg-slate-900`} 
                         />
                     </div>
                 </div>
                 {((formData.passedQuantity || 0) + (formData.failedQuantity || 0)) > (formData.inspectedQuantity || 0) && (
-                    <div className="flex items-center gap-1.5 bg-red-50 p-1.5 rounded-lg border border-red-100">
-                        <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                    <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 p-1.5 rounded-lg border border-red-100">
+                        <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
                         <p className="text-[8px] text-red-700 font-bold uppercase leading-none">Lỗi: (Đạt + Lỗi) &gt; Số lượng kiểm tra</p>
                     </div>
                 )}
@@ -939,35 +939,35 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
 
         <div className="space-y-2">
-            <h3 className="font-bold text-slate-700 uppercase tracking-widest flex items-center gap-2 border-b border-slate-300 pb-2 px-1 text-[11px]"><LayoutList className="w-3.5 h-3.5 text-blue-600"/> IV. NỘI DUNG KIỂM TRA ({visibleItems.length})</h3>
+            <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 border-b border-slate-300 dark:border-slate-600 pb-2 px-1 text-[11px]"><LayoutList className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400"/> IV. NỘI DUNG KIỂM TRA ({visibleItems.length})</h3>
             {formData.inspectionStage ? (
                 <div className="space-y-3">
                     {visibleItems.length > 0 ? (
                       visibleItems.map((item, originalIndex) => {
                         const actualIndexInFullList = formData.items?.findIndex(i => i.id === item.id) ?? -1;
                         return (
-                            <div key={item.id} className={`bg-white rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50/10' : 'border-slate-200'}`}>
+                            <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
                                 <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
-                                    <div className="flex-1"><input value={item.label || ''} onChange={e => handleItemChange(actualIndexInFullList, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 uppercase text-[11px]" placeholder="Nội dung..." /><div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1"><div className="flex items-start gap-2"><Microscope className="w-3 h-3 text-blue-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 leading-tight"><span className="font-bold text-slate-800">PP:</span> {item.method || '---'}</div></div><div className="flex items-start gap-2"><Ruler className="w-3 h-3 text-orange-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 leading-tight"><span className="font-bold text-slate-800">TC:</span> {item.standard || '---'}</div></div></div></div>
-                                    <button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button>
+                                    <div className="flex-1"><input value={item.label || ''} onChange={e => handleItemChange(actualIndexInFullList, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-[11px]" placeholder="Nội dung..." /><div className="mt-1.5 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 space-y-1"><div className="flex items-start gap-2"><Microscope className="w-3 h-3 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 dark:text-slate-400 dark:text-slate-500 leading-tight"><span className="font-bold text-slate-800 dark:text-slate-200">PP:</span> {item.method || '---'}</div></div><div className="flex items-start gap-2"><Ruler className="w-3 h-3 text-orange-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 dark:text-slate-400 dark:text-slate-500 leading-tight"><span className="font-bold text-slate-800 dark:text-slate-200">TC:</span> {item.standard || '---'}</div></div></div></div>
+                                    <button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500 dark:text-red-400" type="button"><Trash2 className="w-3.5 h-3.5"/></button>
                                 </div>
                                 <div className="flex flex-wrap gap-2 items-center">
-                                    <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">
+                                    <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 dark:border-slate-700 w-fit">
                                         {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
-                                            <button key={st} onClick={() => handleItemChange(actualIndexInFullList, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : st === CheckStatus.FAIL ? 'bg-red-600 text-white' : 'bg-orange-50 text-white') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}</button>
+                                            <button key={st} onClick={() => handleItemChange(actualIndexInFullList, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : st === CheckStatus.FAIL ? 'bg-red-600 text-white' : 'bg-orange-50 text-white') : 'text-slate-400 dark:text-slate-500 hover:bg-white dark:bg-slate-900'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}</button>
                                         ))}
                                     </div>
                                     <div className="flex items-center gap-1 ml-auto">
-                                        <div className="relative p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 active:text-blue-600 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}><ImageIcon className="w-4 h-4"/></div>
-                                        <div className="relative p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 active:text-blue-600 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}><Camera className="w-4 h-4"/></div>
+                                        <div className="relative p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-400 dark:text-slate-500 active:text-blue-600 dark:text-blue-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}><ImageIcon className="w-4 h-4"/></div>
+                                        <div className="relative p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-400 dark:text-slate-500 active:text-blue-600 dark:text-blue-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}><Camera className="w-4 h-4"/></div>
                                         {item.status === CheckStatus.FAIL && <button onClick={() => { setActiveNcrItemIndex(actualIndexInFullList); setIsNcrModalOpen(true); }} className="px-2.5 py-1.5 bg-slate-900 text-white rounded-lg font-bold uppercase tracking-widest flex items-center gap-1 transition-all text-[9px]" type="button"><AlertOctagon className="w-3 h-3"/> NCR</button>}
                                     </div>
                                 </div>
-                                <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndexInFullList, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg font-medium outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
+                                <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndexInFullList, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-lg font-medium outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
                                 {item.images && item.images.length > 0 && (
                                     <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
                                         {item.images.map((im, i) => (
-                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}>
+                                            <div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}>
                                             <ProxyImage src={im} alt="Ảnh lỗi" className="w-full h-full object-cover" />
                                             <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndexInFullList, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 md:opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-2.5 h-2.5"/></button>
                                         </div>
@@ -978,21 +978,21 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         );
                       })
                     ) : (
-                      <div className="p-8 text-center text-slate-400 italic bg-white rounded-xl border border-dashed border-slate-200">
+                      <div className="p-8 text-center text-slate-400 dark:text-slate-500 italic bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                         <p className="text-[10px] font-bold uppercase">Không có dữ liệu mẫu cho công đoạn này</p>
                         <p className="text-[9px]">Vui lòng nhấn "+ Thêm Tiêu Chí" bên dưới</p>
                       </div>
                     )}
-                    <button onClick={() => setFormData({...formData, items: [...(formData.items || []), { id: `new_${Date.now()}`, category: 'BỔ SUNG', label: 'TIÊU CHÍ MỚI', status: CheckStatus.PENDING, stage: formData.inspectionStage, method: 'Kiểm tra bổ sung', standard: 'Theo thực tế' }]})} className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold uppercase tracking-[0.1em] transition-all text-[10px]" type="button">+ THÊM TIÊU CHÍ</button>
+                    <button onClick={() => setFormData({...formData, items: [...(formData.items || []), { id: `new_${Date.now()}`, category: 'BỔ SUNG', label: 'TIÊU CHÍ MỚI', status: CheckStatus.PENDING, stage: formData.inspectionStage, method: 'Kiểm tra bổ sung', standard: 'Theo thực tế' }]})} className="w-full py-2.5 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 dark:text-slate-500 font-bold uppercase tracking-[0.1em] transition-all text-[10px]" type="button">+ THÊM TIÊU CHÍ</button>
                 </div>
             ) : (
                 <div className="bg-orange-50 border border-orange-100 p-6 rounded-2xl text-center space-y-1 animate-pulse"><Info className="w-6 h-6 text-orange-300 mx-auto" /><p className="font-bold text-orange-800 uppercase tracking-widest text-[10px]">Vui lòng chọn Công đoạn tại Mục III</p></div>
             )}
         </div>
 
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-3">
+        <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mt-3">
             <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-3 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><PenTool className="w-3.5 h-3.5"/> V. CHỮ KÝ XÁC NHẬN</h3>
-            <div className="mb-4"><label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Ghi chú QC</label><textarea value={formData.summary || ''} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-1 ring-blue-100 outline-none h-20 resize-none" placeholder="Ghi chú thêm..."/></div>
+            <div className="mb-4"><label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Ghi chú QC</label><textarea value={formData.summary || ''} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium focus:ring-1 ring-blue-100 outline-none h-20 resize-none" placeholder="Ghi chú thêm..."/></div>
             <SignaturePad 
                 label={`QC Ký Tên (${user.name})`} 
                 value={formData.signature} 
@@ -1004,20 +1004,20 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
       {showHistory && (
           <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in duration-200">
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in duration-200">
+                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50/50">
                       <div className="flex items-center gap-3">
                           <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg">
                               <History className="w-5 h-5" />
                           </div>
                           <div>
-                              <h3 className="font-black text-slate-800 uppercase text-sm tracking-tight">Lịch sử kiểm tra sản phẩm</h3>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ISO Audit Trail • Mã NM: {searchCode}</p>
+                              <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-sm tracking-tight">Lịch sử kiểm tra sản phẩm</h3>
+                              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">ISO Audit Trail • Mã NM: {searchCode}</p>
                           </div>
                       </div>
-                      <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400"/></button>
+                      <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400 dark:text-slate-500"/></button>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white no-scrollbar">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white dark:bg-slate-900 no-scrollbar">
                       {historicalRecords.length === 0 ? (
                           <div className="py-20 flex flex-col items-center justify-center text-slate-300">
                               <Clock className="w-12 h-12 opacity-10 mb-4" />
@@ -1025,76 +1025,76 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                           </div>
                       ) : (
                           historicalRecords.map(rec => (
-                              <div key={rec.id} onClick={() => handleOpenQuickReview(rec.id)} className="p-4 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all group flex items-center justify-between gap-4 cursor-pointer active:scale-[0.98]">
+                              <div key={rec.id} onClick={() => handleOpenQuickReview(rec.id)} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:border-slate-700 hover:bg-blue-50 dark:bg-slate-800/80/20 transition-all group flex items-center justify-between gap-4 cursor-pointer active:scale-[0.98]">
                                   <div className="flex items-center gap-4">
-                                      <div className={`p-2.5 rounded-xl shrink-0 ${rec.status === InspectionStatus.APPROVED ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                                      <div className={`p-2.5 rounded-xl shrink-0 ${rec.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500' : 'bg-orange-100 text-orange-600'}`}>
                                           <CheckCircle2 className="w-5 h-5" />
                                       </div>
                                       <div>
                                           <div className="flex items-center gap-2 mb-1">
-                                              <span className="font-black text-[11px] text-slate-800 uppercase tracking-tight">{rec.date}</span>
-                                              <span className="text-[8px] font-black bg-white border px-1.5 py-0.5 rounded text-slate-400 uppercase tracking-widest">Score: {rec.score}%</span>
+                                              <span className="font-black text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-tight">{rec.date}</span>
+                                              <span className="text-[8px] font-black bg-white dark:bg-slate-900 border px-1.5 py-0.5 rounded text-slate-400 dark:text-slate-500 uppercase tracking-widest">Score: {rec.score}%</span>
                                           </div>
-                                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Inspector: {rec.inspectorName}</p>
-                                          <p className="text-[9px] text-slate-400 font-mono mt-0.5">#{rec.id.split('-').pop()}</p>
+                                          <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Inspector: {rec.inspectorName}</p>
+                                          <p className="text-[9px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">#{rec.id.split('-').pop()}</p>
                                       </div>
                                   </div>
                                   <div className="flex items-center gap-3">
                                       <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${
                                           rec.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-sm' :
-                                          rec.status === InspectionStatus.FLAGGED ? 'bg-red-50 text-red-600 border-red-100' :
-                                          'bg-slate-50 text-slate-500 border-slate-200'
+                                          rec.status === InspectionStatus.FLAGGED ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-100' :
+                                          'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'
                                       }`}>
                                           {rec.status}
                                       </div>
-                                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all" />
                                   </div>
                               </div>
                           ))
                       )}
                   </div>
-                  <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
-                      <button onClick={() => setShowHistory(false)} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-98 transition-all">Đóng lịch sử</button>
+                  <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                      <button onClick={() => setShowHistory(false)} className="w-full py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 dark:text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 active:scale-98 transition-all">Đóng lịch sử</button>
                   </div>
               </div>
 
               {previewId && (
                   <div className="fixed inset-0 z-[250] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-                      <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-300">
-                          <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-900 text-white shrink-0">
+                      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-300">
+                          <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-900 text-white shrink-0">
                               <div className="flex items-center gap-3">
                                   <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg">
                                       <FileText className="w-5 h-5" />
                                   </div>
                                   <div>
                                       <h3 className="font-black text-xs uppercase tracking-widest">Chi tiết lịch sử kiểm tra</h3>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Reviewing: #{previewId.split('-').pop()}</p>
+                                      <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Reviewing: #{previewId.split('-').pop()}</p>
                                   </div>
                               </div>
-                              <button onClick={() => { setPreviewId(null); setPreviewData(null); }} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="w-6 h-6"/></button>
+                              <button onClick={() => { setPreviewId(null); setPreviewData(null); }} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-full transition-colors"><X className="w-6 h-6"/></button>
                           </div>
                           
                           <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
                               {isPreviewLoading ? (
                                   <div className="py-32 flex flex-col items-center justify-center gap-4">
-                                      <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang truy xuất chi tiết ISO...</p>
+                                      <Loader2 className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-spin" />
+                                      <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Đang truy xuất chi tiết ISO...</p>
                                   </div>
                               ) : previewData ? (
                                   <>
-                                      <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-100 flex justify-between items-center shadow-inner">
+                                      <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-inner">
                                           <div className="grid grid-cols-3 gap-6 flex-1 pr-4">
                                               <div className="text-center">
-                                                  <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">KIỂM TRA</p>
+                                                  <p className="text-[7px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">KIỂM TRA</p>
                                                   <p className="text-xl font-black text-blue-700">{previewData.inspectedQuantity || 0}</p>
                                               </div>
                                               <div className="text-center">
-                                                  <p className="text-[7px] font-black text-green-500 uppercase tracking-widest mb-0.5">ĐẠT</p>
-                                                  <p className="text-xl font-black text-green-600">{previewData.passedQuantity || 0}</p>
+                                                  <p className="text-[7px] font-black text-green-500 dark:text-green-400 uppercase tracking-widest mb-0.5">ĐẠT</p>
+                                                  <p className="text-xl font-black text-green-600 dark:text-green-500">{previewData.passedQuantity || 0}</p>
                                               </div>
                                               <div className="text-center">
-                                                  <p className="text-[7px] font-black text-red-500 uppercase tracking-widest mb-0.5">HỎNG</p>
-                                                  <p className="text-xl font-black text-red-600">{previewData.failedQuantity || 0}</p>
+                                                  <p className="text-[7px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest mb-0.5">HỎNG</p>
+                                                  <p className="text-xl font-black text-red-600 dark:text-red-400">{previewData.failedQuantity || 0}</p>
                                               </div>
                                           </div>
                                           <div className={`px-4 py-1.5 rounded-xl border font-black text-[9px] uppercase tracking-widest ${previewData.status === InspectionStatus.APPROVED ? 'bg-green-600 text-white border-green-600 shadow-lg shadow-green-100' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
@@ -1103,29 +1103,29 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                       </div>
 
                                       <div className="grid grid-cols-2 gap-4">
-                                          <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                                              <div className="flex items-center gap-2 mb-2 text-slate-400"><UserCheck className="w-3.5 h-3.5"/> <span className="text-[9px] font-black uppercase tracking-widest">QC Thẩm định</span></div>
-                                              <p className="text-xs font-black text-slate-800 uppercase truncate">{previewData.inspectorName}</p>
+                                          <div className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm">
+                                              <div className="flex items-center gap-2 mb-2 text-slate-400 dark:text-slate-500"><UserCheck className="w-3.5 h-3.5"/> <span className="text-[9px] font-black uppercase tracking-widest">QC Thẩm định</span></div>
+                                              <p className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase truncate">{previewData.inspectorName}</p>
                                           </div>
-                                          <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                                              <div className="flex items-center gap-2 mb-2 text-slate-400"><Calendar className="w-3.5 h-3.5"/> <span className="text-[9px] font-black uppercase tracking-widest">Ngày kiểm</span></div>
-                                              <p className="text-xs font-black text-slate-800 uppercase">{previewData.date}</p>
+                                          <div className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm">
+                                              <div className="flex items-center gap-2 mb-2 text-slate-400 dark:text-slate-500"><Calendar className="w-3.5 h-3.5"/> <span className="text-[9px] font-black uppercase tracking-widest">Ngày kiểm</span></div>
+                                              <p className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase">{previewData.date}</p>
                                           </div>
                                       </div>
 
                                       <div className="space-y-3">
-                                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                                          <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
                                               <Activity className="w-3.5 h-3.5" /> Kết quả tiêu chí ({previewData.items?.length || 0})
                                           </h4>
                                           <div className="space-y-3">
                                               {previewData.items?.map((it, idx) => (
-                                                  <div key={idx} className="p-4 bg-white border border-slate-100 rounded-[1.5rem] shadow-sm space-y-3">
+                                                  <div key={idx} className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1.5rem] shadow-sm space-y-3">
                                                       <div className="flex items-center justify-between gap-4">
                                                           <div className="flex-1 overflow-hidden">
-                                                              <p className="text-[10px] font-black text-slate-800 uppercase truncate leading-tight">{it.label}</p>
-                                                              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{it.category}</p>
+                                                              <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-tight">{it.label}</p>
+                                                              <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter mt-1">{it.category}</p>
                                                           </div>
-                                                          <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border ${it.status === CheckStatus.PASS ? 'text-green-600 bg-green-50 border-green-200' : it.status === CheckStatus.FAIL ? 'text-red-600 bg-red-50 border-red-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
+                                                          <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase border ${it.status === CheckStatus.PASS ? 'text-green-600 dark:text-green-500 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : it.status === CheckStatus.FAIL ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
                                                               {it.status}
                                                           </span>
                                                       </div>
@@ -1135,7 +1135,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                                   <img 
                                                                       key={iIdx} 
                                                                       src={getProxyImageUrl(img)} 
-                                                                      className="w-16 h-16 rounded-xl object-cover border border-slate-100 shadow-sm transition-transform hover:scale-105" 
+                                                                      className="w-16 h-16 rounded-xl object-cover border border-slate-100 dark:border-slate-800 shadow-sm transition-transform hover:scale-105" 
                                                                       onClick={() => setLightboxState({ images: it.images!, index: iIdx })}
                                                                       referrerPolicy="no-referrer"
                                                                   />
@@ -1148,21 +1148,21 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                                       </div>
 
                                       {previewData.signature && (
-                                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                                              <div className="flex items-center justify-center gap-2 mb-3 text-slate-400"><ShieldCheck className="w-4 h-4" /> <span className="text-[9px] font-black uppercase tracking-widest">Chữ ký điện tử QC</span></div>
-                                              <div className="bg-white h-24 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 mx-auto w-full">
+                                          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
+                                              <div className="flex items-center justify-center gap-2 mb-3 text-slate-400 dark:text-slate-500"><ShieldCheck className="w-4 h-4" /> <span className="text-[9px] font-black uppercase tracking-widest">Chữ ký điện tử QC</span></div>
+                                              <div className="bg-white dark:bg-slate-900 h-24 rounded-xl flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700 mx-auto w-full">
                                                   <img src={getProxyImageUrl(previewData.signature)} className="h-full object-contain" alt="" referrerPolicy="no-referrer" />
                                               </div>
                                           </div>
                                       )}
                                   </>
                               ) : (
-                                  <div className="py-20 text-center text-slate-400 font-bold text-xs">Không thể tải dữ liệu bản ghi này.</div>
+                                  <div className="py-20 text-center text-slate-400 dark:text-slate-500 font-bold text-xs">Không thể tải dữ liệu bản ghi này.</div>
                               )}
                           </div>
 
-                          <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-                              <button onClick={() => { setPreviewId(null); setPreviewData(null); }} className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 active:scale-95 transition-all">Đóng</button>
+                          <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex gap-3 shrink-0">
+                              <button onClick={() => { setPreviewId(null); setPreviewData(null); }} className="flex-1 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 dark:text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 active:scale-95 transition-all">Đóng</button>
                           </div>
                       </div>
                   </div>
@@ -1170,8 +1170,8 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           </div>
       )}
 
-      <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-        <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 flex items-center justify-center text-[10px]" type="button">HỦY BỎ</button>
+      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 rounded-xl transition-all border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px]" type="button">HỦY BỎ</button>
         <button onClick={handleSubmit} disabled={isSaving} className="h-[44px] flex-1 bg-blue-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT PQC</span></button>
       </div>
 

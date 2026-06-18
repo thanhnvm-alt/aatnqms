@@ -1,7 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React from 'react';
-import { ViewState, User } from '../types';
+import { ViewState, User, Role, ModuleId, hasPermission } from '../types';
 import { 
   Briefcase, 
   FileSpreadsheet, 
@@ -16,7 +16,8 @@ import {
   Truck,
   Factory,
   Package,
-  Trash2
+  Trash2,
+  Wrench
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,9 +28,10 @@ interface SidebarProps {
   onLogout: () => void;
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
+  rolesList?: Role[];
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigate, user, onLogout, collapsed, setCollapsed }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigate, user, onLogout, collapsed, setCollapsed, rolesList = [] }) => {
   if (!user) return null;
 
   const menuItems = [
@@ -40,17 +42,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
     { id: 'DEFECT_LIBRARY', label: 'Thư Viện Lỗi', icon: BookOpen },
     { id: 'MATERIALS', label: 'Quản Lý Vật Liệu', icon: Package },
+    { id: 'TOOLS', label: 'Quản Lý CCDC', icon: Wrench },
     { id: 'IPO', label: 'IPO Data', icon: FileSpreadsheet },
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
     { id: 'TRASH', label: 'Thùng Rác', icon: Trash2 },
   ].filter(item => {
-    if (user.role === 'QC') {
-      return ['LIST', 'NCR_LIST', 'DEFECT_LIBRARY'].includes(item.id);
-    }
-    if (item.id === 'TRASH' && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
-      return false;
-    }
-    return true;
+    return hasPermission(user, rolesList, item.id as ModuleId, 'VIEW');
   });
 
   const isMenuItemActive = (itemId: string) => {
@@ -64,23 +61,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
   };
 
   return (
-    <aside className={`bg-[#0f172a] text-slate-400 flex flex-col h-full transition-all duration-300 border-r border-slate-800 ${collapsed ? 'w-20' : 'w-56'}`}>
-      <div className="px-4 py-4 flex items-center justify-between h-24">
+    <aside className={`bg-[#0f172a] text-slate-400 dark:text-slate-500 flex flex-col h-full transition-all duration-300 border-r border-slate-800 relative ${collapsed ? 'w-20' : 'w-56'}`}>
+      <div className="px-2 py-4 flex items-center justify-center h-24 relative">
         {!collapsed && (
-          <div className="flex items-center gap-3">
-            <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-md shrink-0">
-              <img 
-                src={getProxyImageUrl("https://lh3.googleusercontent.com/d/1bDMxj465lBlBF0IJY7R-93MxkulDeMND")} 
-                alt="Logo" 
-                className="w-full h-full object-contain" 
-                referrerPolicy="no-referrer"
-              />
+          <>
+            <div className="flex items-center gap-2.5">
+              <div className="w-12 h-12 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center p-1.5 shadow-md shrink-0">
+                <img 
+                  src={getProxyImageUrl("https://lh3.googleusercontent.com/d/1bDMxj465lBlBF0IJY7R-93MxkulDeMND")} 
+                  alt="Logo" 
+                  className="w-full h-full object-contain" 
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              <div className="flex flex-col justify-center">
+                <span className="font-bold text-white text-sm tracking-tight leading-none mb-1">Quality System</span>
+                <span className="text-slate-300 text-[10px] font-bold uppercase tracking-wider leading-none">AA Corporation</span>
+              </div>
             </div>
-            <span className="font-bold text-white text-lg tracking-tight">AATN QC</span>
-          </div>
+            <button onClick={() => setCollapsed(true)} className="absolute right-2 p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300">
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </>
         )}
         {collapsed && (
-            <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center p-1.5 mx-auto shadow-md shrink-0">
+            <div className="w-12 h-12 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center p-1.5 shadow-md flex-shrink-0 mx-auto">
               <img 
                 src={getProxyImageUrl("https://lh3.googleusercontent.com/d/1bDMxj465lBlBF0IJY7R-93MxkulDeMND")} 
                 alt="Logo" 
@@ -88,16 +93,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
                 referrerPolicy="no-referrer"
               />
             </div>
-        )}
-        {!collapsed && (
-          <button onClick={() => setCollapsed(true)} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-500 hover:text-slate-300">
-            <PanelLeftClose className="w-5 h-5" />
-          </button>
         )}
       </div>
 
       {collapsed && (
-        <button onClick={() => setCollapsed(false)} className="p-3 mx-auto mb-6 hover:bg-slate-800 rounded-xl transition-colors text-slate-500 hover:text-slate-300">
+        <button onClick={() => setCollapsed(false)} className="p-3 mx-auto mb-6 hover:bg-slate-800 rounded-xl transition-colors text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300">
           <PanelLeft className="w-5 h-5" />
         </button>
       )}
@@ -114,13 +114,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
               className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all group relative font-medium text-[14px] ${
                 isActive 
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
-                : 'hover:bg-slate-800 hover:text-slate-200 text-slate-400'
+                : 'hover:bg-slate-800 hover:text-slate-200 text-slate-400 dark:text-slate-500'
               }`}
             >
-              <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400 transition-colors'}`} />
+              <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-400 transition-colors'}`} />
               {!collapsed && <span className="tracking-tight truncate whitespace-nowrap">{item.label}</span>}
               {collapsed && isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-r-full"></div>
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white dark:bg-slate-900 rounded-r-full"></div>
               )}
             </button>
           );
@@ -142,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
         
         <button 
             onClick={onLogout}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-all group ${collapsed ? 'justify-center' : ''}`}
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-red-500/10 text-slate-400 dark:text-slate-500 hover:text-red-400 transition-all group ${collapsed ? 'justify-center' : ''}`}
         >
             <LogOut className="w-5 h-5 shrink-0 group-hover:stroke-red-400" />
             {!collapsed && <span className="text-[14px] font-medium whitespace-nowrap">Đăng xuất</span>}

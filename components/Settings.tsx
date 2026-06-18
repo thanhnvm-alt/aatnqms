@@ -1,11 +1,12 @@
 import { getProxyImageUrl } from '../src/utils';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { CheckItem, User, Workshop, Role } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { CheckItem, User, Workshop, Role, ModuleId, hasPermission } from '../types';
 import { TemplateEditor } from './TemplateEditor';
 import { UserManagement } from './UserManagement';
 import { WorkshopManagement } from './WorkshopManagement';
-import { RoleManagement } from './RoleManagement';
+import { DepartmentManagement } from './DepartmentManagement';
+import { UserActivityList } from './UserActivityList';
 import { Button } from './Button';
 import { 
     ArrowLeft, 
@@ -29,7 +30,9 @@ import {
     Database,
     Cloud,
     HardDrive,
-    ShieldAlert
+    ShieldAlert,
+    Building,
+    Activity
 } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
 import { fetchRoles, saveRole, deleteRole as apiDeleteRole } from '../services/apiService';
@@ -49,7 +52,7 @@ interface SettingsProps {
   onDeleteWorkshop: (id: string) => Promise<void>;
   onClose: () => void;
   onCheckConnection?: () => Promise<boolean>;
-  initialTab?: 'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES'; 
+  initialTab?: 'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES' | 'DEPARTMENTS'; 
 }
 
 export const Settings: React.FC<SettingsProps> = ({ 
@@ -69,14 +72,54 @@ export const Settings: React.FC<SettingsProps> = ({
     onCheckConnection,
     initialTab
 }) => {
-  const isAdminOrManager = currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER';
-  
-  const [activeTab, setActiveTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES'>(
-    initialTab || (isAdminOrManager ? 'TEMPLATE' : 'PROFILE')
-  );
-  
   const [roles, setRoles] = useState<Role[]>([]);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+
+  const isAdminOrManager = useMemo(() => {
+    if (currentUser.role === 'ADMIN') return true;
+    if (hasPermission(currentUser, roles, 'SETTINGS_USERS', 'VIEW')) return true;
+    if (hasPermission(currentUser, roles, 'SETTINGS_ROLES', 'VIEW')) return true;
+    return currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER';
+  }, [currentUser, roles]);
+  
+  const showTab = (tabName: 'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES' | 'DEPARTMENTS') => {
+      if (tabName === 'ROLES') return false;
+      if (currentUser.role === 'ADMIN') return true;
+      const mapping: Record<string, ModuleId> = {
+          'TEMPLATE': 'SETTINGS_TEMPLATE',
+          'USERS': 'SETTINGS_USERS',
+          'ROLES': 'SETTINGS_ROLES',
+          'WORKSHOPS': 'SETTINGS_WORKSHOPS',
+          'DEPARTMENTS': 'SETTINGS_DEPARTMENTS',
+          'PROFILE': 'SETTINGS_PROFILE'
+      };
+      return hasPermission(currentUser, roles, mapping[tabName], 'VIEW');
+  };
+
+  const [activeTab, setActiveTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES' | 'DEPARTMENTS'>(() => {
+    if (initialTab) return initialTab;
+    if (currentUser.role === 'ADMIN') return 'TEMPLATE';
+    if (currentUser.role === 'MANAGER') return 'TEMPLATE';
+    return 'PROFILE';
+  });
+
+  // Dynamically adjust activeTab once roles list are loaded
+  useEffect(() => {
+    if (roles && roles.length > 0 && !initialTab) {
+      const order: ('TEMPLATE' | 'USERS' | 'ROLES' | 'WORKSHOPS' | 'DEPARTMENTS' | 'PROFILE')[] = [
+        'TEMPLATE', 'USERS', 'ROLES', 'WORKSHOPS', 'DEPARTMENTS', 'PROFILE'
+      ];
+      const firstAllowed = order.find(tab => showTab(tab));
+      if (firstAllowed && firstAllowed !== activeTab) {
+        if (activeTab === 'PROFILE' && firstAllowed !== 'PROFILE') {
+          setActiveTab(firstAllowed);
+        } else if (!showTab(activeTab)) {
+          setActiveTab(firstAllowed);
+        }
+      }
+    }
+  }, [roles]);
+  
   const [selectedModuleForTemplate, setSelectedModuleForTemplate] = useState<string>('PQC');
   const [isChecking, setIsChecking] = useState(false);
   const [connStatus, setConnStatus] = useState<'IDLE' | 'SUCCESS' | 'ERROR'>('IDLE');
@@ -87,19 +130,25 @@ export const Settings: React.FC<SettingsProps> = ({
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [profileData, setProfileData] = useState<User>(currentUser);
+  const [profileData, setProfileData] = useState<User>(() => ({
+    ...currentUser,
+    workLocation: currentUser.workLocation || (currentUser as any).work_location || '',
+    joinDate: currentUser.joinDate || (currentUser as any).join_date || ''
+  }));
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const profileFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isAdminOrManager) {
-        handleTestConnection();
-        loadRoles();
-    }
+    handleTestConnection();
+    loadRoles();
   }, []);
 
   useEffect(() => {
-      setProfileData(currentUser);
+      setProfileData({
+        ...currentUser,
+        workLocation: currentUser.workLocation || (currentUser as any).work_location || '',
+        joinDate: currentUser.joinDate || (currentUser as any).join_date || ''
+      });
   }, [currentUser]);
 
   const loadRoles = async () => {
@@ -157,11 +206,11 @@ export const Settings: React.FC<SettingsProps> = ({
       catch (error) { alert("Lỗi khi cập nhật thông tin cá nhân"); } finally { setIsSavingProfile(false); }
   };
 
-  const qcModules = ALL_MODULES.filter(m => m.group === 'QC' || m.group === 'QA');
+  const qcModules = ALL_MODULES.filter(m => m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA');
 
   return (
-    <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0 bg-slate-50">
-        <div className="bg-white p-3 md:p-4 border-b border-slate-200 flex flex-col gap-3 sticky top-0 z-20 shadow-sm">
+    <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0 bg-slate-50 dark:bg-slate-800/50">
+        <div className="bg-white dark:bg-slate-900 p-3 md:p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-3 sticky top-0 z-20 shadow-sm">
              <div className="flex items-center justify-end">
                  {isAdminOrManager && onCheckConnection && (
                     <Button variant={connStatus === 'ERROR' ? 'danger' : 'secondary'} size="sm" onClick={handleTestConnection} disabled={isChecking} icon={isChecking ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Wifi className="w-4 h-4"/>} className="md:hidden"></Button>
@@ -169,183 +218,196 @@ export const Settings: React.FC<SettingsProps> = ({
              </div>
              <div className="w-full">
                  <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 w-full">
-                     {isAdminOrManager && (
-                         <>
-                            <button onClick={() => setActiveTab('TEMPLATE')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'TEMPLATE' ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-700'}`}><FileCheck className="w-4 h-4"/> <span>Mẫu kiểm tra</span></button>
-                            <button onClick={() => setActiveTab('USERS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'USERS' ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-700'}`}><Users className="w-4 h-4"/> <span>Người dùng</span></button>
-                            <button onClick={() => setActiveTab('ROLES')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'ROLES' ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-700'}`}><ShieldAlert className="w-4 h-4"/> <span>Phân quyền</span></button>
-                            <button onClick={() => setActiveTab('WORKSHOPS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'WORKSHOPS' ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-700'}`}><Factory className="w-4 h-4"/> <span>Quản lý xưởng</span></button>
-                         </>
+                     {showTab('TEMPLATE') && (
+                         <button onClick={() => setActiveTab('TEMPLATE')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'TEMPLATE' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><FileCheck className="w-4 h-4"/> <span>Mẫu kiểm tra</span></button>
                      )}
-                     <button onClick={() => setActiveTab('PROFILE')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'PROFILE' ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-700'}`}><UserCircle className="w-4 h-4"/> <span>Cá nhân</span></button>
+                     {showTab('USERS') && (
+                         <button onClick={() => setActiveTab('USERS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'USERS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Users className="w-4 h-4"/> <span>Người dùng</span></button>
+                     )}
+                     {showTab('WORKSHOPS') && (
+                         <button onClick={() => setActiveTab('WORKSHOPS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'WORKSHOPS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Factory className="w-4 h-4"/> <span>Quản lý xưởng</span></button>
+                     )}
+                     {showTab('DEPARTMENTS') && (
+                         <button onClick={() => setActiveTab('DEPARTMENTS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'DEPARTMENTS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Building className="w-4 h-4"/> <span>Phòng ban</span></button>
+                     )}
+                     {showTab('PROFILE') && (
+                         <button onClick={() => setActiveTab('PROFILE')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'PROFILE' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><UserCircle className="w-4 h-4"/> <span>Cá nhân</span></button>
+                     )}
                  </div>
              </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 md:p-6 no-scrollbar">
             <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
-                {activeTab === 'TEMPLATE' && isAdminOrManager && (
+                {activeTab === 'TEMPLATE' && showTab('TEMPLATE') && (
                     <div className="space-y-4">
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'}`}>{m.label}</button>))}</div></div>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} user={currentUser} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/></div>
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:border-slate-600'}`}>{m.label}</button>))}</div></div>
+                        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} user={currentUser} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/></div>
                     </div>
                 )}
-                {activeTab === 'USERS' && isAdminOrManager && (
+                {activeTab === 'USERS' && showTab('USERS') && (
                     <UserManagement currentUser={currentUser} users={users} roles={roles} onAddUser={onAddUser} onUpdateUser={onUpdateUser} onDeleteUser={onDeleteUser} onImportUsers={onImportUsers} />
                 )}
-                {activeTab === 'ROLES' && isAdminOrManager && (
-                    <RoleManagement roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} onDeleteRole={handleDeleteRole} />
-                )}
-                {activeTab === 'WORKSHOPS' && isAdminOrManager && (
+                {activeTab === 'WORKSHOPS' && showTab('WORKSHOPS') && (
                     <WorkshopManagement workshops={workshops} onAddWorkshop={onAddWorkshop} onUpdateWorkshop={onUpdateWorkshop} onDeleteWorkshop={onDeleteWorkshop} />
                 )}
+                {activeTab === 'DEPARTMENTS' && showTab('DEPARTMENTS') && (
+                    <DepartmentManagement />
+                )}
 
-                {activeTab === 'PROFILE' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="lg:col-span-2 space-y-4 md:space-y-6 relative">
-                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative">
-                                <div className="bg-slate-900 p-6 md:p-8 flex flex-col items-center text-center relative group min-h-[280px] justify-center">
-                                    <div className="absolute top-3 right-3 md:top-4 md:right-4 bg-white/10 px-2 py-1 md:px-3 rounded-full text-[9px] md:text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-1.5 border border-white/10"><ShieldCheck className="w-3 h-3 text-blue-400" /><span className="hidden md:inline">Hệ thống</span> {profileData.role}</div>
-                                    <div className="relative">
-                                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white/20 shadow-2xl overflow-hidden mb-3 md:mb-4 bg-slate-800 flex items-center justify-center">
-                                            <img 
-                                                src={getProxyImageUrl(profileData.avatar)} 
-                                                alt={profileData.name} 
-                                                className="w-full h-full object-cover" 
-                                                onError={(e) => {
-                                                    // Fallback khi ảnh không load được
-                                                    const name = profileData.name || 'User';
-                                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=256`;
-                                                }}
-                                            />
-                                        </div>
-                                        {isEditingProfile && (
-                                            <button onClick={() => profileFileInputRef.current?.click()} className="absolute bottom-2 right-0 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all active:scale-95 border-2 border-slate-900">
-                                                <Camera className="w-4 h-4 md:w-5 md:h-5" />
-                                            </button>
-                                        )}
-                                        <input type="file" ref={profileFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange}/>
+                {activeTab === 'PROFILE' && showTab('PROFILE') && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        {/* Compact Horizontal Profile Panel */}
+                        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm flex flex-col gap-3">
+                            <div className="flex flex-col md:flex-row items-center gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                <div className="relative shrink-0">
+                                    <div className="w-16 h-16 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden bg-slate-50 dark:bg-slate-850 flex items-center justify-center">
+                                        <img 
+                                            src={getProxyImageUrl(profileData.avatar)} 
+                                            alt={profileData.name} 
+                                            className="w-full h-full object-cover" 
+                                            onError={(e) => {
+                                                const name = profileData.name || 'User';
+                                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=2563EB&color=fff&size=256`;
+                                            }}
+                                        />
                                     </div>
-                                    {isEditingProfile ? (
-                                        <div className="w-full max-w-sm space-y-2">
+                                    {isEditingProfile && (
+                                        <button onClick={() => profileFileInputRef.current?.click()} className="absolute bottom-0 right-0 p-1 bg-blue-600 text-white rounded-full shadow-md hover:bg-blue-700 transition-all active:scale-95 border border-white dark:border-slate-900">
+                                            <Camera className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                    <input type="file" ref={profileFileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange}/>
+                                </div>
+                                <div className="flex-1 text-center md:text-left min-w-0">
+                                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                                        {isEditingProfile ? (
                                             <input 
                                                 value={profileData.name} 
                                                 onChange={e => setProfileData({...profileData, name: e.target.value.toUpperCase()})} 
-                                                className="w-full px-4 py-2 text-center text-lg md:text-xl font-black text-slate-900 bg-white rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 placeholder:text-slate-400 uppercase" 
-                                                placeholder="Nhập họ và tên..."
+                                                className="px-2 py-1 text-xs font-black text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/10 uppercase" 
+                                                placeholder="HỌ VÀ TÊN..."
                                             />
-                                        </div>
-                                    ) : (
-                                        <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">{profileData.name}</h3>
-                                    )}
-                                    <p className="text-blue-400 font-bold text-sm mt-1">@{profileData.username}</p>
-                                </div>
-                                <div className="p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-                                    <div className="space-y-3 md:space-y-4">
-                                        <div>
-                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Mã nhân viên (MSNV)</label>
-                                            {isEditingProfile ? (
-                                                <input value={profileData.msnv || ''} onChange={e => setProfileData({...profileData, msnv: e.target.value.toUpperCase()})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập mã nhân viên..."/>
-                                            ) : (
-                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.msnv || '---'}</p>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Chức vụ</label>
-                                            {isEditingProfile ? (
-                                                <input value={profileData.position || ''} onChange={e => setProfileData({...profileData, position: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập chức vụ..."/>
-                                            ) : (
-                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.position || '---'}</p>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Ngày nhận việc</label>
-                                            {isEditingProfile ? (
-                                                <input type="date" value={profileData.joinDate || ''} onChange={e => setProfileData({...profileData, joinDate: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"/>
-                                            ) : (
-                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100 font-mono">{profileData.joinDate || '---'}</p>
-                                            )}
-                                        </div>
+                                        ) : (
+                                            <h3 className="text-sm font-black text-slate-950 dark:text-slate-50 uppercase tracking-tight">{profileData.name}</h3>
+                                        )}
+                                        <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider border border-slate-200 dark:border-slate-700">
+                                            {profileData.role === 'ADMIN' ? 'Admin' : profileData.role === 'MANAGER' ? 'Quản lý' : 'Nhân viên'}
+                                        </span>
                                     </div>
-                                    <div className="space-y-3 md:space-y-4">
-                                        <div>
-                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nơi làm việc</label>
-                                            {isEditingProfile ? (
-                                                <input value={profileData.workLocation || ''} onChange={e => setProfileData({...profileData, workLocation: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập nơi làm việc..."/>
-                                            ) : (
-                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.workLocation || '---'}</p>
-                                            )}
+                                    <p className="text-blue-600 dark:text-blue-400 font-bold text-xs mt-0.5">@{profileData.username}</p>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    {!isEditingProfile ? (
+                                        <button onClick={() => setIsEditingProfile(true)} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold uppercase tracking-tight rounded-md active:scale-95 transition-all flex items-center gap-1.5 leading-none">
+                                            <Edit3 className="w-3.5 h-3.5" /> Thống kê & Chỉnh sửa
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => { setIsEditingProfile(false); setProfileData(currentUser); }} className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold uppercase tracking-tight rounded-md active:scale-95 transition-all leading-none">
+                                                Hủy
+                                            </button>
+                                            <button onClick={handleSaveProfile} disabled={isSavingProfile} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold uppercase tracking-tight rounded-md active:scale-95 transition-all flex items-center gap-1 leading-none disabled:opacity-50">
+                                                {isSavingProfile ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Save className="w-3.5 h-3.5"/>}
+                                                <span>Lưu</span>
+                                            </button>
                                         </div>
-                                        <div>
-                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Trình độ</label>
-                                            {isEditingProfile ? (
-                                                <input value={profileData.education || ''} onChange={e => setProfileData({...profileData, education: e.target.value})} className="w-full text-sm font-bold text-slate-800 bg-white px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập trình độ..."/>
-                                            ) : (
-                                                <p className="text-sm font-bold text-slate-800 bg-slate-50 px-3 py-2 md:px-4 md:py-2.5 rounded-xl border border-slate-100">{profileData.education || '---'}</p>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Quyền truy cập</label>
-                                            <div className="flex flex-wrap gap-1.5 mt-1">
-                                                {(profileData?.allowedModules || []).map((m, mIdx) => (
-                                                    <span key={`${m}-${mIdx}`} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100 uppercase">{m}</span>
-                                                ))}
-                                                {(!profileData?.allowedModules || profileData.allowedModules.length === 0) && (
-                                                    <span className="text-xs italic text-slate-400">Không có modules</span>
-                                                )}
-                                            </div>
-                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Info Fields Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Mã nhân viên (MSNV)</span>
+                                    {isEditingProfile ? (
+                                        <input value={profileData.msnv || ''} onChange={e => setProfileData({...profileData, msnv: e.target.value.toUpperCase()})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:font-normal" placeholder="VD: AA-00123"/>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.msnv || 'Chưa thiết lập'}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Chức danh / Cấp bậc</span>
+                                    {isEditingProfile ? (
+                                        <input value={profileData.position || ''} onChange={e => setProfileData({...profileData, position: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập chức danh..."/>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.position || 'Chưa thiết lập'}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Ngày nhận việc</span>
+                                    {isEditingProfile ? (
+                                        <input type="date" value={profileData.joinDate || ''} onChange={e => setProfileData({...profileData, joinDate: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all"/>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800 font-mono">{profileData.joinDate || 'Chưa thiết lập'}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Nơi làm việc / Chi nhánh</span>
+                                    {isEditingProfile ? (
+                                        <input value={profileData.workLocation || ''} onChange={e => setProfileData({...profileData, workLocation: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập địa điểm..."/>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.workLocation || 'Chưa thiết lập'}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Trình độ chuyên môn</span>
+                                    {isEditingProfile ? (
+                                        <input value={profileData.education || ''} onChange={e => setProfileData({...profileData, education: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập trình độ..."/>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.education || 'Chưa thiết lập'}</p>
+                                    )}
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Quyền truy cập Module</span>
+                                    <div className="flex flex-wrap gap-1 bg-slate-50/20 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 p-1 rounded-md min-h-[31px]">
+                                        {(profileData?.allowedModules || []).map((m, mIdx) => (
+                                            <span key={`${m}-${mIdx}`} className="px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded text-[8px] font-black border border-blue-100 dark:border-slate-700 uppercase leading-none">{m}</span>
+                                        ))}
+                                        {(!profileData?.allowedModules || profileData.allowedModules.length === 0) && (
+                                            <span className="text-[10px] italic text-slate-400 dark:text-slate-500">Chưa cấp quyền module</span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
-                            {!isEditingProfile && (
-                                <button onClick={() => setIsEditingProfile(true)} className="absolute -bottom-3 right-4 md:right-6 bg-blue-600 text-white w-12 h-12 md:w-14 md:h-14 rounded-full shadow-xl shadow-blue-500/40 flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all z-10 border-4 border-slate-50">
-                                    <Edit3 className="w-5 h-5 md:w-6 md:h-6" />
-                                </button>
-                            )}
-                            {isEditingProfile && (
-                                <div className="flex justify-end gap-3 mt-4 animate-in slide-in-from-bottom-2 fade-in duration-300">
-                                    <Button variant="secondary" onClick={() => { setIsEditingProfile(false); setProfileData(currentUser); }} className="text-xs md:text-sm">Hủy bỏ</Button>
-                                    <Button onClick={handleSaveProfile} disabled={isSavingProfile} icon={isSavingProfile ? <Loader2 className="w-3 h-3 md:w-4 md:h-4 animate-spin"/> : <Save className="w-3 h-3 md:w-4 md:h-4"/>} className="text-xs md:text-sm">
-                                        {isSavingProfile ? 'Đang lưu...' : 'Lưu thay đổi'}
-                                    </Button>
-                                </div>
-                            )}
                         </div>
-                        <div className="lg:col-span-1 pb-10 md:pb-0">
-                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 md:p-6 space-y-4 md:space-y-6 sticky top-24">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-3 bg-red-50 text-red-600 rounded-2xl">
-                                        <Lock className="w-5 h-5 md:w-6 md:h-6" />
+
+                        {/* Ultra-compact horizontal Password Reset Panel */}
+                        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <Lock className="w-4 h-4 text-slate-500" />
+                                <h4 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">Đổi mật khẩu tài khoản</h4>
+                            </div>
+                            <div className="flex flex-col md:flex-row items-end md:items-center gap-2">
+                                <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase shrink-0">Mật khẩu mới:</span>
+                                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-transparent border-none p-0 outline-none text-xs font-bold text-slate-800 dark:text-slate-200" placeholder="Ít nhất 4 ký tự..."/>
                                     </div>
-                                    <h3 className="font-black text-slate-800 uppercase tracking-tighter text-sm md:text-base">Bảo mật tài khoản</h3>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mật khẩu mới</label>
-                                        <div className="relative group">
-                                            <input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full pl-4 pr-10 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Nhập mật khẩu mới..."/>
-                                            <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600 transition-colors">
-                                                {showPassword ? <EyeOff className="h-4 h-4" /> : <Eye className="h-4 h-4" />}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Xác nhận mật khẩu</label>
-                                        <input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Xác nhận lại mật khẩu..."/>
-                                    </div>
-                                    <Button className="w-full py-3 md:py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-200 text-xs md:text-sm" onClick={handleChangePassword} disabled={isUpdatingPassword || !newPassword || !confirmPassword} icon={isUpdatingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}>
-                                        Cập nhật mật khẩu
-                                    </Button>
-                                </div>
-                                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
-                                    <div className="flex items-start gap-3">
-                                        <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
-                                        <p className="text-[9px] md:text-[10px] text-orange-800 font-medium leading-relaxed uppercase tracking-tighter">
-                                            Ghi chú: Vui lòng lưu lại mật khẩu mới ở nơi an toàn. Bạn sẽ cần sử dụng nó cho lần đăng nhập tiếp theo.
-                                        </p>
+                                    <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-705 rounded-md px-2 py-1">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase shrink-0">Xác nhận:</span>
+                                        <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full bg-transparent border-none p-0 outline-none text-xs font-bold text-slate-800 dark:text-slate-200" placeholder="Xác nhận lại..."/>
                                     </div>
                                 </div>
+                                <button 
+                                    onClick={handleChangePassword} 
+                                    disabled={isUpdatingPassword || !newPassword || !confirmPassword} 
+                                    className="px-3 py-1.5 bg-slate-900 dark:bg-slate-800 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-md transition-all shrink-0 flex items-center gap-1 h-[31px] disabled:opacity-50"
+                                >
+                                    {isUpdatingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Save className="w-3.5 h-3.5"/>}
+                                    <span>Cập nhật</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Compact user activity logs */}
+                        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-3 space-y-2">
+                            <div className="flex items-center gap-2">
+                                <Activity className="w-4 h-4 text-indigo-500" />
+                                <h4 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide">Nhật ký hoạt động cá nhân</h4>
+                            </div>
+                            <div className="max-h-[220px] overflow-y-auto no-scrollbar border border-slate-100 dark:border-slate-800 rounded-md bg-slate-50/50 dark:bg-slate-800/30 p-2">
+                                <UserActivityList userId={currentUser.id} />
                             </div>
                         </div>
                     </div>

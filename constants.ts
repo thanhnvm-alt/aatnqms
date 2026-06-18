@@ -248,19 +248,41 @@ export const SITE_TEMPLATES = {
 export const SITE_CHECKLIST_TEMPLATE = SITE_TEMPLATES.BAN; // Default to BAN
 
 export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
-  { id: 'CONVERT_3D', label: 'AI - 2D sang 3D', group: 'TOOLS' },
-  { id: 'IQC', label: 'IQC - Vật Liệu Đầu Vào', group: 'QC' },
-  { id: 'SQC_MAT', label: 'SQC - Gia Công Ngoài - Vật Tư', group: 'QC' },
-  { id: 'SQC_BTP', label: 'SQC - Gia Công Ngoài - BTP', group: 'QC' },
-  { id: 'PQC', label: 'PQC - Kiểm tra Sản xuất', group: 'QC' },
-  { id: 'FSR', label: 'FSR - Mẫu Đầu Tiên', group: 'QC' },
-  { id: 'STEP', label: 'Step Vecni - Bước màu', group: 'QC' },
-  { id: 'FQC', label: 'FQC - Final', group: 'QA' },
-  { id: 'SPR', label: 'SPR - Kiểm Mẫu', group: 'QA' },
-  { id: 'SITE', label: 'Site - Công trình', group: 'QA' },
-  { id: 'PROJECTS', label: 'Danh Sách Dự Án', group: 'PM' },
-  { id: 'OEM', label: 'Khách OEM', group: 'OEM' },
-  { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', group: 'QC' },
+  // --- Hệ thống Nghiệp vụ Thẩm định / Kiểm tra ---
+  { id: 'IQC', label: 'IQC - Đầu Vào', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'SQC_MAT', label: 'SQC - Vật Tư Ngoài', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'SQC_BTP', label: 'SQC - Bán Thành Phẩm', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'PQC', label: 'PQC - Sản Xuất', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'FSR', label: 'FSR - Mẫu Đầu Tiên', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'STEP', label: 'Step Vecni - Bước màu', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'FQC', label: 'FQC - Thành Phẩm', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'SPR', label: 'SPR - Kiểm Mẫu', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'SITE', label: 'Site - Công Trình', group: 'KIỂM TRA CHẤT LƯỢNG' },
+
+  // --- Menu chính trên Sidebar ---
+  { id: 'DASHBOARD', label: 'Menu - Báo Cáo Tổng Hợp', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'PROJECTS', label: 'Menu - Quản lý dự án', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'SUPPLIERS', label: 'Menu - Nhà cung cấp', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'LIST', label: 'Menu - Danh sách phiếu', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'NCR_LIST', label: 'Menu - Danh sách NCR', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'DEFECT_LIBRARY', label: 'Menu - Thư viện lỗi', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'MATERIALS', label: 'Menu - Quản lý vật liệu', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'TOOLS', label: 'Menu - Quản lý CCDC / Thiết bị', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'IPO', label: 'Menu - IPO Data (Đơn hàng)', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'SETTINGS', label: 'Menu - Cài đặt hệ thống', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'TRASH', label: 'Menu - Thùng rác hệ thống', group: 'ĐIỀU HƯỚNG CHÍNH' },
+
+  // --- Cài đặt chi tiết (Sub-settings Tabs) ---
+  { id: 'SETTINGS_TEMPLATE', label: 'Cài đặt - Mẫu phiếu kiểm tra', group: 'CẤU HÌNH CHI TIẾT' },
+  { id: 'SETTINGS_USERS', label: 'Cài đặt - Hồ sơ Người dùng', group: 'CẤU HÌNH CHI TIẾT' },
+  { id: 'SETTINGS_ROLES', label: 'Cài đặt - Ma trận Phân quyền', group: 'CẤU HÌNH CHI TIẾT' },
+  { id: 'SETTINGS_WORKSHOPS', label: 'Cài đặt - Danh mục Xưởng', group: 'CẤU HÌNH CHI TIẾT' },
+  { id: 'SETTINGS_DEPARTMENTS', label: 'Cài đặt - Phòng ban & Cấp bậc', group: 'CẤU HÌNH CHI TIẾT' },
+  { id: 'SETTINGS_PROFILE', label: 'Cài đặt - Thông tin cá nhân', group: 'CẤU HÌNH CHI TIẾT' },
+
+  // --- Tính năng mở rộng ---
+  { id: 'CONVERT_3D', label: 'Phần mềm 3D - AI Convert', group: 'CÔNG CỤ PHỤ TRỢ' },
+  { id: 'OEM', label: 'Cổng Khách hàng OEM', group: 'ĐƯỜNG HOẠT ĐỘNG KHÁC' },
 ];
 
 export const MOCK_USERS: User[] = [

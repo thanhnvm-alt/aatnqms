@@ -49,7 +49,7 @@ const CustomPinIcon = ({ color, isSelected }: { color: string, isSelected?: bool
         </svg>
         {isSelected && (
             <div className="absolute -top-1 -right-1">
-                <div className="w-3 h-3 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100">
+                <div className="w-3 h-3 bg-white dark:bg-slate-900 rounded-full flex items-center justify-center shadow-sm border border-slate-100 dark:border-slate-800">
                     <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></div>
                 </div>
             </div>
@@ -427,25 +427,25 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
     return (
         <div className="absolute inset-0 z-40 bg-[#f1f5f9] flex flex-col animate-in fade-in duration-300 overflow-hidden pb-[80px] lg:pb-0">
-            <header className="h-14 bg-white border-b border-slate-200 px-3 md:px-4 flex items-center justify-between shrink-0 shadow-sm z-50">
+            <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-3 md:px-4 flex items-center justify-between shrink-0 shadow-sm z-50">
                 <div className="flex items-center gap-2 md:gap-3">
-                    <button onClick={onBack} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"><ArrowLeft className="w-4 h-4" /></button>
-                    <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+                    <button onClick={onBack} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-colors"><ArrowLeft className="w-4 h-4" /></button>
+                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden md:block"></div>
                     <div className="overflow-hidden">
-                        <h2 className="text-[10px] md:text-[11px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[140px] md:max-w-[200px]">{floorPlan.name}</h2>
-                        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate mt-0.5">REV {floorPlan.version}</p>
+                        <h2 className="text-[10px] md:text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight truncate max-w-[140px] md:max-w-[200px]">{floorPlan.name}</h2>
+                        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest truncate mt-0.5">REV {floorPlan.version}</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 md:gap-2">
-                    <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                        <button onClick={() => handleZoom(0.5)} className="p-1.5 hover:bg-white rounded-md text-slate-600"><ZoomIn className="w-3.5 h-3.5" /></button>
-                        <span className="hidden sm:inline-block px-2 text-[9px] font-black text-slate-500 min-w-[30px] text-center">{Math.round(scale * 100)}%</span>
-                        <button onClick={() => handleZoom(-0.5)} className="p-1.5 hover:bg-white rounded-md text-slate-600"><ZoomOut className="w-3.5 h-3.5" /></button>
+                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <button onClick={() => handleZoom(0.5)} className="p-1.5 hover:bg-white dark:bg-slate-900 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500"><ZoomIn className="w-3.5 h-3.5" /></button>
+                        <span className="hidden sm:inline-block px-2 text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 min-w-[30px] text-center">{Math.round(scale * 100)}%</span>
+                        <button onClick={() => handleZoom(-0.5)} className="p-1.5 hover:bg-white dark:bg-slate-900 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500"><ZoomOut className="w-3.5 h-3.5" /></button>
                     </div>
                     <button 
                         onClick={() => setIsAddingMode(!isAddingMode)}
-                        className={`px-2.5 py-1.5 rounded-lg border font-black text-[9px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${isAddingMode ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-100' : 'bg-white text-blue-600 border-blue-200'}`}
+                        className={`px-2.5 py-1.5 rounded-lg border font-black text-[9px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${isAddingMode ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-100' : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-slate-700'}`}
                     >
                         {isAddingMode ? <Crosshair className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                         <span className="hidden md:inline">{isAddingMode ? 'CANCEL' : 'DROP PIN'}</span>
@@ -454,16 +454,16 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
             </header>
 
             <div className="flex-1 relative overflow-hidden flex">
-                <div className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex flex-col shrink-0 z-30 shadow-sm">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="hidden lg:flex w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 flex flex-col shrink-0 z-30 shadow-sm">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                             <input 
                                 value={leftSidebarSearchInput}
                                 onChange={e => setLeftSidebarSearchInput(e.target.value)}
                                 onBlur={handleCommitSidebarSearch}
                                 onKeyDown={handleSidebarKeyDown}
-                                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:ring-2 ring-blue-100 transition-all"
+                                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium outline-none focus:ring-2 ring-blue-100 transition-all"
                                 placeholder="Tìm điểm kiểm tra..."
                             />
                         </div>
@@ -476,7 +476,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                 <div 
                                     key={pin.id}
                                     onClick={() => handleSelectPin(pin)}
-                                    className={`p-3 rounded-2xl border transition-all cursor-pointer group ${isSelected ? 'bg-blue-50 border-blue-200 shadow-sm ring-1 ring-blue-100' : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-200'}`}
+                                    className={`p-3 rounded-2xl border transition-all cursor-pointer group ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 shadow-sm ring-1 ring-blue-100' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 hover:border-slate-200 dark:border-slate-700'}`}
                                 >
                                     <div className="flex items-start gap-3">
                                         <div className="shrink-0 mt-0.5">
@@ -487,7 +487,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                             </svg>
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h4 className={`text-[11px] font-black uppercase truncate pr-1 ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>{pin.label || 'Chưa đặt tên'}</h4>
+                                            <h4 className={`text-[11px] font-black uppercase truncate pr-1 ${isSelected ? 'text-blue-700' : 'text-slate-800 dark:text-slate-200'}`}>{pin.label || 'Chưa đặt tên'}</h4>
                                             <p className={`text-[8px] font-black uppercase mt-0.5 ${pin.status === InspectionStatus.APPROVED ? 'text-emerald-600' : 'text-orange-600'}`}>{pin.status}</p>
                                         </div>
                                     </div>
@@ -510,7 +510,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                     onClick={handleLayoutClick}
                 >
                     <div 
-                        className="relative shadow-[0_40px_120px_rgba(0,0,0,0.2)] rounded-sm overflow-hidden bg-white"
+                        className="relative shadow-[0_40px_120px_rgba(0,0,0,0.2)] rounded-sm overflow-hidden bg-white dark:bg-slate-900"
                         style={{ 
                             transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
                             transformOrigin: 'center',
@@ -588,50 +588,50 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
             {/* --- QUICK REVIEW OVERLAY --- */}
             {selectedPin && (
-                <div className="absolute inset-0 sm:left-auto sm:right-0 sm:w-[400px] bg-white flex flex-col z-[100] shadow-[-20px_0_60px_rgba(0,0,0,0.15)] animate-in slide-in-from-bottom sm:slide-in-from-right duration-300">
+                <div className="absolute inset-0 sm:left-auto sm:right-0 sm:w-[400px] bg-white dark:bg-slate-900 flex flex-col z-[100] shadow-[-20px_0_60px_rgba(0,0,0,0.15)] animate-in slide-in-from-bottom sm:slide-in-from-right duration-300">
                     {isLoadingQuickDetail ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-white">
-                            <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-600" />
+                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900">
+                            <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-600 dark:text-blue-400" />
                             <p className="text-[10px] font-black uppercase tracking-widest">Đang đồng bộ dữ liệu...</p>
                         </div>
                     ) : quickDetail ? (
                         <>
-                            <header className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white shadow-sm z-10">
+                            <header className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0 bg-white dark:bg-slate-900 shadow-sm z-10">
                                 <div className="flex items-center gap-3">
-                                    <button onClick={() => setSelectedPin(null)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 active:scale-90 transition-all sm:hidden"><ArrowLeft className="w-5 h-5"/></button>
+                                    <button onClick={() => setSelectedPin(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl text-slate-500 dark:text-slate-400 dark:text-slate-500 active:scale-90 transition-all sm:hidden"><ArrowLeft className="w-5 h-5"/></button>
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <Flag className="w-3.5 h-3.5 text-orange-500 fill-current animate-bounce" />
-                                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-tight">Hồ sơ #{quickDetail.id.split('-').pop()}</h3>
+                                            <h3 className="font-black text-slate-900 dark:text-slate-100 text-xs uppercase tracking-tight">Hồ sơ #{quickDetail.id.split('-').pop()}</h3>
                                         </div>
                                         <div className="flex gap-1.5 mt-1">
-                                            <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border shadow-sm ${quickDetail.status === InspectionStatus.APPROVED ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>{quickDetail.status}</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border shadow-sm ${quickDetail.status === InspectionStatus.APPROVED ? 'bg-green-50 dark:bg-green-900/20 text-green-700 border-green-200 dark:border-green-800' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>{quickDetail.status}</span>
                                         </div>
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedPin(null)} className="p-2.5 hover:bg-slate-100 rounded-2xl text-slate-400 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
+                                <button onClick={() => setSelectedPin(null)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-2xl text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
                             </header>
 
-                            <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-6 bg-slate-50/30">
+                            <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-6 bg-slate-50 dark:bg-slate-800/50/30">
                                 <div className="space-y-2">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Hạng mục thẩm định</p>
-                                    <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
-                                        <p className="text-[13px] font-black text-slate-800 leading-relaxed uppercase tracking-tight italic">"{quickDetail.ten_hang_muc}"</p>
-                                        {quickDetail.summary && <p className="text-[11px] text-slate-500 leading-relaxed border-l-3 border-orange-200 pl-4 mt-3">Notes: {quickDetail.summary}</p>}
+                                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Hạng mục thẩm định</p>
+                                    <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <p className="text-[13px] font-black text-slate-800 dark:text-slate-200 leading-relaxed uppercase tracking-tight italic">"{quickDetail.ten_hang_muc}"</p>
+                                        {quickDetail.summary && <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 leading-relaxed border-l-3 border-orange-200 pl-4 mt-3">Notes: {quickDetail.summary}</p>}
                                     </div>
                                 </div>
 
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between ml-1">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                            <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
+                                        <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                            <ImageIcon className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
                                             Minh chứng ({(quickDetail.images || []).length})
                                         </p>
                                         <div className="flex gap-1.5">
-                                            <button onClick={() => quickCameraRef.current?.click()} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-90 transition-all border border-blue-100" title="Chụp ảnh nhanh">
+                                            <button onClick={() => quickCameraRef.current?.click()} className="p-1.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:bg-blue-900/30 active:scale-90 transition-all border border-blue-100 dark:border-slate-700" title="Chụp ảnh nhanh">
                                                 <Camera className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => quickFileRef.current?.click()} className="p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 active:scale-90 transition-all border border-slate-200" title="Tải ảnh">
+                                            <button onClick={() => quickFileRef.current?.click()} className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-lg hover:bg-slate-200 dark:bg-slate-700 active:scale-90 transition-all border border-slate-200 dark:border-slate-700" title="Tải ảnh">
                                                 <ImagePlus className="w-4 h-4" />
                                             </button>
                                         </div>
@@ -641,7 +641,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                         {quickDetail.images?.map((img, idx) => (
                                             <div 
                                                 key={idx} 
-                                                className="aspect-square bg-white rounded-[2rem] border border-slate-200 overflow-hidden cursor-zoom-in group shadow-sm hover:border-blue-400 hover:shadow-xl transition-all relative"
+                                                className="aspect-square bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 overflow-hidden cursor-zoom-in group shadow-sm hover:border-blue-400 hover:shadow-xl transition-all relative"
                                             >
                                                 <img 
                                                     src={getProxyImageUrl(img)} 
@@ -649,8 +649,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                                     className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500" 
                                                 />
                                                 <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                                    <div className="bg-white/90 backdrop-blur-md p-2 rounded-xl shadow-lg">
-                                                        <Maximize2 className="w-4 h-4 text-blue-600" />
+                                                    <div className="bg-white dark:bg-slate-900/90 backdrop-blur-md p-2 rounded-xl shadow-lg">
+                                                        <Maximize2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                                                     </div>
                                                 </div>
                                                 <button 
@@ -664,31 +664,31 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                         {(quickDetail.images?.length === 0) && (
                                             <div 
                                                 onClick={() => quickCameraRef.current?.click()}
-                                                className="col-span-2 py-12 flex flex-col items-center justify-center bg-white rounded-[2rem] border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer group"
+                                                className="col-span-2 py-12 flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/80/50 transition-all cursor-pointer group"
                                             >
-                                                <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-3 group-hover:bg-blue-100 group-hover:scale-110 transition-all">
-                                                    <Camera className="w-6 h-6 text-slate-300 group-hover:text-blue-500" />
+                                                <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center mb-3 group-hover:bg-blue-100 dark:bg-blue-900/30 group-hover:scale-110 transition-all">
+                                                    <Camera className="w-6 h-6 text-slate-300 group-hover:text-blue-500 dark:text-blue-400" />
                                                 </div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-600">Bấm để chụp ảnh minh chứng</p>
+                                                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest group-hover:text-blue-600 dark:text-blue-400">Bấm để chụp ảnh minh chứng</p>
                                             </div>
                                         )}
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Phân công xử lý</p>
+                                    <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Phân công xử lý</p>
                                     <button 
                                         onClick={openUserSelector}
-                                        className="w-full flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm group hover:border-blue-300 transition-all active:scale-[0.98]"
+                                        className="w-full flex items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm group hover:border-blue-300 transition-all active:scale-[0.98]"
                                     >
-                                        <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-300 group-hover:text-blue-50 group-hover:bg-blue-50 transition-all">
+                                        <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center border border-slate-100 dark:border-slate-800 text-slate-300 group-hover:text-blue-50 group-hover:bg-blue-50 dark:bg-slate-800/80 transition-all">
                                             <UserIcon className="w-6 h-6" />
                                         </div>
                                         <div className="flex-1 min-w-0 text-left">
-                                            <p className="text-[12px] font-black text-slate-800 uppercase truncate">{quickDetail.responsiblePerson || 'CHƯA PHÂN CÔNG'}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Assigned Staff</p>
+                                            <p className="text-[12px] font-black text-slate-800 dark:text-slate-200 uppercase truncate">{quickDetail.responsiblePerson || 'CHƯA PHÂN CÔNG'}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">Assigned Staff</p>
                                         </div>
-                                        <div className="p-2 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
+                                        <div className="p-2 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">
                                             <ChevronRight className="w-5 h-5" />
                                         </div>
                                     </button>
@@ -696,19 +696,19 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between ml-1">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5"/> Thảo luận</p>
+                                        <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5"/> Thảo luận</p>
                                     </div>
                                     <div className="space-y-5 px-1 pb-4">
                                         {(quickDetail.comments || []).slice(-4).map((cmt, idx) => (
                                             <div key={idx} className="flex gap-4 animate-in slide-in-from-bottom-1">
-                                                <img src={getProxyImageUrl(cmt.userAvatar)} className="w-9 h-9 rounded-xl bg-white shrink-0 border border-slate-200 shadow-sm object-cover" />
+                                                <img src={getProxyImageUrl(cmt.userAvatar)} className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 shrink-0 border border-slate-200 dark:border-slate-700 shadow-sm object-cover" />
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-[10px] font-black text-slate-800 uppercase truncate pr-1">{cmt.userName}</span>
-                                                        <span className="text-[8px] text-slate-400 font-mono shrink-0 uppercase">{formatTime(cmt.createdAt)}</span>
+                                                        <span className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase truncate pr-1">{cmt.userName}</span>
+                                                        <span className="text-[8px] text-slate-400 dark:text-slate-500 font-mono shrink-0 uppercase">{formatTime(cmt.createdAt)}</span>
                                                     </div>
-                                                    <div className="bg-white p-3.5 rounded-2xl rounded-tl-none border border-slate-200 shadow-sm">
-                                                        <p className="text-[11px] text-slate-600 leading-relaxed font-medium">{cmt.content}</p>
+                                                    <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                        <p className="text-[11px] text-slate-600 dark:text-slate-400 dark:text-slate-500 leading-relaxed font-medium">{cmt.content}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -720,19 +720,19 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                 </div>
                             </div>
 
-                            <div className="p-4 bg-white border-t border-slate-100 shrink-0 space-y-4 shadow-[0_-15px_40px_rgba(0,0,0,0.05)] pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
+                            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 space-y-4 shadow-[0_-15px_40px_rgba(0,0,0,0.05)] pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
                                 <div className="flex gap-2">
                                     <input 
                                         value={newComment} 
                                         onChange={e => setNewComment(e.target.value)} 
                                         onKeyDown={e => e.key === 'Enter' && handlePostQuickComment()} 
-                                        className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-[12px] font-medium outline-none focus:ring-4 focus:ring-blue-100 h-12 transition-all shadow-inner" 
+                                        className="flex-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 text-[12px] font-medium outline-none focus:ring-4 focus:ring-blue-100 h-12 transition-all shadow-inner" 
                                         placeholder="Phản hồi nhanh..." 
                                     />
                                     <button 
                                         onClick={handlePostQuickComment} 
                                         disabled={isUpdating || !newComment.trim()} 
-                                        className="w-12 h-12 bg-blue-600/10 text-blue-600 rounded-2xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-30 hover:bg-blue-600 hover:text-white"
+                                        className="w-12 h-12 bg-blue-600/10 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-30 hover:bg-blue-600 hover:text-white"
                                     >
                                         <Send className="w-5 h-5"/>
                                     </button>
@@ -764,29 +764,29 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
             {isUserSelectorOpen && (
                 <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[85vh]">
-                        <header className="p-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                            <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">Phân công nhân sự</h3>
-                            <button onClick={() => setIsUserSelectorOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><X className="w-6 h-6"/></button>
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[85vh]">
+                        <header className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
+                            <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-xs tracking-widest">Phân công nhân sự</h3>
+                            <button onClick={() => setIsUserSelectorOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"><X className="w-6 h-6"/></button>
                         </header>
-                        <div className="p-4 bg-slate-50/50 border-b border-slate-100 shrink-0">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-b border-slate-100 dark:border-slate-800 shrink-0">
                             <div className="relative">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input value={userSearchInput} onChange={e => setUserSearchInput(e.target.value)} onBlur={handleCommitUserSearch} onKeyDown={handleUserKeyDown} className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
+                                <input value={userSearchInput} onChange={e => setUserSearchInput(e.target.value)} onBlur={handleCommitUserSearch} onKeyDown={handleUserKeyDown} className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1">
                             {filteredUsers.map(u => (
-                                <button key={u.id} onClick={() => handleAssignUser(u)} className="w-full flex items-center gap-4 p-4 rounded-[1.5rem] hover:bg-blue-50 transition-all border border-transparent active:scale-95 text-left group">
+                                <button key={u.id} onClick={() => handleAssignUser(u)} className="w-full flex items-center gap-4 p-4 rounded-[1.5rem] hover:bg-blue-50 dark:bg-slate-800/80 transition-all border border-transparent active:scale-95 text-left group">
                                     <div className="relative">
-                                        <img src={getProxyImageUrl(u.avatar)} className="w-11 h-11 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-sm" />
+                                        <img src={getProxyImageUrl(u.avatar)} className="w-11 h-11 rounded-2xl object-cover shrink-0 border border-slate-200 dark:border-slate-700 shadow-sm" />
                                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-[13px] font-black text-slate-800 uppercase truncate leading-none">{u.name}</p>
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1.5">{u.position || u.role}</p>
+                                        <p className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-none">{u.name}</p>
+                                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase mt-1.5">{u.position || u.role}</p>
                                     </div>
-                                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all"><Check className="w-4 h-4" /></div>
+                                    <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all"><Check className="w-4 h-4" /></div>
                                 </button>
                             ))}
                         </div>

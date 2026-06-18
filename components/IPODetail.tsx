@@ -117,29 +117,29 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-slate-50">
+      <div className="h-full flex items-center justify-center bg-slate-50 dark:bg-slate-800/50">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading IPO Intelligence...</p>
+          <div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+          <p className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Loading IPO Intelligence...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 overflow-hidden">
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-800/50 overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm z-10">
+      <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shadow-sm z-10">
         <div className="flex items-center gap-4">
-          <button onClick={onBack} className="p-2.5 hover:bg-slate-100 rounded-2xl transition-colors text-slate-500">
+          <button onClick={onBack} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-2xl transition-colors text-slate-500 dark:text-slate-400 dark:text-slate-500">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[10px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-lg tracking-wider uppercase">INTERNAL ORDER</span>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.ma_ct}</span>
+              <span className="text-[10px] font-black bg-blue-100 dark:bg-blue-900/30 text-blue-700 px-2 py-0.5 rounded-lg tracking-wider uppercase">INTERNAL ORDER</span>
+              <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{item.ma_ct}</span>
             </div>
-            <h2 className="text-xl font-black text-slate-800 tracking-tight leading-none uppercase">{item.ma_nha_may}</h2>
+            <h2 className="text-xl font-black text-slate-800 dark:text-slate-200 tracking-tight leading-none uppercase">{item.ma_nha_may}</h2>
           </div>
         </div>
 
@@ -147,16 +147,16 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
           <button 
             onClick={handleAIAnalysis}
             disabled={analyzing}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all shadow-sm ${analyzing ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200'}`}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all shadow-sm ${analyzing ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200'}`}
           >
-            {analyzing ? <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" /> : <BrainCircuit className="w-4 h-4" />}
+            {analyzing ? <div className="w-4 h-4 border-2 border-slate-300 dark:border-slate-600 border-t-slate-500 rounded-full animate-spin" /> : <BrainCircuit className="w-4 h-4" />}
             {analyzing ? 'Analyzing...' : 'Prompt AI Studio'}
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="shrink-0 flex px-6 pt-2 bg-white border-b border-slate-100 gap-8 overflow-x-auto no-scrollbar">
+      <div className="shrink-0 flex px-6 pt-2 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 gap-8 overflow-x-auto no-scrollbar">
         {[
           { id: 'info', label: 'THÔNG TIN CHUNG', icon: FileText },
           { id: 'drawings', label: 'HỒ SƠ BẢN VẼ', icon: Ruler },
@@ -167,7 +167,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 pb-3 pt-2 text-[11px] font-black uppercase tracking-widest transition-all relative whitespace-nowrap ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`flex items-center gap-2 pb-3 pt-2 text-[11px] font-black uppercase tracking-widest transition-all relative whitespace-nowrap ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}
           >
             <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
             {tab.label}
@@ -192,47 +192,47 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
               >
                 {/* Status Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-6 bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col gap-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SỐ LƯỢNG IPO</p>
+                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1">
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">SỐ LƯỢNG IPO</p>
                     <div className="flex items-end gap-2">
-                      <p className="text-3xl font-black text-slate-800">{item.so_luong_ipo}</p>
-                      <p className="text-xs font-black text-slate-400 mb-1">{item.dvt}</p>
+                      <p className="text-3xl font-black text-slate-800 dark:text-slate-200">{item.so_luong_ipo}</p>
+                      <p className="text-xs font-black text-slate-400 dark:text-slate-500 mb-1">{item.dvt}</p>
                     </div>
                   </div>
-                  <div className="p-6 bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col gap-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">TÊN CÔNG TRÌNH</p>
-                    <p className="text-sm font-black text-slate-700 leading-tight line-clamp-2">{item.ten_ct}</p>
+                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1">
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">TÊN CÔNG TRÌNH</p>
+                    <p className="text-sm font-black text-slate-700 dark:text-slate-300 leading-tight line-clamp-2">{item.ten_ct}</p>
                   </div>
-                  <div className="p-6 bg-white rounded-[2rem] border border-slate-200 shadow-sm flex flex-col gap-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">HẠNG MỤC</p>
-                    <p className="text-sm font-bold text-slate-600 leading-tight line-clamp-2">{item.ten_hang_muc}</p>
+                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1">
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">HẠNG MỤC</p>
+                    <p className="text-sm font-bold text-slate-600 dark:text-slate-400 dark:text-slate-500 leading-tight line-clamp-2">{item.ten_hang_muc}</p>
                   </div>
                 </div>
 
                 {/* History Summary */}
-                <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50/50">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                      <div className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm">
                         <History className="w-5 h-5 text-indigo-500" />
                       </div>
-                      <h3 className="font-black text-[13px] text-slate-800 uppercase tracking-wider">Lịch sử thay đổi hệ thống</h3>
+                      <h3 className="font-black text-[13px] text-slate-800 dark:text-slate-200 uppercase tracking-wider">Lịch sử thay đổi hệ thống</h3>
                     </div>
                   </div>
                   <div className="p-8 space-y-8">
                     <div>
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                         <span className="w-1 h-4 bg-indigo-400 rounded-full"></span> NHÓM VẬT LIỆU
                       </h4>
-                      <p className="text-sm text-slate-600 italic leading-relaxed">
+                      <p className="text-sm text-slate-600 dark:text-slate-400 dark:text-slate-500 italic leading-relaxed">
                         {extendedDetail?.material_history || "Chưa có dữ liệu thay đổi vật liệu được ghi nhận trong hệ thống."}
                       </p>
                     </div>
                     <div className="pt-6 border-t border-slate-50">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                         <span className="w-1 h-4 bg-amber-400 rounded-full"></span> NHÓM MẪU VẬT LIỆU
                       </h4>
-                      <p className="text-sm text-slate-600 italic leading-relaxed">
+                      <p className="text-sm text-slate-600 dark:text-slate-400 dark:text-slate-500 italic leading-relaxed">
                         {extendedDetail?.sample_history || "Chưa có dữ liệu thay đổi mẫu mẫu vật liệu được ghi nhận."}
                       </p>
                     </div>
@@ -251,7 +251,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                 {/* Drawing Actions */}
                 <div className="flex justify-between items-center bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
                   <div className="flex gap-4 items-center">
-                    <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-indigo-100 shadow-xl border border-indigo-100">
+                    <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 flex items-center justify-center shadow-indigo-100 shadow-xl border border-indigo-100">
                       <FileDiff className="w-6 h-6 text-indigo-600" />
                     </div>
                     <div>
@@ -269,33 +269,33 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                 {/* Drawing List */}
                 <div className="grid grid-cols-1 gap-4">
                   {drawings.length > 0 ? drawings.map((dw, idx) => (
-                    <div key={dw.id || idx} className="group bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-md transition-all flex items-start gap-6">
-                      <div className={`shrink-0 w-14 h-14 rounded-3xl flex items-center justify-center ${idx === 0 ? 'bg-green-100 text-green-600 border border-green-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                    <div key={dw.id || idx} className="group bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex items-start gap-6">
+                      <div className={`shrink-0 w-14 h-14 rounded-3xl flex items-center justify-center ${idx === 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500 border border-green-200 dark:border-green-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'}`}>
                         <FileText className="w-7 h-7" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${idx === 0 ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${idx === 0 ? 'bg-green-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>
                             VER {dw.version}
                           </span>
                           <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
                             • {new Date(Number(dw.created_at) * 1000).toLocaleDateString()}
                           </span>
                         </div>
-                        <h4 className="text-sm font-black text-slate-800 truncate uppercase mt-1">{dw.drawing_name}</h4>
-                        <p className="text-xs text-slate-500 mt-2 italic font-medium leading-relaxed">
+                        <h4 className="text-sm font-black text-slate-800 dark:text-slate-200 truncate uppercase mt-1">{dw.drawing_name}</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2 italic font-medium leading-relaxed">
                           {dw.revision_notes || "No revision notes provided."}
                         </p>
                       </div>
                       <div className="flex flex-col gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                         <a href={dw.file_url} target="_blank" rel="noreferrer" className="p-2 hover:bg-slate-100 rounded-xl text-indigo-600">
+                         <a href={dw.file_url} target="_blank" rel="noreferrer" className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl text-indigo-600">
                            <ChevronRight className="w-5 h-5" />
                          </a>
                       </div>
                     </div>
                   )) : (
                     <div className="py-20 text-center space-y-4">
-                      <div className="w-16 h-16 bg-slate-100 rounded-3xl mx-auto flex items-center justify-center">
+                      <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-3xl mx-auto flex items-center justify-center">
                         <Ruler className="w-8 h-8 text-slate-300" />
                       </div>
                       <p className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em]">Chưa có bản vẽ nào được lưu trữ</p>
@@ -311,9 +311,9 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-6"
                >
-                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+                 <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                    <div className="flex items-center justify-between">
-                     <h3 className="font-black text-sm text-slate-800 uppercase tracking-widest">Cập nhật hồ sơ vật liệu</h3>
+                     <h3 className="font-black text-sm text-slate-800 dark:text-slate-200 uppercase tracking-widest">Cập nhật hồ sơ vật liệu</h3>
                      <Package className="w-5 h-5 text-indigo-500" />
                    </div>
                    <form className="space-y-4" onSubmit={async (e) => {
@@ -354,26 +354,26 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                      form.reset();
                    }}>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <input name="material_name" placeholder="Tên vật liệu" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100" required />
-                       <input name="drawing_ref" placeholder="Mã bản vẽ đối chiếu" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100" />
+                       <input name="material_name" placeholder="Tên vật liệu" className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-100" required />
+                       <input name="drawing_ref" placeholder="Mã bản vẽ đối chiếu" className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-100" />
                        
                        <div className="flex flex-col gap-1">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Mã công trình (Auto-filled)</label>
-                         <input name="ma_ct" defaultValue={projectData?.ma_ct || item.ma_ct} placeholder="Mã công trình" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100" />
+                         <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Mã công trình (Auto-filled)</label>
+                         <input name="ma_ct" defaultValue={projectData?.ma_ct || item.ma_ct} placeholder="Mã công trình" className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-100" />
                        </div>
                        <div className="flex flex-col gap-1">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tên công trình (Auto-filled)</label>
-                         <input name="ten_ct" defaultValue={projectData?.ten_ct || item.ten_ct} placeholder="Tên công trình" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100" />
+                         <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Tên công trình (Auto-filled)</label>
+                         <input name="ten_ct" defaultValue={projectData?.ten_ct || item.ten_ct} placeholder="Tên công trình" className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-100" />
                        </div>
 
-                       <textarea name="specification" placeholder="Quy cách kỹ thuật chi tiết..." className="md:col-span-2 bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-100 h-24" />
+                       <textarea name="specification" placeholder="Quy cách kỹ thuật chi tiết..." className="md:col-span-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-100 h-24" />
                        <div className="md:col-span-2">
-                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2">Ảnh vật liệu / Specs</label>
+                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-2">Ảnh vật liệu / Specs</label>
                          <div className="relative group">
                            <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" accept="image/*,.pdf" />
-                           <div className="bg-slate-50 border-2 border-dashed border-slate-100 rounded-2xl px-5 py-4 flex items-center justify-center gap-3 group-hover:border-indigo-200 transition-all">
-                             <Upload className="w-5 h-5 text-slate-400 group-hover:text-indigo-500 transition-all" />
-                             <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest group-hover:text-indigo-600">Chọn tệp tin (Ảnh/PDF)</span>
+                           <div className="bg-slate-50 dark:bg-slate-800/50 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 flex items-center justify-center gap-3 group-hover:border-indigo-200 transition-all">
+                             <Upload className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-indigo-500 transition-all" />
+                             <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest group-hover:text-indigo-600">Chọn tệp tin (Ảnh/PDF)</span>
                            </div>
                          </div>
                        </div>
@@ -386,19 +386,19 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
                  <div className="space-y-4">
                     {materials.map((m, idx) => (
-                      <div key={idx} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-start gap-4">
+                      <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex items-start gap-4">
                         <div className="shrink-0 w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-black text-[10px]">
                           V{m.version}
                         </div>
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center gap-2">
-                             <h4 className="font-black text-slate-800 text-sm uppercase">{m.material_name}</h4>
+                             <h4 className="font-black text-slate-800 dark:text-slate-200 text-sm uppercase">{m.material_name}</h4>
                              <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">• {new Date(Number(m.created_at) * 1000).toLocaleDateString()}</span>
                           </div>
-                          <p className="text-xs text-slate-500 font-bold">REF: {m.drawing_ref || 'N/A'}</p>
-                          <p className="text-xs text-slate-600 italic mt-2">{m.specification}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold">REF: {m.drawing_ref || 'N/A'}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 dark:text-slate-500 italic mt-2">{m.specification}</p>
                           {m.file_url && (
-                            <a href={m.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-slate-50 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 transition-all">
+                            <a href={m.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 transition-all">
                               <FileText className="w-3 h-3" />
                               Xem tài liệu / Ảnh
                             </a>
@@ -416,12 +416,12 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-6"
                >
-                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+                 <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
                    <div className="flex items-center justify-between">
-                     <h3 className="font-black text-sm text-slate-800 uppercase tracking-widest">{editingSample ? 'Chỉnh sửa hồ sơ mẫu' : 'Cập nhật hồ sơ mẫu'}</h3>
+                     <h3 className="font-black text-sm text-slate-800 dark:text-slate-200 uppercase tracking-widest">{editingSample ? 'Chỉnh sửa hồ sơ mẫu' : 'Cập nhật hồ sơ mẫu'}</h3>
                      <div className="flex items-center gap-2">
                        {editingSample && (
-                         <button onClick={() => setEditingSample(null)} className="text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-widest px-2 py-1 bg-slate-100 rounded-lg">Hủy</button>
+                         <button onClick={() => setEditingSample(null)} className="text-[10px] font-black text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg">Hủy</button>
                        )}
                        <Info className="w-5 h-5 text-amber-500" />
                      </div>
@@ -472,8 +472,8 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                      form.reset();
                    }}>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <input name="sample_name" defaultValue={editingSample?.sample_name} placeholder="Tên mẫu vật liệu" className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" required />
-                       <select name="status" defaultValue={editingSample?.status || 'DRAFT'} className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50">
+                       <input name="sample_name" defaultValue={editingSample?.sample_name} placeholder="Tên mẫu vật liệu" className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-50" required />
+                       <select name="status" defaultValue={editingSample?.status || 'DRAFT'} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-50">
                          <option value="DRAFT">DRAFT</option>
                          <option value="SUBMITTED">SUBMITTED</option>
                          <option value="APPROVED">APPROVED</option>
@@ -481,21 +481,21 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                        </select>
 
                        <div className="flex flex-col gap-1">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Mã công trình (Auto-filled)</label>
-                         <input name="ma_ct" defaultValue={projectData?.ma_ct || item.ma_ct} placeholder="Mã công trình" disabled={!!editingSample} className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" />
+                         <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Mã công trình (Auto-filled)</label>
+                         <input name="ma_ct" defaultValue={projectData?.ma_ct || item.ma_ct} placeholder="Mã công trình" disabled={!!editingSample} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-50" />
                        </div>
                        <div className="flex flex-col gap-1">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tên công trình (Auto-filled)</label>
-                         <input name="ten_ct" defaultValue={projectData?.ten_ct || item.ten_ct} placeholder="Tên công trình" disabled={!!editingSample} className="bg-slate-50 border border-slate-100 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-50" />
+                         <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Tên công trình (Auto-filled)</label>
+                         <input name="ten_ct" defaultValue={projectData?.ten_ct || item.ten_ct} placeholder="Tên công trình" disabled={!!editingSample} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 px-5 py-3 rounded-2xl text-[13px] font-bold text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-amber-50" />
                        </div>
 
                        <div className="md:col-span-2">
-                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2">Ảnh mẫu thực tế {editingSample?.file_url ? '(Đã có ảnh)' : ''}</label>
+                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-2">Ảnh mẫu thực tế {editingSample?.file_url ? '(Đã có ảnh)' : ''}</label>
                          <div className="relative group">
                            <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" accept="image/*" />
-                           <div className="bg-slate-50 border-2 border-dashed border-slate-100 rounded-2xl px-5 py-4 flex items-center justify-center gap-3 group-hover:border-amber-200 transition-all">
-                             <Upload className="w-5 h-5 text-slate-400 group-hover:text-amber-500 transition-all" />
-                             <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest group-hover:text-amber-600">Chọn ảnh mẫu tải lên</span>
+                           <div className="bg-slate-50 dark:bg-slate-800/50 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 flex items-center justify-center gap-3 group-hover:border-amber-200 transition-all">
+                             <Upload className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-amber-500 transition-all" />
+                             <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest group-hover:text-amber-600">Chọn ảnh mẫu tải lên</span>
                            </div>
                          </div>
                        </div>
@@ -508,31 +508,31 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
                  <div className="space-y-4">
                     {samples.map((s, idx) => (
-                      <div key={idx} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-start gap-4">
+                      <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex items-start gap-4">
                         <div className="shrink-0 w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 font-black text-[10px]">
                           V{s.version}
                         </div>
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center justify-between">
                              <div className="flex items-center gap-2">
-                               <h4 className="font-black text-slate-800 text-sm uppercase">{s.sample_name}</h4>
+                               <h4 className="font-black text-slate-800 dark:text-slate-200 text-sm uppercase">{s.sample_name}</h4>
                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">• {new Date(Number(s.created_at) * 1000).toLocaleDateString()}</span>
                              </div>
                              <div className="flex items-center gap-1">
-                               <button type="button" onClick={() => setEditingSample(s)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
+                               <button type="button" onClick={() => setEditingSample(s)} className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit className="w-4 h-4"/></button>
                                <button type="button" onClick={async () => {
                                  if(window.confirm('Bạn có chắc chắn muốn xóa mẫu này?')) {
                                    await deleteIpoSampleRecord(s.id);
                                    loadData();
                                  }
-                               }} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
+                               }} className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
                              </div>
                           </div>
                           <div className="flex items-center gap-3 mt-1">
                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider ${
-                              s.status === 'APPROVED' ? 'bg-green-100 text-green-600' : 
-                              s.status === 'REJECTED' ? 'bg-red-100 text-red-600' : 
-                              'bg-slate-100 text-slate-500'
+                              s.status === 'APPROVED' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500' : 
+                              s.status === 'REJECTED' ? 'bg-red-100 text-red-600 dark:text-red-400' : 
+                              'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'
                             }`}>
                               {s.status}
                             </span>
@@ -576,52 +576,52 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                        {/* Revision Notes */}
-                       <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm space-y-4">
+                       <div className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                          <div className="flex items-center gap-3 mb-2">
                            <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                              <FileDiff className="w-5 h-5" />
                            </div>
-                           <h4 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">Phân tích Revision mới</h4>
+                           <h4 className="font-black text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-widest">Phân tích Revision mới</h4>
                          </div>
-                         <p className="text-sm text-slate-600 font-medium leading-relaxed italic border-l-4 border-indigo-100 pl-4 py-1">
+                         <p className="text-sm text-slate-600 dark:text-slate-400 dark:text-slate-500 font-medium leading-relaxed italic border-l-4 border-indigo-100 pl-4 py-1">
                            {aiResult.Field_Drawing_Revision_Notes}
                          </p>
                        </div>
 
                        {/* Material Verification */}
-                       <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm space-y-4">
+                       <div className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                          <div className="flex items-center gap-3 mb-2">
                            <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
                              <Package className="w-5 h-5" />
                            </div>
-                           <h4 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">Kiểm soát vật liệu</h4>
+                           <h4 className="font-black text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-widest">Kiểm soát vật liệu</h4>
                          </div>
-                         <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                         <p className="text-sm text-slate-600 dark:text-slate-400 dark:text-slate-500 font-medium leading-relaxed">
                            {aiResult.Field_Material_Verification}
                          </p>
                        </div>
 
                        {/* History Summary */}
-                       <div className="col-span-full bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm space-y-4">
+                       <div className="col-span-full bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                          <div className="flex items-center gap-3 mb-2">
-                           <div className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-600">
+                           <div className="w-10 h-10 rounded-2xl bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center text-slate-600 dark:text-slate-400 dark:text-slate-500">
                              <History className="w-5 h-5" />
                            </div>
-                           <h4 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">Tóm tắt lộ trình thay đổi</h4>
+                           <h4 className="font-black text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-widest">Tóm tắt lộ trình thay đổi</h4>
                          </div>
-                         <p className="text-sm text-slate-700 font-bold leading-relaxed bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                         <p className="text-sm text-slate-700 dark:text-slate-300 font-bold leading-relaxed bg-slate-50 dark:bg-slate-800/50/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
                            {aiResult.Field_Group_History_Summary}
                          </p>
                        </div>
 
                        {/* Risk Correlation */}
-                       <div className="col-span-full p-8 bg-red-50/50 rounded-[3rem] border border-red-100 space-y-4">
+                       <div className="col-span-full p-8 bg-red-50 dark:bg-red-900/20/50 rounded-[3rem] border border-red-100 space-y-4">
                          <div className="flex items-center gap-3 mb-2 text-red-700">
                            <AlertTriangle className="w-6 h-6" />
                            <h4 className="font-black text-[11px] uppercase tracking-widest">Đối chiếu rủi ro chất lượng (Quality Correlation)</h4>
                          </div>
-                         <div className="p-6 bg-white rounded-3xl border border-red-100 shadow-sm">
-                           <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                         <div className="p-6 bg-white dark:bg-slate-900 rounded-3xl border border-red-100 shadow-sm">
+                           <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
                              {aiResult.Field_Quality_Correlation}
                            </p>
                          </div>
@@ -635,12 +635,12 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-4 border-white rounded-full animate-pulse"></div>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">Chưa có phân tích từ Prompt AI Studio</p>
+                      <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em]">Chưa có phân tích từ Prompt AI Studio</p>
                       <p className="text-xs text-slate-300 max-w-xs mx-auto">Vui lòng nhấn nút phân tích AI trên thanh tiêu chuẩn để bắt đầu quá trình kiểm soát Revision.</p>
                     </div>
                     <button 
                       onClick={handleAIAnalysis}
-                      className="inline-flex items-center gap-2 bg-white border border-indigo-200 px-6 py-3 rounded-2xl text-[11px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm"
+                      className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 border border-indigo-200 px-6 py-3 rounded-2xl text-[11px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm"
                     >
                       Bắt đầu phân tích ngay
                     </button>

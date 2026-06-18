@@ -1,5 +1,5 @@
 {
-  "name": "QMS QA/QC AATN",
+  "name": "AAG - Quality System",
   "description": "ISO 9001:2015 Digital Quality Management System for high-end manufacturing. Decoupled image evidence architecture.",
   "requestFramePermissions": [
     "camera",

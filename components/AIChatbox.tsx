@@ -28,7 +28,7 @@ const FormattedText: React.FC<{ text: string }> = ({ text }) => {
         if (isBullet) {
           return (
             <div key={i} className="flex gap-2 ml-1">
-              <span className="text-blue-500 font-bold">•</span>
+              <span className="text-blue-500 dark:text-blue-400 font-bold">•</span>
               <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^[*|-]\s/, '') }} />
             </div>
           );
@@ -229,7 +229,7 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
       )}
 
       {isOpen && (
-        <div className="fixed inset-0 sm:inset-auto sm:right-6 sm:bottom-6 z-[1000] bg-white/95 backdrop-blur-xl sm:w-[380px] sm:h-[580px] sm:rounded-[2rem] flex flex-col shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-4 duration-300 overflow-hidden">
+        <div className="fixed inset-0 sm:inset-auto sm:right-6 sm:bottom-6 z-[1000] bg-white dark:bg-slate-900/95 backdrop-blur-xl sm:w-[380px] sm:h-[580px] sm:rounded-[2rem] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-in slide-in-from-bottom-4 duration-300 overflow-hidden">
           <div className="bg-slate-900 p-4 flex items-center justify-between text-white">
             <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><Bot className="w-5 h-5" /></div>
@@ -239,12 +239,12 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
                 </div>
             </div>
             <div className="flex items-center gap-1">
-                <button onClick={() => setMessages([messages[0]])} className="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors" title="Xóa lịch sử"><Eraser className="w-4 h-4"/></button>
-                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-red-500/20 rounded-xl text-slate-400 hover:text-red-400 transition-colors"><X className="w-5 h-5"/></button>
+                <button onClick={() => setMessages([messages[0]])} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-xl text-slate-400 dark:text-slate-500 hover:text-white transition-colors" title="Xóa lịch sử"><Eraser className="w-4 h-4"/></button>
+                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-red-500/20 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-400 transition-colors"><X className="w-5 h-5"/></button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 no-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800/50/50 no-scrollbar">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                 {msg.role === 'model' && (
@@ -253,10 +253,10 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
                     </div>
                 )}
                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs shadow-sm ${
-                    msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none font-medium'
+                    msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-800 rounded-tl-none font-medium'
                 }`}>
                   <FormattedText text={msg.text} />
-                  <div className={`text-[8px] mt-2 text-right font-black uppercase opacity-40 ${msg.role === 'user' ? 'text-white' : 'text-slate-500'}`}>
+                  <div className={`text-[8px] mt-2 text-right font-black uppercase opacity-40 ${msg.role === 'user' ? 'text-white' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
                       {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
@@ -264,22 +264,22 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
             ))}
             {isLoading && (
                 <div className="flex justify-start animate-pulse">
-                    <div className="w-7 h-7 rounded-lg bg-slate-200 mr-2"></div>
-                    <div className="bg-white px-5 py-3 rounded-2xl border border-slate-50 shadow-sm flex items-center gap-2">
-                        <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
-                        <span className="text-[10px] text-slate-400 font-black uppercase">Đang phân tích dữ liệu...</span>
+                    <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 mr-2"></div>
+                    <div className="bg-white dark:bg-slate-900 px-5 py-3 rounded-2xl border border-slate-50 shadow-sm flex items-center gap-2">
+                        <Loader2 className="w-3 h-3 animate-spin text-blue-500 dark:text-blue-400" />
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase">Đang phân tích dữ liệu...</span>
                     </div>
                 </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 bg-white border-t border-slate-100">
+          <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
             <div className="flex gap-2 items-end">
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf" className="hidden" />
                 <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-3.5 bg-slate-100 text-slate-600 rounded-2xl shadow-inner hover:bg-slate-200 transition-all active:scale-90 shrink-0"
+                    className="p-3.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-2xl shadow-inner hover:bg-slate-200 dark:bg-slate-700 transition-all active:scale-90 shrink-0"
                     title="Tải lên quy trình PDF"
                 >
                     <Upload className="w-5 h-5" />
@@ -288,7 +288,7 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
                     value={input} 
                     onChange={e => setInput(e.target.value)} 
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-inner max-h-24 font-medium transition-all" 
+                    className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-inner max-h-24 font-medium transition-all" 
                     placeholder="Hỏi về mã CT, mã NM, số lượng..." 
                     rows={1}
                 />

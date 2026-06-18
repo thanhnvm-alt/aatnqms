@@ -218,16 +218,16 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-slate-800">Danh sách xưởng</h3>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Danh sách xưởng</h3>
         <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
           Thêm xưởng mới
         </Button>
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="hidden md:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
         <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+          <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium border-b border-slate-200 dark:border-slate-700">
             <tr>
               <th className="px-4 py-3">Thông tin xưởng</th>
               <th className="px-4 py-3 hidden md:table-cell">Vị trí & Công đoạn</th>
@@ -235,23 +235,23 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {workshops.map(ws => (
-              <tr key={ws.id} className="hover:bg-slate-50 transition-colors">
+              <tr key={ws.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200">
+                    <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex-shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
                         {ws.image ? (
                             <img src={getProxyImageUrl(ws.image)} alt="" className="w-full h-full object-cover" />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-400">
+                            <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-slate-500">
                                 <Factory className="w-6 h-6" />
                             </div>
                         )}
                     </div>
                     <div>
-                      <div className="font-bold text-slate-800">{ws.name}</div>
-                      <div className="text-xs text-slate-500 font-mono bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                      <div className="font-bold text-slate-800 dark:text-slate-200">{ws.name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded inline-block mt-0.5">
                         {ws.code}
                       </div>
                     </div>
@@ -259,19 +259,19 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
                    <div className="flex flex-col gap-2">
-                       <div className="flex items-center gap-2 text-slate-600">
-                           <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 dark:text-slate-500">
+                           <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500 flex-shrink-0" />
                            <span className="truncate max-w-[200px] text-xs">{ws.location || '---'}</span>
                        </div>
                        {ws.stages && ws.stages.length > 0 && (
                            <div className="flex flex-wrap gap-1 mt-1">
                                {ws.stages.slice(0, 3).map(stage => (
-                                   <span key={stage} className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">
+                                   <span key={stage} className="text-[9px] bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded border border-blue-100 dark:border-slate-700 font-medium">
                                        {stage}
                                    </span>
                                ))}
                                {ws.stages.length > 3 && (
-                                   <span className="text-[9px] bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded border border-slate-100 font-medium">
+                                   <span className="text-[9px] bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800 font-medium">
                                        +{ws.stages.length - 3}
                                    </span>
                                )}
@@ -281,11 +281,11 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
                    <div className="flex flex-col gap-1">
-                       <div className="flex items-center gap-2 text-slate-700 font-medium">
-                           <User className="w-3 h-3 text-slate-400" />
+                       <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-medium">
+                           <User className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                            {ws.manager || '---'}
                        </div>
-                       <div className="flex items-center gap-2 text-slate-500 text-xs">
+                       <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">
                            <Phone className="w-3 h-3" />
                            {ws.phone || '---'}
                        </div>
@@ -295,13 +295,13 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                   <div className="flex items-center justify-end gap-2">
                     <button 
                       onClick={() => handleOpenModal(ws)}
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-lg transition-colors"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={() => { if(window.confirm('Xóa xưởng này?')) onDeleteWorkshop(ws.id) }}
-                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/20 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -311,7 +311,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
             ))}
             {workshops.length === 0 && (
                 <tr>
-                    <td colSpan={4} className="p-8 text-center text-slate-500">
+                    <td colSpan={4} className="p-8 text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">
                         Chưa có dữ liệu xưởng sản xuất.
                     </td>
                 </tr>
@@ -323,47 +323,47 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
       {/* Mobile Card List View */}
       <div className="md:hidden space-y-3">
         {workshops.map(ws => (
-            <div key={ws.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div key={ws.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
                 <div className="flex gap-3">
-                    <div className="w-14 h-14 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200">
+                    <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-slate-800 flex-shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
                         {ws.image ? (
                             <img src={getProxyImageUrl(ws.image)} alt="" className="w-full h-full object-cover" />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-400">
+                            <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-slate-500">
                                 <Factory className="w-6 h-6" />
                             </div>
                         )}
                     </div>
                     <div className="flex-1 overflow-hidden">
                         <div className="flex justify-between items-start">
-                            <h4 className="font-bold text-slate-800 text-sm truncate">{ws.name}</h4>
-                            <span className="text-[10px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-bold border border-slate-200">{ws.code}</span>
+                            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm truncate">{ws.name}</h4>
+                            <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700">{ws.code}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1">
-                            <User className="w-3 h-3 text-slate-400" />
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 dark:text-slate-500 mt-1">
+                            <User className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                             {ws.manager || '---'}
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-0.5">
-                            <Phone className="w-3 h-3 text-slate-400" />
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 dark:text-slate-500 mt-0.5">
+                            <Phone className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                             {ws.phone || '---'}
                         </div>
                     </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100">
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                     <div className="flex items-center gap-2 mb-2">
-                        <MapPin className="w-3 h-3 text-slate-400" />
-                        <span className="text-xs text-slate-600 truncate">{ws.location || 'Chưa cập nhật vị trí'}</span>
+                        <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                        <span className="text-xs text-slate-600 dark:text-slate-400 dark:text-slate-500 truncate">{ws.location || 'Chưa cập nhật vị trí'}</span>
                     </div>
                     {ws.stages && ws.stages.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                             {ws.stages.slice(0, 4).map(stage => (
-                                <span key={stage} className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">
+                                <span key={stage} className="text-[9px] bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded border border-blue-100 dark:border-slate-700 font-medium">
                                     {stage}
                                 </span>
                             ))}
                             {ws.stages.length > 4 && (
-                                <span className="text-[9px] bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded border border-slate-100 font-medium">
+                                <span className="text-[9px] bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800 font-medium">
                                     +{ws.stages.length - 4}
                                 </span>
                             )}
@@ -371,16 +371,16 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                     )}
                 </div>
 
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button 
                         onClick={() => handleOpenModal(ws)}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-blue-50 text-blue-600 font-bold text-xs active:scale-95 transition-all"
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 font-bold text-xs active:scale-95 transition-all"
                     >
                         <Edit2 className="w-3.5 h-3.5" /> Sửa
                     </button>
                     <button 
                         onClick={() => { if(window.confirm('Xóa xưởng này?')) onDeleteWorkshop(ws.id) }}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-red-50 text-red-600 font-bold text-xs active:scale-95 transition-all"
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold text-xs active:scale-95 transition-all"
                     >
                         <Trash2 className="w-3.5 h-3.5" /> Xóa
                     </button>
@@ -388,7 +388,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
             </div>
         ))}
         {workshops.length === 0 && (
-            <div className="p-8 text-center text-slate-400 italic bg-white rounded-xl border border-dashed border-slate-200">
+            <div className="p-8 text-center text-slate-400 dark:text-slate-500 italic bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                 Chưa có dữ liệu.
             </div>
         )}
@@ -397,13 +397,13 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
       {/* Modal - Optimized for mobile */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center md:p-4 overflow-hidden">
-          <div className="bg-white md:rounded-xl shadow-2xl w-full max-w-lg h-full md:h-auto md:max-h-[95vh] flex flex-col overflow-hidden animate-fade-in">
-             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Factory className="w-5 h-5 text-blue-600"/> 
+          <div className="bg-white dark:bg-slate-900 md:rounded-xl shadow-2xl w-full max-w-lg h-full md:h-auto md:max-h-[95vh] flex flex-col overflow-hidden animate-fade-in">
+             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <Factory className="w-5 h-5 text-blue-600 dark:text-blue-400"/> 
                     {editingWorkshop ? 'Chỉnh sửa thông tin' : 'Thêm xưởng mới'}
                 </h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500">
                     <X className="w-5 h-5"/>
                 </button>
              </div>
@@ -413,7 +413,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                 <div className="flex flex-col items-center justify-center">
                     <div 
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all relative overflow-hidden group"
+                        className="w-full h-32 bg-slate-50 dark:bg-slate-800/50 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 transition-all relative overflow-hidden group"
                     >
                         {formData.image ? (
                             <>
@@ -425,7 +425,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                         ) : (
                             <>
                                 <ImageIcon className="w-8 h-8 text-slate-300 mb-1" />
-                                <span className="text-xs text-slate-500 font-medium">Tải lên hình ảnh xưởng</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">Tải lên hình ảnh xưởng</span>
                             </>
                         )}
                         <input 
@@ -440,27 +440,27 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Mã xưởng *</label>
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Mã xưởng *</label>
                       <input 
                         type="text" 
                         value={formData.code}
                         onChange={e => setFormData({...formData, code: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
                         placeholder="VD: XSX-01"
                       />
                    </div>
                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Tên xưởng *</label>
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Tên xưởng *</label>
                       <input 
                         type="text" 
                         value={formData.name}
                         onChange={e => setFormData({...formData, name: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
                         placeholder="VD: Xưởng Mộc 1"
                       />
                    </div>
                    <div className="md:col-span-2 space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase flex justify-between">
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase flex justify-between">
                           Vị trí xưởng (Google Maps)
                       </label>
                       <div className="flex gap-2">
@@ -468,13 +468,13 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                             type="text" 
                             value={formData.location}
                             onChange={e => setFormData({...formData, location: e.target.value})}
-                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
+                            className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
                             placeholder="Nhập địa chỉ hoặc tọa độ..."
                         />
                         <button
                             onClick={handleGetLocation}
                             disabled={isGettingLocation}
-                            className="px-3 py-2 bg-slate-100 text-blue-600 border border-slate-200 rounded-lg hover:bg-blue-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                            className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-blue-50 dark:bg-slate-800/80 flex items-center gap-2 transition-colors disabled:opacity-50"
                         >
                             {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin"/> : <Locate className="w-4 h-4" />}
                         </button>
@@ -482,10 +482,10 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                    </div>
 
                    {/* Production Stages Management */}
-                   <div className="md:col-span-2 space-y-2 pt-2 border-t border-slate-100">
-                       <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center justify-between">
-                           <div className="flex items-center gap-2"><Layers className="w-3 h-3 text-blue-500"/> Chọn công đoạn sản xuất</div>
-                           <span className="text-slate-400 text-[9px]">{formData.stages?.length} đã chọn</span>
+                   <div className="md:col-span-2 space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                       <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase flex items-center justify-between">
+                           <div className="flex items-center gap-2"><Layers className="w-3 h-3 text-blue-500 dark:text-blue-400"/> Chọn công đoạn sản xuất</div>
+                           <span className="text-slate-400 dark:text-slate-500 text-[9px]">{formData.stages?.length} đã chọn</span>
                        </label>
                        
                        {/* Custom Stage Input */}
@@ -495,7 +495,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                                value={newStageInput}
                                onChange={e => setNewStageInput(e.target.value)}
                                onKeyDown={e => { if(e.key === 'Enter') handleAddCustomStage() }}
-                               className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                               className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs outline-none focus:border-blue-500"
                                placeholder="Thêm công đoạn mới..."
                            />
                            <button 
@@ -521,7 +521,7 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                                               onChange={(e) => setEditStageValue(e.target.value)}
                                               onKeyDown={(e) => { if(e.key === 'Enter') saveEditStage() }}
                                               onBlur={saveEditStage}
-                                              className="flex-1 px-2 py-2 border border-blue-500 rounded-lg text-xs outline-none bg-blue-50"
+                                              className="flex-1 px-2 py-2 border border-blue-500 rounded-lg text-xs outline-none bg-blue-50 dark:bg-slate-800/80"
                                            />
                                            <button onMouseDown={saveEditStage} className="px-2 bg-green-500 text-white rounded-lg"><Check className="w-3 h-3" /></button>
                                        </div>
@@ -536,21 +536,21 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                                            cursor-pointer px-3 py-2 rounded-lg border text-xs font-bold transition-all flex items-center justify-between select-none group relative
                                            ${isSelected 
                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]' 
-                                               : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:bg-blue-50'
+                                               : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/80'
                                            }
                                        `}
                                    >
                                        <div className="flex items-center gap-2 overflow-hidden">
-                                           <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white border-white' : 'bg-slate-100 border-slate-300'}`}>
-                                               {isSelected && <Check className="w-3 h-3 text-blue-600 stroke-[4px]" />}
+                                           <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white dark:bg-slate-900 border-white' : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600'}`}>
+                                               {isSelected && <Check className="w-3 h-3 text-blue-600 dark:text-blue-400 stroke-[4px]" />}
                                            </div>
                                            <span className="truncate">{stage}</span>
                                        </div>
                                        
-                                       <div className={`flex gap-1 ${isSelected ? 'text-white' : 'text-slate-400'} opacity-100 md:md:opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                       <div className={`flex gap-1 ${isSelected ? 'text-white' : 'text-slate-400 dark:text-slate-500'} opacity-100 md:md:opacity-0 group-hover:opacity-100 transition-opacity`}>
                                            <button 
                                               onClick={(e) => startEditStage(e, stage)}
-                                              className={`p-1 rounded hover:bg-white/20`}
+                                              className={`p-1 rounded hover:bg-white dark:bg-slate-900/20`}
                                               title="Sửa tên"
                                            >
                                                <Pencil className="w-3 h-3" />
@@ -570,29 +570,29 @@ export const WorkshopManagement: React.FC<WorkshopManagementProps> = ({ workshop
                    </div>
 
                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Quản lý xưởng</label>
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Quản lý xưởng</label>
                       <input 
                         type="text" 
                         value={formData.manager}
                         onChange={e => setFormData({...formData, manager: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
                         placeholder="Tên quản lý"
                       />
                    </div>
                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Số điện thoại</label>
+                      <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Số điện thoại</label>
                       <input 
                         type="text" 
                         value={formData.phone}
                         onChange={e => setFormData({...formData, phone: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-base md:text-sm"
                         placeholder="SĐT liên hệ"
                       />
                    </div>
                 </div>
              </div>
 
-             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 sticky bottom-0 md:relative z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] md:shadow-none shrink-0">
+             <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 sticky bottom-0 md:relative z-20 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] md:shadow-none shrink-0">
                  <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="flex-1 md:flex-none">Hủy bỏ</Button>
                  <Button onClick={handleSave} disabled={isSaving} icon={isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4"/>} className="flex-1 md:flex-none">
                     {isSaving ? 'Đang lưu...' : 'Lưu thông tin'}

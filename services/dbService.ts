@@ -390,7 +390,7 @@ export async function saveInspection(inspection: Inspection) {
         so_luong_ipo, inspected_qty, passed_qty, failed_qty,
         sl_ipo, qty_total, qty_pass, qty_fail,
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
-        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment
+        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment, data
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
@@ -398,7 +398,7 @@ export async function saveInspection(inspection: Inspection) {
         $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
-        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42
+        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42, $43::text
       )
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
@@ -442,7 +442,8 @@ export async function saveInspection(inspection: Inspection) {
         workshop = EXCLUDED.workshop,
         stage = EXCLUDED.stage,
         headcode = EXCLUDED.headcode,
-        dvt = EXCLUDED.dvt
+        dvt = EXCLUDED.dvt,
+        data = EXCLUDED.data
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
         inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection_date,
@@ -456,7 +457,8 @@ export async function saveInspection(inspection: Inspection) {
         inspection.location, inspection.supplierAddress, inspection.supportingDocs,
         inspection.responsiblePerson,
         inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode,
-        inspection.productionComment
+        inspection.productionComment,
+        JSON.stringify(inspection)
       ]));
     }
 
@@ -530,9 +532,14 @@ export async function saveInspection(inspection: Inspection) {
   })();
 }
 
-function buildBaseWhere(filters: any) {
+function buildBaseWhere(filters: any, user?: User) {
     let whereClause = 'WHERE 1=1';
     const subArgs: any[] = [];
+
+    // Enforcement: If user is not Admin/Manager and has a specific workshop (Tổ), restrict them to it.
+    if (user && user.role !== 'ADMIN' && user.role !== 'MANAGER' && (user.to_qc || user.toQC)) {
+        filters.workshop = user.to_qc || user.toQC;
+    }
     
     if (filters.status && filters.status !== 'ALL') {
         const statuses = filters.status.split(',').map((s: string) => s.trim());
@@ -617,8 +624,8 @@ function buildBaseWhere(filters: any) {
     return { whereClause, subArgs };
 }
 
-export async function getInspectionsDatesList(filters: any = {}): Promise<{ date: string, count: number }[]> {
-    const { whereClause, subArgs } = buildBaseWhere(filters);
+export async function getInspectionsDatesList(filters: any = {}, user?: User): Promise<{ date: string, count: number }[]> {
+    const { whereClause, subArgs } = buildBaseWhere(filters, user);
     
     // If no specific filters, use the optimized materialized view
     if (whereClause === 'WHERE 1=1' || Object.keys(filters).length === 0) {
@@ -653,8 +660,8 @@ export async function getInspectionsDatesList(filters: any = {}): Promise<{ date
     }
 }
 
-export async function getInspectionsProjectsList(filters: any = {}): Promise<{ ma_ct: string, ten_ct: string, count: number }[]> {
-    const { whereClause, subArgs } = buildBaseWhere(filters);
+export async function getInspectionsProjectsList(filters: any = {}, user?: User): Promise<{ ma_ct: string, ten_ct: string, count: number }[]> {
+    const { whereClause, subArgs } = buildBaseWhere(filters, user);
     // Group by to get unique projects and their count
     const q = `SELECT ma_ct, MAX(ten_ct) as ten_ct, COUNT(*) as count FROM ${SCHEMA}."inspections" ${whereClause} GROUP BY ma_ct`;
     try {
@@ -669,11 +676,11 @@ export async function getInspectionsProjectsList(filters: any = {}): Promise<{ m
 /**
  * Aggregates inspections from the centralized 'inspections' table.
  */
-export async function getInspectionsList(filters: any = {}, page: number = 1, limit?: number): Promise<{ items: Inspection[], total: number }> {
+export async function getInspectionsList(filters: any = {}, page: number = 1, limit?: number, user?: User): Promise<{ items: Inspection[], total: number }> {
     const offsetLimit = limit || 1000000;
     const offset = (page - 1) * offsetLimit;
     
-    const { whereClause, subArgs } = buildBaseWhere(filters);
+    const { whereClause, subArgs } = buildBaseWhere(filters, user);
 
     const limitIdx = subArgs.length + 1;
     const offsetIdx = subArgs.length + 2;
@@ -731,8 +738,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
 /**
  * Fetches the year/month structure of inspections for hierarchical loading.
  */
-export async function getInspectionsHierarchy(filters: any = {}) {
-    let { whereClause, subArgs } = buildBaseWhere(filters);
+export async function getInspectionsHierarchy(filters: any = {}, user?: User) {
+    let { whereClause, subArgs } = buildBaseWhere(filters, user);
 
     if (filters.project && filters.project !== 'ALL') {
         const projects = filters.project.split(',').map((s: string) => s.trim());
@@ -822,7 +829,9 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
             const res = await query(`SELECT * FROM ${SCHEMA}."${table}" WHERE id = $1`, [id]);
             if (res.rows.length > 0) {
                 const row = res.rows[0];
+                const parsedData = row.data ? safeJsonParse(row.data, {}) : {};
                 return {
+                    ...parsedData,
                     id: row.id as string,
                     type: (row.type || table.replace('forms_', '').toUpperCase()) as ModuleId,
                     ma_ct: row.ma_ct as string,
@@ -901,10 +910,15 @@ export async function deleteInspection(id: string) {
 
 // --- PLANS (IPO) ---
 
-export async function getPlansPaginated(searchTerm: string = '', page: number = 1, limit: number = 20) {
+export async function getPlansPaginated(searchTerm: string = '', page: number = 1, limit: number = 20, user?: User) {
     const offset = (page - 1) * limit;
     let sql = `SELECT "ID_Factory_Order" as id, "ID_Factory_Order" as ma_nha_may, "Ma_Tender" as ma_ct, "Project_name" as ten_ct, "Material_description" as ten_hang_muc, "Quantity_IPO" as so_luong_ipo, "Base_Unit" as dvt FROM ${SCHEMA}.ipo`;
     let args: any[] = [];
+    
+    // Enforcement: If user is not Admin/Manager and has a specific workshop (Tổ), restrict them to it.
+    // However, IPO table might not have a workshop column yet. 
+    // If it did, we would handle it here. 
+    
     if (searchTerm) {
         sql += ` WHERE "Ma_Tender" LIKE $1 OR "Project_name" LIKE $2 OR "Material_description" LIKE $3 OR "ID_Factory_Order" LIKE $4`;
         const p = `%${searchTerm}%`;
@@ -1399,10 +1413,76 @@ export async function deleteNcr(id: string, userId: string) {
 
 // --- USERS ---
 
+export function getAdvisoryModules(phong_ban: string, bo_phan: string): string[] {
+    const pb = (phong_ban || '').trim().toLowerCase();
+    const bp = (bo_phan || '').trim().toLowerCase();
+
+    if (pb.includes('qaqc') || pb.includes('qa/qc') || pb.includes('qa qc')) {
+        if (bp.includes('qa')) {
+            return ['FQC', 'SPR', 'SITE'];
+        }
+        if (bp.includes('qc')) {
+            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP'];
+        }
+    } else if (pb.includes('sản xuất') || pb.includes('san xuat')) {
+        return ['PQC', 'SQC_BTP', 'STEP'];
+    } else if (pb.includes('vật tư') || pb.includes('vat tu')) {
+        return ['IQC', 'SQC_MAT'];
+    } else if (pb.includes('sd') || pb.includes('drawing') || pb.includes('thiết kế') || pb.includes('thiet ke')) {
+        return ['CONVERT_3D', 'FSR', 'SPR'];
+    } else if (pb.includes('kế hoạch') || pb.includes('ke hoach') || pb.includes('planning')) {
+        return ['IQC', 'PQC', 'SITE'];
+    }
+    return [];
+}
+
+export function mapUserRow(r: any): any {
+    if (!r) return null;
+    const dataExtra: any = safeJsonParse(r.data, {});
+    
+    let allowedModules: any[] = [];
+    if (r.allowed_modules) {
+        allowedModules = safeJsonParse(r.allowed_modules, []);
+    } else if (dataExtra.allowedModules) {
+        allowedModules = dataExtra.allowedModules;
+    } else if (dataExtra.allowed_modules) {
+        allowedModules = typeof dataExtra.allowed_modules === 'string' 
+            ? safeJsonParse(dataExtra.allowed_modules, []) 
+            : dataExtra.allowed_modules;
+    }
+
+    return {
+        ...r,
+        ...dataExtra,
+        phong_ban: r.phong_ban || dataExtra.phong_ban || dataExtra.phongBan || '',
+        phongBan: r.phong_ban || dataExtra.phong_ban || dataExtra.phongBan || '',
+        bo_phan: r.bo_phan || dataExtra.bo_phan || dataExtra.boPhan || '',
+        boPhan: r.bo_phan || dataExtra.bo_phan || dataExtra.boPhan || '',
+        workLocation: r.work_location || dataExtra.workLocation || dataExtra.work_location || '',
+        work_location: r.work_location || dataExtra.workLocation || dataExtra.work_location || '',
+        joinDate: r.join_date || dataExtra.joinDate || dataExtra.join_date || '',
+        join_date: r.join_date || dataExtra.joinDate || dataExtra.join_date || '',
+        to_qc: r.to_qc || dataExtra.to_qc || dataExtra.toQC || '',
+        toQC: r.to_qc || dataExtra.to_qc || dataExtra.toQC || '',
+        la_to_truong: r.la_to_truong !== undefined ? !!r.la_to_truong : !!(dataExtra.la_to_truong || dataExtra.laToTruong),
+        laToTruong: r.la_to_truong !== undefined ? !!r.la_to_truong : !!(dataExtra.la_to_truong || dataExtra.laToTruong),
+        allowed_modules: r.allowed_modules || (allowedModules ? JSON.stringify(allowedModules) : '[]'),
+        allowedModules: allowedModules,
+        department_id: r.department_id || dataExtra.department_id || dataExtra.departmentId || '',
+        departmentId: r.department_id || dataExtra.department_id || dataExtra.departmentId || '',
+        division_id: r.division_id || dataExtra.division_id || dataExtra.divisionId || '',
+        divisionId: r.division_id || dataExtra.division_id || dataExtra.divisionId || '',
+        team_id: r.team_id || dataExtra.team_id || dataExtra.teamId || '',
+        teamId: r.team_id || dataExtra.team_id || dataExtra.teamId || '',
+        user_permissions: r.user_permissions || dataExtra.user_permissions || dataExtra.userPermissions || null,
+        userPermissions: typeof r.user_permissions === 'string' ? safeJsonParse(r.user_permissions, null) : (r.user_permissions || dataExtra.userPermissions || null)
+    };
+}
+
 export async function getUserByUsername(username: string): Promise<User | null> {
     const res = await query(`SELECT * FROM ${SCHEMA}.users WHERE username = $1 AND deleted_at IS NULL`, [username]);
     if (res.rows.length === 0) return null;
-    return { ...res.rows[0], ...safeJsonParse((res.rows[0] as any).data, {}) } as unknown as User;
+    return mapUserRow(res.rows[0]) as unknown as User;
 }
 
 export async function importUsers(users: User[]) {
@@ -1432,6 +1512,113 @@ export async function saveWorkshop(ws: Workshop) {
 
 export async function deleteWorkshop(id: string) {
     await query(`DELETE FROM ${SCHEMA}.workshops WHERE id = $1`, [id]);
+}
+
+// --- TOOLS EQUIPMENT ---
+
+export async function getToolCatalogs(): Promise<any[]> {
+    const res = await query(`SELECT * FROM ${SCHEMA}.tool_catalogs ORDER BY created_at DESC`);
+    return res.rows;
+}
+
+export async function saveToolCatalog(catalog: any) {
+    await query(`
+        INSERT INTO ${SCHEMA}.tool_catalogs (
+            id, code, name, type, specifications, manual_markdown, manual_pdf_url, created_by, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, EXTRACT(EPOCH FROM NOW())::BIGINT)
+        ON CONFLICT(id) DO UPDATE SET 
+            code = EXCLUDED.code, name = EXCLUDED.name, type = EXCLUDED.type,
+            specifications = EXCLUDED.specifications, manual_markdown = EXCLUDED.manual_markdown, manual_pdf_url = EXCLUDED.manual_pdf_url,
+            updated_at = EXCLUDED.updated_at
+    `, [
+        catalog.id, catalog.code, catalog.name, catalog.type, catalog.specifications, catalog.manual_markdown, catalog.manual_pdf_url, catalog.created_by
+    ]);
+}
+
+export async function deleteToolCatalog(id: string) {
+    await query(`DELETE FROM ${SCHEMA}.tool_catalogs WHERE id = $1`, [id]);
+}
+
+export async function getToolAssets(): Promise<any[]> {
+    const res = await query(`
+        SELECT a.*, c.code as catalog_code, c.name as catalog_name, c.type as catalog_type, c.specifications as catalog_specifications, c.manual_markdown, c.manual_pdf_url
+        FROM ${SCHEMA}.tool_assets a
+        JOIN ${SCHEMA}.tool_catalogs c ON a.catalog_id = c.id
+        ORDER BY a.created_at DESC
+    `);
+    return res.rows;
+}
+
+export async function getToolAssetsByCatalog(catalogId: string): Promise<any[]> {
+    const res = await query(`SELECT * FROM ${SCHEMA}.tool_assets WHERE catalog_id = $1 ORDER BY created_at DESC`, [catalogId]);
+    return res.rows;
+}
+
+export async function getToolAssetById(id: string): Promise<any> {
+    const res = await query(`
+        SELECT a.*, c.code as catalog_code, c.name as catalog_name, c.type as catalog_type, c.specifications as catalog_specifications, c.manual_markdown, c.manual_pdf_url
+        FROM ${SCHEMA}.tool_assets a
+        JOIN ${SCHEMA}.tool_catalogs c ON a.catalog_id = c.id
+        WHERE a.id = $1
+    `, [id]);
+    return res.rows[0];
+}
+
+export async function saveToolAsset(asset: any) {
+    await query(`
+        INSERT INTO ${SCHEMA}.tool_assets (
+            id, catalog_id, asset_code, serial_number, current_user_id, next_calibration_date, status, created_by, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, EXTRACT(EPOCH FROM NOW())::BIGINT)
+        ON CONFLICT(id) DO UPDATE SET 
+            catalog_id = EXCLUDED.catalog_id, asset_code = EXCLUDED.asset_code, serial_number = EXCLUDED.serial_number,
+            current_user_id = EXCLUDED.current_user_id, next_calibration_date = EXCLUDED.next_calibration_date, 
+            status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+    `, [
+        asset.id, asset.catalog_id, asset.asset_code, asset.serial_number, asset.current_user_id, asset.next_calibration_date, asset.status, asset.created_by
+    ]);
+}
+
+export async function deleteToolAsset(id: string) {
+    await query(`DELETE FROM ${SCHEMA}.tool_assets WHERE id = $1`, [id]);
+}
+
+export async function getToolTransfers(toolAssetId: string): Promise<any[]> {
+    const res = await query(`SELECT * FROM ${SCHEMA}.tool_transfers WHERE tool_asset_ids @> $1::jsonb ORDER BY request_date DESC`, [JSON.stringify([toolAssetId])]);
+    return res.rows;
+}
+
+export async function saveToolTransfer(transfer: any) {
+    const status = transfer.status || 'PENDING';
+    await query(`
+        INSERT INTO ${SCHEMA}.tool_transfers (
+            id, tool_asset_ids, from_user_id, to_user_id, status, request_date, receiver_confirm_date, receiver_signature, receiver_image, manager_approve_date, manager_signature, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT(id) DO UPDATE SET 
+            tool_asset_ids = EXCLUDED.tool_asset_ids, status = EXCLUDED.status, receiver_confirm_date = EXCLUDED.receiver_confirm_date, receiver_signature = EXCLUDED.receiver_signature, receiver_image = EXCLUDED.receiver_image,
+            manager_approve_date = EXCLUDED.manager_approve_date, manager_signature = EXCLUDED.manager_signature, notes = EXCLUDED.notes
+    `, [
+        transfer.id, JSON.stringify(transfer.tool_asset_ids || []), transfer.from_user_id, transfer.to_user_id, status, transfer.request_date, transfer.receiver_confirm_date,
+        transfer.receiver_signature, transfer.receiver_image, transfer.manager_approve_date, transfer.manager_signature, transfer.notes
+    ]);
+}
+
+export async function getToolCalibrations(toolAssetId: string): Promise<any[]> {
+    const res = await query(`SELECT * FROM ${SCHEMA}.tool_calibrations WHERE tool_asset_id = $1 ORDER BY request_date DESC`, [toolAssetId]);
+    return res.rows;
+}
+
+export async function saveToolCalibration(calib: any) {
+    const status = calib.status || 'PENDING';
+    await query(`
+        INSERT INTO ${SCHEMA}.tool_calibrations (
+            id, tool_asset_id, request_date, requested_by, status, calibration_date, next_calibration_date, certificate_url, approved_by, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT(id) DO UPDATE SET 
+            status = EXCLUDED.status, calibration_date = EXCLUDED.calibration_date, next_calibration_date = EXCLUDED.next_calibration_date,
+            certificate_url = EXCLUDED.certificate_url, approved_by = EXCLUDED.approved_by, notes = EXCLUDED.notes
+    `, [
+        calib.id, calib.tool_asset_id, calib.request_date, calib.requested_by, status, calib.calibration_date, calib.next_calibration_date, calib.certificate_url, calib.approved_by, calib.notes
+    ]);
 }
 
 // --- TEMPLATES ---
@@ -1645,22 +1832,55 @@ export async function logStatusChange(entityType: string, entityId: string, stat
 
 export async function getUsers(): Promise<User[]> {
     const res = await query(`SELECT * FROM ${SCHEMA}.users WHERE deleted_at IS NULL ORDER BY name ASC`);
-    return res.rows.map((r: any) => ({ ...r, ...safeJsonParse((r as any).data, {}) })) as unknown as User[];
+    return res.rows.map((r: any) => mapUserRow(r));
 }
 
-export async function saveUser(u: User) {
+export async function saveUser(u: any) {
     const existing = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1`, [u.id]);
-    const oldValue = existing.rows.length > 0 ? { ...existing.rows[0], ...safeJsonParse(existing.rows[0].data, {}) } : null;
+    const oldValue = existing.rows.length > 0 ? mapUserRow(existing.rows[0]) : null;
     
     let password = u.password || '123456';
-    // Only hash if it's not already a bcrypt hash (starts with $2b$)
     if (!password.startsWith('$2b$')) {
         password = await bcrypt.hash(password, SALT_ROUNDS);
     }
 
+    const phong_ban = u.phong_ban || u.phongBan || '';
+    const bo_phan = u.bo_phan || u.boPhan || '';
+    
+    let allowedModules = u.allowedModules;
+    if (!allowedModules && u.allowed_modules) {
+        allowedModules = typeof u.allowed_modules === 'string' ? safeJsonParse(u.allowed_modules, []) : u.allowed_modules;
+    }
+    if (!allowedModules && phong_ban && bo_phan) {
+        allowedModules = getAdvisoryModules(phong_ban, bo_phan);
+    }
+    if (!allowedModules) {
+        allowedModules = [];
+    }
+
+    const allowed_modules_str = JSON.stringify(allowedModules);
+
+    const updatedU = {
+        ...u,
+        phong_ban,
+        phongBan: phong_ban,
+        bo_phan,
+        boPhan: bo_phan,
+        allowedModules,
+        allowed_modules: allowed_modules_str,
+        to_qc: u.to_qc || u.toQC || '',
+        toQC: u.to_qc || u.toQC || '',
+        la_to_truong: !!(u.la_to_truong || u.laToTruong),
+        laToTruong: !!(u.la_to_truong || u.laToTruong),
+        department_id: u.department_id || u.departmentId || '',
+        division_id: u.division_id || u.divisionId || '',
+        team_id: u.team_id || u.teamId || '',
+        user_permissions: u.user_permissions ? (typeof u.user_permissions === 'string' ? u.user_permissions : JSON.stringify(u.user_permissions)) : (u.userPermissions ? JSON.stringify(u.userPermissions) : null)
+    };
+
     await query(`
-        INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, email, position, work_location, status, join_date, education, notes, data, updated_at) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, EXTRACT(EPOCH FROM NOW())::BIGINT) 
+        INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, email, position, work_location, status, join_date, education, notes, phong_ban, bo_phan, allowed_modules, to_qc, la_to_truong, department_id, division_id, team_id, user_permissions, data, updated_at) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, EXTRACT(EPOCH FROM NOW())::BIGINT) 
         ON CONFLICT(id) DO UPDATE SET 
             username = EXCLUDED.username, 
             password = EXCLUDED.password,
@@ -1675,13 +1895,24 @@ export async function saveUser(u: User) {
             join_date = EXCLUDED.join_date,
             education = EXCLUDED.education,
             notes = EXCLUDED.notes,
+            phong_ban = EXCLUDED.phong_ban,
+            bo_phan = EXCLUDED.bo_phan,
+            allowed_modules = EXCLUDED.allowed_modules,
+            to_qc = EXCLUDED.to_qc,
+            la_to_truong = EXCLUDED.la_to_truong,
+            department_id = EXCLUDED.department_id,
+            division_id = EXCLUDED.division_id,
+            team_id = EXCLUDED.team_id,
+            user_permissions = EXCLUDED.user_permissions,
             data = EXCLUDED.data, 
             updated_at = EXCLUDED.updated_at
-    `, sanitizeArgs([u.id, u.username, password, u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, u]));
+    `, sanitizeArgs([
+        u.id, u.username, password, u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, 
+        phong_ban, bo_phan, allowed_modules_str, updatedU.to_qc, updatedU.la_to_truong, updatedU.department_id, updatedU.division_id, updatedU.team_id, updatedU.user_permissions, updatedU
+    ]));
 
-    // Log Audit
     if (u.id) {
-        await logAudit('SYSTEM', oldValue ? 'UPDATE_USER' : 'CREATE_USER', 'user', u.id, oldValue, u);
+        await logAudit('SYSTEM', oldValue ? 'UPDATE_USER' : 'CREATE_USER', 'user', u.id, oldValue, updatedU);
     }
 }
 
@@ -1691,6 +1922,75 @@ export async function deleteUser(id: string) {
         await query(`UPDATE ${SCHEMA}.users SET deleted_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = $1`, [id]);
         await logAudit('SYSTEM', 'DELETE_USER', 'user', id, existing.rows[0], null);
     }
+}
+
+// --- DEPARTMENTS ---
+
+export async function getDepartments() {
+    const res = await query(`SELECT * FROM ${SCHEMA}.departments ORDER BY name ASC`);
+    return res.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        divisions: r.divisions ? safeJsonParse(r.divisions, []) : []
+    }));
+}
+
+export async function saveDepartment(dept: { id: string; name: string; divisions: string[] }) {
+    await query(`
+        INSERT INTO ${SCHEMA}.departments (id, name, divisions, updated_at) 
+        VALUES ($1, $2, $3, EXTRACT(EPOCH FROM NOW())::BIGINT) 
+        ON CONFLICT (id) DO UPDATE SET 
+            name = EXCLUDED.name, 
+            divisions = EXCLUDED.divisions, 
+            updated_at = EXCLUDED.updated_at
+    `, [dept.id, dept.name, JSON.stringify(dept.divisions)]);
+}
+
+export async function deleteDepartment(id: string) {
+    await query(`DELETE FROM ${SCHEMA}.departments WHERE id = $1`, [id]);
+}
+
+// --- USER OPERATIONS ACTIVITY ---
+
+export async function getUserActivityStats(userId: string) {
+    const totalLoginsRes = await query(`
+        SELECT COUNT(*) as count 
+        FROM ${SCHEMA}.audit_logs 
+        WHERE user_id = $1 AND action = 'LOGIN'
+    `, [userId]);
+    const totalLogins = parseInt(totalLoginsRes.rows[0]?.count || '0');
+
+    const lastLoginRes = await query(`
+        SELECT timestamp 
+        FROM ${SCHEMA}.audit_logs 
+        WHERE user_id = $1 AND action = 'LOGIN' 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+    `, [userId]);
+    const lastLogin = lastLoginRes.rows[0]?.timestamp ? parseInt(lastLoginRes.rows[0].timestamp) : null;
+
+    const operationsRes = await query(`
+        SELECT * 
+        FROM ${SCHEMA}.audit_logs 
+        WHERE user_id = $1 AND action != 'LOGIN' 
+        ORDER BY timestamp DESC 
+        LIMIT 200
+    `, [userId]);
+
+    const loginsRes = await query(`
+        SELECT * 
+        FROM ${SCHEMA}.audit_logs 
+        WHERE user_id = $1 AND action = 'LOGIN' 
+        ORDER BY timestamp DESC 
+        LIMIT 100
+    `, [userId]);
+
+    return {
+        totalLogins,
+        lastLogin,
+        operations: operationsRes.rows,
+        logins: loginsRes.rows
+    };
 }
 
 // --- MATERIALS ---
@@ -1745,24 +2045,28 @@ export async function deleteDefectLibraryItem(id: string) {
 // --- ROLES ---
 
 export async function getRoles(): Promise<Role[]> {
-    const res = await query(`SELECT * FROM ${SCHEMA}.roles ORDER BY name ASC`);
+    const res = await query(`SELECT * FROM ${SCHEMA}.qms_roles ORDER BY name ASC`);
     return res.rows.map((r: any) => {
         const parsed = safeJsonParse((r as any).data, {}) as any;
         const roleId = r.id || r.name || '';
         const isSystem = r.isSystem || parsed.isSystem || ['admin', 'root', 'member', 'adminQAQC'].includes(roleId.toLowerCase());
+        const permissions = typeof r.permissions === 'string' 
+            ? safeJsonParse(r.permissions, []) 
+            : (Array.isArray(r.permissions) ? r.permissions : (parsed.permissions || []));
         return {
             ...r,
             ...parsed,
             id: roleId,
             name: r.name || parsed.name || roleId,
-            isSystem: !!isSystem
+            isSystem: !!isSystem,
+            permissions
         };
     }) as unknown as Role[];
 }
 
 export async function saveRole(role: Role) {
     await query(`
-        INSERT INTO ${SCHEMA}.roles (id, name, permissions, data, updated_at) 
+        INSERT INTO ${SCHEMA}.qms_roles (id, name, permissions, data, updated_at) 
         VALUES ($1, $2, $3, $4, EXTRACT(EPOCH FROM NOW())::BIGINT) 
         ON CONFLICT(id) DO UPDATE SET 
             name = EXCLUDED.name, 
@@ -1773,7 +2077,7 @@ export async function saveRole(role: Role) {
 }
 
 export async function deleteRole(id: string) {
-    await query(`DELETE FROM ${SCHEMA}.roles WHERE id = $1`, [id]);
+    await query(`DELETE FROM ${SCHEMA}.qms_roles WHERE id = $1`, [id]);
 }
 
 // --- PROJECT DOCUMENTS ---
@@ -1895,5 +2199,104 @@ async function refreshDailyStatsMV() {
     } catch (e) {
         console.warn('Failed to refresh inspections_daily_stats_mv:', e);
     }
+}
+
+// --- DIVISIONS & TEAMS OPERATIONS ---
+
+export async function getDivisions() {
+    const res = await query(`SELECT * FROM ${SCHEMA}.divisions ORDER BY name ASC`);
+    return res.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        departmentId: r.department_id,
+        department_id: r.department_id
+    }));
+}
+
+export async function saveDivision(div: { id: string; name: string; departmentId: string }) {
+    await query(`
+        INSERT INTO ${SCHEMA}.divisions (id, name, department_id, updated_at) 
+        VALUES ($1, $2, $3, EXTRACT(EPOCH FROM NOW())::BIGINT) 
+        ON CONFLICT (id) DO UPDATE SET 
+            name = EXCLUDED.name, 
+            department_id = EXCLUDED.department_id, 
+            updated_at = EXCLUDED.updated_at
+    `, [div.id, div.name, div.departmentId]);
+}
+
+export async function deleteDivision(id: string) {
+    await query(`DELETE FROM ${SCHEMA}.divisions WHERE id = $1`, [id]);
+}
+
+export async function getTeams() {
+    const res = await query(`SELECT * FROM ${SCHEMA}.teams ORDER BY name ASC`);
+    return res.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        divisionId: r.division_id,
+        division_id: r.division_id,
+        leaderId: r.leader_id,
+        leader_id: r.leader_id
+    }));
+}
+
+export async function saveTeam(team: { id: string; name: string; divisionId: string; leaderId?: string | null }) {
+    // 1. Save the team
+    await query(`
+        INSERT INTO ${SCHEMA}.teams (id, name, division_id, leader_id, updated_at) 
+        VALUES ($1, $2, $3, $4, EXTRACT(EPOCH FROM NOW())::BIGINT) 
+        ON CONFLICT (id) DO UPDATE SET 
+            name = EXCLUDED.name, 
+            division_id = EXCLUDED.division_id, 
+            leader_id = EXCLUDED.leader_id, 
+            updated_at = EXCLUDED.updated_at
+    `, [team.id, team.name, team.divisionId, team.leaderId || null]);
+
+    // 2. If leaderId is set, update that user to "Tổ trưởng" and la_to_truong = true, and set team_id, division_id, department_id
+    if (team.leaderId) {
+        // Fetch user first to get division/department if they can be inherited
+        const userRes = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1`, [team.leaderId]);
+        if (userRes.rows.length > 0) {
+            const user = userRes.rows[0];
+            const dataExtra = safeJsonParse(user.data, {});
+            
+            // Get division info to set division_id and department_id
+            const divRes = await query(`SELECT * FROM ${SCHEMA}.divisions WHERE id = $1`, [team.divisionId]);
+            let userDeptId = user.department_id;
+            let userDivId = team.divisionId;
+            if (divRes.rows.length > 0) {
+                userDeptId = divRes.rows[0].department_id;
+            }
+
+            const updatedData = {
+                ...dataExtra,
+                position: 'Tổ trưởng',
+                la_to_truong: true,
+                laToTruong: true,
+                team_id: team.id,
+                division_id: userDivId,
+                department_id: userDeptId,
+                toQC: team.name,
+                to_qc: team.name
+            };
+
+            await query(`
+                UPDATE ${SCHEMA}.users 
+                SET position = $1, 
+                    la_to_truong = TRUE, 
+                    team_id = $2, 
+                    division_id = $3, 
+                    department_id = $4,
+                    to_qc = $5,
+                    data = $6,
+                    updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+                WHERE id = $7
+            `, ['Tổ trưởng', team.id, userDivId, userDeptId, team.name, JSON.stringify(updatedData), team.leaderId]);
+        }
+    }
+}
+
+export async function deleteTeam(id: string) {
+    await query(`DELETE FROM ${SCHEMA}.teams WHERE id = $1`, [id]);
 }
 
