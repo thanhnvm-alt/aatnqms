@@ -25,11 +25,26 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   const filteredOptions = useMemo(() => {
     if (!search) return options;
+    
     const cleanSearch = removeVietnameseTones(search.toLowerCase().trim());
-    return options.filter(opt => 
-      removeVietnameseTones(opt.toLowerCase()).includes(cleanSearch) || 
-      removeVietnameseTones(getLabel(opt).toLowerCase()).includes(cleanSearch)
-    );
+    const searchWords = cleanSearch.split(/\s+/).filter(Boolean);
+    
+    return options.filter(opt => {
+      const optLower = removeVietnameseTones(opt.toLowerCase());
+      const labelLower = removeVietnameseTones(getLabel(opt).toLowerCase());
+      
+      // Traditional exact substring match first (faster)
+      if (optLower.includes(cleanSearch) || labelLower.includes(cleanSearch)) return true;
+      
+      // Word-by-word match (flexible order)
+      if (searchWords.length > 1) {
+        return searchWords.every(word => 
+          optLower.includes(word) || labelLower.includes(word)
+        );
+      }
+      
+      return false;
+    });
   }, [options, search, optionLabels]);
 
   useEffect(() => {

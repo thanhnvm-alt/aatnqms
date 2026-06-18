@@ -232,19 +232,38 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     return map;
   }, [workshops]);
 
-  const filterOptions = useMemo(() => ({
-      inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
-      workshops: Array.from(new Set([
-          ...workshops.map(w => w.code),
-          'VẬT TƯ', 'GCN', 'LẮP ĐẶT'
-      ])),
-      projects: Array.from(new Set([
-          ...projects.map(p => p.ma_ct),
-          ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
-      ])).sort(),
-      types: Object.keys(MODULE_CONFIG),
-      statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
-  }), [user, users, workshops, projects, inspections]);
+  const filterOptions = useMemo(() => {
+      const showAllInspectors = user?.role === 'ADMIN' || user?.role === 'MANAGER' || hasPermission(user, [], 'LIST', 'VIEW_ALL');
+      
+      let allPotentialInspectors: string[] = [];
+      if (showAllInspectors) {
+          // All users with inspection-related roles
+          allPotentialInspectors = users?.filter(u => 
+              ['QC', 'QA', 'ADMIN', 'MANAGER'].includes(u.role as string)
+          ).map(u => u.name) || [];
+      } else if (user?.role === 'QC') {
+          allPotentialInspectors = [user.name];
+      } else {
+          allPotentialInspectors = users?.filter(u => u.role === 'QC').map(u => u.name) || [];
+      }
+
+      // Also include people who have actually performed inspections in the current list
+      const actualInspectors = inspections.map(i => i.inspectorName).filter((n): n is string => !!n);
+      
+      return {
+          inspectors: Array.from(new Set([...allPotentialInspectors, ...actualInspectors])),
+          workshops: Array.from(new Set([
+              ...workshops.map(w => w.code),
+              'VẬT TƯ', 'GCN', 'LẮP ĐẶT'
+          ])),
+          projects: Array.from(new Set([
+              ...projects.map(p => p.ma_ct),
+              ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
+          ])).sort(),
+          types: Object.keys(MODULE_CONFIG),
+          statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
+      };
+  }, [user, users, workshops, projects, inspections]);
 
   const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterProject.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
 
