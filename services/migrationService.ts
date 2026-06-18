@@ -833,11 +833,19 @@ export async function runMigrations() {
       migrationLogs.push(`✅ Ensured table tools exists in ${schema}`);
 
       try {
-        await query(`ALTER TABLE "${schema}"."tool_transfers" RENAME COLUMN "tool_id" TO "tool_asset_id"`);
+        const transCols = await getExistingColumns('tool_transfers');
+        if (transCols.includes('tool_id') && !transCols.includes('tool_asset_id') && !transCols.includes('tool_asset_ids')) {
+          await query(`ALTER TABLE "${schema}"."tool_transfers" RENAME COLUMN "tool_id" TO "tool_asset_id"`);
+        }
       } catch(e) {}
       
       try {
-        await query(`ALTER TABLE "${schema}"."tool_calibrations" RENAME COLUMN "tool_id" TO "tool_asset_id"`);
+        const calibCols = await getExistingColumns('tool_calibrations');
+        if (calibCols.includes('tool_id') && !calibCols.includes('tool_asset_id')) {
+          await query(`ALTER TABLE "${schema}"."tool_calibrations" RENAME COLUMN "tool_id" TO "tool_asset_id"`);
+        } else if (!calibCols.includes('tool_asset_id')) {
+          await query(`ALTER TABLE "${schema}"."tool_calibrations" ADD COLUMN IF NOT EXISTS "tool_asset_id" TEXT`);
+        }
       } catch (alterError) {
         try {
             await query(`ALTER TABLE "${schema}"."tool_calibrations" ADD COLUMN IF NOT EXISTS "tool_asset_id" TEXT`);

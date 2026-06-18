@@ -785,29 +785,29 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                               </div>
                           </div>
 
-                          <div className="space-y-3 overflow-x-auto no-scrollbar pb-4">
-                              <table className="w-full text-left text-xs border-collapse">
+                          <div className="space-y-3 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
+                              <table className="w-full text-left text-xs border-collapse table-fixed">
                                   <thead>
-                                      <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-900/10">
-                                          <th className="py-2 px-2 font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[9px] min-w-[150px]">Phân hệ / Module</th>
-                                          <th className="py-2 text-center font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest text-[9px] bg-blue-50/50 dark:bg-blue-950/10 border-x border-slate-100 dark:border-slate-800 w-[60px]">TRUY CẬP</th>
+                                      <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-900/10 sticky top-0 bg-white dark:bg-slate-900 z-20">
+                                          <th className="py-2 px-2 font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[8px] w-[140px] sticky left-0 bg-white dark:bg-slate-950/10 backdrop-blur-sm z-30 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] shadow-slate-100 dark:shadow-slate-800">Phân hệ / Module</th>
+                                          <th className="py-2 text-center font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest text-[8px] bg-blue-50/50 dark:bg-blue-950/10 border-x border-slate-100 dark:border-slate-800 w-[45px]">TRUY CẬP</th>
                                           {[
                                               { id: 'VIEW', title: 'VIEW', desc: 'xem' },
-                                              { id: 'VIEW_ALL', title: 'VIEW ALL', desc: 'tất cả' },
+                                              { id: 'VIEW_ALL', title: 'V-ALL', desc: 'tất cả' },
                                               { id: 'CREATE', title: 'CREATE', desc: 'tạo' },
-                                              { id: 'EDIT_OWN', title: 'EDIT', desc: 'tôi' },
-                                              { id: 'EDIT_ALL', title: 'EDIT', desc: 'tất cả' },
-                                              { id: 'DELETE_OWN', title: 'DELETE', desc: 'tôi' },
-                                              { id: 'DELETE_ALL', title: 'DELETE', desc: 'tất cả' },
-                                              { id: 'IMPORT', title: 'IMPORT', desc: 'nhập' },
-                                              { id: 'EXPORT', title: 'EXPORT', desc: 'xuất' },
+                                              { id: 'EDIT_OWN', title: 'EDIT-O', desc: 'tôi' },
+                                              { id: 'EDIT_ALL', title: 'EDIT-A', desc: 'tất cả' },
+                                              { id: 'DELETE_OWN', title: 'DEL-O', desc: 'tôi' },
+                                              { id: 'DELETE_ALL', title: 'DEL-A', desc: 'tất cả' },
+                                              { id: 'IMPORT', title: 'IMPT', desc: 'nhập' },
+                                              { id: 'EXPORT', title: 'EXPT', desc: 'xuất' },
                                               { id: 'SIGN1', title: 'SIGN1', desc: 'L1' },
                                               { id: 'SIGN2', title: 'SIGN2', desc: 'L2' }
                                           ].map(act => (
-                                              <th key={act.id} className="py-1 px-1 text-center font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter text-[7.5px] border-r border-slate-100 dark:border-slate-800 w-[45px] leading-tight">
-                                                  <div className="flex flex-col items-center justify-center min-h-[40px]">
+                                              <th key={act.id} className="py-1 px-0 text-center font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter text-[7px] border-r border-slate-100 dark:border-slate-800 w-[38px] leading-tight">
+                                                  <div className="flex flex-col items-center justify-center min-h-[36px]">
                                                       <span>{act.title}</span>
-                                                      <span className="opacity-60 font-normal lowercase italic text-[6.5px]">({act.desc})</span>
+                                                      <span className="opacity-60 font-normal lowercase italic text-[6px]">({act.desc})</span>
                                                   </div>
                                               </th>
                                           ))}
@@ -829,8 +829,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                           return Object.entries(grouped).map(([groupName, groupModules]) => (
                                               <React.Fragment key={groupName}>
                                                   {/* Group Section Header */}
-                                                  <tr className="bg-slate-100/60 dark:bg-slate-800/40">
-                                                      <td colSpan={11} className="py-2 px-3 font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[8.5px] border-y border-slate-200/50 dark:border-slate-800/50">
+                                                  <tr className="bg-slate-100/60 dark:bg-slate-800/40 sticky z-10">
+                                                      <td colSpan={13} className="py-1 px-3 font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[8px] border-y border-slate-200/50 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-800 sticky left-0">
                                                           📁 {groupName}
                                                       </td>
                                                   </tr>
@@ -885,15 +885,15 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
 
                                                       return (
                                                           <tr key={m.id} className="border-b border-slate-150 dark:border-slate-800/60 hover:bg-slate-100/30 dark:hover:bg-slate-800/20">
-                                                              <td className="py-2 px-2">
-                                                                  <div className="text-[10px] uppercase font-bold text-slate-700 dark:text-slate-300 truncate tracking-tight transition-all" title={m.label}>{m.label}</div>
+                                                              <td className="py-1.5 px-2 sticky left-0 bg-white dark:bg-[#111827] shadow-[1px_0_0_0_rgba(0,0,0,0.05)] z-[5]">
+                                                                  <div className="text-[9px] uppercase font-bold text-slate-700 dark:text-slate-300 truncate tracking-tight transition-all" title={m.label}>{m.label}</div>
                                                                   <div className="flex items-center gap-1 mt-0.5">
-                                                                      <span className="font-mono text-[7px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 px-1 rounded uppercase tracking-tighter">{m.id}</span>
+                                                                      <span className="font-mono text-[6.5px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 px-1 rounded uppercase tracking-tighter shrink-0">{m.id}</span>
                                                                   </div>
                                                               </td>
                                                               
                                                               {/* TRUY CẬP Column: QMS Blue brand checkbox */}
-                                                              <td className="py-2 text-center bg-blue-50/10 dark:bg-blue-950/5 border-x border-slate-100 dark:border-slate-800 w-[60px]">
+                                                              <td className="py-1.5 text-center bg-blue-50/10 dark:bg-blue-950/5 border-x border-slate-100 dark:border-slate-800">
                                                                   <div className="flex justify-center">
                                                                       <div 
                                                                           onClick={() => {
@@ -906,7 +906,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                                                       : [...current, m.id]
                                                                               }));
                                                                           }}
-                                                                          className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer transition-all ${
+                                                                          className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center cursor-pointer transition-all ${
                                                                               isAllowed 
                                                                                   ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-100/50 dark:shadow-none scale-105' 
                                                                                   : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-transparent hover:border-blue-400'
@@ -928,7 +928,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                               ].map(act => {
                                                                   if (!hasActions) {
                                                                       return (
-                                                                          <td key={act} className="py-2 text-center text-slate-200 dark:text-slate-800 text-[8px] w-[45px]">
+                                                                          <td key={act} className="py-1.5 text-center text-slate-200 dark:text-slate-800 text-[8px]">
                                                                               <span className="select-none inline-block w-4 opacity-30">—</span>
                                                                           </td>
                                                                       );
@@ -936,14 +936,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
 
                                                                   const isChecked = existingPerm?.actions.includes(act) || false;
                                                                   return (
-                                                                      <td key={act} className="py-2 text-center border-r border-slate-50 dark:border-slate-800/30 w-[45px]">
+                                                                      <td key={act} className="py-1.5 text-center border-r border-slate-50 dark:border-slate-800/30">
                                                                           <div className="flex justify-center">
                                                                               <div 
                                                                                   onClick={() => {
                                                                                       if (!isAllowed) return;
                                                                                       toggleUserPermission(act);
                                                                                   }}
-                                                                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                                                                  className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-all ${
                                                                                       !isAllowed 
                                                                                           ? 'opacity-20 cursor-not-allowed border-slate-200 dark:border-slate-800' 
                                                                                           : isChecked 

@@ -237,14 +237,22 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       
       let allPotentialInspectors: string[] = [];
       if (showAllInspectors) {
-          // All users with inspection-related roles
-          allPotentialInspectors = users?.filter(u => 
-              ['QC', 'QA', 'ADMIN', 'MANAGER'].includes(u.role as string)
-          ).map(u => u.name) || [];
+          // Sort users: QC/QA/ADMIN/MANAGER first
+          const sortedUsers = [...(users || [])].sort((a, b) => {
+              const roles = ['QC', 'QA', 'ADMIN', 'MANAGER'];
+              const idxA = roles.indexOf(a.role as string);
+              const idxB = roles.indexOf(b.role as string);
+              if (idxA === -1 && idxB === -1) return a.name.localeCompare(b.name);
+              if (idxA === -1) return 1;
+              if (idxB === -1) return -1;
+              return idxA - idxB;
+          });
+          allPotentialInspectors = sortedUsers.map(u => u.name);
       } else if (user?.role === 'QC') {
           allPotentialInspectors = [user.name];
       } else {
-          allPotentialInspectors = users?.filter(u => u.role === 'QC').map(u => u.name) || [];
+          // Fallback to everyone if restricted but not QC
+          allPotentialInspectors = users?.map(u => u.name) || [];
       }
 
       // Also include people who have actually performed inspections in the current list
