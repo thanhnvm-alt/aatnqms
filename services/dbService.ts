@@ -537,9 +537,12 @@ function buildBaseWhere(filters: any, user?: User) {
     const subArgs: any[] = [];
 
     // Enforcement: If user is not Admin/Manager and has a specific workshop (Tổ), restrict them to it.
+    // Removed as per user request to allow broader workshop search for team leads.
+    /*
     if (user && user.role !== 'ADMIN' && user.role !== 'MANAGER' && (user.to_qc || user.toQC)) {
         filters.workshop = user.to_qc || user.toQC;
     }
+    */
     
     if (filters.status && filters.status !== 'ALL') {
         const statuses = filters.status.split(',').map((s: string) => s.trim());
@@ -677,7 +680,7 @@ export async function getInspectionsProjectsList(filters: any = {}, user?: User)
  * Aggregates inspections from the centralized 'inspections' table.
  */
 export async function getInspectionsList(filters: any = {}, page: number = 1, limit?: number, user?: User): Promise<{ items: Inspection[], total: number }> {
-    const offsetLimit = limit || 1000000;
+    const offsetLimit = limit || 50;
     const offset = (page - 1) * offsetLimit;
     
     const { whereClause, subArgs } = buildBaseWhere(filters, user);
@@ -695,13 +698,13 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
-        ${limit ? `LIMIT $${limitIdx} OFFSET $${offsetIdx}` : ''}
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
 
     const countQuery = `SELECT COUNT(*) as total FROM ${SCHEMA}."inspections" ${whereClause}`;
 
     try {
-        const queryArgs = limit ? [...subArgs, limit, offset] : subArgs;
+        const queryArgs = [...subArgs, offsetLimit, offset];
         const [res, countRes] = await Promise.all([
             query(finalQuery, queryArgs),
             query(countQuery, subArgs)
@@ -731,6 +734,61 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
         };
     } catch (e) {
         console.error("ISO-DB: getInspectionsList failed", e);
+        return { items: [], total: 0 };
+    }
+}
+
+/**
+ * Chuyên biệt hóa lấy toàn bộ inspections cho module Báo Cáo Tổng Hợp (không phân trang).
+ * Tuyệt đối không query bất kỳ cột JSON hoặc cột chứa dữ liệu lớn như "data" để tránh quá tải băng thông.
+ */
+export async function getDashboardInspectionsList(filters: any = {}, user?: User): Promise<{ items: Inspection[], total: number }> {
+    const { whereClause, subArgs } = buildBaseWhere(filters, user);
+
+    const finalQuery = `
+        SELECT 
+            id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
+            workshop, status, score, created_at, updated_at, created_by as "inspectorName",
+            stage as "inspectionStage", inspected_qty as "inspectedQuantity",
+            passed_qty as "passedQuantity", failed_qty as "failedQuantity",
+            so_luong_ipo
+        FROM ${SCHEMA}."inspections"
+        ${whereClause}
+        ORDER BY updated_at DESC
+    `;
+
+    const countQuery = `SELECT COUNT(*) as total FROM ${SCHEMA}."inspections" ${whereClause}`;
+
+    try {
+        const [res, countRes] = await Promise.all([
+            query(finalQuery, subArgs),
+            query(countQuery, subArgs)
+        ]);
+
+        const items = res.rows.map((row: any) => ({
+            ...row,
+            inspectorName: row.inspectorName || row.created_by,
+            created_by: row.created_by || row.inspectorName,
+            date: (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
+                  (row.updated_at && Number(row.updated_at) > 1000000000) ? row.updated_at : 
+                  row.created_at,
+            updatedAt: row.updated_at,
+            isAllPass: row.status === 'COMPLETED' || row.status === 'APPROVED',
+            hasNcr: row.status === 'FLAGGED',
+            isCond: row.status === 'CONDITIONAL',
+            inspectionStage: row.inspectionStage,
+            inspectedQuantity: row.inspectedQuantity !== null ? Number(row.inspectedQuantity) : undefined,
+            passedQuantity: row.passedQuantity !== null ? Number(row.passedQuantity) : undefined,
+            failedQuantity: row.failedQuantity !== null ? Number(row.failedQuantity) : undefined,
+            so_luong_ipo: row.so_luong_ipo !== null ? Number(row.so_luong_ipo) : 0
+        })) as unknown as Inspection[];
+
+        return { 
+            items, 
+            total: parseInt(countRes.rows[0].total, 10) 
+        };
+    } catch (e) {
+        console.error("ISO-DB: getDashboardInspectionsList failed", e);
         return { items: [], total: 0 };
     }
 }
@@ -1475,7 +1533,11 @@ export function mapUserRow(r: any): any {
         team_id: r.team_id || dataExtra.team_id || dataExtra.teamId || '',
         teamId: r.team_id || dataExtra.team_id || dataExtra.teamId || '',
         user_permissions: r.user_permissions || dataExtra.user_permissions || dataExtra.userPermissions || null,
-        userPermissions: typeof r.user_permissions === 'string' ? safeJsonParse(r.user_permissions, null) : (r.user_permissions || dataExtra.userPermissions || null)
+        userPermissions: typeof r.user_permissions === 'string' ? safeJsonParse(r.user_permissions, null) : (r.user_permissions || dataExtra.userPermissions || null),
+        signatureTemplate: r.signature_template || dataExtra.signature_template || dataExtra.signatureTemplate || '',
+        signature_template: r.signature_template || dataExtra.signature_template || dataExtra.signatureTemplate || '',
+        require_password_change: r.require_password_change !== undefined ? !!r.require_password_change : (dataExtra.require_password_change !== undefined ? !!dataExtra.require_password_change : false),
+        requirePasswordChange: r.require_password_change !== undefined ? !!r.require_password_change : (dataExtra.require_password_change !== undefined ? !!dataExtra.require_password_change : false),
     };
 }
 
@@ -1795,7 +1857,7 @@ export async function addNotification(userId: string, type: string, title: strin
 }
 
 export async function getNotifications(userId: string): Promise<Notification[]> {
-    const res = await query(`SELECT * FROM ${SCHEMA}.notifications WHERE user_id = $1 ORDER BY created_at DESC`, [userId]);
+    const res = await query(`SELECT * FROM ${SCHEMA}.notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [userId]);
     return res.rows.map((r: any) => ({
         id: r.id as string,
         userId: r.user_id as string,
@@ -1845,9 +1907,38 @@ export async function saveUser(u: any) {
     const existing = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1`, [u.id]);
     const oldValue = existing.rows.length > 0 ? mapUserRow(existing.rows[0]) : null;
     
-    let password = u.password || '123456';
-    if (!password.startsWith('$2b$')) {
+    // 1. Optimize password hashing & retain old hashed password if unchanged
+    let password = u.password;
+    let passwordHasChanged = false;
+
+    if (!password) {
+        if (oldValue && oldValue.password) {
+            password = oldValue.password; // Retain existing hashed password
+        } else {
+            password = '123456';
+            passwordHasChanged = true;
+        }
+    } else if (oldValue && password === oldValue.password) {
+        // Frontend passed the same hashed password (unlikely but safe)
+        passwordHasChanged = false;
+    } else if (!password.startsWith('$2b$') && !password.startsWith('$2a$')) {
+        // Plain text password, hash it
         password = await bcrypt.hash(password, SALT_ROUNDS);
+        passwordHasChanged = true;
+    }
+
+    // 2. Determine require_password_change flag
+    let require_password_change = u.require_password_change;
+    if (require_password_change === undefined) {
+        if (!oldValue) {
+            // New user must change password
+            require_password_change = true;
+        } else if (passwordHasChanged) {
+            // User had their password updated/reset
+            require_password_change = true;
+        } else {
+            require_password_change = oldValue.require_password_change || false;
+        }
     }
 
     const phong_ban = u.phong_ban || u.phongBan || '';
@@ -1881,12 +1972,15 @@ export async function saveUser(u: any) {
         department_id: u.department_id || u.departmentId || '',
         division_id: u.division_id || u.divisionId || '',
         team_id: u.team_id || u.teamId || '',
-        user_permissions: u.user_permissions ? (typeof u.user_permissions === 'string' ? u.user_permissions : JSON.stringify(u.user_permissions)) : (u.userPermissions ? JSON.stringify(u.userPermissions) : null)
+        signature_template: u.signatureTemplate || u.signature_template || '',
+        user_permissions: u.user_permissions ? (typeof u.user_permissions === 'string' ? u.user_permissions : JSON.stringify(u.user_permissions)) : (u.userPermissions ? JSON.stringify(u.userPermissions) : null),
+        require_password_change,
+        requirePasswordChange: require_password_change
     };
 
     await query(`
-        INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, email, position, work_location, status, join_date, education, notes, phong_ban, bo_phan, allowed_modules, to_qc, la_to_truong, department_id, division_id, team_id, user_permissions, data, updated_at) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, EXTRACT(EPOCH FROM NOW())::BIGINT) 
+        INSERT INTO ${SCHEMA}.users (id, username, password, name, role, avatar, msnv, email, position, work_location, status, join_date, education, notes, phong_ban, bo_phan, allowed_modules, to_qc, la_to_truong, department_id, division_id, team_id, user_permissions, data, updated_at, require_password_change) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, EXTRACT(EPOCH FROM NOW())::BIGINT, $25) 
         ON CONFLICT(id) DO UPDATE SET 
             username = EXCLUDED.username, 
             password = EXCLUDED.password,
@@ -1911,10 +2005,11 @@ export async function saveUser(u: any) {
             team_id = EXCLUDED.team_id,
             user_permissions = EXCLUDED.user_permissions,
             data = EXCLUDED.data, 
-            updated_at = EXCLUDED.updated_at
+            updated_at = EXCLUDED.updated_at,
+            require_password_change = EXCLUDED.require_password_change
     `, sanitizeArgs([
         u.id, u.username, password, u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, 
-        phong_ban, bo_phan, allowed_modules_str, updatedU.to_qc, updatedU.la_to_truong, updatedU.department_id, updatedU.division_id, updatedU.team_id, updatedU.user_permissions, updatedU
+        phong_ban, bo_phan, allowed_modules_str, updatedU.to_qc, updatedU.la_to_truong, updatedU.department_id, updatedU.division_id, updatedU.team_id, updatedU.user_permissions, updatedU, require_password_change
     ]));
 
     if (u.id) {

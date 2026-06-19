@@ -293,7 +293,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   {showSign1Button ? (
                     isAuthorizedTeam ? (
                       <button 
-                        onClick={() => setShowModal('SIGN1')}
+                        onClick={() => { setSignature(user.signature_template || ''); setShowModal('SIGN1'); }}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
                       >
                         <CheckSquare className="w-3.5 h-3.5" /> Ký xác nhận L1
@@ -344,6 +344,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   isAuthorizedTeam ? (
                     <button 
                       onClick={() => {
+                        setSignature(user.signature_template || '');
                         const isBoss = 
                           user.role === 'ADMIN' || 
                           user.role === 'MANAGER' ||
@@ -420,6 +421,19 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 p-2 shadow-inner">
               <SignaturePad label="Chữ ký xác nhận" value={signature} onChange={setSignature} />
             </div>
+
+            {user.signature_template && (
+              <div className="mt-4 px-2">
+                <button
+                  type="button"
+                  onClick={() => setSignature(user.signature_template || '')}
+                  className="w-full py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-100 transition-all active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  SỬ DỤNG CHỮ KÝ MẪU CỦA BẠN
+                </button>
+              </div>
+            )}
 
             <footer className="flex justify-end gap-3 mt-6">
               <button 

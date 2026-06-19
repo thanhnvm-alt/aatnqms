@@ -19,12 +19,14 @@ import {
 } from './constants';
 
 import { LoginPage } from './components/LoginPage';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { GlobalHeader } from './components/GlobalHeader';
 import { Sidebar } from './components/Sidebar';
 import { ChatAI } from './components/ChatAI';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
   fetchInspections, 
+  fetchDashboardInspections,
   fetchInspectionById,
   saveInspectionToSheet, 
   deleteInspectionFromSheet, 
@@ -112,6 +114,9 @@ const App = () => {
   const [returnView, setReturnView] = useState<ViewState>('LIST');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
+  const [dashboardInspections, setDashboardInspections] = useState<Inspection[]>([]);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [dashboardFilters, setDashboardFilters] = useState<any>({});
   const [inspectionsTotal, setInspectionsTotal] = useState(0);
   const [inspectionsHierarchy, setInspectionsHierarchy] = useState<{ year: number, month: number, count: number }[]>([]);
   const [projectsByMonth, setProjectsByMonth] = useState<Record<string, {ma_ct: string, ten_ct: string, count: number}[]>>({});
@@ -204,7 +209,7 @@ const App = () => {
   const loadInspections = async (page: number = 1, filters: any = {}) => {
     setIsLoadingInspections(true);
     try {
-        const result = await fetchInspections(filters, page);
+        const result = await fetchInspections(filters, page, 50);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
     } catch (e) {
@@ -213,6 +218,25 @@ const App = () => {
         setIsLoadingInspections(false);
     }
   };
+
+  const loadDashboardInspections = async (filters: any = {}) => {
+    setIsDashboardLoading(true);
+    try {
+        const result = await fetchDashboardInspections(filters);
+        setDashboardInspections(result.items || []);
+    } catch (e) {
+        console.error("ISO-FRONT: Load dashboard inspections failed", e);
+    } finally {
+        setIsDashboardLoading(false);
+    }
+  };
+
+  // Load dashboard inspections when on dashboard view and filters change
+  useEffect(() => {
+    if (user && isDbReady && view === 'DASHBOARD') {
+        loadDashboardInspections(dashboardFilters);
+    }
+  }, [user, isDbReady, view, dashboardFilters]);
 
   const loadProjects = async (search: string = '', page: number = 1) => { 
     try { 
@@ -231,6 +255,13 @@ const App = () => {
     storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser)); 
     setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
   };
+
+  const handlePasswordChangeSuccess = (updatedUser: User) => {
+    const { password, ...safeUser } = updatedUser;
+    setUser(safeUser as User);
+    const storage = localStorage.getItem(AUTH_STORAGE_KEY) ? localStorage : sessionStorage;
+    storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+  };
   
   const handleLogout = () => { 
     setUser(null); 
@@ -242,8 +273,33 @@ const App = () => {
   };
 
   const notifyUsers = async (targetRoles: string[], title: string, message: string, link?: { view: ViewState, id: string }, excludeUserId?: string) => {
-    const targets = users.filter(u => targetRoles.includes(u.role as string) && u.id !== excludeUserId);
-    for (const target of targets) {
+    const isStandardMatch = (u: User) => targetRoles.includes(u.role as string);
+
+    const qaQcKeywords = ['QA', 'QC', 'CHẤT LƯỢNG', 'CHAT LUONG', 'QUALITY'];
+    const targetPositions = [
+      'TỔ TRƯỞNG', 'TO TRUONG', 
+      'TRƯỞNG BỘ PHẬN', 'TRUONG BO PHAN', 
+      'TRƯỞNG PHÒNG', 'TRUONG PHONG', 
+      'GIÁM ĐỐC', 'GIAM DOC'
+    ];
+
+    const isQaqcManagementMatch = (u: User) => {
+      const userDept = (u.phong_ban || (u as any).phongBan || '').trim().toUpperCase();
+      const isQaqcDept = qaQcKeywords.some(keyword => userDept.includes(keyword));
+      
+      const userPos = (u.position || '').trim().toUpperCase();
+      const isLeaderPos = targetPositions.some(pos => userPos.includes(pos));
+      
+      return isQaqcDept && isLeaderPos;
+    };
+
+    const targets = users.filter(u => {
+      if (u.id === excludeUserId) return false;
+      return isStandardMatch(u) || isQaqcManagementMatch(u);
+    });
+
+    // Notify asynchronously in parallel using Promise.all
+    await Promise.all(targets.map(async (target) => {
       try {
         await createNotification({
           userId: target.id,
@@ -255,7 +311,7 @@ const App = () => {
       } catch (e) {
         console.error(`Failed to notify user ${target.id}`, e);
       }
-    }
+    }));
   };
 
   const updateSingleInspection = async (id: string, notifySuccess: boolean = true) => {
@@ -325,6 +381,19 @@ const App = () => {
 
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
 
+  if (user.requirePasswordChange || user.require_password_change) {
+    return (
+      <div className="fixed inset-0 z-[300] bg-slate-950 flex items-center justify-center p-4">
+        <ChangePasswordModal 
+          onClose={() => {}} 
+          onSuccess={handlePasswordChangeSuccess} 
+          forcing={true} 
+          onLogout={handleLogout} 
+        />
+      </div>
+    );
+  }
+
   return (
     <InspectionProvider>
       <div className="flex flex-row h-[100dvh] bg-slate-50 dark:bg-[#0b1120] overflow-hidden font-sans select-none text-slate-900 dark:text-slate-100 transition-colors duration-200">
@@ -353,16 +422,15 @@ const App = () => {
             <Suspense fallback={<LoadingFallback />}>
                 {view === 'DASHBOARD' && (
                     <Dashboard 
-                        inspections={inspections} 
+                        inspections={dashboardInspections} 
                         user={user} 
                         users={users}
                         workshops={workshops}
-                        filters={inspectionFilters}
+                        filters={dashboardFilters}
                         onNavigate={setView} 
                         onViewInspection={handleSelectInspection} 
                         onFilterChange={(filters) => {
-                            setInspectionFilters(filters);
-                            setInspectionsPage(1);
+                            setDashboardFilters(filters);
                         }}
                     />
                 )}

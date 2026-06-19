@@ -4,7 +4,7 @@ import { useInspectionContext } from '../src/context/InspectionContext';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User, hasPermission } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
 import { ProxyImage } from '../src/components/ProxyImage';
-import { formatDisplayDate } from '../lib/utils';
+import { formatDisplayDate, getGmt7DayBounds, getGmt7MonthBounds } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
 import { SearchableSelect } from './SearchableSelect';
 import { 
@@ -471,18 +471,17 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       }
       
       if (selectedDateDesktop && selectedDateDesktop !== 'ALL') {
-             const [d, m, y] = selectedDateDesktop.split('/');
-             const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
-             args.unixStart = Math.floor(dateObj.getTime() / 1000);
-             args.unixEnd = args.unixStart + 86399;
+             const bounds = getGmt7DayBounds(selectedDateDesktop);
+             args.unixStart = bounds.unixStart;
+             args.unixEnd = bounds.unixEnd;
       } else if (selectedMonthDesktop) {
              const { year, month } = selectedMonthDesktop;
-             const mapDays = new Date(year, month, 0).getDate();
-             args.unixStart = Math.floor(new Date(year, month - 1, 1).getTime() / 1000);
-             args.unixEnd = Math.floor(new Date(year, month - 1, mapDays, 23, 59, 59, 999).getTime() / 1000);
+             const bounds = getGmt7MonthBounds(year, month);
+             args.unixStart = bounds.unixStart;
+             args.unixEnd = bounds.unixEnd;
       }
       
-      fetchInspections(args).then(res => {
+      fetchInspections(args, 1, 50).then(res => {
           if (isActive) {
               setLazyLoadedItems(res.items || []);
               setIsItemsLoading(false);
@@ -577,12 +576,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               </button>
 
               {isFilterOpen && (
-                  <div className="absolute top-16 right-4 w-[320px] bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200 dark:border-slate-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 max-h-[85vh] overflow-y-auto">
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="font-bold text-black dark:text-white uppercase text-sm">Bộ lọc</span>
-                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                  <div className="absolute top-16 right-4 w-[280px] bg-white dark:bg-slate-900 rounded-2xl p-2.5 border border-slate-200 dark:border-slate-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 max-h-[80vh] overflow-y-auto scrollbar-thin">
+                      <div className="flex justify-between items-center mb-2 px-1">
+                        <span className="font-bold text-black dark:text-white uppercase text-[11px] tracking-wider">Bộ lọc tìm kiếm</span>
+                        <button onClick={() => setIsFilterOpen(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-400 dark:text-slate-500"><X className="w-4 h-4" /></button>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 pb-2">
                           <SearchableSelect 
                             label="LOẠI PHIẾU" 
                             values={filterType} 
@@ -629,23 +628,27 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   </div>
               )}
 
-              {user.role !== 'QC' && (
-                <div className="flex items-center gap-1.5">
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    onChange={handleFileChange} 
-                    accept=".xlsx, .xls" 
-                    className="hidden" 
-                  />
-                  <button 
-                    onClick={handleImportClick}
-                    disabled={isImporting}
-                    title="Nhập Excel"
-                    className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                  </button>
+              <div className="flex items-center gap-1.5">
+                {hasPermission(user, [], 'LIST', 'IMPORT') && (
+                  <>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileChange} 
+                      accept=".xlsx, .xls" 
+                      className="hidden" 
+                    />
+                    <button 
+                      onClick={handleImportClick}
+                      disabled={isImporting}
+                      title="Nhập Excel"
+                      className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                    </button>
+                  </>
+                )}
+                {hasPermission(user, [], 'LIST', 'EXPORT') && (
                   <button 
                     onClick={handleExport}
                     disabled={isExporting}
@@ -654,8 +657,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   >
                     {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
           </div>
       </div>
 
@@ -1214,7 +1217,13 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         }) || [];
                                                         setLightboxState({ images: formattedImages, index: i });
                                                     }}>
-                                                        <ProxyImage src={src} alt="Product image" className="w-24 h-24 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0" />
+                                                        <ProxyImage 
+                                                            src={src} 
+                                                            alt="Product image" 
+                                                            className="w-24 h-24 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0" 
+                                                            showTimestamp={true}
+                                                            timestamp={typeof img === 'object' ? (img.created_at || selectedItemDesktop.date) : selectedItemDesktop.date}
+                                                        />
                                                         <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
                                                             <Maximize2 className="w-5 h-5 text-white" />
                                                         </div>

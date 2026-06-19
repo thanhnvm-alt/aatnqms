@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import { User, UserRole, ModuleId, Role, hasPermission } from '../types';
 import { ALL_MODULES } from '../constants';
 import { Button } from './Button';
+import { SignaturePad } from './SignaturePad';
 import { saveRole } from '../services/apiService';
 import { 
   Edit2, 
@@ -278,7 +279,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
           department_id: formData.department_id || '',
           division_id: formData.division_id || '',
           team_id: formData.team_id || '',
-          user_permissions: (formData as any).userPermissions || []
+          user_permissions: (formData as any).userPermissions || [],
+          signature_template: formData.signature_template || formData.signatureTemplate || '',
+          signatureTemplate: formData.signatureTemplate || formData.signature_template || ''
         };
         if (editingUser) await onUpdateUser(userData);
         else await onAddUser(userData);
@@ -505,7 +508,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                       {u.avatar ? <img src={getProxyImageUrl(u.avatar)} className="w-full h-full object-cover rounded-full" alt=""/> : getInitials(u.name)}
                                   </div>
                                   <div className="overflow-hidden">
-                                      <p className="font-bold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-tight truncate leading-tight">{u.name}</p>
+                                      <div className="flex items-center gap-1.5">
+                                          <p className="font-bold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-tight truncate leading-tight">{u.name}</p>
+                                          {u.signature_template && (
+                                              <span className="shrink-0 text-[8px] bg-green-50 text-green-600 px-1 rounded border border-green-100" title="Đã có chữ ký mẫu">
+                                                  <ShieldCheck className="w-2.5 h-2.5 inline mr-0.5" /> SIG
+                                              </span>
+                                          )}
+                                      </div>
                                       <p className="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider leading-none mt-0.5">@{u.username} {u.email ? `• ${u.email}` : ''}</p>
                                   </div>
                               </div>
@@ -589,6 +599,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                           <option key="status-leave" value="Nghỉ phép">Nghỉ phép</option>
                                           <option key="status-quit" value="Đã nghỉ việc">Đã nghỉ việc</option>
                                       </select>
+                                  </div>
+                                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Chữ ký mẫu (Template)</label>
+                                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden p-1 shadow-sm">
+                                          <SignaturePad 
+                                            label="Vẽ mẫu chữ ký cho NV" 
+                                            value={formData.signature_template} 
+                                            onChange={(val) => setFormData(prev => ({...prev, signature_template: val, signatureTemplate: val}))} 
+                                          />
+                                      </div>
                                   </div>
                               </div>
                           </div>
@@ -815,7 +835,26 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   </thead>
                                   <tbody>
                                       {(() => {
-                                          const MODULES_WITH_ACTIONS = ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'SYSTEM_ADMIN'];
+                                          const getModuleAllowedActions = (mid: string): string[] => {
+                                              // 1. Read-Only Modules: Only VIEW, VIEW_ALL, EXPORT are allowed. All others: CREATE, EDIT, DELETE, IMPORT, SIGN1, SIGN2 are completely blocked and left blank!
+                                              if (mid === 'MATERIALS' || mid === 'IPO') {
+                                                  return ['VIEW', 'VIEW_ALL', 'EXPORT'];
+                                              }
+                                              // 2. Main workflow modules (KIỂM TRA CHẤT LƯỢNG & some main modules)
+                                              if (['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'LIST', 'NCR_LIST', 'TOOLS'].includes(mid)) {
+                                                  return ['VIEW', 'VIEW_ALL', 'CREATE', 'EDIT_OWN', 'EDIT_ALL', 'DELETE_OWN', 'DELETE_ALL', 'IMPORT', 'EXPORT', 'SIGN1', 'SIGN2'];
+                                              }
+                                              // 3. Simple inventory / config / CRUD tables with import/export (PROJECTS has no import/export but has CRUD)
+                                              if (['PROJECTS', 'SUPPLIERS', 'DEFECT_LIBRARY', 'SETTINGS_USERS', 'SETTINGS_ROLES', 'SETTINGS_WORKSHOPS', 'SETTINGS_DEPARTMENTS', 'SETTINGS_TEMPLATE'].includes(mid)) {
+                                                  return ['VIEW', 'VIEW_ALL', 'CREATE', 'EDIT_OWN', 'EDIT_ALL', 'DELETE_OWN', 'DELETE_ALL', 'IMPORT', 'EXPORT'];
+                                              }
+                                              // 4. System Admin
+                                              if (mid === 'SYSTEM_ADMIN') {
+                                                  return ['VIEW', 'CREATE', 'EDIT_ALL', 'DELETE_ALL'];
+                                              }
+                                              // 5. Default view-only for dashboard or simple navigation sections
+                                              return ['VIEW', 'VIEW_ALL'];
+                                          };
                                           
                                           // Group ALL_MODULES by m.group
                                           const grouped: Record<string, typeof ALL_MODULES> = {};
@@ -838,7 +877,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                       const userPermissions = (formData.userPermissions || []) as any[];
                                                       const isAllowed = formData.allowedModules?.includes(m.id) || false;
                                                       const existingPerm = userPermissions.find(p => p.moduleId === m.id);
-                                                      const hasActions = MODULES_WITH_ACTIONS.includes(m.id);
+                                                      const allowedActions = getModuleAllowedActions(m.id);
+                                                      const hasActions = allowedActions.length > 0;
 
                                                       const toggleUserPermission = (action: string) => {
                                                           setFormData(prev => {
@@ -926,7 +966,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                                   'IMPORT', 'EXPORT', 
                                                                   'SIGN1', 'SIGN2'
                                                               ].map(act => {
-                                                                  if (!hasActions) {
+                                                                  if (!hasActions || !allowedActions.includes(act)) {
                                                                       return (
                                                                           <td key={act} className="py-1.5 text-center text-slate-200 dark:text-slate-800 text-[8px]">
                                                                               <span className="select-none inline-block w-4 opacity-30">—</span>

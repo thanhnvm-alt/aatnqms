@@ -77,7 +77,7 @@ export const InspectionProvider: React.FC<{ children: ReactNode }> = ({ children
   const loadInspections = useCallback(async (filters: any, page: number = 1) => {
     setIsInspectionsLoading(true);
     try {
-      const result = await fetchInspections(filters, page);
+      const result = await fetchInspections(filters, page, 50);
       setInspections(result.items || []);
     } catch (e) {
       console.error("Load inspections failed", e);

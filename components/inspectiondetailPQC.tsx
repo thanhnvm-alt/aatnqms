@@ -13,6 +13,7 @@ import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
 import { formatDisplayDate } from '../lib/utils';
+import { ProxyImage } from '../src/components/ProxyImage';
 
 interface InspectionDetailProps {
   inspection: Inspection;
@@ -301,8 +302,14 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 {inspection.images && inspection.images.length > 0 ? (
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-2">
                         {inspection.images.map((img, i) => (
-                            <div key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="w-24 h-24 rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-400 transition-all">
-                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                            <div key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="shrink-0 cursor-zoom-in hover:scale-105 transition-all">
+                                <ProxyImage 
+                                    src={typeof img === 'string' ? img : (img as any).url_hd} 
+                                    alt="Ảnh hiện trường" 
+                                    className="w-24 h-24 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm" 
+                                    showTimestamp={true}
+                                    timestamp={typeof img === 'object' ? ((img as any).created_at || inspection.date) : inspection.date}
+                                />
                             </div>
                         ))}
                     </div>
@@ -339,8 +346,14 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 mt-2">
                                 {item.images.map((img, i) => (
-                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 cursor-zoom-in shadow-sm hover:border-blue-400 transition-all">
-                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="shrink-0 cursor-zoom-in hover:scale-105 transition-all">
+                                        <ProxyImage 
+                                            src={typeof img === 'string' ? img : (img as any).url_hd} 
+                                            alt="Ảnh hạng mục" 
+                                            className="w-20 h-20 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"
+                                            showTimestamp={true}
+                                            timestamp={typeof img === 'object' ? ((img as any).created_at || inspection.date) : inspection.date}
+                                        />
                                     </div>
                                 ))}
                             </div>

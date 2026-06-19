@@ -1,6 +1,6 @@
 import { getProxyImageUrl } from '../src/utils';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { DefectLibraryItem, User, Workshop } from '../types';
+import { DefectLibraryItem, User, Workshop, hasPermission } from '../types';
 import { fetchDefectLibrary, saveDefectLibraryItem, deleteDefectLibraryItem, fetchWorkshops, exportDefectLibrary, importDefectLibraryFile } from '../services/apiService';
 import { useTheme } from '../src/context/ThemeContext';
 import { 
@@ -244,29 +244,33 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       />
                   </div>
                   
-                  {isQA && (
-                      <div className="flex items-center gap-2">
-                        <button 
-                            onClick={handleExport}
-                            disabled={isExporting}
-                            className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 active:scale-95 transition-all shadow-sm"
-                            title="Xuất Excel"
-                        >
-                            {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
-                        </button>
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isImporting}
-                            className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 active:scale-95 transition-all shadow-sm"
-                            title="Nhập từ Excel"
-                        >
-                            {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
-                        </button>
-                        <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
-                            <Plus className="w-4 h-4" /> Thêm lỗi mới
-                        </button>
-                      </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                      {hasPermission(currentUser, [], 'DEFECT_LIBRARY', 'EXPORT') && (
+                          <button 
+                              onClick={handleExport}
+                              disabled={isExporting}
+                              className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 active:scale-95 transition-all shadow-sm"
+                              title="Xuất Excel"
+                          >
+                              {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
+                          </button>
+                      )}
+                      {hasPermission(currentUser, [], 'DEFECT_LIBRARY', 'IMPORT') && (
+                          <button 
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={isImporting}
+                              className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 active:scale-95 transition-all shadow-sm"
+                              title="Nhập từ Excel"
+                          >
+                              {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
+                          </button>
+                      )}
+                      {hasPermission(currentUser, [], 'DEFECT_LIBRARY', 'CREATE') && (
+                          <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
+                              <Plus className="w-4 h-4" /> Thêm lỗi mới
+                          </button>
+                      )}
+                  </div>
               </div>
           </div>
       </div>

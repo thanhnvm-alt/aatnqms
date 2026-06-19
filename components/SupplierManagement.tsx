@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Supplier, User } from '../types';
+import { Supplier, User, hasPermission } from '../types';
 import { fetchSuppliers, saveSupplier, deleteSupplier, fetchSupplierStats, exportSuppliers, importSuppliersFile } from '../services/apiService';
 import { 
   Building2, Search, Plus, Filter, 
@@ -151,27 +151,29 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
             accept=".xlsx, .xls" 
             className="hidden" 
           />
-          {user.role !== 'QC' && (
-            <>
-              <button 
-                onClick={handleImportClick}
-                disabled={isImporting}
-                title="Nhập Excel"
-                className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              </button>
-              <button 
-                onClick={handleExport}
-                disabled={isExporting}
-                title="Xuất Excel"
-                className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              </button>
-            </>
+          {hasPermission(user, [], 'SUPPLIERS', 'IMPORT') && (
+            <button 
+              onClick={handleImportClick}
+              disabled={isImporting}
+              title="Nhập Excel"
+              className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            </button>
           )}
-          <button onClick={() => handleOpenModal()} className="p-2 bg-slate-900 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-4 h-4" /></button>
+          {hasPermission(user, [], 'SUPPLIERS', 'EXPORT') && (
+            <button 
+              onClick={handleExport}
+              disabled={isExporting}
+              title="Xuất Excel"
+              className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            </button>
+          )}
+          {hasPermission(user, [], 'SUPPLIERS', 'CREATE') && (
+            <button onClick={() => handleOpenModal()} className="p-2 bg-slate-900 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-4 h-4" /></button>
+          )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar pb-24">

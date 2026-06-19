@@ -38,7 +38,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       
       // Word-by-word match (flexible order)
       if (searchWords.length > 1) {
-        return searchWords.every(word => 
+        return searchWords.every((word: string) => 
           optLower.includes(word) || labelLower.includes(word)
         );
       }
@@ -69,16 +69,16 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   const displayValue = values.length > 0 ? (values.length === 1 ? getLabel(values[0]) : `${values.length} mục đã chọn`) : placeholder;
 
   return (
-    <div className={`space-y-1 relative ${className} ${disabled ? 'opacity-50 pointer-events-none' : ''}`} ref={containerRef}>
-      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{label}</label>
+    <div className={`space-y-0.5 relative ${className} ${disabled ? 'opacity-50 pointer-events-none' : ''}`} ref={containerRef}>
+      <label className="text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest pl-1">{label}</label>
       <div 
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-[12px] font-black flex items-center justify-between transition-all h-[38px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800'}`}
+        className={`w-full px-2.5 py-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold flex items-center justify-between transition-all h-[30px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800'}`}
       >
         <span className={`truncate ${values.length > 0 ? 'text-black dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>
           {displayValue}
         </span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       {isOpen && (

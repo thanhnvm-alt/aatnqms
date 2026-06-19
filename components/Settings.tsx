@@ -8,6 +8,7 @@ import { WorkshopManagement } from './WorkshopManagement';
 import { DepartmentManagement } from './DepartmentManagement';
 import { UserActivityList } from './UserActivityList';
 import { Button } from './Button';
+import { SignaturePad } from './SignaturePad';
 import { 
     ArrowLeft, 
     FileCheck, 
@@ -178,14 +179,33 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || newPassword.length < 4) { alert("Mật khẩu mới phải có ít nhất 4 ký tự."); return; }
-    if (newPassword !== confirmPassword) { alert("Mật khẩu xác nhận không khớp."); return; }
+    if (!newPassword || newPassword.length < 6) { 
+        alert("Mật khẩu mới phải có tối thiểu 6 ký tự."); 
+        return; 
+    }
+    if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
+        alert("Mật khẩu mới bắt buộc phải chứa cả ký tự viết Hoa (A-Z) và viết thường (a-z).");
+        return;
+    }
+    if (newPassword !== confirmPassword) { 
+        alert("Mật khẩu xác nhận không khớp."); 
+        return; 
+    }
     setIsUpdatingPassword(true);
     try {
-        await onUpdateUser({ ...currentUser, password: newPassword });
+        await onUpdateUser({ 
+            ...currentUser, 
+            password: newPassword,
+            require_password_change: false,
+            requirePasswordChange: false
+        });
         alert("Đã cập nhật mật khẩu thành công!");
         setNewPassword(''); setConfirmPassword('');
-    } catch (error) { alert("Lỗi khi cập nhật mật khẩu."); } finally { setIsUpdatingPassword(false); }
+    } catch (error) { 
+        alert("Lỗi khi cập nhật mật khẩu."); 
+    } finally { 
+        setIsUpdatingPassword(false); 
+    }
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -403,13 +423,58 @@ export const Settings: React.FC<SettingsProps> = ({
                         </div>
 
                         {/* Compact user activity logs */}
-                        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-3 space-y-2">
-                            <div className="flex items-center gap-2">
-                                <Activity className="w-4 h-4 text-indigo-500" />
-                                <h4 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide">Nhật ký hoạt động cá nhân</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Signature Template Management */}
+                            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Edit3 className="w-4 h-4 text-orange-500" />
+                                        <h4 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide">Dấu chữ ký điện tử</h4>
+                                    </div>
+                                    {profileData.signature_template && (
+                                        <div className="text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase border border-green-100 flex items-center gap-1">
+                                            <ShieldCheck className="w-2.5 h-2.5" /> Đã cài đặt
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <div className="bg-slate-50 dark:bg-slate-800/20 rounded-xl p-1 border border-dashed border-slate-200 dark:border-slate-700">
+                                        <SignaturePad 
+                                            label="VẼ CHỮ KÝ MẪU CỦA BẠN" 
+                                            value={profileData.signature_template}
+                                            onChange={(val) => setProfileData(prev => ({ ...prev, signature_template: val, signatureTemplate: val }))}
+                                        />
+                                    </div>
+                                    
+                                    <div className="text-[9px] text-slate-500 leading-relaxed italic pr-2">
+                                        * Chữ ký này sẽ được sử dụng để ký nhanh các phiếu kiểm tra. Hãy đảm bảo bạn vẽ chữ ký rõ ràng và đúng mẫu quy định.
+                                    </div>
+                                    
+                                    {isEditingProfile && (
+                                        <div className="pt-2">
+                                            <button 
+                                                onClick={handleSaveProfile}
+                                                disabled={isSavingProfile}
+                                                className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm"
+                                            >
+                                                {isSavingProfile ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                                Cập nhật chữ ký mẫu
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <div className="max-h-[220px] overflow-y-auto no-scrollbar border border-slate-100 dark:border-slate-800 rounded-md bg-slate-50/50 dark:bg-slate-800/30 p-2">
-                                <UserActivityList userId={currentUser.id} />
+
+                            {/* Activity Logs */}
+                            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm p-3 space-y-2 flex flex-col">
+                                <div className="flex items-center gap-2">
+                                    <Activity className="w-4 h-4 text-indigo-500" />
+                                    <h4 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide">Nhật ký hoạt động cá nhân</h4>
+                                </div>
+                                <div className="flex-1 max-h-[300px] overflow-y-auto no-scrollbar border border-slate-100 dark:border-slate-800 rounded-md bg-slate-50/50 dark:bg-slate-800/30 p-2">
+                                    <UserActivityList userId={currentUser.id} />
+                                </div>
                             </div>
                         </div>
                     </div>

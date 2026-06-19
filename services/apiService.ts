@@ -226,6 +226,11 @@ export const fetchInspections = async (filters: any = {}, page: number = 1, limi
     return apiFetch(`/api/inspections?${params.toString()}`);
 };
 
+export const fetchDashboardInspections = async (filters: any = {}) => {
+    const params = new URLSearchParams({ ...filters });
+    return apiFetch(`/api/dashboard/inspections?${params.toString()}`);
+};
+
 export const fetchInspectionsDates = async (filters: any = {}): Promise<{ date: string, count?: number }[]> => {
     const params = new URLSearchParams({ ...filters });
     return apiFetch(`/api/inspections/dates?${params.toString()}`);
@@ -554,6 +559,16 @@ export const createNotification = async (params: { userId: string, type: Notific
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
+    });
+};
+
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+    return apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
     });
 };
 

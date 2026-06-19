@@ -161,6 +161,10 @@ export interface User {
   division_id?: string;
   user_permissions?: any;
   userPermissions?: any;
+  signatureTemplate?: string;
+  signature_template?: string;
+  requirePasswordChange?: boolean;
+  require_password_change?: boolean;
 }
 
 export interface NCRComment {

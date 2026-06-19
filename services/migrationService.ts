@@ -199,6 +199,7 @@ export async function runMigrations() {
     await addColumn('users', 'division_id', 'TEXT');
     await addColumn('users', 'team_id', 'TEXT');
     await addColumn('users', 'user_permissions', 'TEXT');
+    await addColumn('users', 'require_password_change', 'BOOLEAN DEFAULT FALSE');
 
     // Seed default users if table is empty
     try {

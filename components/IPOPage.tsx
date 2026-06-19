@@ -163,9 +163,9 @@ export default function IPOPage({ user }: { user: User }) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     </div>
 
-                    {hasPermission(user, [], 'IPO', 'EXPORT') && (
-                        <div className="flex gap-2 shrink-0">
-                           <button 
+                    <div className="flex gap-2 shrink-0">
+                        {hasPermission(user, [], 'IPO', 'EXPORT') && (
+                            <button 
                                 onClick={handleExport}
                                 disabled={isExporting}
                                 className="p-3 bg-green-600 text-white rounded-full shadow-lg shadow-green-500/30 active:scale-95 transition-all disabled:opacity-50"
@@ -173,26 +173,26 @@ export default function IPOPage({ user }: { user: User }) {
                             >
                                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                             </button>
-                            {hasPermission(user, [], 'IPO', 'IMPORT') && (
-                                <>
-                                    <input 
-                                        type="file" 
-                                        id="ipo-import" 
-                                        className="hidden" 
-                                        onChange={handleImport}
-                                        accept=".xlsx, .xls"
-                                    />
-                                    <label 
-                                        htmlFor="ipo-import"
-                                        className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
-                                        title="Nhập Excel"
-                                    >
-                                        <Upload className="w-4 h-4" />
-                                    </label>
-                                </>
-                            )}
-                        </div>
-                    )}
+                        )}
+                        {hasPermission(user, [], 'IPO', 'IMPORT') && (
+                            <>
+                                <input 
+                                    type="file" 
+                                    id="ipo-import" 
+                                    className="hidden" 
+                                    onChange={handleImport}
+                                    accept=".xlsx, .xls"
+                                />
+                                <label 
+                                    htmlFor="ipo-import"
+                                    className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+                                    title="Nhập Excel"
+                                >
+                                    <Upload className="w-4 h-4" />
+                                </label>
+                            </>
+                        )}
+                    </div>
                 </div>
                 
                 <div className="flex items-center justify-between px-2">

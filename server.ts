@@ -566,6 +566,56 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  app.post("/api/auth/change-password", authenticate, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const loggedInUser = (req as any).user;
+      
+      const user = await db.getUserByUsername(loggedInUser.username);
+      if (!user) {
+        return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
+      }
+
+      // Check current password
+      let isMatch = false;
+      if (user.password) {
+        if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
+          isMatch = await bcrypt.compare(currentPassword, user.password);
+        } else {
+          isMatch = currentPassword === user.password;
+        }
+      }
+
+      if (!isMatch) {
+        return res.status(400).json({ error: 'Mật khẩu hiện tại không chính xác' });
+      }
+
+      // Validate new password complexity: min 6 chars, mandatory upper & lower case letters.
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' });
+      }
+      if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({ error: 'Mật khẩu mới bắt buộc phải chứa cả ký tự hoa và thường' });
+      }
+
+      // Save user with new password and reset change flag
+      const updatedUserPayload = {
+        ...user,
+        password: newPassword,
+        require_password_change: false,
+        requirePasswordChange: false
+      };
+
+      await db.saveUser(updatedUserPayload);
+      
+      const { password: _, ...userWithoutPassword } = updatedUserPayload;
+      res.json({ success: true, user: userWithoutPassword });
+    } catch (error: any) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Đổi mật khẩu thất bại, lỗi hệ thống', details: error.message });
+    }
+  });
+
   app.post("/api/chat", express.json(), async (req, res) => {
     const { message, context } = req.body;
     
@@ -918,6 +968,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch inspections' });
+    }
+  });
+
+  app.get("/api/dashboard/inspections", authenticate, async (req, res) => {
+    try {
+      const filters = {
+        status: req.query.status as string,
+        search: req.query.search as string,
+        qc: req.query.qc as string,
+        workshop: req.query.workshop as string,
+        project: req.query.project as string,
+        type: req.query.type as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string
+      };
+
+      const result = await db.getDashboardInspectionsList(filters, (req as any).user);
+      res.json(result);
+    } catch (error) {
+      console.error("Dashboard API error:", error);
+      res.status(500).json({ error: 'Failed to fetch dashboard inspections' });
     }
   });
 
