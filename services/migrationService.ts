@@ -391,7 +391,8 @@ export async function runMigrations() {
             "inspected_qty" NUMERIC,
             "passed_qty" NUMERIC,
             "failed_qty" NUMERIC,
-            "so_luong_ipo" NUMERIC
+            "so_luong_ipo" NUMERIC,
+            "priority" TEXT
         );
       `);
       migrationLogs.push(`✅ Ensured table inspections exists in ${schema}`);
@@ -404,6 +405,22 @@ export async function runMigrations() {
     await addColumn('inspections', 'passed_qty', 'NUMERIC');
     await addColumn('inspections', 'failed_qty', 'NUMERIC');
     await addColumn('inspections', 'so_luong_ipo', 'NUMERIC');
+    await addColumn('inspections', 'priority', 'TEXT');
+
+    // Create highly optimized indices for inspections table to speed up dashboard reporting
+    try {
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_status" ON "${schema}"."inspections" ("status");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_type" ON "${schema}"."inspections" ("type");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_workshop" ON "${schema}"."inspections" ("workshop");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_ma_ct" ON "${schema}"."inspections" ("ma_ct");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_created_at" ON "${schema}"."inspections" ("created_at");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_created_by" ON "${schema}"."inspections" ("created_by");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_priority" ON "${schema}"."inspections" ("priority");`);
+      migrationLogs.push(`✅ Created performance indices for table inspections in ${schema}`);
+    } catch (e: any) {
+      console.warn(`⚠️ Could not create index on inspections:`, e.message);
+      migrationLogs.push(`⚠️ Could not create index on inspections: ${e.message}`);
+    }
 
     // 8. Defect Library
     try {

@@ -1,19 +1,20 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Inspection, InspectionStatus, Priority, User, ViewState, Workshop } from '../types';
+import { fetchInspectionsProjects } from '../services/apiService';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, ComposedChart, Line, CartesianGrid, Legend, LabelList
 } from 'recharts';
 import { 
   ClipboardCheck, AlertTriangle, CheckCircle2, Flag, 
   Activity, Clock, AlertOctagon,
-  ArrowRight, ShieldCheck, UserCircle, Filter, X, Search, RotateCcw
+  ArrowRight, ShieldCheck, UserCircle, Filter, X, Search, RotateCcw, ChevronDown
 } from 'lucide-react';
 import { SearchableSelect } from './SearchableSelect';
 import { DateRangePicker } from './DateRangePicker';
 
 interface DashboardProps {
-  inspections: Inspection[];
+  dashboardStats?: any;
   user?: User;
   users?: User[];
   workshops?: Workshop[];
@@ -45,14 +46,30 @@ const MODULE_CONFIG: Record<string, { label: string }> = {
     'FSR': { label: 'FSR' }
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users = [], workshops = [], filters, onLogout, onNavigate, onViewInspection, onFilterChange }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, users = [], workshops = [], filters, onLogout, onNavigate, onViewInspection, onFilterChange }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filterQC, setFilterQC] = useState<string[]>(() => filters?.qc ? filters.qc.split(',').filter(Boolean) : []);
   const [filterWorkshop, setFilterWorkshop] = useState<string[]>(() => filters?.workshop ? filters.workshop.split(',').filter(Boolean) : []);
   const [filterStatus, setFilterStatus] = useState<string[]>(() => filters?.status ? filters.status.split(',').filter(Boolean) : []);
   const [filterType, setFilterType] = useState<string[]>(() => filters?.type ? filters.type.split(',').filter(Boolean) : []);
+  const [filterProject, setFilterProject] = useState<string[]>(() => filters?.project ? filters.project.split(',').filter(Boolean) : []);
   const [startDate, setStartDate] = useState(() => filters?.startDate || '');
   const [endDate, setEndDate] = useState(() => filters?.endDate || '');
+  const [projectOptions, setProjectOptions] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetchInspectionsProjects()
+      .then((projs) => {
+        if (active) {
+          setProjectOptions(projs || []);
+        }
+      })
+      .catch((err) => console.error("Failed to load dashboard projects filtering options", err));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const workshopLabels = useMemo(() => {
     const map: Record<string, string> = {};
@@ -65,17 +82,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
     return map;
   }, [workshops]);
 
-  const filterOptions = useMemo(() => ({
-    inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (users?.filter(u => u.role === 'QC').map(u => u.name) || []))),
-    workshops: Array.from(new Set([
-      ...workshops.map(w => w.code),
-      'VẬT TƯ', 'GCN', 'LẮP ĐẶT'
-    ])),
-    types: Object.keys(MODULE_CONFIG),
-    statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
-  }), [user, users, workshops]);
+  const projectLabels = useMemo(() => {
+    const map: Record<string, string> = {};
+    projectOptions.forEach(p => {
+      map[p.ma_ct] = `${p.ten_ct || p.name || p.ma_ct} (${p.ma_ct})`;
+    });
+    return map;
+  }, [projectOptions]);
 
-  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
+  const filterOptions = useMemo(() => {
+    const qaqcUsers = (users || []).filter(u => {
+      const isRoleQC = u.role === 'QC';
+      const dept = String(u.phong_ban || u.phongBan || '').toUpperCase();
+      return isRoleQC || dept.includes('QA') || dept.includes('QC') || dept.includes('CHẤT LƯỢNG') || dept.includes('CHAT LUONG');
+    });
+
+    return {
+      inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (qaqcUsers.map(u => u.name) || []))),
+      workshops: Array.from(new Set([
+        ...workshops.map(w => w.code),
+        'VẬT TƯ', 'GCN', 'LẮP ĐẶT'
+      ])),
+      types: Object.keys(MODULE_CONFIG),
+      projects: projectOptions.map(p => p.ma_ct),
+      statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
+    };
+  }, [user, users, workshops, projectOptions]);
+
+  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || filterProject.length > 0 || startDate !== '' || endDate !== '';
 
   const handleApplyFilters = () => {
     if (onFilterChange) {
@@ -84,6 +118,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
         workshop: filterWorkshop.join(','),
         status: filterStatus.join(','),
         type: filterType.join(','),
+        project: filterProject.join(','),
         startDate,
         endDate
       });
@@ -95,76 +130,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
     setFilterWorkshop([]);
     setFilterStatus([]);
     setFilterType([]);
+    setFilterProject([]);
     setStartDate('');
     setEndDate('');
     if (onFilterChange) onFilterChange({});
   };
 
-  const safeInspections = useMemo(() => (Array.isArray(inspections) ? inspections : []).filter(i => i !== null), [inspections]);
-
   const stats = useMemo(() => {
-    const total = safeInspections.length;
-    const nonDraftItems = safeInspections.filter(i => i.status !== InspectionStatus.DRAFT);
-    const drafts = safeInspections.filter(i => i.status === InspectionStatus.DRAFT).length;
-    const highPriority = safeInspections.filter(i => i.priority === Priority.HIGH).length;
-    
-    let totalInspected = 0;
-    let totalPassed = 0;
-    let totalFailed = 0;
-    let fallbackScoreSum = 0;
-    let hasQuantities = false;
-
-    nonDraftItems.forEach(i => {
-      const inspected = Number(i.inspectedQuantity || 0);
-      const passed = Number(i.passedQuantity || 0);
-      const failed = Number(i.failedQuantity || 0);
-      
-      if (inspected > 0) {
-        hasQuantities = true;
-        totalInspected += inspected;
-        totalPassed += passed;
-        totalFailed += failed;
-      }
-      fallbackScoreSum += Number(i.score || 0); 
-    });
-
-    let avgSuccessRate = 0;
-    let avgErrorRate = 0;
-
-    if (hasQuantities && totalInspected > 0) {
-      avgSuccessRate = parseFloat(((totalPassed / totalInspected) * 100).toFixed(2));
-      avgErrorRate = parseFloat(((totalFailed / totalInspected) * 100).toFixed(2));
-    } else if (nonDraftItems.length > 0) {
-      // Fallback for types that only use 'score'
-      avgSuccessRate = parseFloat((fallbackScoreSum / nonDraftItems.length).toFixed(2));
-      avgErrorRate = parseFloat((100 - avgSuccessRate).toFixed(2));
+    if (dashboardStats?.stats) {
+      return dashboardStats.stats;
     }
+    return { total: 0, drafts: 0, highPriority: 0, avgSuccessRate: 0, avgErrorRate: 0, nonDraftCount: 0 };
+  }, [dashboardStats]);
 
-    return { total, drafts, highPriority, avgSuccessRate, avgErrorRate, nonDraftCount: nonDraftItems.length };
-  }, [safeInspections]);
-
-  const statusData = [
-    { name: '% Đạt', value: stats.avgSuccessRate, color: COLORS.pass },
-    { name: '% Lỗi', value: stats.avgErrorRate, color: COLORS.fail },
-  ].filter(item => item.value > 0);
+  const statusData = useMemo(() => {
+    return [
+      { name: '% Đạt', value: stats.avgSuccessRate, color: COLORS.pass },
+      { name: '% Lỗi', value: stats.avgErrorRate, color: COLORS.fail },
+    ].filter(item => item.value > 0);
+  }, [stats]);
 
   const workshopData = useMemo(() => {
-    const wsMap: Record<string, { inspected: number; passed: number; fallbackScore: number; count: number }> = {};
+    if (!dashboardStats?.workshopData) return [];
     
-    safeInspections.forEach(i => {
-      if (!i || i.status === InspectionStatus.DRAFT) return;
-      const ws = String(i.ma_xuong || i.workshop || 'Chưa xác định');
-      if (!wsMap[ws]) wsMap[ws] = { inspected: 0, passed: 0, fallbackScore: 0, count: 0 };
-      
-      wsMap[ws].inspected += Number(i.inspectedQuantity || 0);
-      wsMap[ws].passed += Number(i.passedQuantity || 0);
-      wsMap[ws].fallbackScore += Number(i.score || 0);
-      wsMap[ws].count += 1;
-    });
-
-    return Object.keys(wsMap)
-      .map(key => {
-        const item = wsMap[key];
+    return dashboardStats.workshopData
+      .map((item: any) => {
         let passRate = 0;
         if (item.inspected > 0) {
           passRate = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
@@ -173,27 +163,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
         }
         
         // Translate raw code/value to readable Name
-        const wsObj = workshops.find(w => w.code === key);
-        const displayName = wsObj ? wsObj.name : (workshopLabels[key] || key);
+        const wsObj = workshops.find(w => w.code === item.code);
+        const displayName = wsObj ? wsObj.name : (workshopLabels[item.code] || item.code);
 
         return {
-          code: key,
+          code: item.code,
           name: displayName,
           passRate: passRate,
           failRate: parseFloat((100 - passRate).toFixed(2))
         };
       })
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+      .sort((a: any, b: any) => a.code.localeCompare(b.code, undefined, { numeric: true }))
       .slice(0, 15);
-  }, [safeInspections, workshops, workshopLabels]);
+  }, [dashboardStats, workshops, workshopLabels]);
 
   const stageData = useMemo(() => {
+    if (!dashboardStats?.stageData) return [];
+
     const stageMap: Record<string, { inspected: number; passed: number; count: number }> = {};
     
-    safeInspections.forEach(i => {
-      if (!i || i.status === InspectionStatus.DRAFT || i.type !== 'PQC') return;
-      
-      let stageName = String(i.stage || i.inspectionStage || '').trim();
+    dashboardStats.stageData.forEach((item: any) => {
+      let stageName = String(item.stageName || '').trim();
       if (!stageName) return;
 
       // Ensure formatting as "Pxx"
@@ -206,9 +196,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
 
       if (!stageMap[stageName]) stageMap[stageName] = { inspected: 0, passed: 0, count: 0 };
       
-      stageMap[stageName].inspected += Number(i.inspectedQuantity || 0);
-      stageMap[stageName].passed += Number(i.passedQuantity || 0);
-      stageMap[stageName].count += 1;
+      stageMap[stageName].inspected += Number(item.inspected || 0);
+      stageMap[stageName].passed += Number(item.passed || 0);
+      stageMap[stageName].count += Number(item.count || 0);
     });
 
     return Object.keys(stageMap)
@@ -226,47 +216,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  }, [safeInspections]);
+  }, [dashboardStats]);
 
-  const projectData = useMemo(() => {
-    const projMap: Record<string, { inspected: number; passed: number; fallbackScore: number; count: number }> = {};
-    
-    safeInspections.forEach(i => {
-      if (!i || i.status === InspectionStatus.DRAFT) return;
-      const project = String(i.ma_ct || 'Không xác định');
-      if (!projMap[project]) projMap[project] = { inspected: 0, passed: 0, fallbackScore: 0, count: 0 };
-      
-      projMap[project].inspected += Number(i.inspectedQuantity || 0);
-      projMap[project].passed += Number(i.passedQuantity || 0);
-      projMap[project].fallbackScore += Number(i.score || 0);
-      projMap[project].count += 1;
-    });
 
-    return Object.keys(projMap)
-      .map(key => {
-        const item = projMap[key];
-        let score = 0;
-        if (item.inspected > 0) {
-          score = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
-        } else if (item.count > 0) {
-          score = parseFloat((item.fallbackScore / item.count).toFixed(2));
-        }
-        
-        return {
-          name: key,
-          score: score
-        };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-  }, [safeInspections]);
-
-  const recentCritical = useMemo(() => {
-    return safeInspections
-      .filter(i => i && i.status === InspectionStatus.FLAGGED)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
-  }, [safeInspections]);
 
   const StatCard = ({ title, value, icon: Icon, colorHex, subtitle }: any) => (
     <div className="bg-white dark:bg-slate-900 p-4 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
@@ -288,50 +240,64 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
       <div className="p-4 space-y-5 max-w-7xl mx-auto w-full pb-28">
         
         {/* Filter Section */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <Filter className="w-4 h-4" /> BỘ LỌC DỮ LIỆU
+        <div className="bg-white dark:bg-slate-900 px-5 py-4 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+            <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+                <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Filter className="w-4 h-4" /> BỘ LỌC DỮ LIỆU {isFilterActive && <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded text-[8px] animate-pulse">ĐANG TÁC DỤNG</span>}
                 </h3>
-                {isFilterActive && (
-                    <button 
-                        onClick={clearFilters}
-                        className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
-                    >
-                        Xóa tất cả
-                    </button>
-                )}
+                <div className="flex items-center gap-4">
+                  {isFilterActive && (
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); clearFilters(); }}
+                          className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
+                      >
+                          Xóa tất cả
+                      </button>
+                  )}
+                  <div className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-full">
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <SearchableSelect 
-                    label="Loại phiếu"
-                    values={filterType}
-                    options={filterOptions.types}
-                    onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), startDate, endDate }); }}
-                    optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
-                />
-                <SearchableSelect 
-                    label="Xưởng Sản Xuất"
-                    values={filterWorkshop}
-                    options={filterOptions.workshops}
-                    onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate }); }}
-                    optionLabels={workshopLabels}
-                />
-                <SearchableSelect 
-                    label="QC Kiểm tra"
-                    values={filterQC}
-                    options={filterOptions.inspectors}
-                    onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate }); }}
-                />
-                <DateRangePicker 
-                    label="Khoảng ngày"
-                    startDate={startDate}
-                    endDate={endDate}
-                    onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate: d, endDate }); }}
-                    onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), startDate, endDate: d }); }}
-                />
-            </div>
+            {isFilterOpen && (
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <SearchableSelect 
+                        label="Loại phiếu"
+                        values={filterType}
+                        options={filterOptions.types}
+                        onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), project: filterProject.join(','), startDate, endDate }); }}
+                        optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
+                    />
+                    <SearchableSelect 
+                        label="Dự án"
+                        values={filterProject}
+                        options={filterOptions.projects}
+                        onChange={(vals) => { setFilterProject(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: vals.join(','), startDate, endDate }); }}
+                        optionLabels={projectLabels}
+                    />
+                    <SearchableSelect 
+                        label="Xưởng Sản Xuất"
+                        values={filterWorkshop}
+                        options={filterOptions.workshops}
+                        onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate, endDate }); }}
+                        optionLabels={workshopLabels}
+                    />
+                    <SearchableSelect 
+                        label="QC Kiểm tra"
+                        values={filterQC}
+                        options={filterOptions.inspectors}
+                        onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate, endDate }); }}
+                    />
+                    <DateRangePicker 
+                        label="Khoảng ngày"
+                        startDate={startDate}
+                        endDate={endDate}
+                        onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate: d, endDate }); }}
+                        onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate, endDate: d }); }}
+                    />
+                </div>
+            )}
         </div>
 
         {/* Top Stat Grid */}
@@ -360,7 +326,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                         dataKey="value"
                         stroke="none"
                       >
-                        {statusData.map((entry, index) => (
+                        {statusData.map((entry: any, index: number) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
@@ -381,31 +347,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                </div>
             </div>
 
-            {/* Top Project Bar */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-               <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">HIỆU SUẤT THEO DỰ ÁN (%)</h3>
-               <div className="h-48 w-full min-h-[192px]">
-                  <ResponsiveContainer width="99%" height={192}>
-                    <BarChart data={projectData} layout="vertical" margin={{ left: -20, right: 35 }}>
-                      <XAxis type="number" domain={[0, 100]} hide />
-                      <YAxis 
-                        dataKey="name" 
-                        type="category" 
-                        width={80} 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}} 
-                      />
-                      <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={8}>
-                        {projectData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.score >= 90 ? COLORS.pass : COLORS.blue} />
-                        ))}
-                        <LabelList dataKey="score" position="right" style={{ fill: '#475569', fontSize: 9, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-               </div>
-            </div>
+
 
             {/* Workshop Quality Chart */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
@@ -447,7 +389,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
                         wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} 
                       />
                       <Bar yAxisId="left" dataKey="passRate" name="Tỷ Lệ Đạt %" fill={COLORS.pass} barSize={24} radius={[4, 4, 0, 0]}>
-                        {workshopData.map((entry, index) => (
+                        {workshopData.map((entry: any, index: number) => (
                            <Cell key={`cell-${index}`} fill={COLORS.pass} />
                         ))}
                         <LabelList dataKey="passRate" position="insideTop" style={{ fill: '#fff', fontSize: 8, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
@@ -495,51 +437,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ inspections, user, users =
             )}
         </div>
 
-        {/* Critical Issues Section */}
-        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-red-50 dark:bg-red-900/20/20">
-                <h3 className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest flex items-center gap-2">
-                    <AlertOctagon className="w-4 h-4" /> PHIẾU CẦN XỬ LÝ LỖI
-                </h3>
-             </div>
-             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {recentCritical.length > 0 ? (
-                    recentCritical.map((item) => (
-                        <div 
-                          key={item.id} 
-                          onClick={() => onViewInspection?.(item.id)}
-                          className="p-4 active:bg-slate-50 dark:bg-slate-800/50 transition-all flex items-center justify-between group cursor-pointer"
-                        >
-                            <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-                                <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex flex-col items-center justify-center font-black shrink-0 shadow-md">
-                                    <span className="text-sm leading-none">{item.score}</span>
-                                    <span className="text-[6px] uppercase opacity-60">PTS</span>
-                                </div>
-                                <div className="min-w-0 overflow-hidden">
-                                    <h4 className="font-black text-slate-800 dark:text-slate-200 text-[11px] truncate uppercase tracking-tight mb-0.5">{item.ten_hang_muc}</h4>
-                                    <div className="flex items-center gap-2 text-[7px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-tighter">
-                                        <span className="truncate max-w-[60px]">{item.ma_ct}</span>
-                                        <span className="text-slate-300">|</span>
-                                        <span>{item.date}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-300 active:scale-90 shrink-0">
-                                <ArrowRight className="w-3.5 h-3.5" />
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="py-12 text-center flex flex-col items-center justify-center space-y-2">
-                        <CheckCircle2 className="w-8 h-8 text-green-200" />
-                        <p className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Hệ thống không ghi nhận lỗi mới</p>
-                    </div>
-                )}
-             </div>
-             <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
-                <button onClick={() => onNavigate?.('LIST')} className="w-full py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 dark:text-slate-500 shadow-sm active:scale-95 transition-all">Xem tất cả báo cáo</button>
-             </div>
-        </div>
+
       </div>
     </div>
   );

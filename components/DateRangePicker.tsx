@@ -38,16 +38,16 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ startDate, end
   };
 
   return (
-    <div className="space-y-1 relative col-span-2 md:col-span-1">
-      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{label}</label>
+    <div className="space-y-0.5 relative col-span-2 lg:col-span-1">
+      <label className="text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest pl-1">{label}</label>
       <div 
-        className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 h-[38px] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 transition-colors"
+        className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 h-[30px] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <span className="text-xs font-black text-black dark:text-white truncate">
+        <span className="text-[11px] font-bold text-black dark:text-white truncate">
           {displayValue()}
         </span>
-        <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
       </div>
 
       {isOpen && (

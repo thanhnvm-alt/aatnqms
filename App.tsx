@@ -26,7 +26,7 @@ import { ChatAI } from './components/ChatAI';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { 
   fetchInspections, 
-  fetchDashboardInspections,
+  fetchDashboardStats,
   fetchInspectionById,
   saveInspectionToSheet, 
   deleteInspectionFromSheet, 
@@ -114,7 +114,7 @@ const App = () => {
   const [returnView, setReturnView] = useState<ViewState>('LIST');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
-  const [dashboardInspections, setDashboardInspections] = useState<Inspection[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState<any>({});
   const [inspectionsTotal, setInspectionsTotal] = useState(0);
@@ -219,22 +219,22 @@ const App = () => {
     }
   };
 
-  const loadDashboardInspections = async (filters: any = {}) => {
+  const loadDashboardStats = async (filters: any = {}) => {
     setIsDashboardLoading(true);
     try {
-        const result = await fetchDashboardInspections(filters);
-        setDashboardInspections(result.items || []);
+        const result = await fetchDashboardStats(filters);
+        setDashboardStats(result);
     } catch (e) {
-        console.error("ISO-FRONT: Load dashboard inspections failed", e);
+        console.error("ISO-FRONT: Load dashboard stats failed", e);
     } finally {
         setIsDashboardLoading(false);
     }
   };
 
-  // Load dashboard inspections when on dashboard view and filters change
+  // Load dashboard stats when on dashboard view and filters change
   useEffect(() => {
     if (user && isDbReady && view === 'DASHBOARD') {
-        loadDashboardInspections(dashboardFilters);
+        loadDashboardStats(dashboardFilters);
     }
   }, [user, isDbReady, view, dashboardFilters]);
 
@@ -422,7 +422,7 @@ const App = () => {
             <Suspense fallback={<LoadingFallback />}>
                 {view === 'DASHBOARD' && (
                     <Dashboard 
-                        inspections={dashboardInspections} 
+                        dashboardStats={dashboardStats} 
                         user={user} 
                         users={users}
                         workshops={workshops}

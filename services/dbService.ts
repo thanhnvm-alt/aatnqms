@@ -40,12 +40,12 @@ async function syncToInspectionsTable(inspection: Inspection) {
             INSERT INTO ${SCHEMA}."inspections" (
                 id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
                 workshop, status, score, created_at, updated_at, created_by, headcode,
-                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo
+                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, 
                 $9::double precision, $10::bigint, $11::bigint, $12, $13,
-                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric
+                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19
             )
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
@@ -62,6 +62,7 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 passed_qty = EXCLUDED.passed_qty,
                 failed_qty = EXCLUDED.failed_qty,
                 so_luong_ipo = EXCLUDED.so_luong_ipo,
+                priority = EXCLUDED.priority,
                 created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by),
                 created_at = CASE WHEN ${SCHEMA}."inspections".created_at = 0 THEN EXCLUDED.created_at ELSE ${SCHEMA}."inspections".created_at END
         `, sanitizeArgs([
@@ -82,7 +83,8 @@ async function syncToInspectionsTable(inspection: Inspection) {
             inspection.inspectedQuantity || 0,
             inspection.passedQuantity || 0,
             inspection.failedQuantity || 0,
-            inspection.so_luong_ipo || 0
+            inspection.so_luong_ipo || 0,
+            inspection.priority || null
         ]));
     } catch (e) {
         console.error(`❌ ISO-DB: Sync to inspections table failed for ${inspection.id}:`, e);
@@ -325,7 +327,7 @@ export async function saveInspection(inspection: Inspection) {
           id, ma_ct, ten_ct, ten_hang_muc, ma_nha_may, workshop, stage, dvt, 
           sl_ipo, qty_total, qty_pass, qty_fail,
           so_luong_ipo, inspected_qty, passed_qty, failed_qty,
-          inspector, status, data, updated_at, items_json, images_json, headcode, date, score, summary, type, 
+          inspector, status, updated_at, items_json, images_json, headcode, date, score, summary, type, 
           production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
           signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
           comments_json
@@ -334,8 +336,8 @@ export async function saveInspection(inspection: Inspection) {
           $1, $2, $3, $4, $5, $6, $7, $8, 
           $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
           $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
-          $13, $14, $15::jsonb, $16::bigint, $17::jsonb, $18::jsonb, $19, $20, $21::numeric, $22, $23, 
-          $24, $25, $26::numeric, $27::numeric, $28, $29::text, $30::text, $31::text, $32::text, $33::text, $34::text, $35::jsonb
+          $13, $14, $15::bigint, $16::jsonb, $17::jsonb, $18, $19::bigint, $20::numeric, $21, $22, 
+          $23, $24, $25::numeric, $26::numeric, $27, $28::text, $29::text, $30::text, $31::text, $32::text, $33::text, $34::jsonb
         )
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
@@ -344,7 +346,6 @@ export async function saveInspection(inspection: Inspection) {
           items_json = EXCLUDED.items_json,
           images_json = EXCLUDED.images_json,
           summary = EXCLUDED.summary,
-          data = EXCLUDED.data,
           floor_plan_id = EXCLUDED.floor_plan_id, 
           coord_x = EXCLUDED.coord_x, 
           coord_y = EXCLUDED.coord_y, 
@@ -370,7 +371,7 @@ export async function saveInspection(inspection: Inspection) {
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
           inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
           inspection.so_luong_ipo || 0, inspection.inspectedQuantity || 0, inspection.passedQuantity || 0, inspection.failedQuantity || 0,
-          inspection.inspectorName, inspection.status, inspection, updatedAt,
+          inspection.inspectorName, inspection.status, updatedAt,
           inspection.items, inspection.images, inspection.headcode, inspection_date, inspection.score, 
           inspection.summary, inspection.type, inspection.productionComment,
           inspection.floor_plan_id, inspection.coord_x, inspection.coord_y,
@@ -390,7 +391,7 @@ export async function saveInspection(inspection: Inspection) {
         so_luong_ipo, inspected_qty, passed_qty, failed_qty,
         sl_ipo, qty_total, qty_pass, qty_fail,
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
-        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment, data
+        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
@@ -398,7 +399,7 @@ export async function saveInspection(inspection: Inspection) {
         $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
-        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42, $43::text
+        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42
       )
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
@@ -442,8 +443,7 @@ export async function saveInspection(inspection: Inspection) {
         workshop = EXCLUDED.workshop,
         stage = EXCLUDED.stage,
         headcode = EXCLUDED.headcode,
-        dvt = EXCLUDED.dvt,
-        data = EXCLUDED.data
+        dvt = EXCLUDED.dvt
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
         inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection_date,
@@ -790,6 +790,167 @@ export async function getDashboardInspectionsList(filters: any = {}, user?: User
     } catch (e) {
         console.error("ISO-DB: getDashboardInspectionsList failed", e);
         return { items: [], total: 0 };
+    }
+}
+
+export async function getDashboardStats(filters: any = {}, user?: User): Promise<any> {
+    const { whereClause, subArgs } = buildBaseWhere(filters, user);
+
+    // 1. Stats query (aggregate calculations over entire filtered set)
+    const statsQuery = `
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN status = 'DRAFT' THEN 1 END) as drafts,
+            COUNT(CASE WHEN status != 'DRAFT' THEN 1 END) as non_draft_count,
+            COUNT(CASE WHEN priority = 'HIGH' THEN 1 END) as high_priority,
+            SUM(CASE WHEN status != 'DRAFT' AND COALESCE(inspected_qty, 0) > 0 THEN COALESCE(inspected_qty, 0) ELSE 0 END) as total_inspected,
+            SUM(CASE WHEN status != 'DRAFT' AND COALESCE(inspected_qty, 0) > 0 THEN COALESCE(passed_qty, 0) ELSE 0 END) as total_passed,
+            SUM(CASE WHEN status != 'DRAFT' AND COALESCE(inspected_qty, 0) > 0 THEN COALESCE(failed_qty, 0) ELSE 0 END) as total_failed,
+            SUM(CASE WHEN status != 'DRAFT' THEN COALESCE(score, 0) ELSE 0 END) as fallback_score_sum
+        FROM ${SCHEMA}."inspections"
+        ${whereClause}
+    `;
+
+    // 2. Workshop Aggregation query
+    const workshopQuery = `
+        SELECT 
+            COALESCE(workshop, '') as workshop,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(inspected_qty, 0) ELSE 0 END) as inspected,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(passed_qty, 0) ELSE 0 END) as passed,
+            SUM(COALESCE(score, 0)) as fallback_score,
+            COUNT(*) as count
+        FROM ${SCHEMA}."inspections"
+        ${whereClause} AND status != 'DRAFT'
+        GROUP BY COALESCE(workshop, '')
+    `;
+
+    // 3. Stage Aggregation query (for type = 'PQC')
+    const stageQuery = `
+        SELECT 
+            COALESCE(stage, '') as stage,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(inspected_qty, 0) ELSE 0 END) as inspected,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(passed_qty, 0) ELSE 0 END) as passed,
+            COUNT(*) as count
+        FROM ${SCHEMA}."inspections"
+        ${whereClause} AND status != 'DRAFT' AND type = 'PQC' AND COALESCE(stage, '') != ''
+        GROUP BY COALESCE(stage, '')
+    `;
+
+    // 4. Project Aggregation query
+    const projectQuery = `
+        SELECT 
+            COALESCE(ma_ct, 'Không xác định') as name,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(inspected_qty, 0) ELSE 0 END) as inspected,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(passed_qty, 0) ELSE 0 END) as passed,
+            SUM(COALESCE(score, 0)) as fallback_score,
+            COUNT(*) as count
+        FROM ${SCHEMA}."inspections"
+        ${whereClause} AND status != 'DRAFT'
+        GROUP BY COALESCE(ma_ct, 'Không xác định')
+    `;
+
+    // 5. Recent Critical query (max 5 FLAGGED rows)
+    const criticalQuery = `
+        SELECT 
+            id, score, ten_hang_muc, ma_ct, created_at, updated_at
+        FROM ${SCHEMA}."inspections"
+        ${whereClause} AND status = 'FLAGGED'
+        ORDER BY created_at DESC, updated_at DESC
+        LIMIT 5
+    `;
+
+    try {
+        const [statsRes, workshopRes, stageRes, projectRes, criticalRes] = await Promise.all([
+            query(statsQuery, subArgs),
+            query(workshopQuery, subArgs),
+            query(stageQuery, subArgs),
+            query(projectQuery, subArgs),
+            query(criticalQuery, subArgs)
+        ]);
+
+        const statsRow = statsRes.rows[0] || {};
+        const total = parseInt(statsRow.total || 0, 10);
+        const drafts = parseInt(statsRow.drafts || 0, 10);
+        const nonDraftCount = parseInt(statsRow.non_draft_count || 0, 10);
+        const highPriority = parseInt(statsRow.high_priority || 0, 10);
+        const totalInspected = Number(statsRow.total_inspected || 0);
+        const totalPassed = Number(statsRow.total_passed || 0);
+        const totalFailed = Number(statsRow.total_failed || 0);
+        const fallbackScoreSum = Number(statsRow.fallback_score_sum || 0);
+
+        let avgSuccessRate = 0;
+        let avgErrorRate = 0;
+
+        if (totalInspected > 0) {
+            avgSuccessRate = parseFloat(((totalPassed / totalInspected) * 100).toFixed(2));
+            avgErrorRate = parseFloat(((totalFailed / totalInspected) * 100).toFixed(2));
+        } else if (nonDraftCount > 0) {
+            avgSuccessRate = parseFloat((fallbackScoreSum / nonDraftCount).toFixed(2));
+            avgErrorRate = parseFloat((100 - avgSuccessRate).toFixed(2));
+        }
+
+        const mappedWorkshops = workshopRes.rows.map((r: any) => ({
+            code: r.workshop || '',
+            inspected: Number(r.inspected || 0),
+            passed: Number(r.passed || 0),
+            fallbackScore: Number(r.fallback_score || 0),
+            count: parseInt(r.count || 0, 10)
+        }));
+
+        const mappedStages = stageRes.rows.map((r: any) => ({
+            stageName: r.stage || '',
+            inspected: Number(r.inspected || 0),
+            passed: Number(r.passed || 0),
+            count: parseInt(r.count || 0, 10)
+        }));
+
+        const mappedProjects = projectRes.rows.map((r: any) => ({
+            name: r.name || '',
+            inspected: Number(r.inspected || 0),
+            passed: Number(r.passed || 0),
+            fallbackScore: Number(r.fallback_score || 0),
+            count: parseInt(r.count || 0, 10)
+        }));
+
+        const mappedCritical = criticalRes.rows.map((row: any) => {
+            const rowDate = (row.created_at && Number(row.created_at) > 1000000000) ? 
+                          new Date(Number(row.created_at) * 1000).toLocaleDateString('vi-VN') : 
+                          (row.updated_at && Number(row.updated_at) > 1000000000) ? 
+                          new Date(Number(row.updated_at) * 1000).toLocaleDateString('vi-VN') : 
+                          '';
+            return {
+                id: row.id,
+                score: Number(row.score || 0),
+                ten_hang_muc: row.ten_hang_muc || '',
+                ma_ct: row.ma_ct || '',
+                status: 'FLAGGED',
+                date: rowDate
+            };
+        });
+
+        return {
+            stats: {
+                total,
+                drafts,
+                highPriority,
+                avgSuccessRate,
+                avgErrorRate,
+                nonDraftCount
+            },
+            workshopData: mappedWorkshops,
+            stageData: mappedStages,
+            projectData: mappedProjects,
+            recentCritical: mappedCritical
+        };
+    } catch (e) {
+        console.error("ISO-DB: getDashboardStats failed", e);
+        return {
+            stats: { total: 0, drafts: 0, highPriority: 0, avgSuccessRate: 0, avgErrorRate: 0, nonDraftCount: 0 },
+            workshopData: [],
+            stageData: [],
+            projectData: [],
+            recentCritical: []
+        };
     }
 }
 

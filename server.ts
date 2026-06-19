@@ -992,6 +992,27 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  app.get("/api/dashboard/stats", authenticate, async (req, res) => {
+    try {
+      const filters = {
+        status: req.query.status as string,
+        search: req.query.search as string,
+        qc: req.query.qc as string,
+        workshop: req.query.workshop as string,
+        project: req.query.project as string,
+        type: req.query.type as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string
+      };
+
+      const stats = await db.getDashboardStats(filters, (req as any).user);
+      res.json(stats);
+    } catch (error) {
+      console.error("Dashboard stats API error:", error);
+      res.status(500).json({ error: 'Failed to fetch dashboard aggregate statistics' });
+    }
+  });
+
   app.get("/api/inspections/dates", authenticate, async (req, res) => {
     try {
       const dates = await db.getInspectionsDatesList(req.query, (req as any).user);

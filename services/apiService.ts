@@ -231,6 +231,11 @@ export const fetchDashboardInspections = async (filters: any = {}) => {
     return apiFetch(`/api/dashboard/inspections?${params.toString()}`);
 };
 
+export const fetchDashboardStats = async (filters: any = {}) => {
+    const params = new URLSearchParams({ ...filters });
+    return apiFetch(`/api/dashboard/stats?${params.toString()}`);
+};
+
 export const fetchInspectionsDates = async (filters: any = {}): Promise<{ date: string, count?: number }[]> => {
     const params = new URLSearchParams({ ...filters });
     return apiFetch(`/api/inspections/dates?${params.toString()}`);
