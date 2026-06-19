@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, ToolCatalog, ToolAsset, ToolTransfer, ToolCalibration, Role, hasPermission } from '../types';
 import { fetchToolCatalogs, saveToolCatalog, deleteToolCatalog, fetchToolAssetsByCatalog, saveToolAsset, deleteToolAsset, fetchToolTransfers, saveToolTransfer, fetchToolCalibrations, saveToolCalibration, uploadQMSImage, fetchRoles } from '../services/apiService';
-import { Plus, Search, Wrench, Edit, Trash2, ArrowRightLeft, FileText, FileBadge, CheckCircle, ExternalLink, Image as ImageIcon, Loader2, BookOpen, Hash, ChevronDown } from 'lucide-react';
+import { Plus, Search, Wrench, Edit, Trash2, ArrowRightLeft, FileText, FileBadge, CheckCircle, ExternalLink, Image as ImageIcon, Loader2, BookOpen, Hash, ChevronDown, Upload, Download, Filter } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { SignaturePad } from './SignaturePad';
 
@@ -18,29 +18,27 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Filter QC and Lead QC roles
-  const qcUsers = useMemo(() => {
-    return users.filter(u => {
-      const r = u.role?.toString().toUpperCase();
-      return r === 'QC' || r === 'LEAD_QC';
-    });
+  // Filter users - show everyone so we can find any employee
+  const selectableUsers = useMemo(() => {
+    return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [users]);
 
   const selectedUser = useMemo(() => {
-    return users.find(u => u.id === value);
+    return users.find(u => u.id === value || u.username === value);
   }, [users, value]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return qcUsers;
-    return qcUsers.filter(u => {
+    if (!q) return selectableUsers;
+    return selectableUsers.filter(u => {
       const nameMatch = u.name?.toLowerCase().includes(q);
       const msnvMatch = u.msnv?.toLowerCase().includes(q);
       const idMatch = u.id?.toLowerCase().includes(q);
       const usernameMatch = u.username?.toLowerCase().includes(q);
-      return nameMatch || msnvMatch || idMatch || usernameMatch;
+      const posMatch = u.position?.toLowerCase().includes(q);
+      return nameMatch || msnvMatch || idMatch || usernameMatch || posMatch;
     });
-  }, [qcUsers, search]);
+  }, [selectableUsers, search]);
 
   useEffect(() => {
     const clickOutside = (e: MouseEvent) => {
@@ -54,8 +52,12 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
 
   const getQCUserLabel = (u: User) => {
     const msnvStr = u.msnv ? `[${u.msnv}] ` : u.username ? `[${u.username}] ` : `[${u.id}] `;
-    const roleStr = u.role?.toString().toUpperCase() === 'LEAD_QC' ? 'Lead QC' : 'QC';
-    return `${msnvStr}${u.name} (${roleStr})`;
+    let roleStr = u.role?.toString() || 'USER';
+    if (roleStr === 'LEAD_QC') roleStr = 'Lead QC';
+    else if (roleStr === 'QC') roleStr = 'QC';
+    
+    const pos = u.position ? ` - ${u.position}` : '';
+    return `${msnvStr}${u.name} (${roleStr}${pos})`;
   };
 
   return (
@@ -66,7 +68,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
         className={`w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center cursor-pointer transition h-11 ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-100'}`}
       >
         <span className="font-bold text-sm text-slate-800 truncate">
-          {selectedUser ? getQCUserLabel(selectedUser) : '--- CHỌN NHÂN VIÊN QC ---'}
+          {selectedUser ? getQCUserLabel(selectedUser) : '--- CHỌN NHÂN VIÊN ---'}
         </span>
         {!disabled && <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
       </div>
@@ -79,7 +81,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Tìm theo tên, MSNV..."
+              placeholder="Tìm theo tên, MSNV, vị trí..."
               className="w-full px-3 py-2 text-xs bg-white rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 font-medium"
             />
           </div>
@@ -109,7 +111,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
                 </div>
               ))
             ) : (
-              <div className="p-4 text-center text-xs text-slate-400 font-bold">Không tìm thấy Nhân viên QC nào.</div>
+              <div className="p-4 text-center text-xs text-slate-400 font-bold">Không tìm thấy Nhân viên nào.</div>
             )}
           </div>
         </div>
@@ -125,6 +127,9 @@ interface ToolsManagementProps {
 export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
   const [catalogs, setCatalogs] = useState<ToolCatalog[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<string>('');
+  const [filterAction, setFilterAction] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedCatalog, setSelectedCatalog] = useState<ToolCatalog | null>(null);
@@ -269,10 +274,81 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
     }
   };
 
-  const filteredCatalogs = catalogs.filter(t => 
-    t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    t.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCatalogs = catalogs.filter(t => {
+    const matchesSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          t.code.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = !filterType || t.type === filterType;
+    return matchesSearch && matchesType;
+  });
+
+  const filteredMyAssets = myAssets.filter(asset => {
+    const catalogName = (asset as any).catalog_name || '';
+    const matchesSearch = catalogName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          asset.asset_code.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = !filterAction || asset.status === filterAction;
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleExportExcel = async () => {
+    try {
+        const { utils, writeFile } = await import('xlsx');
+        let dataToExport = [];
+        let filename = '';
+
+        if (activeTab === 'KHO') {
+            dataToExport = filteredCatalogs.map(cat => ({
+                'Mã Loại': cat.code,
+                'Tên Danh Mục': cat.name,
+                'Loại / Kiểu': cat.type || 'Chung',
+                'Mô Tả': (cat as any).description || cat.specifications || ''
+            }));
+            filename = `Danh_muc_CCDC_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`;
+        } else {
+            dataToExport = filteredMyAssets.map(asset => ({
+                'Mã Tài Sản': asset.asset_code,
+                'Tên Thiết Bị': (asset as any).catalog_name,
+                'Số Serial': asset.serial_number || '',
+                'Trạng Thái': asset.status,
+                'Hạn Hiệu Chuẩn': asset.next_calibration_date ? new Date(asset.next_calibration_date * 1000).toLocaleDateString('vi-VN') : ''
+            }));
+            filename = `CCDC_Cua_Toi_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`;
+        }
+
+        const ws = utils.json_to_sheet(dataToExport);
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Dữ liệu");
+        writeFile(wb, filename);
+    } catch (error) {
+        console.error('Export failed:', error);
+        alert('Lỗi xuất file Excel');
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls';
+    input.onchange = async (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            const { read, utils } = await import('xlsx');
+            const data = await file.arrayBuffer();
+            const workbook = read(data);
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = utils.sheet_to_json(worksheet);
+            
+            console.log('Imported data:', jsonData);
+            alert('Chức năng nhập từ Excel đang được phát triển. Dữ liệu đã được đọc thành công (xem console).');
+            // Here you would typically validate and send to backend
+        } catch (error) {
+            console.error('Import failed:', error);
+            alert('Lỗi nhập file Excel');
+        }
+    };
+    input.click();
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
@@ -282,32 +358,118 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
             <div className="flex flex-col h-full">
                 <div className="px-4 py-3 md:px-8 md:py-4 bg-white dark:bg-slate-900">
                     <div className="flex flex-col gap-3">
-                        <div className="flex flex-col md:flex-row gap-4 justify-between items-center border-b border-slate-200 dark:border-slate-800">
-                            <div className="flex gap-4">
-                                <button onClick={() => setActiveTab('MY_TOOLS')} className={`pb-3 px-1 border-b-2 -mb-[2px] font-bold text-sm uppercase transition-colors ${activeTab === 'MY_TOOLS' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Công Cụ Của Tôi</button>
-                                <button onClick={() => setActiveTab('KHO')} className={`pb-3 px-1 border-b-2 -mb-[2px] font-bold text-sm uppercase transition-colors ${activeTab === 'KHO' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Quản Lý Kho Tổng</button>
-                            </div>
-                            
-                            {activeTab === 'KHO' && (
-                                <div className="flex gap-3 w-full md:w-auto pb-3 md:pb-2">
-                                    <div className="relative flex-1 md:w-64">
+                            <div className="flex flex-col md:flex-row gap-4 justify-between items-center w-full">
+                                <div className="flex gap-4">
+                                    <button onClick={() => setActiveTab('MY_TOOLS')} className={`pb-3 px-1 border-b-2 -mb-[2px] font-bold text-sm uppercase transition-colors ${activeTab === 'MY_TOOLS' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Công Cụ Của Tôi</button>
+                                    <button onClick={() => setActiveTab('KHO')} className={`pb-3 px-1 border-b-2 -mb-[2px] font-bold text-sm uppercase transition-colors ${activeTab === 'KHO' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Quản Lý Kho Tổng</button>
+                                </div>
+                                
+                                <div className="flex flex-wrap items-center gap-2 pb-3 md:pb-2">
+                                    <div className="relative w-full md:w-64">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                         <input 
                                             className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
-                                            placeholder="Tìm mã, tên danh mục..."
+                                            placeholder={activeTab === 'KHO' ? "Tìm mã, tên danh mục..." : "Tìm mã, tên thiết bị..."}
                                             value={searchTerm}
                                             onChange={e => setSearchTerm(e.target.value)}
                                         />
                                     </div>
-                                    {isManagerOrAdmin && (
-                                        <button onClick={() => { setFormData({}); setViewState('CATALOG_FORM'); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shrink-0">
+
+                                    <div className="flex items-center gap-1">
+                                        <button 
+                                            onClick={handleImportButtonClick}
+                                            title="Nhập Excel"
+                                            className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                        >
+                                            <Upload className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            onClick={handleExportExcel}
+                                            title="Xuất Excel"
+                                            className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </button>
+                                        <div className="relative">
+                                            <button 
+                                                onClick={() => setShowFilters(!showFilters)}
+                                                className={`p-2 rounded-xl transition-colors ${showFilters || filterType || filterAction ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                                            >
+                                                <Filter className="w-4 h-4" />
+                                            </button>
+                                            
+                                            {showFilters && (
+                                                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700 rounded-2xl p-4 z-[60] animate-in fade-in zoom-in-95 duration-200">
+                                                    <div className="space-y-4">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Lọc Theo Loại</label>
+                                                            <select 
+                                                                value={filterType}
+                                                                onChange={(e) => setFilterType(e.target.value)}
+                                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                            >
+                                                                <option value="">Tất cả loại</option>
+                                                                {Array.from(new Set(catalogs.map(c => c.type).filter(Boolean))).map(t => (
+                                                                    <option key={t} value={t}>{t}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tìm Theo Tên</label>
+                                                            <input 
+                                                                type="text"
+                                                                value={searchTerm}
+                                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                                placeholder="Nhập tên..."
+                                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                            />
+                                                        </div>
+                                                        
+                                                        {activeTab === 'MY_TOOLS' && (
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Lọc Theo Trạng Thái</label>
+                                                                <select 
+                                                                    value={filterAction}
+                                                                    onChange={(e) => setFilterAction(e.target.value)}
+                                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                                >
+                                                                    <option value="">Tất cả trạng thái</option>
+                                                                    <option value="AVAILABLE">Sẵn sàng</option>
+                                                                    <option value="IN_USE">Đang sử dụng</option>
+                                                                    <option value="MAINTENANCE">Bảo trì</option>
+                                                                    <option value="BROKEN">Hỏng</option>
+                                                                    <option value="LOST">Thất lạc</option>
+                                                                </select>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setFilterType('');
+                                                                    setFilterAction('');
+                                                                    setShowFilters(false);
+                                                                }}
+                                                                className="text-[10px] font-black text-indigo-600 uppercase hover:underline"
+                                                            >
+                                                                Xóa bộ lọc
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {activeTab === 'KHO' && isManagerOrAdmin && (
+                                        <button onClick={() => { setFormData({}); setViewState('CATALOG_FORM'); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shrink-0 ml-auto md:ml-0">
                                             <Plus className="w-4 h-4" />
                                             <span className="font-bold text-xs md:text-sm">Thêm Danh Mục</span>
                                         </button>
                                     )}
                                 </div>
-                            )}
-                        </div>
+                            </div>
                     </div>
                 </div>
 
@@ -321,64 +483,121 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                 <p>Không có danh mục nào.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {filteredCatalogs.map(cat => (
-                                    <div key={cat.id} onClick={() => loadCatalogDetails(cat)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 hover:shadow-xl hover:border-indigo-500 transition-all cursor-pointer group">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-2xl"><Wrench className="w-6 h-6" /></div>
-                                        </div>
-                                        <h3 className="font-black text-lg text-slate-900 dark:text-white uppercase truncate mb-1">{cat.name}</h3>
-                                        <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{cat.code}</p>
-                                        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                                            <span className="text-sm font-medium text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg">{cat.type || 'Chung'}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Mã Loại</th>
+                                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Tên Danh Mục</th>
+                                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Loại / Kiểu</th>
+                                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Hành Động</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {filteredCatalogs.map(cat => (
+                                            <tr 
+                                                key={cat.id} 
+                                                onClick={() => loadCatalogDetails(cat)} 
+                                                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
+                                            >
+                                                <td className="px-6 py-4">
+                                                    <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded tracking-tighter">{cat.code}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm font-bold text-slate-800 dark:text-slate-200 uppercase">{cat.name}</td>
+                                                <td className="px-6 py-4 text-xs font-medium text-slate-500">{cat.type || 'Chung'}</td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <ExternalLink className="w-4 h-4 text-slate-400" />
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         )
                     ) : (
-                        <div className="max-w-5xl mx-auto">
-                            {myAssets.length === 0 ? (
+                        <div className="max-w-6xl mx-auto pb-24">
+                            {filteredMyAssets.length === 0 ? (
                                 <div className="text-center py-20 text-slate-500 flex flex-col items-center">
                                     <Wrench className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600"/>
-                                    <p>Bạn chưa được bàn giao công cụ dụng cụ nào.</p>
+                                    <p>{myAssets.length === 0 ? "Bạn chưa được bàn giao công cụ dụng cụ nào." : "Không tìm thấy công cụ nào phù hợp với bộ lọc."}</p>
                                 </div>
                             ) : (
                                 <>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {myAssets.map(asset => {
-                                            let calibStatus = 'ok';
-                                            if (asset.next_calibration_date) {
-                                                const daysLeft = (asset.next_calibration_date * 1000 - Date.now()) / (1000 * 60 * 60 * 24);
-                                                if (daysLeft < 0) calibStatus = 'overdue';
-                                                else if (daysLeft < 30) calibStatus = 'upcoming';
-                                            }
-                                            const isSelected = selectedAssetIds.includes(asset.id);
-                                            return (
-                                            <div key={asset.id} onClick={() => loadAssetDetails(asset)} className={`bg-white p-6 rounded-3xl border cursor-pointer shadow-sm transition-all group relative ${isSelected ? 'border-indigo-600 bg-indigo-50/30' : 'border-slate-200 hover:border-indigo-500'}`}>
-                                                <div className="absolute top-4 right-4" onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (isSelected) {
-                                                        setSelectedAssetIds(selectedAssetIds.filter(id => id !== asset.id));
-                                                    } else {
-                                                        setSelectedAssetIds([...selectedAssetIds, asset.id]);
+                                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                                                    <th className="px-6 py-4 w-12">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedAssetIds.length === filteredMyAssets.length && filteredMyAssets.length > 0} 
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) setSelectedAssetIds(filteredMyAssets.map(a => a.id));
+                                                                else setSelectedAssetIds([]);
+                                                            }}
+                                                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" 
+                                                        />
+                                                    </th>
+                                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Mã Tài Sản</th>
+                                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Tên Thiết Bị</th>
+                                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Trạng Thái</th>
+                                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Hạn Hiệu Chuẩn</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                {filteredMyAssets.map(asset => {
+                                                    let calibStatus = 'ok';
+                                                    if (asset.next_calibration_date) {
+                                                        const daysLeft = (asset.next_calibration_date * 1000 - Date.now()) / (1000 * 60 * 60 * 24);
+                                                        if (daysLeft < 0) calibStatus = 'overdue';
+                                                        else if (daysLeft < 30) calibStatus = 'upcoming';
                                                     }
-                                                }}>
-                                                    <input type="checkbox" checked={isSelected} readOnly className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                                                </div>
-                                                <div className="flex justify-between mb-2 pr-8">{getStatusBadge(asset.status)}</div>
-                                                <h4 className="font-black text-indigo-700 uppercase tracking-widest text-lg mb-1 mt-2">{(asset as any).catalog_name}</h4>
-                                                <p className="text-sm text-slate-600 mb-2 font-bold">{asset.asset_code}</p>
-                                                <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
-                                                    <p className="text-xs text-slate-500">S/N: {asset.serial_number || '---'}</p>
-                                                    {asset.next_calibration_date && (
-                                                        <div className={`px-2 py-1.5 rounded-lg text-[10px] font-bold ${calibStatus === 'overdue' ? 'bg-red-50 text-red-700' : calibStatus === 'upcoming' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>H.C Tới: {new Date(asset.next_calibration_date * 1000).toLocaleDateString('vi-VN')}</div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )})}
+                                                    const isSelected = selectedAssetIds.includes(asset.id);
+                                                    return (
+                                                        <tr 
+                                                            key={asset.id} 
+                                                            className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer ${isSelected ? 'bg-indigo-50/30' : ''}`}
+                                                            onClick={() => loadAssetDetails(asset)}
+                                                        >
+                                                            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={isSelected} 
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) setSelectedAssetIds([...selectedAssetIds, asset.id]);
+                                                                        else setSelectedAssetIds(selectedAssetIds.filter(id => id !== asset.id));
+                                                                    }}
+                                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" 
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <span className="font-mono text-xs font-black text-slate-700 dark:text-slate-300 tracking-tighter">{asset.asset_code}</span>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <div className="text-sm font-black text-indigo-700 dark:text-indigo-400 uppercase truncate">{(asset as any).catalog_name}</div>
+                                                                <div className="text-[10px] text-slate-400 font-medium">S/N: {asset.serial_number || '---'}</div>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                {getStatusBadge(asset.status)}
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                {asset.next_calibration_date ? (
+                                                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${calibStatus === 'overdue' ? 'bg-red-50 text-red-700' : calibStatus === 'upcoming' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                                                                        {new Date(asset.next_calibration_date * 1000).toLocaleDateString('vi-VN')}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-slate-400">---</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    
+
                                     {selectedAssetIds.length > 0 && (
                                         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700 px-6 py-4 rounded-full flex items-center gap-6 animate-in slide-in-from-bottom-10 z-50">
                                             <span className="font-bold text-sm text-slate-700 dark:text-slate-200">Đã chọn {selectedAssetIds.length} thiết bị</span>
@@ -590,7 +809,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                         {isManagerOrAdmin && (
                             <div className="space-y-1 block md:col-span-2">
                                 <QCSelectionCombobox 
-                                    label="Người giữ / Sở hữu tài sản (QC)"
+                                    label="Người giữ / Sở hữu tài sản"
                                     value={formData.current_user_id || ''}
                                     onChange={userId => setFormData({ ...formData, current_user_id: userId || '' })}
                                     users={usersList}
@@ -717,7 +936,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                             <div><p className="text-xs text-slate-500 font-bold uppercase mb-1">Người Bàn Giao</p><p className="font-medium text-sm">{formatUserDisplayById(formData.from_user_id)}</p></div>
                             <div>
                                 <QCSelectionCombobox 
-                                    label="Người Nhận (QC)"
+                                    label="Người Nhận (Nhân viên)"
                                     value={formData.to_user_id || ''}
                                     onChange={userId => setFormData({...formData, to_user_id: userId})}
                                     users={usersList}

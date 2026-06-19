@@ -73,9 +73,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{label}</label>
       <div 
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full p-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-[12px] font-bold flex items-center justify-between transition-all h-[42px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800'}`}
+        className={`w-full p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-[12px] font-black flex items-center justify-between transition-all h-[38px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800'}`}
       >
-        <span className={`truncate ${values.length > 0 ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}`}>
+        <span className={`truncate ${values.length > 0 ? 'text-black dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>
           {displayValue}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -100,7 +100,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           <div className="overflow-y-auto flex-1 no-scrollbar p-2">
             <div 
               onClick={(e) => { e.stopPropagation(); onChange([]); }}
-              className={`px-3 py-2.5 text-xs font-black rounded-xl cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all mb-1 uppercase tracking-tight ${values.length === 0 ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}
+              className={`px-3 py-2 text-xs font-black rounded-xl cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all mb-1 uppercase tracking-tight ${values.length === 0 ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
             >
               - TẤT CẢ -
             </div>
@@ -110,7 +110,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 <div 
                   key={opt}
                   onClick={(e) => { e.stopPropagation(); handleToggle(opt); }}
-                  className={`px-3 py-2.5 text-xs font-black flex items-center justify-between rounded-xl cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all mb-0.5 tracking-tight ${values.includes(opt) ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}
+                  className={`px-3 py-2 text-xs font-black flex items-center justify-between rounded-xl cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all mb-0.5 tracking-tight ${values.includes(opt) ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}
                 >
                   <span className="truncate uppercase">{getLabel(opt)}</span>
                   {values.includes(opt) && <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />}

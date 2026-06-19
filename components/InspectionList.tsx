@@ -169,15 +169,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   };
 
   const [filterQC, setFilterQC] = useState<string[]>([]);
-  const [filterWorkshop, setFilterWorkshop] = useState<string[]>(() => {
-    // If user is restricted to a team and doesn't have VIEW_ALL for current module (represented by 'LIST' here)
-    if (user && user.role !== 'ADMIN' && user.role !== 'MANAGER' && (user.to_qc || user.toQC)) {
-      if (!hasPermission(user, [], 'LIST', 'VIEW_ALL')) {
-        return [user.to_qc || user.toQC || ''];
-      }
-    }
-    return [];
-  });
+  const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
   const [filterProject, setFilterProject] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string[]>([]);
@@ -585,12 +577,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               </button>
 
               {isFilterOpen && (
-                  <div className="absolute top-16 right-4 w-[320px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="font-bold text-slate-800 dark:text-slate-200">Bộ lọc</span>
-                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500"><X className="w-4 h-4" /></button>
+                  <div className="absolute top-16 right-4 w-[320px] bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200 dark:border-slate-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 max-h-[85vh] overflow-y-auto">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="font-bold text-black dark:text-white uppercase text-sm">Bộ lọc</span>
+                        <button onClick={() => setIsFilterOpen(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600"><X className="w-5 h-5" /></button>
                       </div>
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                           <SearchableSelect 
                             label="LOẠI PHIẾU" 
                             values={filterType} 
@@ -616,7 +608,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             options={filterOptions.workshops} 
                             onChange={vals => setFilterWorkshop(vals)} 
                             optionLabels={workshopLabels}
-                            disabled={!!(user && user.role !== 'ADMIN' && user.role !== 'MANAGER' && (user.to_qc || user.toQC) && !hasPermission(user, [], 'LIST', 'VIEW_ALL'))}
                           />
                           <SearchableSelect 
                             label="MÃ DỰ ÁN" 
@@ -631,7 +622,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             onStartDateChange={setStartDate}
                             onEndDateChange={setEndDate}
                           />
-                          <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 dark:bg-blue-900/30 transition-colors border border-blue-200 dark:border-slate-700">XÓA BỘ LỌC</button>
+                          <div className="pt-2">
+                             <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full p-2.5 bg-slate-100 dark:bg-slate-800 text-black dark:text-white rounded-xl text-xs font-black uppercase hover:bg-slate-200 transition-all border border-slate-200 dark:border-slate-700">XÓA BỘ LỌC</button>
+                          </div>
                       </div>
                   </div>
               )}

@@ -27,6 +27,37 @@ const pipelineAsync = promisify(pipeline);
 const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Backend permission checker for SYSTEM_ADMIN matrix
+ */
+async function checkPermission(userId: string, moduleId: string, action: string = 'VIEW'): Promise<boolean> {
+  const user = await db.getUserById(userId);
+  if (!user) return false;
+  if (user.role === 'ADMIN' || user.username?.toLowerCase() === 'admin') return true;
+
+  const rawPerms = (user as any).user_permissions || (user as any).userPermissions || [];
+  let perms: any[] = [];
+  try {
+      perms = typeof rawPerms === 'string' ? JSON.parse(rawPerms) : rawPerms;
+  } catch (e) {
+      perms = [];
+  }
+
+  if (!Array.isArray(perms)) perms = [];
+
+  // Master check: SYSTEM_ADMIN row grants rights to EVERYTHING
+  const sa = perms.find((p: any) => p.moduleId === 'SYSTEM_ADMIN');
+  if (sa && sa.actions && sa.actions.includes(action)) return true;
+
+  // Specific module check
+  const target = perms.find((p: any) => p.moduleId === moduleId);
+  if (target && target.actions && target.actions.includes(action)) return true;
+
+  if (user.role === 'MANAGER' && (action === 'VIEW' || action === 'VIEW_ALL')) return true;
+
+  return false;
+}
+
 // Khởi tạo Gemini SDK dựa trên biến môi trường
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -998,7 +1029,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.get("/api/admin/deleted-inspections", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'VIEW'))) {
         return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
       }
       const result = await db.getDeletedInspections();
@@ -1011,7 +1042,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/admin/restore-inspection/:id", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
         return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
       }
       await db.restoreInspection(String(req.params.id));
@@ -1025,7 +1056,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.delete("/api/admin/permanent-delete/:id", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
         return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
       }
       await db.hardDeleteInspection(String(req.params.id));
@@ -1038,6 +1069,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.post("/api/users", authenticate, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
+        return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+      }
       await db.saveUser(req.body);
       res.json({ success: true });
     } catch (error: any) {
@@ -1048,6 +1083,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.delete("/api/users/:id", authenticate, async (req, res) => {
     try {
+      const user = (req as any).user;
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
+        return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+      }
       await db.deleteUser(String(req.params.id));
       res.json({ success: true });
     } catch (error) {
@@ -1068,7 +1107,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/departments", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
         return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
       }
       await db.saveDepartment(req.body);
@@ -1081,7 +1120,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.delete("/api/departments/:id", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
         return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
       }
       await db.deleteDepartment(req.params.id as string);
@@ -1104,7 +1143,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/divisions", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
         return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
       }
       await db.saveDivision(req.body);
@@ -1117,7 +1156,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.delete("/api/divisions/:id", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
         return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
       }
       await db.deleteDivision(req.params.id as string);
@@ -1184,7 +1223,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       const targetUserId = req.params.id as string;
       
       // Admin sees everyone, normal users only see themselves
-      if (user.id !== targetUserId && user.role !== 'ADMIN' && user.role !== 'MANAGER') {
+      if (user.id !== targetUserId && !(await checkPermission(user.id, 'SYSTEM_ADMIN', 'VIEW'))) {
         return res.status(403).json({ error: 'Forbidden. You do not have permission to view operations of this user.' });
       }
       

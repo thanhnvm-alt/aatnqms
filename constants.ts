@@ -279,6 +279,7 @@ export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   { id: 'SETTINGS_WORKSHOPS', label: 'Cài đặt - Danh mục Xưởng', group: 'CẤU HÌNH CHI TIẾT' },
   { id: 'SETTINGS_DEPARTMENTS', label: 'Cài đặt - Phòng ban & Cấp bậc', group: 'CẤU HÌNH CHI TIẾT' },
   { id: 'SETTINGS_PROFILE', label: 'Cài đặt - Thông tin cá nhân', group: 'CẤU HÌNH CHI TIẾT' },
+  { id: 'SYSTEM_ADMIN', label: 'ADMIN - Quyền hệ thống (Master)', group: 'CẤU HÌNH CHI TIẾT' },
 
   // --- Tính năng mở rộng ---
   { id: 'CONVERT_3D', label: 'Phần mềm 3D - AI Convert', group: 'CÔNG CỤ PHỤ TRỢ' },

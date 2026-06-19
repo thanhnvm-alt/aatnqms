@@ -99,6 +99,31 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     return false;
   };
 
+  const formatDateTime = (dateVal: any) => {
+    if (!dateVal) return '';
+    let d: Date;
+    
+    // If numeric string or number (unix epoch in seconds or ms)
+    if (!isNaN(Number(dateVal)) && String(dateVal).length >= 10 && String(dateVal).length <= 13) {
+      const num = Number(dateVal);
+      // Heuristic: if <= 2 * 10^9, it's probably seconds, else milliseconds
+      d = new Date(num <= 2000000000 ? num * 1000 : num);
+    } else {
+      d = new Date(dateVal);
+    }
+
+    if (isNaN(d.getTime())) return String(dateVal);
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const seconds = String(d.getSeconds()).padStart(2, '0');
+
+    return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
+  };
+
   const handleSigningSubmit = async () => {
     if (!signature) {
       alert("Vui lòng ký tên trước khi xác nhận.");
@@ -110,7 +135,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     }
     setIsProcessing(true);
     try {
-      const todayISO = new Date().toISOString().split('T')[0];
+      const nowISO = new Date().toISOString();
       if (showModal === 'SIGN1') {
         const isBoss = 
           user.role === 'ADMIN' || 
@@ -127,17 +152,19 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           await onApprove(inspection.id, signature, {
             teamLeadSignature: signature,
             teamLeadName: `${user.name} - Ký thay`,
-            teamLeadDate: todayISO,
+            teamLeadDate: nowISO,
             managerSignature: signature,
             managerName: `${user.name} - Ký thay`,
-            status: 'approved' as InspectionStatus
+            status: 'approved' as InspectionStatus,
+            updatedAt: nowISO
           });
         } else {
           await onApprove(inspection.id, '', {
             teamLeadSignature: signature,
             teamLeadName: user.name,
-            teamLeadDate: todayISO,
-            status: 'verified' as InspectionStatus
+            teamLeadDate: nowISO,
+            status: 'verified' as InspectionStatus,
+            updatedAt: nowISO
           });
         }
       } else if (showModal === 'SIGN2') {
@@ -163,7 +190,8 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         await onApprove(inspection.id, signature, {
           managerSignature: signature,
           managerName: mgrName,
-          status: 'approved' as InspectionStatus
+          status: 'approved' as InspectionStatus,
+          updatedAt: nowISO
         });
       }
       setShowModal(false);
@@ -191,7 +219,8 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     try {
       await onApprove(inspection.id, "", {
         status: 'rejected' as InspectionStatus,
-        summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason 
+        summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason,
+        updatedAt: new Date().toISOString()
       });
       alert("Đã trả lại/từ chối phiếu thành công.");
     } catch (e) {
@@ -244,7 +273,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           </div>
           <div>
             <div className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate">{inspection.inspectorName || 'No Name'}</div>
-            <div className="text-center font-mono text-[9px] text-slate-400 mt-1">{inspection.date}</div>
+            <div className="text-center font-mono text-[9px] text-slate-400 mt-1">{formatDateTime(inspection.createdAt || inspection.date)}</div>
           </div>
         </div>
 
@@ -288,7 +317,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
               {inspection.teamLeadSignature ? (
                 <>
                   <div className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate">{inspection.teamLeadName}</div>
-                  <div className="text-center font-mono text-[9px] text-slate-400 mt-1">{inspection.teamLeadDate || inspection.date}</div>
+                  <div className="text-center font-mono text-[9px] text-slate-400 mt-1">{formatDateTime(inspection.teamLeadDate || inspection.date)}</div>
                 </>
               ) : (
                 <div className="text-center text-xs italic text-slate-400">Chưa xác nhận</div>
@@ -357,7 +386,9 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             {inspection.managerSignature ? (
               <>
                 <div className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate">{inspection.managerName}</div>
-                <div className="text-center font-mono text-[9px] text-slate-400 mt-1">Status: APPROVED</div>
+                <div className="text-center font-mono text-[9px] text-slate-400 mt-1">
+                  {inspection.updatedAt ? formatDateTime(inspection.updatedAt) : 'Status: APPROVED'}
+                </div>
               </>
             ) : (
               <div className="text-center text-xs italic text-slate-400">Chưa phê duyệt</div>

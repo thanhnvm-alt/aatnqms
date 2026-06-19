@@ -29,7 +29,7 @@ export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLA
 export type ModuleId = 
   | 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'TOOLS'
   | 'DASHBOARD' | 'LIST' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'MATERIALS' | 'IPO' | 'TRASH'
-  | 'SETTINGS_TEMPLATE' | 'SETTINGS_USERS' | 'SETTINGS_ROLES' | 'SETTINGS_WORKSHOPS' | 'SETTINGS_PROFILE' | 'SETTINGS_DEPARTMENTS';
+  | 'SETTINGS_TEMPLATE' | 'SETTINGS_USERS' | 'SETTINGS_ROLES' | 'SETTINGS_WORKSHOPS' | 'SETTINGS_PROFILE' | 'SETTINGS_DEPARTMENTS' | 'SYSTEM_ADMIN';
 
 export interface IPOItem {
   id: string;
@@ -617,7 +617,8 @@ export const hasPermission = (
 ): boolean => {
   if (!user) return false;
   
-  // 1. ADMIN has supreme absolute privilege.
+  // 1. SYSTEM_ADMIN checked first - if user has specific permission on SYSTEM_ADMIN, they might be a "Partial Admin"
+  // However, traditionally ADMIN role was supreme. We keep that but allow SYSTEM_ADMIN to grant similar powers.
   if (user.role === 'ADMIN' || user.username?.toLowerCase() === 'admin') return true;
 
   // Let's gather all merged/inherited permissions for this user
@@ -638,6 +639,13 @@ export const hasPermission = (
 
   if (userPerms && Array.isArray(userPerms)) {
     matchedPermissions.push(...userPerms);
+  }
+
+  // B. SUPREME CHECK: If user has this action on 'SYSTEM_ADMIN' module, they have it on EVERYTHING.
+  // This fulfills "Option B": SYSTEM_ADMIN acts as a master permission matrix.
+  const systemAdminMatrix = matchedPermissions.find(p => p.moduleId === 'SYSTEM_ADMIN');
+  if (systemAdminMatrix && systemAdminMatrix.actions && systemAdminMatrix.actions.includes(action)) {
+      return true;
   }
 
   // Evaluate matrix specifically for this module

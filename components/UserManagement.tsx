@@ -815,7 +815,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   </thead>
                                   <tbody>
                                       {(() => {
-                                          const MODULES_WITH_ACTIONS = ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE'];
+                                          const MODULES_WITH_ACTIONS = ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'SYSTEM_ADMIN'];
                                           
                                           // Group ALL_MODULES by m.group
                                           const grouped: Record<string, typeof ALL_MODULES> = {};

@@ -41,10 +41,10 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ startDate, end
     <div className="space-y-1 relative col-span-2 md:col-span-1">
       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{label}</label>
       <div 
-        className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 h-[42px] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 transition-colors"
+        className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 h-[38px] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 transition-colors"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">
+        <span className="text-xs font-black text-black dark:text-white truncate">
           {displayValue()}
         </span>
         <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
