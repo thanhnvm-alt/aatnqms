@@ -33,7 +33,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 async function checkPermission(userId: string, moduleId: string, action: string = 'VIEW'): Promise<boolean> {
   const user = await db.getUserById(userId);
   if (!user) return false;
-  if (user.role === 'ADMIN' || user.username?.toLowerCase() === 'admin') return true;
 
   const rawPerms = (user as any).user_permissions || (user as any).userPermissions || [];
   let perms: any[] = [];
@@ -52,8 +51,6 @@ async function checkPermission(userId: string, moduleId: string, action: string 
   // Specific module check
   const target = perms.find((p: any) => p.moduleId === moduleId);
   if (target && target.actions && target.actions.includes(action)) return true;
-
-  if (user.role === 'MANAGER' && (action === 'VIEW' || action === 'VIEW_ALL')) return true;
 
   return false;
 }
@@ -1271,8 +1268,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.post("/api/teams", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
-        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
+        return res.status(403).json({ error: 'Unauthorized: SYSTEM_ADMIN permission required' });
       }
       await db.saveTeam(req.body);
       res.json({ success: true });
@@ -1284,8 +1281,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.delete("/api/teams/:id", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
-        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
+      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
+        return res.status(403).json({ error: 'Unauthorized: SYSTEM_ADMIN permission required' });
       }
       await db.deleteTeam(req.params.id as string);
       res.json({ success: true });

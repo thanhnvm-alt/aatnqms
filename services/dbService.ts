@@ -330,14 +330,17 @@ export async function saveInspection(inspection: Inspection) {
           inspector, status, updated_at, items_json, images_json, headcode, date, score, summary, type, 
           production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
           signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
-          comments_json
+          signature_teamlead, name_teamlead, date_teamlead,
+          comments_json, data
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, 
           $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
           $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
           $13, $14, $15::bigint, $16::jsonb, $17::jsonb, $18, $19::bigint, $20::numeric, $21, $22, 
-          $23, $24, $25::numeric, $26::numeric, $27, $28::text, $29::text, $30::text, $31::text, $32::text, $33::text, $34::jsonb
+          $23, $24, $25::numeric, $26::numeric, $27, $28::text, $29::text, $30::text, $31::text, $32::text, $33::text, 
+          $34::text, $35::text, $36::text,
+          $37::jsonb, $38::jsonb
         )
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
@@ -356,6 +359,9 @@ export async function saveInspection(inspection: Inspection) {
           signature_production = EXCLUDED.signature_production,
           name_production = EXCLUDED.name_production,
           comment_production = EXCLUDED.comment_production,
+          signature_teamlead = EXCLUDED.signature_teamlead,
+          name_teamlead = EXCLUDED.name_teamlead,
+          date_teamlead = EXCLUDED.date_teamlead,
           comments_json = EXCLUDED.comments_json,
           sl_ipo = EXCLUDED.sl_ipo,
           qty_total = EXCLUDED.qty_total,
@@ -366,7 +372,8 @@ export async function saveInspection(inspection: Inspection) {
           passed_qty = EXCLUDED.passed_qty,
           failed_qty = EXCLUDED.failed_qty,
           workshop = EXCLUDED.workshop,
-          stage = EXCLUDED.stage
+          stage = EXCLUDED.stage,
+          data = EXCLUDED.data
       `, sanitizeArgs([
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
           inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.dvt,
@@ -378,7 +385,8 @@ export async function saveInspection(inspection: Inspection) {
           inspection.responsiblePerson,
           inspection.signature, inspection.managerSignature, inspection.managerName,
           inspection.productionSignature, inspection.productionName, inspection.productionComment,
-          inspection.comments
+          inspection.teamLeadSignature, inspection.teamLeadName, inspection.teamLeadDate,
+          inspection.comments, inspection
       ]));
     } else {
     // ISO Standard mapping cho các module: SITE, IQC, SQC, FQC...
@@ -391,7 +399,8 @@ export async function saveInspection(inspection: Inspection) {
         so_luong_ipo, inspected_qty, passed_qty, failed_qty,
         sl_ipo, qty_total, qty_pass, qty_fail,
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
-        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment
+        responsible_person, ma_nha_may, workshop, stage, headcode, production_comment,
+        signature_teamlead, name_teamlead, date_teamlead, data
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
@@ -399,7 +408,8 @@ export async function saveInspection(inspection: Inspection) {
         $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
-        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42
+        $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42,
+        $43::text, $44::text, $45::text, $46::jsonb
       )
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
@@ -417,6 +427,9 @@ export async function saveInspection(inspection: Inspection) {
         signature_production = EXCLUDED.signature_production,
         name_production = EXCLUDED.name_production,
         comment_production = EXCLUDED.comment_production,
+        signature_teamlead = EXCLUDED.signature_teamlead,
+        name_teamlead = EXCLUDED.name_teamlead,
+        date_teamlead = EXCLUDED.date_teamlead,
         production_comment = EXCLUDED.production_comment,
         location = EXCLUDED.location,
         comments_json = EXCLUDED.comments_json,
@@ -443,7 +456,8 @@ export async function saveInspection(inspection: Inspection) {
         workshop = EXCLUDED.workshop,
         stage = EXCLUDED.stage,
         headcode = EXCLUDED.headcode,
-        dvt = EXCLUDED.dvt
+        dvt = EXCLUDED.dvt,
+        data = EXCLUDED.data
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
         inspection.po_number, inspection.supplier, inspection.inspectorName, inspection.status, inspection_date,
@@ -458,6 +472,7 @@ export async function saveInspection(inspection: Inspection) {
         inspection.responsiblePerson,
         inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode,
         inspection.productionComment,
+        inspection.teamLeadSignature, inspection.teamLeadName, inspection.teamLeadDate,
         JSON.stringify(inspection)
       ]));
     }
@@ -1081,6 +1096,9 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     productionSignature: row.signature_production as string,
                     productionName: row.name_production as string,
                     productionComment: row.comment_production as string,
+                    teamLeadSignature: row.signature_teamlead as string,
+                    teamLeadName: row.name_teamlead as string,
+                    teamLeadDate: row.date_teamlead as string,
                     floor_plan_id: row.floor_plan_id as string,
                     coord_x: row.coord_x as number,
                     coord_y: row.coord_y as number,
@@ -2102,12 +2120,15 @@ export async function saveUser(u: any) {
         }
     }
 
-    const phong_ban = u.phong_ban || u.phongBan || '';
-    const bo_phan = u.bo_phan || u.boPhan || '';
+    const phong_ban = u.phong_ban || u.phongBan || oldValue?.phong_ban || '';
+    const bo_phan = u.bo_phan || u.boPhan || oldValue?.bo_phan || '';
     
-    let allowedModules = u.allowedModules;
-    if (!allowedModules && u.allowed_modules) {
-        allowedModules = typeof u.allowed_modules === 'string' ? safeJsonParse(u.allowed_modules, []) : u.allowed_modules;
+    let allowedModules = u.allowedModules || u.allowed_modules;
+    if (typeof allowedModules === 'string') {
+        try { allowedModules = JSON.parse(allowedModules); } catch(e) { allowedModules = []; }
+    }
+    if (!allowedModules && oldValue?.allowed_modules) {
+        allowedModules = typeof oldValue.allowed_modules === 'string' ? safeJsonParse(oldValue.allowed_modules, []) : oldValue.allowed_modules;
     }
     if (!allowedModules && phong_ban && bo_phan) {
         allowedModules = getAdvisoryModules(phong_ban, bo_phan);
@@ -2119,6 +2140,7 @@ export async function saveUser(u: any) {
     const allowed_modules_str = JSON.stringify(allowedModules);
 
     const updatedU = {
+        ...oldValue,
         ...u,
         phong_ban,
         phongBan: phong_ban,
@@ -2126,15 +2148,15 @@ export async function saveUser(u: any) {
         boPhan: bo_phan,
         allowedModules,
         allowed_modules: allowed_modules_str,
-        to_qc: u.to_qc || u.toQC || '',
-        toQC: u.to_qc || u.toQC || '',
-        la_to_truong: !!(u.la_to_truong || u.laToTruong),
-        laToTruong: !!(u.la_to_truong || u.laToTruong),
-        department_id: u.department_id || u.departmentId || '',
-        division_id: u.division_id || u.divisionId || '',
-        team_id: u.team_id || u.teamId || '',
-        signature_template: u.signatureTemplate || u.signature_template || '',
-        user_permissions: u.user_permissions ? (typeof u.user_permissions === 'string' ? u.user_permissions : JSON.stringify(u.user_permissions)) : (u.userPermissions ? JSON.stringify(u.userPermissions) : null),
+        to_qc: u.to_qc || u.toQC || oldValue?.to_qc || '',
+        toQC: u.to_qc || u.toQC || oldValue?.to_qc || '',
+        la_to_truong: !!(u.la_to_truong || u.laToTruong || oldValue?.la_to_truong),
+        laToTruong: !!(u.la_to_truong || u.laToTruong || oldValue?.la_to_truong),
+        department_id: u.department_id || u.departmentId || oldValue?.department_id || '',
+        division_id: u.division_id || u.divisionId || oldValue?.division_id || '',
+        team_id: u.team_id || u.teamId || oldValue?.team_id || '',
+        signature_template: u.signatureTemplate || u.signature_template || oldValue?.signature_template || '',
+        user_permissions: u.user_permissions ? (typeof u.user_permissions === 'string' ? u.user_permissions : JSON.stringify(u.user_permissions)) : (u.userPermissions ? JSON.stringify(u.userPermissions) : (oldValue?.user_permissions ? (typeof oldValue.user_permissions === 'string' ? oldValue.user_permissions : JSON.stringify(oldValue.user_permissions)) : null)),
         require_password_change,
         requirePasswordChange: require_password_change
     };
@@ -2169,7 +2191,8 @@ export async function saveUser(u: any) {
             updated_at = EXCLUDED.updated_at,
             require_password_change = EXCLUDED.require_password_change
     `, sanitizeArgs([
-        u.id, u.username, password, u.name, u.role, u.avatar, u.msnv, u.email, u.position, u.workLocation, u.status, u.joinDate, u.education, u.notes, 
+        u.id, u.username || oldValue?.username, password, u.name || oldValue?.name, u.role || oldValue?.role, u.avatar || oldValue?.avatar, u.msnv || oldValue?.msnv, u.email || oldValue?.email, u.position || oldValue?.position, 
+        u.work_location || u.workLocation || oldValue?.work_location, u.status || oldValue?.status, u.join_date || u.joinDate || oldValue?.join_date, u.education || oldValue?.education, u.notes || oldValue?.notes, 
         phong_ban, bo_phan, allowed_modules_str, updatedU.to_qc, updatedU.la_to_truong, updatedU.department_id, updatedU.division_id, updatedU.team_id, updatedU.user_permissions, updatedU, require_password_change
     ]));
 

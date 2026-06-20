@@ -664,7 +664,7 @@ const App = () => {
                     
                     <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50 dark:bg-slate-800/50/30">
                         {(ALL_MODULES || [])
-                            .filter(m => (m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.allowedModules?.includes(m.id) || hasPermission(user, roles, m.id, 'VIEW') || hasPermission(user, roles, m.id, 'CREATE')))
+                            .filter(m => (m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.allowedModules?.includes(m.id) || hasPermission(user, roles, m.id, 'VIEW') || hasPermission(user, roles, m.id, 'CREATE')))
                             .map(mod => (
                                 <button 
                                     key={mod.id} 

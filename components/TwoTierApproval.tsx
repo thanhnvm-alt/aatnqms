@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Inspection, InspectionStatus, User, Role, ModuleId, hasPermission } from '../types';
-import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban } from 'lucide-react';
+import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { getProxyImageUrl } from '../src/utils';
 import { fetchRoles } from '../services/apiService';
@@ -66,7 +66,6 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   }, [user, inspection.inspectorName, users]);
 
   const hasSignPermission = (action: 'SIGN1' | 'SIGN2'): boolean => {
-    if (String(user.role).toUpperCase() === 'ADMIN') return true;
     const moduleId = (inspection.type || 'PQC') as ModuleId;
 
     // Use our refined case-insensitive union permissions checker
@@ -230,7 +229,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     }
   };
 
-  const showSign1Button = hasSignPermission('SIGN1') && !inspection.teamLeadSignature;
+  const showSign1Button = hasSignPermission('SIGN1') && !inspection.teamLeadSignature && !inspection.managerSignature;
   const showSign2Button = hasSignPermission('SIGN2') && !inspection.managerSignature;
 
   return (
@@ -288,6 +287,12 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2">
               {inspection.teamLeadSignature ? (
                 <img src={getProxyImageUrl(inspection.teamLeadSignature)} className="h-full object-contain" referrerPolicy="no-referrer" alt="Team Lead Sig" />
+              ) : inspection.managerSignature ? (
+                <div className="text-center px-3 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl">
+                  <span className="text-[9px] text-slate-500 font-black tracking-widest uppercase flex items-center justify-center gap-1.5 opacity-70">
+                    <FastForward className="w-4 h-4" /> Bỏ Qua (L2 Đã Ký)
+                  </span>
+                </div>
               ) : (
                 <div className="text-center">
                   {showSign1Button ? (
@@ -357,11 +362,6 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                             user.position.toUpperCase().includes('BO PHAN')
                           ));
 
-                        const is1Level = inspection.type === 'IQC' || inspection.type === 'SITE';
-                        if (!is1Level && !inspection.teamLeadSignature && !isBoss) {
-                          alert("Theo quy trình ISO: Cần phải có chữ ký xác nhận hiện trường của Tổ trưởng (L1) trước khi Trưởng phòng duyệt đóng phiếu (L2).");
-                          return;
-                        }
                         setShowModal('SIGN2');
                       }}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"

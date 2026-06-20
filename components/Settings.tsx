@@ -77,7 +77,6 @@ export const Settings: React.FC<SettingsProps> = ({
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
   const isAdminOrManager = useMemo(() => {
-    if (currentUser.role === 'ADMIN' || currentUser.username?.toLowerCase() === 'admin') return true;
     if (hasPermission(currentUser, roles, 'SYSTEM_ADMIN', 'VIEW')) return true;
     if (hasPermission(currentUser, roles, 'SETTINGS_USERS', 'VIEW')) return true;
     if (hasPermission(currentUser, roles, 'SETTINGS_ROLES', 'VIEW')) return true;
@@ -85,7 +84,6 @@ export const Settings: React.FC<SettingsProps> = ({
   }, [currentUser, roles]);
   
   const showTab = (tabName: 'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES' | 'DEPARTMENTS') => {
-      if (currentUser.role === 'ADMIN' || currentUser.username?.toLowerCase() === 'admin') return true;
       if (hasPermission(currentUser, roles, 'SYSTEM_ADMIN', 'VIEW')) return true;
       
       const mapping: Record<string, ModuleId> = {

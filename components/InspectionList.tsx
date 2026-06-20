@@ -261,7 +261,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
           ])).sort(),
           types: Object.keys(MODULE_CONFIG),
-          statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
+          statuses: [InspectionStatus.PENDING, InspectionStatus.VERIFIED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
       };
   }, [user, users, workshops, projects, inspections]);
 

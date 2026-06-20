@@ -292,6 +292,9 @@ export async function runMigrations() {
                   "signature_manager" TEXT,
                   "name_manager" TEXT,
                   "signature_production" TEXT,
+                  "signature_teamlead" TEXT,
+                  "name_teamlead" TEXT,
+                  "date_teamlead" TEXT,
                   "name_production" TEXT,
                   "comment_production" TEXT,
                   "images_json" TEXT,
@@ -338,6 +341,9 @@ export async function runMigrations() {
         await addColumn(table, 'name_manager', 'TEXT');
         await addColumn(table, 'signature_production', 'TEXT');
         await addColumn(table, 'name_production', 'TEXT');
+        await addColumn(table, 'signature_teamlead', 'TEXT');
+        await addColumn(table, 'name_teamlead', 'TEXT');
+        await addColumn(table, 'date_teamlead', 'TEXT');
         await addColumn(table, 'comment_production', 'TEXT');
         await addColumn(table, 'so_luong_ipo', 'NUMERIC');
         await addColumn(table, 'inspected_qty', 'NUMERIC');

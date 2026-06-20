@@ -500,10 +500,7 @@ export interface ToolCalibration {
 export const canUserModifyInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
   if (!user) return false;
   
-  // 1. ADMIN has absolute supreme exemption from all locks, rules, and creator restrictions.
-  if (user.role === 'ADMIN') return true;
-  
-  // 2. Immutable Locked State:
+  // Immutable Locked State:
   // If the coupon has been closed (APPROVED) or verified (team lead signed L1), it is locked immutable.
   const isLockedStatus = 
     inspection.status === 'approved' || 
@@ -560,10 +557,7 @@ export const canUserModifyInspection = (inspection: any, user: any, usersList?: 
 export const canUserDeleteInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
   if (!user) return false;
   
-  // 1. ADMIN has absolute supreme exemption
-  if (user.role === 'ADMIN') return true;
-  
-  // 2. Immutable Locked State:
+  // Immutable Locked State:
   const isLockedStatus = 
     inspection.status === 'approved' || 
     inspection.status === 'verified' || 
@@ -621,10 +615,6 @@ export const hasPermission = (
 ): boolean => {
   if (!user) return false;
   
-  // 1. SYSTEM_ADMIN checked first - if user has specific permission on SYSTEM_ADMIN, they might be a "Partial Admin"
-  // However, traditionally ADMIN role was supreme. We keep that but allow SYSTEM_ADMIN to grant similar powers.
-  if (user.role === 'ADMIN' || user.username?.toLowerCase() === 'admin') return true;
-
   // Let's gather all merged/inherited permissions for this user
   const matchedPermissions: ModulePermission[] = [];
 

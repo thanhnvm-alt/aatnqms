@@ -260,7 +260,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
           id: editingUser ? editingUser.id : `user_${Date.now()}`,
           username: formData.username!,
           name: formData.name!,
-          role: (formData.username?.toLowerCase() === 'admin' || (editingUser && editingUser.role === 'ADMIN')) ? 'ADMIN' : 'USER',
+          role: formData.role || 'QC',
           password: formData.password || (editingUser ? editingUser.password : '123456'),
           avatar: formData.avatar || '',
           allowedModules: formData.allowedModules || [],
