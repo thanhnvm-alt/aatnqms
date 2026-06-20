@@ -522,24 +522,84 @@ export async function saveInspection(inspection: Inspection) {
             await logStatusChange('inspection', inspection.id, oldValue.status, inspection.status, inspection.inspectorName || 'SYSTEM');
             
             if (inspection.status === InspectionStatus.SUBMITTED) {
-                const project = await getProjectByCode(inspection.ma_ct);
-                if (project) {
+                try {
+                    const allUsers = await getUsers();
+                    const inspectorUser = allUsers.find(u => u.name === inspection.inspectorName || u.username === inspection.inspectorName);
+                    
                     const notifyPromises = [];
-                    if (project.pm) notifyPromises.push(addNotification(project.pm, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
-                    if (project.qa) notifyPromises.push(addNotification(project.qa, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
+                    for (const u of allUsers) {
+                        if (!u.id) continue;
+                        
+                        // Rule 1: Trưởng bộ phận / Trưởng phòng / Giám đốc phòng QAQC nhận tất cả
+                        const role = (u.role || '').toUpperCase();
+                        const pos = (u.position || '').toUpperCase();
+                        const isHighLevel = 
+                            role === 'ADMIN' || 
+                            role === 'MANAGER' || 
+                            pos.includes('TRƯỞNG PHÒNG') || pos.includes('TRUONG PHONG') || 
+                            pos.includes('GIÁM ĐỐC') || pos.includes('GIAM DOC') ||
+                            pos.includes('BỘ PHẬN') || pos.includes('BO PHAN');
+
+                        if (isHighLevel) {
+                            notifyPromises.push(addNotification(u.id, 'INSPECTION_SUBMITTED', 'Hồ sơ mới chờ duyệt', `Hồ sơ ${inspection.id} (${inspection.ten_hang_muc}) đã được gửi và đang chờ phê duyệt.`, { inspectionId: inspection.id }));
+                            continue;
+                        }
+
+                        // Rule 2: Tổ trưởng chỉ nhận từ nhân viên cùng Tổ
+                        if (u.la_to_truong && inspectorUser) {
+                            const isSameTeam = 
+                                (u.team_id && u.team_id === inspectorUser.team_id) || 
+                                (u.to_qc && u.to_qc === inspectorUser.to_qc);
+                            
+                            if (isSameTeam && u.id !== inspectorUser.id) {
+                                notifyPromises.push(addNotification(u.id, 'INSPECTION_SUBMITTED', 'Hồ sơ Tổ QC chờ duyệt', `Nhân viên ${inspectorUser.name} đã gửi hồ sơ ${inspection.id} chờ bạn xác nhận L1.`, { inspectionId: inspection.id }));
+                            }
+                        }
+                    }
                     await Promise.all(notifyPromises);
+                } catch (notifyErr) {
+                    console.error("❌ ISO-DB: Notification failed:", notifyErr);
                 }
             }
         } else if (!oldValue) {
             await logStatusChange('inspection', inspection.id, null, inspection.status, inspection.inspectorName || 'SYSTEM');
             
             if (inspection.status === InspectionStatus.SUBMITTED) {
-                const project = await getProjectByCode(inspection.ma_ct);
-                if (project) {
+                try {
+                    const allUsers = await getUsers();
+                    const inspectorUser = allUsers.find(u => u.name === inspection.inspectorName || u.username === inspection.inspectorName);
+                    
                     const notifyPromises = [];
-                    if (project.pm) notifyPromises.push(addNotification(project.pm, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
-                    if (project.qa) notifyPromises.push(addNotification(project.qa, 'INSPECTION_SUBMITTED', 'New Inspection Submitted', `Inspection ${inspection.id} is awaiting review.`, { inspectionId: inspection.id }));
+                    for (const u of allUsers) {
+                        if (!u.id) continue;
+                        
+                        const role = (u.role || '').toUpperCase();
+                        const pos = (u.position || '').toUpperCase();
+                        const isHighLevel = 
+                            role === 'ADMIN' || 
+                            role === 'MANAGER' || 
+                            pos.includes('TRƯỞNG PHÒNG') || pos.includes('TRUONG PHONG') || 
+                            pos.includes('GIÁM ĐỐC') || pos.includes('GIAM DOC') ||
+                            pos.includes('BỘ PHẬN') || pos.includes('BO PHAN');
+
+                        if (isHighLevel) {
+                            notifyPromises.push(addNotification(u.id, 'INSPECTION_SUBMITTED', 'Hồ sơ mới chờ duyệt', `Hồ sơ ${inspection.id} (${inspection.ten_hang_muc}) đã được gửi và đang chờ phê duyệt.`, { inspectionId: inspection.id }));
+                            continue;
+                        }
+
+                        if (u.la_to_truong && inspectorUser) {
+                            const isSameTeam = 
+                                (u.team_id && u.team_id === inspectorUser.team_id) || 
+                                (u.to_qc && u.to_qc === inspectorUser.to_qc);
+                            
+                            if (isSameTeam && u.id !== inspectorUser.id) {
+                                notifyPromises.push(addNotification(u.id, 'INSPECTION_SUBMITTED', 'Hồ sơ Tổ QC chờ duyệt', `Nhân viên ${inspectorUser.name} đã gửi hồ sơ ${inspection.id} chờ bạn xác nhận L1.`, { inspectionId: inspection.id }));
+                            }
+                        }
+                    }
                     await Promise.all(notifyPromises);
+                } catch (notifyErr) {
+                    console.error("❌ ISO-DB: Notification failed:", notifyErr);
                 }
             }
         }

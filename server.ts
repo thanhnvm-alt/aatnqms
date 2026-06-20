@@ -1158,11 +1158,41 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.post("/api/users", authenticate, async (req, res) => {
     try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: Admin access required' });
+      const authUser = (req as any).user;
+      const targetUserId = req.body.id;
+      const isAdmin = await checkPermission(authUser.id, 'SYSTEM_ADMIN', 'EDIT_ALL');
+
+      if (!isAdmin && authUser.id !== targetUserId) {
+        return res.status(403).json({ error: 'Unauthorized: Admin access required or can only update own profile' });
       }
-      await db.saveUser(req.body);
+
+      let userData = req.body;
+
+      // If not admin and updating own profile, protect sensitive fields
+      if (!isAdmin && authUser.id === targetUserId) {
+        const existingUser = await db.getUserById(targetUserId);
+        if (!existingUser) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Sanitize update: preserve sensitive fields from existing record
+        userData = {
+          ...req.body,
+          role: existingUser.role,
+          user_permissions: existingUser.user_permissions,
+          userPermissions: existingUser.userPermissions,
+          msnv: existingUser.msnv,
+          phong_ban: existingUser.phong_ban,
+          phongBan: existingUser.phongBan,
+          bo_phan: existingUser.bo_phan,
+          boPhan: existingUser.boPhan,
+          status: existingUser.status,
+          username: existingUser.username, // Username shouldn't be changed through profile settings
+          id: existingUser.id // Ensure ID remains the same
+        };
+      }
+
+      await db.saveUser(userData);
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error saving user:', error);

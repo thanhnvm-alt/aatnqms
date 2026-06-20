@@ -266,10 +266,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2 relative">
             {/* Improved Watermark Stamp for Inspector */}
             {inspection.signature && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.25]">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.3]">
                 <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-12 bg-red-50/10">
                   <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.2em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
-                    ORIGINAL
+                    NGƯỜI KÝ
                   </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
                     <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
@@ -304,10 +304,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2 relative">
               {/* Improved Watermark Stamp for L1 */}
               {inspection.teamLeadSignature && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.25]">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.3]">
                   <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform rotate-12 bg-red-50/10">
                     <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.15em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
-                      VERIFIED L1
+                      XÁC NHẬN L1
                     </span>
                     <div className="flex flex-col items-center gap-0.5 mt-0.5">
                       <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
@@ -377,10 +377,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2 relative">
             {/* Improved Watermark Stamp for L2 */}
             {inspection.managerSignature && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.25]">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.3]">
                 <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-6 bg-red-50/10">
                   <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.15em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
-                    APPROVED L2
+                    PHÊ DUYỆT L2
                   </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
                     <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">

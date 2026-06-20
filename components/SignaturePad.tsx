@@ -128,22 +128,25 @@ const getUser = () => {
 
     return (
         <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-center px-1">
-                <label className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-widest">{label}</label>
-                <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between px-1 mb-1">
+                <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                    {label}
+                </label>
+                <div className="flex items-center gap-3">
                     {!readOnly && savedSignature && (
                         <button 
                             onClick={handleUseTemplate} 
-                            className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase flex items-center gap-1.5 hover:underline active:scale-95 transition-transform" 
+                            className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase flex items-center gap-1 hover:text-indigo-700 active:scale-95 transition-all" 
                             type="button"
                         >
-                            <FileSignature className="w-3.5 h-3.5" /> Dùng mẫu
+                            <FileSignature className="w-3 h-3" /> Dùng mẫu
                         </button>
                     )}
                     {!readOnly && (
                         <button 
                             onClick={clearSignature} 
-                            className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase flex items-center gap-1.5 hover:underline active:scale-95 transition-transform" 
+                            className="text-[10px] font-black text-red-600 hover:text-red-700 uppercase flex items-center gap-1.5 active:scale-95 transition-all px-2 py-1 bg-red-50 dark:bg-red-900/10 rounded-md border border-red-100 dark:border-red-900/20" 
                             type="button"
                         >
                             <Eraser className="w-3.5 h-3.5" /> Xóa
@@ -153,11 +156,11 @@ const getUser = () => {
             </div>
             
             <div className="group relative">
-                <div className="border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-900/50 rounded-2xl bg-white dark:bg-slate-900 overflow-hidden relative h-28 shadow-sm transition-all">
+                <div className="border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-2xl bg-white dark:bg-slate-900 overflow-hidden relative h-32 md:h-36 shadow-inner transition-all">
                     <canvas 
                         ref={canvasRef} 
-                        width={400} 
-                        height={112} 
+                        width={600} 
+                        height={200} 
                         className={`w-full h-full touch-none ${readOnly ? 'cursor-default' : 'cursor-crosshair'}`} 
                         onMouseDown={startDrawing} 
                         onMouseMove={draw} 
@@ -168,16 +171,18 @@ const getUser = () => {
                         onTouchEnd={stopDrawing} 
                     />
                     {isEmpty && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-300 dark:text-slate-700 text-[10px] font-black uppercase tracking-[0.2em] select-none">
-                            Ký tên tại đây
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-slate-300 dark:text-slate-700 text-[11px] font-black uppercase tracking-[0.3em] select-none opacity-50">
+                                Ký tên tại đây
+                            </span>
                         </div>
                     )}
                 </div>
 
                 {!isEmpty && (
-                    <div className="mt-1.5 px-2 flex items-center gap-2 text-slate-400 dark:text-slate-500">
-                        <Clock className="w-3 h-3" />
-                        <span className="text-[10px] font-medium italic">
+                    <div className="mt-2.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/10 rounded-lg inline-flex items-center gap-2 border border-slate-100 dark:border-slate-800/20">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 italic">
                             Đã ký lúc: {formatDateTime(Math.floor(Date.now() / 1000))}
                         </span>
                     </div>

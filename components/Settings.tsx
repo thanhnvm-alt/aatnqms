@@ -129,6 +129,7 @@ export const Settings: React.FC<SettingsProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isSavingSignature, setIsSavingSignature] = useState(false);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState<User>(() => ({
@@ -219,11 +220,39 @@ export const Settings: React.FC<SettingsProps> = ({
       if (!profileData.name) { alert("Tên không được để trống"); return; }
       setIsSavingProfile(true);
       try { 
-          // ISO Clean Update: Gửi object profile đầy đủ
-          await onUpdateUser(profileData); 
+          // Restriction: Only update basic info, strictly preserving sensitive user data
+          const updateObj = {
+              ...currentUser,
+              name: profileData.name,
+              avatar: profileData.avatar,
+              noi_lam_viec: profileData.noi_lam_viec,
+              trinh_do: profileData.trinh_do,
+          };
+          await onUpdateUser(updateObj); 
           setIsEditingProfile(false); 
+          alert("Đã cập nhật thông tin cơ bản thành công!");
       } 
       catch (error) { alert("Lỗi khi cập nhật thông tin cá nhân"); } finally { setIsSavingProfile(false); }
+  };
+
+  const handleSaveSignature = async () => {
+    if (!profileData.signature_template) {
+        alert("Vui lòng vẽ chữ ký trước khi lưu.");
+        return;
+    }
+    setIsSavingSignature(true);
+    try {
+        await onUpdateUser({
+            ...currentUser,
+            signature_template: profileData.signature_template,
+            signatureTemplate: profileData.signature_template
+        });
+        alert("Đã cập nhật chữ ký mẫu thành công!");
+    } catch (error) {
+        alert("Lỗi khi cập nhật chữ ký.");
+    } finally {
+        setIsSavingSignature(false);
+    }
   };
 
   const qcModules = ALL_MODULES.filter(m => m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA');
@@ -319,17 +348,17 @@ export const Settings: React.FC<SettingsProps> = ({
                                 </div>
                                 <div className="flex gap-2 shrink-0">
                                     {!isEditingProfile ? (
-                                        <button onClick={() => setIsEditingProfile(true)} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold uppercase tracking-tight rounded-md active:scale-95 transition-all flex items-center gap-1.5 leading-none">
-                                            <Edit3 className="w-3.5 h-3.5" /> Thống kê & Chỉnh sửa
+                                        <button onClick={() => setIsEditingProfile(true)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center gap-2 shadow-sm shadow-indigo-500/20">
+                                            <Edit3 className="w-4 h-4" /> Chỉnh sửa thông tin
                                         </button>
                                     ) : (
                                         <div className="flex items-center gap-2">
-                                            <button onClick={() => { setIsEditingProfile(false); setProfileData(currentUser); }} className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold uppercase tracking-tight rounded-md active:scale-95 transition-all leading-none">
+                                            <button onClick={() => { setIsEditingProfile(false); setProfileData({...currentUser, workLocation: currentUser.workLocation || (currentUser as any).work_location || '', joinDate: currentUser.joinDate || (currentUser as any).join_date || ''}); }} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all">
                                                 Hủy
                                             </button>
-                                            <button onClick={handleSaveProfile} disabled={isSavingProfile} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold uppercase tracking-tight rounded-md active:scale-95 transition-all flex items-center gap-1 leading-none disabled:opacity-50">
-                                                {isSavingProfile ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Save className="w-3.5 h-3.5"/>}
-                                                <span>Lưu</span>
+                                            <button onClick={handleSaveProfile} disabled={isSavingProfile} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center gap-2 shadow-sm shadow-indigo-500/20 disabled:opacity-50">
+                                                {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
+                                                <span>Lưu thay đổi</span>
                                             </button>
                                         </div>
                                     )}
@@ -338,54 +367,60 @@ export const Settings: React.FC<SettingsProps> = ({
 
                             {/* Info Fields Grid */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Mã nhân viên (MSNV)</span>
-                                    {isEditingProfile ? (
-                                        <input value={profileData.msnv || ''} onChange={e => setProfileData({...profileData, msnv: e.target.value.toUpperCase()})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:font-normal" placeholder="VD: AA-00123"/>
-                                    ) : (
-                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.msnv || 'Chưa thiết lập'}</p>
-                                    )}
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 ml-0.5">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Mã nhân viên (MSNV)</span>
+                                        <Lock className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-70">
+                                        {profileData.msnv || profileData.username?.toUpperCase() || 'Chưa thiết lập'}
+                                    </p>
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Chức danh / Cấp bậc</span>
-                                    {isEditingProfile ? (
-                                        <input value={profileData.position || ''} onChange={e => setProfileData({...profileData, position: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập chức danh..."/>
-                                    ) : (
-                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.position || 'Chưa thiết lập'}</p>
-                                    )}
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 ml-0.5">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Chức danh / Cấp bậc</span>
+                                        <Lock className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-70 uppercase">
+                                        {profileData.position || 'Chưa thiết lập'}
+                                    </p>
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Ngày nhận việc</span>
-                                    {isEditingProfile ? (
-                                        <input type="date" value={profileData.joinDate || ''} onChange={e => setProfileData({...profileData, joinDate: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all"/>
-                                    ) : (
-                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800 font-mono">{profileData.joinDate || 'Chưa thiết lập'}</p>
-                                    )}
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 ml-0.5">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Ngày nhận việc</span>
+                                        <Lock className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-70 font-mono">
+                                        {profileData.joinDate || profileData.ngay_vao_lam || (profileData as any).ngayVaoLam || 'Chưa thiết lập'}
+                                    </p>
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                     <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Nơi làm việc / Chi nhánh</span>
                                     {isEditingProfile ? (
-                                        <input value={profileData.workLocation || ''} onChange={e => setProfileData({...profileData, workLocation: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập địa điểm..."/>
+                                        <input value={profileData.workLocation || ''} onChange={e => setProfileData({...profileData, workLocation: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-900 focus:ring-2 focus:ring-indigo-500/20 shadow-sm outline-none transition-all placeholder:font-normal" placeholder="Nhập địa điểm..."/>
                                     ) : (
-                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.workLocation || 'Chưa thiết lập'}</p>
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800">{profileData.workLocation || 'Chưa thiết lập'}</p>
                                     )}
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                     <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Trình độ chuyên môn</span>
                                     {isEditingProfile ? (
-                                        <input value={profileData.education || ''} onChange={e => setProfileData({...profileData, education: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 focus:ring-1 focus:ring-blue-500 outline-none transition-all" placeholder="Nhập trình độ..."/>
+                                        <input value={profileData.education || ''} onChange={e => setProfileData({...profileData, education: e.target.value})} className="w-full text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-900 focus:ring-2 focus:ring-indigo-500/20 shadow-sm outline-none transition-all placeholder:font-normal" placeholder="Nhập trình độ..."/>
                                     ) : (
-                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-2.5 py-1.5 rounded-md border border-slate-100 dark:border-slate-800">{profileData.education || 'Chưa thiết lập'}</p>
+                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 uppercase">{profileData.education || 'Chưa thiết lập'}</p>
                                     )}
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block ml-0.5">Quyền truy cập Module</span>
-                                    <div className="flex flex-wrap gap-1 bg-slate-50/20 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 p-1 rounded-md min-h-[31px]">
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 ml-0.5">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Quyền truy cập Module</span>
+                                        <Lock className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 bg-slate-50/20 dark:bg-slate-800/20 border border-slate-150 dark:border-slate-800 p-1.5 rounded-xl min-h-[35px] opacity-70 cursor-not-allowed">
                                         {(profileData?.allowedModules || []).map((m, mIdx) => (
-                                            <span key={`${m}-${mIdx}`} className="px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded text-[8px] font-black border border-blue-100 dark:border-slate-700 uppercase leading-none">{m}</span>
+                                            <span key={`${m}-${mIdx}`} className="px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded text-[8px] font-black border border-blue-100 dark:border-slate-700 uppercase leading-none">{m}</span>
                                         ))}
                                         {(!profileData?.allowedModules || profileData.allowedModules.length === 0) && (
-                                            <span className="text-[10px] italic text-slate-400 dark:text-slate-500">Chưa cấp quyền module</span>
+                                            <span className="text-[9px] italic text-slate-400 dark:text-slate-500">Chưa cấp quyền module</span>
                                         )}
                                     </div>
                                 </div>
@@ -422,14 +457,14 @@ export const Settings: React.FC<SettingsProps> = ({
 
                         {/* Compact user activity logs */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Signature Template Management */}
+                            {/* Signature Template Management - Independent Logic */}
                             <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-3 shadow-sm space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <Edit3 className="w-4 h-4 text-orange-500" />
                                         <h4 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide">Dấu chữ ký điện tử</h4>
                                     </div>
-                                    {profileData.signature_template && (
+                                    {(profileData.signature_template || currentUser.signature_template) && (
                                         <div className="text-[8px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase border border-green-100 flex items-center gap-1">
                                             <ShieldCheck className="w-2.5 h-2.5" /> Đã cài đặt
                                         </div>
@@ -439,8 +474,8 @@ export const Settings: React.FC<SettingsProps> = ({
                                 <div className="space-y-4">
                                     <div className="bg-slate-50 dark:bg-slate-800/20 rounded-xl p-1 border border-dashed border-slate-200 dark:border-slate-700">
                                         <SignaturePad 
-                                            label="VẼ CHỮ KÝ MẪU CỦA BẠN" 
-                                            value={profileData.signature_template}
+                                            label="Vẽ chữ ký mẫu của bạn (Ký trực tiếp vào khung dưới)" 
+                                            value={profileData.signature_template || currentUser.signature_template}
                                             onChange={(val) => setProfileData(prev => ({ ...prev, signature_template: val, signatureTemplate: val }))}
                                         />
                                     </div>
@@ -449,15 +484,15 @@ export const Settings: React.FC<SettingsProps> = ({
                                         * Chữ ký này sẽ được sử dụng để ký nhanh các phiếu kiểm tra. Hãy đảm bảo bạn vẽ chữ ký rõ ràng và đúng mẫu quy định.
                                     </div>
                                     
-                                    {isEditingProfile && (
-                                        <div className="pt-2">
+                                    {(profileData.signature_template !== (currentUser.signature_template || currentUser.signatureTemplate)) && (
+                                        <div className="pt-2 animate-in fade-in zoom-in-95 duration-200">
                                             <button 
-                                                onClick={handleSaveProfile}
-                                                disabled={isSavingProfile}
-                                                className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm"
+                                                onClick={handleSaveSignature}
+                                                disabled={isSavingSignature}
+                                                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 active:scale-95"
                                             >
-                                                {isSavingProfile ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                                                Cập nhật chữ ký mẫu
+                                                {isSavingSignature ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                                Xác nhận & Lưu chữ ký mới
                                             </button>
                                         </div>
                                     )}
