@@ -263,16 +263,33 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block">QC Inspector (Người Lập)</p>
             <p className="text-[9px] text-slate-400 block italic mt-0.5">Khởi tạo phiếu ban đầu</p>
           </div>
-          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2">
+          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2 relative">
+            {/* Improved Watermark Stamp for Inspector */}
+            {inspection.signature && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.25]">
+                <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-12 bg-red-50/10">
+                  <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.2em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
+                    ORIGINAL
+                  </span>
+                  <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                    <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
+                      {formatDateTime(inspection.createdAt || inspection.date).split(' - ')[0]}
+                    </span>
+                    <span className="text-[8px] font-black text-red-600/80 tabular-nums">
+                      {formatDateTime(inspection.createdAt || inspection.date).split(' - ')[1]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             {inspection.signature ? (
-              <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain" referrerPolicy="no-referrer" alt="Inspector Sig" />
+              <img src={getProxyImageUrl(inspection.signature)} className="h-full object-contain relative z-10 mix-blend-multiply" referrerPolicy="no-referrer" alt="Inspector Sig" />
             ) : (
               <div className="text-[10px] font-mono text-slate-300">N/A</div>
             )}
           </div>
           <div>
             <div className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate">{inspection.inspectorName || 'No Name'}</div>
-            <div className="text-center font-mono text-[9px] text-slate-400 mt-1">{formatDateTime(inspection.createdAt || inspection.date)}</div>
           </div>
         </div>
 
@@ -284,9 +301,27 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
               <p className="text-[9px] text-slate-400 block italic mt-0.5">Kiểm soát trực tiếp hiện trường</p>
             </div>
             
-            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2">
+            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2 relative">
+              {/* Improved Watermark Stamp for L1 */}
+              {inspection.teamLeadSignature && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.25]">
+                  <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform rotate-12 bg-red-50/10">
+                    <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.15em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
+                      VERIFIED L1
+                    </span>
+                    <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                      <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
+                        {formatDateTime(inspection.teamLeadDate || inspection.date).split(' - ')[0]}
+                      </span>
+                      <span className="text-[8px] font-black text-red-600/80 tabular-nums">
+                        {formatDateTime(inspection.teamLeadDate || inspection.date).split(' - ')[1]}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               {inspection.teamLeadSignature ? (
-                <img src={getProxyImageUrl(inspection.teamLeadSignature)} className="h-full object-contain" referrerPolicy="no-referrer" alt="Team Lead Sig" />
+                <img src={getProxyImageUrl(inspection.teamLeadSignature)} className="h-full object-contain relative z-10 mix-blend-multiply" referrerPolicy="no-referrer" alt="Team Lead Sig" />
               ) : inspection.managerSignature ? (
                 <div className="text-center px-3 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl">
                   <span className="text-[9px] text-slate-500 font-black tracking-widest uppercase flex items-center justify-center gap-1.5 opacity-70">
@@ -322,7 +357,6 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
               {inspection.teamLeadSignature ? (
                 <>
                   <div className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate">{inspection.teamLeadName}</div>
-                  <div className="text-center font-mono text-[9px] text-slate-400 mt-1">{formatDateTime(inspection.teamLeadDate || inspection.date)}</div>
                 </>
               ) : (
                 <div className="text-center text-xs italic text-slate-400">Chưa xác nhận</div>
@@ -340,9 +374,27 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             <p className="text-[9px] text-slate-400 block italic mt-0.5">Xác nhận đóng hồ sơ vĩnh viễn</p>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2">
+          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl h-24 flex items-center justify-center overflow-hidden border border-slate-100 dark:border-slate-800 shadow-inner my-2 relative">
+            {/* Improved Watermark Stamp for L2 */}
+            {inspection.managerSignature && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.25]">
+                <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-6 bg-red-50/10">
+                  <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.15em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
+                    APPROVED L2
+                  </span>
+                  <div className="flex flex-col items-center gap-0.5 mt-0.5">
+                    <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
+                      {formatDateTime(inspection.updatedAt || inspection.date).split(' - ')[0]}
+                    </span>
+                    <span className="text-[8px] font-black text-red-600/80 tabular-nums">
+                      {formatDateTime(inspection.updatedAt || inspection.date).split(' - ')[1]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             {inspection.managerSignature ? (
-              <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain" referrerPolicy="no-referrer" alt="Manager Sig" />
+              <img src={getProxyImageUrl(inspection.managerSignature)} className="h-full object-contain relative z-10 mix-blend-multiply" referrerPolicy="no-referrer" alt="Manager Sig" />
             ) : (
               <div className="text-center">
                 {showSign2Button ? (
@@ -387,9 +439,6 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             {inspection.managerSignature ? (
               <>
                 <div className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate">{inspection.managerName}</div>
-                <div className="text-center font-mono text-[9px] text-slate-400 mt-1">
-                  {inspection.updatedAt ? formatDateTime(inspection.updatedAt) : 'Status: APPROVED'}
-                </div>
               </>
             ) : (
               <div className="text-center text-xs italic text-slate-400">Chưa phê duyệt</div>

@@ -345,6 +345,7 @@ export async function saveInspection(inspection: Inspection) {
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
           updated_at = EXCLUDED.updated_at, 
+          date = COALESCE(${table}.date, EXCLUDED.date),
           score = EXCLUDED.score, 
           items_json = EXCLUDED.items_json,
           images_json = EXCLUDED.images_json,
@@ -361,7 +362,7 @@ export async function saveInspection(inspection: Inspection) {
           comment_production = EXCLUDED.comment_production,
           signature_teamlead = EXCLUDED.signature_teamlead,
           name_teamlead = EXCLUDED.name_teamlead,
-          date_teamlead = EXCLUDED.date_teamlead,
+          date_teamlead = COALESCE(${table}.date_teamlead, EXCLUDED.date_teamlead),
           comments_json = EXCLUDED.comments_json,
           sl_ipo = EXCLUDED.sl_ipo,
           qty_total = EXCLUDED.qty_total,
@@ -414,6 +415,7 @@ export async function saveInspection(inspection: Inspection) {
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
         score = EXCLUDED.score, 
+        date = COALESCE(${table}.date, EXCLUDED.date),
         summary = EXCLUDED.summary,
         items_json = EXCLUDED.items_json,
         images_json = EXCLUDED.images_json,
@@ -429,7 +431,7 @@ export async function saveInspection(inspection: Inspection) {
         comment_production = EXCLUDED.comment_production,
         signature_teamlead = EXCLUDED.signature_teamlead,
         name_teamlead = EXCLUDED.name_teamlead,
-        date_teamlead = EXCLUDED.date_teamlead,
+        date_teamlead = COALESCE(${table}.date_teamlead, EXCLUDED.date_teamlead),
         production_comment = EXCLUDED.production_comment,
         location = EXCLUDED.location,
         comments_json = EXCLUDED.comments_json,

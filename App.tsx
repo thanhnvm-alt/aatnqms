@@ -272,30 +272,39 @@ const App = () => {
     sessionStorage.removeItem(AUTH_STORAGE_KEY); 
   };
 
-  const notifyUsers = async (targetRoles: string[], title: string, message: string, link?: { view: ViewState, id: string }, excludeUserId?: string) => {
+  const notifyUsers = async (targetRoles: string[], title: string, message: string, link?: { view: ViewState, id: string }, excludeUserId?: string, sender?: User) => {
     const isStandardMatch = (u: User) => targetRoles.includes(u.role as string);
 
     const qaQcKeywords = ['QA', 'QC', 'CHẤT LƯỢNG', 'CHAT LUONG', 'QUALITY'];
-    const targetPositions = [
-      'TỔ TRƯỞNG', 'TO TRUONG', 
+    const highLevelPositions = [
       'TRƯỞNG BỘ PHẬN', 'TRUONG BO PHAN', 
       'TRƯỞNG PHÒNG', 'TRUONG PHONG', 
       'GIÁM ĐỐC', 'GIAM DOC'
     ];
-
-    const isQaqcManagementMatch = (u: User) => {
-      const userDept = (u.phong_ban || (u as any).phongBan || '').trim().toUpperCase();
-      const isQaqcDept = qaQcKeywords.some(keyword => userDept.includes(keyword));
-      
-      const userPos = (u.position || '').trim().toUpperCase();
-      const isLeaderPos = targetPositions.some(pos => userPos.includes(pos));
-      
-      return isQaqcDept && isLeaderPos;
-    };
+    const teamLeadPositions = ['TỔ TRƯỞNG', 'TO TRUONG'];
 
     const targets = users.filter(u => {
       if (u.id === excludeUserId) return false;
-      return isStandardMatch(u) || isQaqcManagementMatch(u);
+      
+      const userPos = (u.position || '').trim().toUpperCase();
+      const userDept = (u.phong_ban || (u as any).phongBan || '').trim().toUpperCase();
+      const isQaqcDept = qaQcKeywords.some(keyword => userDept.includes(keyword));
+      
+      const isHighLevel = highLevelPositions.some(pos => userPos.includes(pos)) && isQaqcDept;
+      const isStandardRole = isStandardMatch(u);
+      
+      // Rule: Team Leads ONLY receive from their own team (Strict restriction override)
+      const isTeamLead = teamLeadPositions.some(pos => userPos.includes(pos));
+
+      if (isTeamLead) {
+        if (!sender) return false; // Don't notify if we don't know who sent it
+        const uTeam = (u.to_qc || u.team_id || (u as any).toQC || '').trim().toUpperCase();
+        const sTeam = (sender.to_qc || sender.team_id || (sender as any).toQC || '').trim().toUpperCase();
+        return uTeam === sTeam && uTeam !== '';
+      }
+
+      // Rule: High Level QAQC Management or Managers/Admins receive all
+      return isStandardRole || isHighLevel;
     });
 
     // Notify asynchronously in parallel using Promise.all
@@ -358,7 +367,7 @@ const App = () => {
       
       if (isNew && user) {
         // Notify Managers and Admins about new report
-        notifyUsers(['MANAGER', 'ADMIN'], 'Phiếu báo cáo mới', `QC ${user.name} vừa gửi phiếu ${newInspection.type} cho dự án ${newInspection.ten_ct}`, { view: 'DETAIL', id: newInspection.id }, user.id);
+        notifyUsers(['MANAGER', 'ADMIN'], 'Phiếu báo cáo mới', `QC ${user.name} vừa gửi phiếu ${newInspection.type} cho dự án ${newInspection.ten_ct}`, { view: 'DETAIL', id: newInspection.id }, user.id, user);
       }
       
       setView('LIST'); loadInspections(inspectionsPage, inspectionFilters); 
