@@ -241,6 +241,7 @@ export interface MaterialIQC {
   passQty: number;
   failQty: number;
   images: string[];
+  status?: 'pass' | 'fail' | 'pending';
   type: string;
   date: string;
 }

@@ -368,17 +368,83 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                                 {isExp ? <ChevronUp className="w-5 h-5 text-teal-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
                             </div>
                             {isExp && (
-                                <div className="p-5 border-t border-slate-50 bg-slate-50 dark:bg-slate-800/50/50">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm mb-4">
-                                        <div className="col-span-2 md:col-span-1">
-                                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Kết quả đánh giá</p>
-                                            <p className={`text-xs font-bold uppercase mt-1 ${mat.items?.[0]?.status === CheckStatus.PASS ? 'text-green-600 dark:text-green-500' : mat.items?.[0]?.status === CheckStatus.FAIL ? 'text-red-600 dark:text-red-400' : 'text-amber-600'}`}>{mat.items?.[0]?.status || 'N/A'}</p>
+                                <div className="p-5 border-t border-slate-50 bg-slate-50 dark:bg-slate-800/50/50 space-y-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Loại kiểm</p>
+                                            <p className="text-xs font-bold uppercase mt-1">{mat.inspectType || '100%'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Dự án</p>
+                                            <p className="text-xs font-bold uppercase mt-1 truncate">{mat.projectCode || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">SL Kiểm tra</p>
+                                            <p className="text-xs font-bold mt-1">{mat.inspectQty} {mat.unit}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Trạng thái</p>
+                                            <div className="flex gap-1 mt-1">
+                                                {mat.items?.some(it => it.status === CheckStatus.FAIL) ? (
+                                                    <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest">NCR</span>
+                                                ) : mat.items?.every(it => it.status === CheckStatus.PASS) ? (
+                                                    <span className="bg-green-600 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest">ĐẠT</span>
+                                                ) : (
+                                                    <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest">PENDING</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    {mat.items?.[0]?.notes && <p className="text-[11px] text-slate-600 dark:text-slate-400 dark:text-slate-500 italic bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 border-l-4 border-l-teal-500">"{mat.items[0].notes}"</p>}
-                                    {mat.items?.[0]?.images && mat.items[0].images.length > 0 && (
-                                        <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
-                                            {mat.items[0].images.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-16 h-16 rounded-xl border border-white shadow-sm object-cover cursor-zoom-in hover:scale-105 transition-all" onClick={() => setLightboxState({ images: mat.items![0].images!, index: i })} />))}
+
+                                    {/* Detailed Criteria Appraisal */}
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black text-teal-700 uppercase tracking-widest flex items-center gap-2">
+                                            <CheckCircle2 className="w-4 h-4"/> CHI TIẾT THẨM ĐỊNH THEO HẠNG MỤC
+                                        </p>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {(mat.items || []).map((item, iIdx) => (
+                                                <div key={item.id || iIdx} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                                                    <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
+                                                        <p className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">{item.label}</p>
+                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
+                                                            item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 border-green-200' : 
+                                                            item.status === CheckStatus.FAIL ? 'text-red-700 bg-red-50 border-red-200' : 
+                                                            'text-amber-700 bg-amber-50 border-amber-200'
+                                                        }`}>
+                                                            {item.status}
+                                                        </span>
+                                                    </div>
+                                                    {item.notes && <p className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg mb-2">"{item.notes}"</p>}
+                                                    {item.images && item.images.length > 0 && (
+                                                        <div className="flex gap-2 overflow-x-auto no-scrollbar pt-1">
+                                                            {item.images.map((img, imgIdx) => (
+                                                                <img 
+                                                                    key={imgIdx} 
+                                                                    src={getProxyImageUrl(img)} 
+                                                                    className="w-16 h-16 rounded-xl border border-slate-100 dark:border-slate-800 object-cover cursor-zoom-in hover:scale-105 transition-all shadow-sm"
+                                                                    onClick={() => setLightboxState({ images: item.images!, index: imgIdx })}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {(!mat.items || mat.items.length === 0) && (
+                                                <p className="text-[10px] text-slate-400 italic text-center py-4 uppercase">Chưa cập nhật nội dung thẩm định</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    {mat.images && mat.images.length > 0 && (
+                                        <div className="space-y-2 mt-2">
+                                             <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">
+                                                <ImageIcon className="w-4 h-4"/> ẢNH TỔNG QUAN VẬT TƯ
+                                            </p>
+                                            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                                                {mat.images.map((img, i) => (
+                                                    <img key={i} src={getProxyImageUrl(img)} className="w-20 h-20 rounded-2xl border border-white shadow-md object-cover cursor-zoom-in hover:scale-105 transition-all" onClick={() => setLightboxState({ images: mat.images!, index: i })} />
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -389,45 +455,6 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
             </div>
         )}
 
-        <div className="space-y-3">
-            <h3 className="text-[11px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><LayoutList className="w-4 h-4 text-indigo-500" /> V. Nội dung thẩm định chi tiết</h3>
-
-            {inspection.items.map((item, idx) => (
-                <div key={idx} className={`bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 ring-1 ring-red-50/50' : 'border-slate-200 dark:border-slate-700'}`}>
-                    <div className="flex items-start justify-between gap-4 mb-3 border-b border-slate-50 pb-3">
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className={`px-3 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : item.status === CheckStatus.FAIL ? 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}>{item.status}</span>
-                                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-800">{item.category}</span>
-                            </div>
-                            <p className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight leading-snug uppercase">{item.label}</p>
-                            {item.notes && <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2 italic leading-relaxed border-l-2 border-slate-100 dark:border-slate-800 pl-3">"{item.notes}"</p>}
-                        </div>
-                    </div>
-                    {item.ncr && (
-                        <div onClick={() => setViewingNcr(item.ncr || null)} className="mb-3 p-4 bg-red-50 dark:bg-red-900/20/50 rounded-2xl border border-red-100 space-y-2 hover:bg-red-50 dark:bg-red-900/20 transition-all cursor-pointer group shadow-sm">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[9px] font-black text-red-600 dark:text-red-400 uppercase flex items-center gap-1.5"><AlertOctagon className="w-3.5 h-3.5"/> Phiếu không phù hợp liên quan</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[9px] font-black text-red-600 dark:text-red-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-red-100 shadow-sm">{item.ncr.severity}</span>
-                                    <ChevronRight className="w-4 h-4 text-red-400 group-hover:translate-x-1 transition-transform" />
-                                </div>
-                            </div>
-                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 italic">"{item.ncr.issueDescription}"</p>
-                        </div>
-                    )}
-                    {item.images && item.images.length > 0 && (
-                        <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
-                            {item.images.map((img, i) => (
-                                <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="w-16 h-16 shrink-0 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 relative group cursor-zoom-in hover:scale-110 transition-transform shadow-sm">
-                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            ))}
-        </div>
 
             {/* --- NOTES & CONCLUSIONS SECTION (BEFORE SIGNATURES) --- */}
             {(inspection.summary || inspection.productionComment || (inspection.items?.some(i => i.notes))) && (

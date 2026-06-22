@@ -289,6 +289,29 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       const matItems = [...(nextMaterials[matIdx].items || [])];
       if (!matItems[itemIdx]) return;
       matItems[itemIdx] = { ...matItems[itemIdx], [field]: value };
+      
+      // Automatic logic: if an item is marked as FAIL, suggest NCR for the whole material
+      if (field === 'status' && value === CheckStatus.FAIL) {
+          nextMaterials[matIdx].status = 'fail';
+          // Gợi ý số lượng hỏng = số lượng kiểm tra nếu có lỗi tiêu chí
+          if ((nextMaterials[matIdx].failQty || 0) === 0) {
+              nextMaterials[matIdx].failQty = nextMaterials[matIdx].inspectQty;
+              nextMaterials[matIdx].passQty = 0;
+          }
+      } else if (field === 'status') {
+          // Re-calculate status if it was FAIL but now changed
+          const hasFail = matItems.some(it => it.status === CheckStatus.FAIL);
+          if (!hasFail) {
+              const allPass = matItems.every(it => it.status === CheckStatus.PASS);
+              nextMaterials[matIdx].status = allPass ? 'pass' : 'pending';
+              // logic to reset quantities if user wants? usually better to let them undo manually or reset if all pass
+              if (allPass && (nextMaterials[matIdx].failQty || 0) > 0) {
+                  nextMaterials[matIdx].passQty = nextMaterials[matIdx].inspectQty;
+                  nextMaterials[matIdx].failQty = 0;
+              }
+          }
+      }
+
       nextMaterials[matIdx].items = matItems;
       setFormData(prev => ({ ...prev, materials: nextMaterials }));
   };
