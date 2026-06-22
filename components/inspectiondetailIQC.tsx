@@ -6,7 +6,7 @@ import {
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   LayoutList, PenTool, ChevronDown, ChevronUp,
   Layers, MessageSquare, Loader2, Eraser, Info,
-  ClipboardList, Send, Save, Check, 
+  ClipboardList, Send, Save, Check, Download,
   FileCheck, Camera, Image as ImageIcon, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';

@@ -16,7 +16,7 @@ interface InspectionDetailProps {
 import { SignaturePad } from './SignaturePad';
 import { TwoTierApproval } from './TwoTierApproval';
 import QRCode from 'qrcode';
-import { Download, ArrowLeft, Box, Edit3, Trash2, ClipboardList, CheckCircle2, AlertOctagon, X, Loader2, Eraser, PenTool } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove }) => {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');

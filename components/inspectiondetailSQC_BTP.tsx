@@ -8,10 +8,11 @@ import {
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   LayoutList, MessageSquare, Loader2, Eraser, Send, 
   UserPlus, AlertOctagon, ChevronRight, Camera, Image as ImageIcon, PenTool,
-  ClipboardList, ChevronUp, ChevronDown, Factory, Activity, Save, Check
+  ClipboardList, ChevronUp, ChevronDown, Factory, Activity, Save, Check, Download
 } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { TwoTierApproval } from './TwoTierApproval';
+import QRCode from 'qrcode';
 import { uploadQMSImage } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -38,6 +39,18 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [managerSig, setManagerSig] = useState('');
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+
+  useEffect(() => {
+    const generateQR = async () => {
+      try {
+        const url = `${window.location.origin}/?share=${inspection.id}`;
+        const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 200 });
+        setQrCodeUrl(dataUrl);
+      } catch (err) { console.error(err); }
+    };
+    generateQR();
+  }, [inspection.id]);
   
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);

@@ -488,44 +488,43 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
       <input type="file" ref={excelImportRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
 
       {/* USER LIST & HIGH DENSITY DUST TABLE */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden overflow-x-auto no-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden no-scrollbar">
+          <table className="w-full text-left border-collapse table-fixed">
               <thead className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                   <tr>
-                      <th className="px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nhân sự</th>
-                      <th className="px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Mã NV</th>
-                      <th className="px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Chức vụ / Phòng ban</th>
-                      <th className="px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Trạng thái</th>
-                      <th className="px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Thao tác</th>
+                      <th className="px-2 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nhân sự</th>
+                      <th className="hidden md:table-cell px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center w-24">Mã NV</th>
+                      <th className="hidden md:table-cell px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Chức vụ / Phòng ban</th>
+                      <th className="px-1 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center w-[60px] md:w-32">Trạng thái</th>
+                      <th className="px-1 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[65px] md:w-32">Thao tác</th>
                   </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
                   {filteredUsers.map((u) => (
                       <tr key={u.id} className="group hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-all text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          <td className="px-3 py-1.5">
-                              <div className="flex items-center gap-2">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-[10px] shadow-sm shrink-0 ${getAvatarBg(u.role as string)}`}>
+                          <td className="px-2 md:px-3 py-1.5">
+                              <div className="flex items-center gap-1 md:gap-2 overflow-hidden">
+                                  <div className={`w-5 h-5 md:w-8 md:h-8 rounded-full flex items-center justify-center text-white font-black text-[7px] md:text-[10px] shadow-sm shrink-0 ${getAvatarBg(u.role as string)}`}>
                                       {u.avatar ? <img src={getProxyImageUrl(u.avatar)} className="w-full h-full object-cover rounded-full" alt=""/> : getInitials(u.name)}
                                   </div>
-                                  <div className="overflow-hidden">
-                                      <div className="flex items-center gap-1.5">
-                                          <p className="font-bold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-tight truncate leading-tight">{u.name}</p>
+                                  <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1">
+                                          <p className="font-bold text-slate-900 dark:text-slate-100 text-[9px] md:text-[11px] uppercase tracking-tight truncate leading-tight">{u.name}</p>
                                           {u.signature_template && (
-                                              <span className="shrink-0 text-[8px] bg-green-50 text-green-600 px-1 rounded border border-green-100" title="Đã có chữ ký mẫu">
-                                                  <ShieldCheck className="w-2.5 h-2.5 inline mr-0.5" /> SIG
+                                              <span className="shrink-0 text-[6px] md:text-[7px] bg-green-50 text-green-600 px-0.5 rounded border border-green-100" title="Đã có chữ ký mẫu">
+                                                  <ShieldCheck className="w-2 md:w-2.5 h-2 md:h-2.5" />
                                               </span>
                                           )}
                                       </div>
-                                      <p className="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider leading-none mt-0.5">@{u.username} {u.email ? `• ${u.email}` : ''}</p>
                                   </div>
                               </div>
                           </td>
-                          <td className="px-3 py-1.5 text-center">
+                          <td className="hidden md:table-cell px-3 py-1.5 text-center">
                               <span className="inline-block px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-md border border-blue-100 dark:border-slate-700 text-[9px] font-mono font-bold leading-none">
                                   {u.msnv || '---'}
                               </span>
                           </td>
-                          <td className="px-3 py-1.5">
+                          <td className="hidden md:table-cell px-3 py-1.5">
                               <div>
                                   <p className="font-bold text-slate-800 dark:text-slate-200 leading-tight uppercase text-[10px]">{u.position || 'Nhân viên'}</p>
                                   <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase leading-none mt-0.5">{u.phong_ban || 'Chưa gán bộ phận'}</p>
@@ -537,18 +536,18 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   )}
                               </div>
                           </td>
-                          <td className="px-3 py-1.5 text-center">
-                              <span className={`inline-block px-1.5 py-0.5 rounded-md border text-[8px] font-black uppercase tracking-tight leading-none ${
+                          <td className="px-1 md:px-3 py-1.5 text-center">
+                              <span className={`inline-block px-1 md:px-1.5 py-0.5 rounded-md border text-[6px] md:text-[8px] font-black uppercase tracking-tight leading-none truncate w-full ${
                                   u.status === 'Đang làm việc' ? 'bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-500 border-green-150 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-150'
                               }`}>
                                   {u.status || 'Đang làm việc'}
                               </span>
                           </td>
-                          <td className="px-3 py-1.5 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                  <button onClick={() => { setSelectedActUserId(u.id); setIsActivityOpen(true); }} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700/60 active:scale-90 transition-all" title="Nhật ký hoạt động"><Clock className="w-3.5 h-3.5"/></button>
-                                  <button onClick={() => handleOpenModal(u)} className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700/60 active:scale-90 transition-all"><Edit2 className="w-3.5 h-3.5"/></button>
-                                  <button onClick={() => onDeleteUser(u.id)} disabled={u.username === 'admin'} className="p-1 text-slate-400 hover:text-red-500 bg-slate-50 dark:bg-slate-800 hover:bg-white rounded-md border border-slate-200 dark:border-slate-700/60 disabled:opacity-25 active:scale-90 transition-all"><Trash2 className="w-3.5 h-3.5"/></button>
+                          <td className="px-1 md:px-3 py-1.5 text-right overflow-hidden">
+                              <div className="flex items-center justify-end gap-0.5 md:gap-1">
+                                  <button onClick={() => { setSelectedActUserId(u.id); setIsActivityOpen(true); }} className="p-0.5 md:p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700/60 active:scale-90 transition-all shrink-0"><Clock className="w-2.5 md:w-3.5 h-2.5 md:h-3.5"/></button>
+                                  <button onClick={() => handleOpenModal(u)} className="p-0.5 md:p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700/60 active:scale-90 transition-all shrink-0"><Edit2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5"/></button>
+                                  <button onClick={() => onDeleteUser(u.id)} disabled={u.username === 'admin'} className="p-0.5 md:p-1 text-slate-400 hover:text-red-500 bg-slate-50 dark:bg-slate-800 hover:bg-white rounded-md border border-slate-200 dark:border-slate-700/60 disabled:opacity-25 active:scale-90 transition-all shrink-0"><Trash2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5"/></button>
                               </div>
                           </td>
                       </tr>
