@@ -109,6 +109,14 @@ const LoadingFallback = () => (
 
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [isPublicView, setIsPublicView] = useState(false);
+  const [shareId] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('share');
+    }
+    return null;
+  });
   const [isDbReady, setIsDbReady] = useState(false);
   const [view, setView] = useState<ViewState>('DASHBOARD');
   const [returnView, setReturnView] = useState<ViewState>('LIST');
@@ -175,10 +183,24 @@ const App = () => {
     const startup = async () => {
         try {
             setIsDbReady(true);
-            loadUsers();
-            loadRoles();
-            loadWorkshops();
-            loadTemplates();
+            await Promise.all([loadUsers(), loadRoles(), loadWorkshops(), loadTemplates()]);
+            
+            if (shareId) {
+                const inspection = await fetchInspectionById(shareId);
+                if (inspection) {
+                    setIsPublicView(true);
+                    setUser({
+                        id: 'guest',
+                        username: 'guest',
+                        name: 'Khách xem báo cáo',
+                        role: 'GUEST',
+                        avatar: '',
+                        workLocation: 'Hệ thống QMS',
+                    } as any);
+                    setActiveInspection(inspection);
+                    setView('DETAIL');
+                }
+            }
         } catch (error) { setIsDbReady(true); }
     };
     startup();
@@ -406,9 +428,11 @@ const App = () => {
   return (
     <InspectionProvider>
       <div className="flex flex-row h-[100dvh] bg-slate-50 dark:bg-[#0b1120] overflow-hidden font-sans select-none text-slate-900 dark:text-slate-100 transition-colors duration-200">
-        <div className="hidden lg:block h-full shrink-0">
-            <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} rolesList={roles} />
-        </div>
+        {!isPublicView && (
+            <div className="hidden lg:block h-full shrink-0">
+                <Sidebar view={view} currentModule={currentModule} onNavigate={id => { if(id==='LIST')setCurrentModule('ALL'); setView(id as ViewState); }} user={user} onLogout={handleLogout} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} rolesList={roles} />
+            </div>
+        )}
         <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
         {isDetailLoading && (
           <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex flex-col items-center justify-center">
@@ -426,6 +450,7 @@ const App = () => {
             onOpenSettingsTab={(tab) => { setSettingsTab(tab); setView('SETTINGS'); }}
             activeFormType={view === 'FORM' ? (activeInspection?.type || initialFormState?.type) : undefined} 
             onNavigateToRecord={handleNavigateToRecord}
+            isPublicView={isPublicView}
         />
         <main className="flex-1 flex flex-col min-h-0 relative overflow-x-hidden overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0 px-2 md:px-6 safe-pb no-scrollbar" id="main-scroll-container">
             <Suspense fallback={<LoadingFallback />}>
@@ -654,7 +679,7 @@ const App = () => {
             </Suspense>
         </main>
         <Suspense fallback={null}>
-            <MobileBottomBar view={view} onNavigate={setView} user={user} rolesList={roles} />
+            {!isPublicView && <MobileBottomBar view={view} onNavigate={setView} user={user} rolesList={roles} />}
             <ChatAI user={user} />
             {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
         </Suspense>

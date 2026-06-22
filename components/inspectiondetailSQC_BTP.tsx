@@ -44,10 +44,34 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   const isApproved = inspection.status === InspectionStatus.COMPLETED || inspection.status === InspectionStatus.APPROVED;
+  const isGuest = user.role === 'GUEST';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
-  const canModify = canUserModifyInspection(inspection, user);
+  const canModify = !isGuest && canUserModifyInspection(inspection, user);
+
+  const handleExportPDF = async () => {
+      if (!pdfContainerRef.current) return;
+      try {
+          const html2pdf = (await import('html2pdf.js')).default;
+          const dateParts = inspection.date.split('/');
+          const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : inspection.date.replace(/\//g, '');
+          const filename = `SQC_BTP_report_${inspection.ma_ct || 'NA'}_${inspection.headcode || inspection.ma_nha_may || 'NA'}_${dateStr}.pdf`;
+
+          const opt = {
+            margin:       0.2,
+            filename:     filename,
+            image:        { type: 'jpeg' as const, quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' as const }
+          };
+          html2pdf().set(opt).from(pdfContainerRef.current).save();
+      } catch (err: any) {
+          console.error(err);
+          alert('Không thể xuất PDF: ' + err.message);
+      }
+  };
 
   // --- STATISTICS CALCULATIONS ---
   const stats = useMemo(() => {
@@ -150,7 +174,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   const reportImages = inspection.reportImages || (inspection.reportImage ? [inspection.reportImage] : []);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <>
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center">
           <div className="flex items-center gap-2">
               <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors active:scale-90 border border-slate-200 dark:border-slate-700 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400 dark:text-slate-500" /></button>
@@ -163,6 +187,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
               </div>
           </div>
           <div className="flex items-center gap-2">
+              <button onClick={handleExportPDF} className="p-2 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg active:scale-90 transition-all shadow-sm" type="button"><Download className="w-4 h-4"/></button>
               {canModify && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>}
               {canModify && <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/20 rounded-xl transition-all" type="button"><Trash2 className="w-4 h-4" /></button>}
           </div>
@@ -171,10 +196,22 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 no-scrollbar pb-32 bg-slate-50 dark:bg-slate-800/50">
         
         {/* --- HEADER INFO SECTION --- */}
-        <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-8 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
-            <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-6xl rotate-12 select-none tracking-widest">SQC-BTP</div>
-            
-            <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase mb-6 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
+        <div ref={pdfContainerRef} className="max-w-4xl mx-auto space-y-4">
+            <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-8 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+                {/* QR Code for Public Verification */}
+                {qrCodeUrl && (
+                  <div className="absolute left-6 top-6 w-16 h-16 border border-slate-100 p-1 bg-white shadow-sm z-10">
+                    <img src={qrCodeUrl} alt="QR Code" className="w-full h-full" />
+                    <p className="text-[6px] font-black text-center text-slate-400 mt-1 uppercase tracking-tighter">Scan to verify</p>
+                  </div>
+                )}
+                
+                <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-6xl rotate-12 select-none tracking-widest">SQC-BTP</div>
+                
+                <div className="flex flex-col items-center mb-8 pt-8 md:pt-4">
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{inspection.ten_ct}</p>
+                    <h1 className="text-[14px] font-black text-slate-900 dark:text-slate-100 uppercase leading-tight tracking-tight text-center">BÁO CÁO KIỂM TRA BÁN THÀNH PHẨM (SQC-BTP)</h1>
+                </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-8">
                 <div>
@@ -194,6 +231,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <p className="text-sm text-slate-800 dark:text-slate-200 tracking-tight font-mono">{displayDate}</p>
                 </div>
             </div>
+          </div>
 
             {/* --- QUANTITY STATS SECTION --- */}
             <div className="bg-slate-50 dark:bg-slate-800/50/80 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
@@ -430,6 +468,6 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
       )}
       <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
       <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
-    </div>
+    </>
   );
 };

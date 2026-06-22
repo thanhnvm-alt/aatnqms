@@ -302,7 +302,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-full flex flex-col animate-fade-in pb-20 md:pb-0 relative">
+    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-full flex flex-col animate-fade-in pb-2 md:pb-0 relative">
       <div className="p-3 md:p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center sticky top-0 z-20">
          <div className="flex items-center gap-2">
             <div className="p-2 bg-slate-200 dark:bg-slate-700 rounded-lg hidden md:block"><Settings className="w-5 h-5 text-slate-700 dark:text-slate-300" /></div>

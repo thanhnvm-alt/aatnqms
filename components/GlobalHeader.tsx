@@ -5,7 +5,7 @@ import { User, ViewState, Inspection, Notification } from '../types';
 import { 
   ShieldCheck, UserCircle, Settings, LogOut, Search, 
   RefreshCw, QrCode, Bell, ChevronDown, Menu, X,
-  LayoutDashboard, List, FileSpreadsheet, Briefcase, Box, Plus, Key, Monitor, Sun, Moon
+  LayoutDashboard, List, FileSpreadsheet, Briefcase, Box, Plus, Key, Monitor, Sun, Moon, FileSignature
 } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
 import { ChangePasswordModal } from './ChangePasswordModal';
@@ -25,17 +25,20 @@ interface GlobalHeaderProps {
   onOpenSettingsTab?: (tab: 'PROFILE' | 'TEMPLATE' | 'USERS' | 'WORKSHOPS') => void;
   activeFormType?: string;
   onNavigateToRecord?: (view: ViewState, id: string) => void;
+  isPublicView?: boolean;
 }
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   user, view, onNavigate, onLogout, onRefresh, onCreate,
   onSearchChange, searchTerm, onScanClick, onOpenSettingsTab,
-  activeFormType, onNavigateToRecord
+  activeFormType, onNavigateToRecord, isPublicView
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifPage, setNotifPage] = useState(1);
+  const [hasMoreNotifs, setHasMoreNotifs] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { theme, setTheme, density, setDensity } = useTheme();
   
@@ -43,15 +46,31 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 30000); // Polling every 30s
+    loadNotifications(true);
+    const interval = setInterval(() => loadNotifications(true), 30000); // Polling every 30s
     return () => clearInterval(interval);
   }, [user.id]);
 
-  const loadNotifications = async () => {
+  const loadNotifications = async (isInitial = false) => {
       try {
-          const data = await fetchNotifications(user.id);
-          setNotifications(data);
+          const page = isInitial ? 1 : notifPage + 1;
+          const data = await fetchNotifications(user.id, page, 50);
+          
+          if (isInitial) {
+              setNotifications(data);
+              setNotifPage(1);
+              setHasMoreNotifs(data.length === 50);
+          } else if (data.length > 0) {
+              setNotifications(prev => {
+                  const existingIds = new Set(prev.map(n => n.id));
+                  const newItems = data.filter((n: Notification) => !existingIds.has(n.id));
+                  return [...prev, ...newItems].sort((a, b) => b.createdAt - a.createdAt);
+              });
+              setNotifPage(page);
+              setHasMoreNotifs(data.length === 50);
+          } else {
+              setHasMoreNotifs(false);
+          }
       } catch (e) {}
   };
 
@@ -130,91 +149,96 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         default: return 'Đang thực hiện kiểm tra';
       }
     }
-    if (view === 'TOOLS') {
-      return 'Kho vật tư và tài sản của bạn';
-    }
-    return null;
+    return '';
   };
 
   const renderMenuItems = () => {
     const isAdminOrManager = user.role === 'ADMIN' || user.role === 'MANAGER';
     return (
-      <div className="p-2 space-y-1 dark:bg-slate-900 border-t dark:border-slate-800">
-        <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-          <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-            <UserCircle className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-blue-400" />
+      <div className="p-1 space-y-0.5 dark:bg-slate-900 border-t dark:border-slate-800">
+        <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
+          <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
+            <UserCircle className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
           </div>
-          <div className="text-left">
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Hồ sơ của tôi</p>
-          </div>
-        </button>
-
-        <button onClick={() => { setIsMenuOpen(false); setIsChangePasswordOpen(true); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-          <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-            <Key className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-blue-400" />
-          </div>
-          <div className="text-left">
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Đổi mật khẩu</p>
+          <div className="text-left flex-1 min-w-0">
+            <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Hồ sơ của tôi</p>
           </div>
         </button>
 
-        <div className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}>
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
-               <List className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+        <button onClick={() => { setIsMenuOpen(false); setIsChangePasswordOpen(true); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
+          <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
+            <Key className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
+          </div>
+          <div className="text-left flex-1 min-w-0">
+            <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Đổi mật khẩu</p>
+          </div>
+        </button>
+
+        <div className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+             <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md shrink-0">
+                <List className="w-4 h-4 text-slate-500 dark:text-slate-400" />
              </div>
-             <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Mật độ: {density === 'comfortable' ? 'Thoáng' : 'Gọn'}</p>
+             <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Mật độ: {density === 'comfortable' ? 'Thoáng' : 'Gọn'}</p>
           </div>
-          <div className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase shrink-0">
+          <div className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-[9px] font-black text-slate-600 dark:text-slate-300 uppercase shrink-0 ml-1">
              {density === 'comfortable' ? 'THOÁNG' : 'GỌN'}
           </div>
         </div>
 
-        <div className="px-3 pb-2 pt-1 border-b border-slate-100 dark:border-slate-800">
-           <div className="flex items-center gap-2 mb-2 text-slate-600 dark:text-slate-400 dark:text-slate-500">
-              <Moon className="w-4 h-4" />
-              <span className="text-sm font-bold">Giao diện</span>
+        <div className="px-2 pb-1.5 pt-1 border-b border-slate-50 dark:border-slate-800">
+           <div className="flex items-center gap-1.5 mb-1.5 text-slate-500">
+              <Moon className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-black uppercase tracking-tight">Giao diện</span>
            </div>
-           <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500">
-              <button onClick={() => setTheme('light')} className={`flex-1 flex flex-col items-center py-2 rounded-lg gap-1 transition-all ${theme === 'light' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-700'}`}>
-                 <Sun className="w-4 h-4" /> Sáng
+           <div className="bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg flex items-center text-[9px] font-black text-slate-500">
+              <button onClick={() => setTheme('light')} className={`flex-1 flex flex-col items-center py-1 rounded-md gap-0.5 transition-all ${theme === 'light' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+                 <Sun className="w-3.5 h-3.5" /> Sáng
               </button>
-              <button onClick={() => setTheme('dark')} className={`flex-1 flex flex-col items-center py-2 rounded-lg gap-1 transition-all ${theme === 'dark' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-700'}`}>
-                 <Moon className="w-4 h-4" /> Tối
+              <button onClick={() => setTheme('dark')} className={`flex-1 flex flex-col items-center py-1 rounded-md gap-0.5 transition-all ${theme === 'dark' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+                 <Moon className="w-3.5 h-3.5" /> Tối
               </button>
-              <button onClick={() => setTheme('auto')} className={`flex-1 flex flex-col items-center py-2 rounded-lg gap-1 transition-all ${theme === 'auto' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-700'}`}>
-                 <Monitor className="w-4 h-4" /> Tự động
+              <button onClick={() => setTheme('auto')} className={`flex-1 flex flex-col items-center py-1 rounded-md gap-0.5 transition-all ${theme === 'auto' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+                 <Monitor className="w-3.5 h-3.5" /> Tự động
               </button>
            </div>
         </div>
         
         {isAdminOrManager && (
-          <div className="pt-1">
-            <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('USERS'); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-                <ShieldCheck className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-blue-400" />
+          <div className="space-y-0.5">
+            <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('USERS'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
+              <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
+                <ShieldCheck className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
               </div>
-              <div className="text-left">
-                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Quản trị nhân sự</p>
-              </div>
-            </button>
-            <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('TEMPLATE'); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-                <Settings className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-blue-400" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Cấu hình biểu mẫu</p>
+              <div className="text-left flex-1 min-w-0">
+                <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Quản trị nhân sự</p>
               </div>
             </button>
+                <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                  <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-indigo-100 dark:bg-indigo-900/30 dark:group-hover:bg-indigo-900 transition-colors">
+                    <FileSignature className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Chữ ký cá nhân</p>
+                  </div>
+                </button>
+                <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('TEMPLATE'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
+                  <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
+                    <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Cấu hình biểu mẫu</p>
+                  </div>
+                </button>
           </div>
         )}
-        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1 mx-2"></div>
-        <button onClick={() => { setIsMenuOpen(false); onLogout(); }} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 dark:bg-red-900/20 dark:hover:bg-red-900/20 transition-colors group">
-          <div className="p-2 bg-red-50 dark:bg-red-500/10 rounded-lg group-hover:bg-red-100 dark:group-hover:bg-red-500/20 transition-colors">
-            <LogOut className="w-5 h-5 text-red-500 dark:text-red-400 group-hover:text-red-600 dark:text-red-400 dark:group-hover:text-red-300" />
+        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1 mx-1"></div>
+        <button onClick={() => { setIsMenuOpen(false); onLogout(); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-red-50 dark:bg-red-900/20 dark:hover:bg-red-900/20 transition-colors group">
+          <div className="p-1.5 bg-red-50 dark:bg-red-500/10 rounded-md group-hover:bg-red-100 dark:group-hover:bg-red-500/20 transition-colors">
+            <LogOut className="w-4 h-4 text-red-500 dark:text-red-400 group-hover:text-red-600 dark:group-hover:text-red-300" />
           </div>
-          <div className="text-left flex-1">
-             <p className="text-sm font-bold text-red-600 dark:text-red-400">Đăng xuất</p>
+          <div className="text-left flex-1 min-w-0">
+             <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-tight">Đăng xuất</p>
           </div>
         </button>
       </div>
@@ -237,8 +261,8 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3 ml-2">
-        {onRefresh && (
+      <div className="flex items-center gap-2 sm:gap-3 ml-2 text-slate-100">
+        {!isPublicView && onRefresh && (
           <button 
             onClick={() => {
               setIsRefreshing(true);
@@ -252,50 +276,60 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
           </button>
         )}
 
-        {onScanClick && (
+        {!isPublicView && onScanClick && (
           <button onClick={onScanClick} className="p-2.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95" title="Quét mã QR">
             <QrCode className="w-5 h-5" />
           </button>
         )}
 
-        <div className="relative" ref={notifRef}>
-            <button 
-                onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className={`p-2.5 rounded-xl transition-all active:scale-95 relative ${isNotifOpen ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-800'}`}
-            >
-                <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                    <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#0f172a] ${isNotifOpen ? 'bg-white dark:bg-slate-900' : 'bg-red-500'}`}></span>
-                )}
-            </button>
-            {isNotifOpen && (
-                <div className="fixed md:absolute top-16 md:top-auto right-4 md:right-0 mt-3 w-[calc(100vw-32px)] md:w-96 z-[120]">
-                    <NotificationCenter 
-                        notifications={notifications}
-                        onMarkRead={handleMarkRead}
-                        onMarkAllRead={handleMarkAllRead}
-                        onNavigate={(v, id) => onNavigateToRecord?.(v, id)}
-                        onClose={() => setIsNotifOpen(false)}
-                    />
-                </div>
-            )}
-        </div>
+        {!isPublicView && (
+          <div className="relative" ref={notifRef}>
+              <button 
+                  onClick={() => setIsNotifOpen(!isNotifOpen)}
+                  className={`p-2.5 rounded-xl transition-all active:scale-95 relative ${isNotifOpen ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-800'}`}
+              >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                      <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#0f172a] ${isNotifOpen ? 'bg-white dark:bg-slate-900' : 'bg-red-500'}`}></span>
+                  )}
+              </button>
+              {isNotifOpen && (
+                  <div className="fixed md:absolute top-16 md:top-auto right-4 md:right-0 mt-2 w-44 md:w-[260px] z-[120]">
+                      <NotificationCenter 
+                          notifications={notifications}
+                          onMarkRead={handleMarkRead}
+                          onMarkAllRead={handleMarkAllRead}
+                          onNavigate={(v, id) => {
+                              onNavigateToRecord?.(v, id);
+                              setIsNotifOpen(false);
+                          }}
+                          onClose={() => setIsNotifOpen(false)}
+                          onLoadMore={() => loadNotifications(false)}
+                          hasMore={hasMoreNotifs}
+                      />
+                  </div>
+              )}
+          </div>
+        )}
 
-        {onCreate && (
+        {!isPublicView && onCreate && (
           <button 
             onClick={onCreate}
-            className="h-10 px-4 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20 flex items-center gap-2 hover:bg-blue-700 transition-all active:scale-95 font-bold text-sm"
+            className="h-8 px-3 bg-blue-600 text-white rounded-lg shadow-lg shadow-blue-500/10 flex items-center gap-1.5 hover:bg-blue-700 transition-all active:scale-95 font-black text-[10px] uppercase tracking-wider"
             title="Tạo mới"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Tạo mới</span>
           </button>
         )}
 
-        <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block"></div>
+        {!isPublicView && <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block"></div>}
 
         <div className="relative" ref={menuRef}>
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center gap-2 p-1 pl-2 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95 group border border-transparent hover:border-slate-100 dark:border-slate-800">
+          <button 
+            onClick={() => !isPublicView && setIsMenuOpen(!isMenuOpen)} 
+            className={`flex items-center gap-2 p-1 pl-2 rounded-2xl transition-all active:scale-95 group border border-transparent ${isPublicView ? 'cursor-default' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 hover:border-slate-100 dark:border-slate-800'}`}
+          >
             <div className="text-right hidden md:block">
                 <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{user.name}</p>
                 <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">{user.role}</p>
@@ -305,12 +339,12 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
             </div>
           </button>
-          {isMenuOpen && (
-            <div className="absolute right-0 mt-3 w-72 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 py-2 z-[110] animate-in zoom-in-95 origin-top-right overflow-hidden ring-1 ring-black/5">
-               <div className="px-5 py-4 border-b border-slate-50 bg-slate-50 dark:bg-slate-800/50/50">
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Tài khoản</p>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 text-base truncate">{user.name}</p>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-0.5">{user.msnv || 'AATN-STAFF'}</p>
+          {!isPublicView && isMenuOpen && (
+            <div className="absolute right-0 mt-2 w-[220px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-100 dark:border-slate-800 py-1.5 z-[110] animate-in zoom-in-95 origin-top-right overflow-hidden ring-1 ring-black/5">
+               <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50 dark:bg-slate-800/20">
+                  <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Tài khoản</p>
+                  <p className="font-black text-slate-800 dark:text-slate-100 text-[11px] truncate">{user.name}</p>
+                  <p className="text-[9px] text-blue-600 dark:text-blue-400 font-bold mt-0.5">{user.msnv || 'AATN-STAFF'}</p>
                </div>
                {renderMenuItems()}
             </div>

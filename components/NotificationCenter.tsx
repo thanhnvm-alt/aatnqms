@@ -13,10 +13,12 @@ interface NotificationCenterProps {
   onMarkAllRead: () => void;
   onNavigate: (view: ViewState, id: string) => void;
   onClose: () => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
 }
 
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ 
-    notifications, onMarkRead, onMarkAllRead, onNavigate, onClose 
+    notifications, onMarkRead, onMarkAllRead, onNavigate, onClose, onLoadMore, hasMore 
 }) => {
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -47,35 +49,35 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full max-h-[85vh] md:max-h-[600px] bg-white dark:bg-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.2)] rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+        <div className="flex flex-col h-full max-h-[300px] md:max-h-[500px] bg-white dark:bg-slate-900 shadow-2xl rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
             {/* Header: Cập nhật theo hình mẫu */}
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
-                <div className="flex items-center gap-3">
+            <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
+                <div className="flex items-center gap-2">
                     <div className="relative">
-                        <Bell className="w-6 h-6 text-slate-800 dark:text-slate-200" strokeWidth={2.5} />
+                        <Bell className="w-5 h-5 text-slate-800 dark:text-slate-200" strokeWidth={2.5} />
                         {unreadCount > 0 && (
-                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 text-white text-[7px] font-black rounded-full flex items-center justify-center border border-white shadow-sm">
                                 {unreadCount}
                             </span>
                         )}
                     </div>
                     <div className="flex flex-col">
-                        <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase tracking-tighter text-sm leading-none">THÔNG BÁO</h3>
-                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
+                        <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase tracking-tighter text-[7px] md:text-[11px] leading-none">THÔNG BÁO</h3>
+                        <p className="text-[6px] md:text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
                             {unreadCount} TIN CHƯA ĐỌC
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                     <button 
                         onClick={(e) => { e.stopPropagation(); onMarkAllRead(); }}
-                        className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all active:scale-90"
+                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-lg transition-all active:scale-90"
                         title="Đánh dấu tất cả đã đọc"
                     >
-                        <Check className="w-5 h-5" strokeWidth={3} />
+                        <Check className="w-4 h-4" strokeWidth={3} />
                     </button>
-                    <button onClick={onClose} className="p-2 text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:bg-red-900/20 hover:text-red-500 dark:text-red-400 rounded-xl transition-all active:scale-90">
-                        <X className="w-5 h-5" strokeWidth={3} />
+                    <button onClick={onClose} className="p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:bg-red-900/20 hover:text-red-500 dark:text-red-400 rounded-lg transition-all active:scale-90">
+                        <X className="w-4 h-4" strokeWidth={3} />
                     </button>
                 </div>
             </div>
@@ -97,37 +99,37 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                     if (n.link) onNavigate(n.link.view, n.link.id);
                                     onClose();
                                 }}
-                                className={`p-4 flex gap-4 rounded-2xl transition-all cursor-pointer group relative border ${
+                                className={`p-1.5 flex gap-2 rounded-xl transition-all cursor-pointer group relative border ${
                                     n.isRead 
                                     ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-70' 
                                     : 'bg-white dark:bg-slate-900 border-blue-100 dark:border-slate-700 shadow-sm ring-1 ring-blue-50'
                                 } active:scale-[0.98]`}
                             >
-                                {/* Circle Icon - Giống hình mẫu */}
-                                <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm border-2 ${
+                                {/* Circle Icon - Ẩn trên mobile theo yêu cầu */}
+                                <div className={`hidden md:flex w-7 h-7 rounded-full items-center justify-center shrink-0 shadow-sm border-2 ${
                                     n.isRead 
                                     ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800' 
                                     : 'bg-white dark:bg-slate-900 border-blue-500/20'
                                 }`}>
-                                    {getIcon(n.type, n.isRead)}
+                                    {React.cloneElement(getIcon(n.type, n.isRead) as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                                 </div>
 
-                                <div className="flex-1 min-w-0 pr-2">
-                                    <div className="flex justify-between items-start mb-0.5">
-                                        <h4 className={`text-[11px] uppercase tracking-tight truncate pr-2 ${n.isRead ? 'font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500' : 'font-black text-slate-900 dark:text-slate-100'}`}>
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <div className="flex justify-between items-start mb-0">
+                                        <h4 className={`text-[7px] md:text-[10px] uppercase tracking-tight truncate pr-1 ${n.isRead ? 'font-bold text-slate-500 dark:text-slate-400' : 'font-black text-slate-900 dark:text-slate-100'}`}>
                                             {n.title}
                                         </h4>
-                                        <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 whitespace-nowrap uppercase shrink-0 mt-0.5">
+                                        <span className="text-[5.5px] md:text-[7.5px] font-black text-slate-400 dark:text-slate-500 whitespace-nowrap uppercase shrink-0 mt-0.5 ml-1">
                                             {formatTime(n.createdAt)}
                                         </span>
                                     </div>
-                                    <p className={`text-[10px] leading-relaxed line-clamp-2 ${n.isRead ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 font-medium'}`}>
+                                    <p className={`text-[6.5px] md:text-[9px] leading-tight line-clamp-1 ${n.isRead ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-300 font-medium'}`}>
                                         {(n.message || '').replace('undefined', 'dự án')}
                                     </p>
                                 </div>
                                 
                                 {!n.isRead && (
-                                    <div className="absolute right-3 bottom-3 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                         <ChevronRight className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
                                     </div>
                                 )}
@@ -137,15 +139,17 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 )}
             </div>
 
-            {/* Footer: Cập nhật font theo hình mẫu */}
-            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 text-center">
-                <button 
-                    onClick={() => { onMarkAllRead(); onClose(); }}
-                    className="w-full py-2 text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em] hover:text-blue-800 transition-colors"
-                >
-                    TẢI THÊM THÔNG BÁO CŨ
-                </button>
-            </div>
+            {/* Footer: Tải thêm thông báo */}
+            {hasMore && (
+                <div className="p-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 text-center">
+                    <button 
+                        onClick={onLoadMore}
+                        className="w-full py-1 text-[7px] md:text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider hover:text-blue-800 transition-colors"
+                    >
+                        TẢI THÊM THÔNG BÁO CŨ
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

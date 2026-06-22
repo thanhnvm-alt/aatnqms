@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Inspection, InspectionStatus, User, Role, ModuleId, hasPermission } from '../types';
-import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward } from 'lucide-react';
+import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward, Lock, Clock } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { getProxyImageUrl } from '../src/utils';
 import { fetchRoles } from '../services/apiService';
@@ -232,6 +232,106 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   const showSign1Button = hasSignPermission('SIGN1') && !inspection.teamLeadSignature && !inspection.managerSignature;
   const showSign2Button = hasSignPermission('SIGN2') && !inspection.managerSignature;
 
+  // ISO Immutability Lock
+  const isFullyApproved = inspection.status === InspectionStatus.APPROVED;
+
+  if (isFullyApproved) {
+    return (
+        <div className="bg-slate-50 dark:bg-[#0f172a] p-5 md:p-6 rounded-3xl border-2 border-emerald-500/20 dark:border-emerald-500/10 shadow-2xl space-y-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-500/5 rounded-full -ml-12 -mb-12 blur-xl"></div>
+            
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center border border-emerald-500/20">
+                        <ShieldCheck className="w-8 h-8 text-emerald-600 animate-pulse" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">Hồ sơ đã được phê duyệt & khóa</h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">TRẠNG THÁI: ISO IMMUTABLE LOCKED</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg">
+                    <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                    BẢO MẬT ISO-QMS
+                </div>
+            </div>
+
+            <div className={`grid grid-cols-1 ${(inspection.type === 'IQC' || inspection.type === 'SITE') ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
+                <div className="space-y-3 bg-white dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">NGƯỜI LẬP PHIẾU (QC)</p>
+                    <div className="h-24 bg-slate-50 dark:bg-slate-800 rounded-xl relative overflow-hidden flex items-center justify-center border border-slate-100 dark:border-slate-800 border-dashed">
+                        {inspection.signature && (
+                            <>
+                            <img src={getProxyImageUrl(inspection.signature)} alt="Inspector" className="h-full object-contain mix-blend-multiply dark:mix-blend-normal relative z-10" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
+                                <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform -rotate-12 bg-red-50/5">
+                                    <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">NGƯỜI KÝ</span>
+                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.createdAt || inspection.date)}</span>
+                                </div>
+                            </div>
+                            </>
+                        )}
+                    </div>
+                    <p className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate mt-2">{inspection.inspectorName}</p>
+                </div>
+
+                {!(inspection.type === 'IQC' || inspection.type === 'SITE') && (
+                    <div className="space-y-3 bg-white dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">XÁC NHẬN L1 (TỔ TRƯỞNG)</p>
+                        <div className="h-24 bg-slate-50 dark:bg-slate-800 rounded-xl relative overflow-hidden flex items-center justify-center border border-slate-100 dark:border-slate-800 border-dashed">
+                            {inspection.teamLeadSignature ? (
+                                <>
+                                <img src={getProxyImageUrl(inspection.teamLeadSignature)} alt="TeamLead" className="h-full object-contain mix-blend-multiply dark:mix-blend-normal relative z-10" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
+                                    <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform rotate-12 bg-red-50/5">
+                                        <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">VERIFIED L1</span>
+                                        <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.teamLeadDate || inspection.date)}</span>
+                                    </div>
+                                </div>
+                                </>
+                            ) : <span className="text-[10px] font-black text-slate-300">N/A</span>}
+                        </div>
+                        <p className="text-center font-black uppercase text-xs text-slate-800 dark:text-slate-200 truncate mt-2">{inspection.teamLeadName || 'Hệ thống tự động'}</p>
+                    </div>
+                )}
+
+                <div className="space-y-3 bg-white dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm shadow-emerald-500/5 relative overflow-hidden">
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block">PHÊ DUYỆT L2 (GIÁM ĐỐC)</p>
+                    <div className="h-24 bg-slate-50 dark:bg-slate-800 rounded-xl relative overflow-hidden flex items-center justify-center border border-emerald-500/20 border-dashed">
+                        {inspection.managerSignature && (
+                            <>
+                            <img src={getProxyImageUrl(inspection.managerSignature)} alt="Manager" className="h-full object-contain mix-blend-multiply dark:mix-blend-normal relative z-10" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
+                                <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform -rotate-6 bg-red-50/5">
+                                    <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">APPROVED L2</span>
+                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.confirmedDate || inspection.updatedAt || inspection.date)}</span>
+                                </div>
+                            </div>
+                            </>
+                        )}
+                    </div>
+                    <p className="text-center font-black uppercase text-xs text-emerald-700 dark:text-emerald-400 truncate mt-2 font-bold">{inspection.managerName}</p>
+                </div>
+            </div>
+
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3 text-slate-400">
+                   <Clock className="w-4 h-4" />
+                   <span className="text-[10px] font-medium uppercase tracking-tight">Cập Nhật Cuối: {formatDateTime(inspection.updatedAt || inspection.date)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] uppercase tracking-widest italic group">
+                    <Lock className="w-3 h-3 group-hover:rotate-12 transition-transform" />
+                    Nội dung đã đóng băng theo tiêu chuẩn ISO
+                </div>
+            </div>
+        </div>
+    );
+  }
+
   return (
     <section className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
       <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -267,15 +367,18 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             {/* Improved Watermark Stamp for Inspector */}
             {inspection.signature && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.3]">
-                <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-12 bg-red-50/10">
-                  <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.2em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
+                <div className="border-[2px] border-red-700 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-12 bg-red-50/10 shadow-md">
+                  <span className="text-[9px] font-black text-red-700 uppercase tracking-[0.2em] mb-1 border-b border-red-700/30 w-full text-center pb-1 leading-none">
                     NGƯỜI KÝ
                   </span>
+                  <span className="text-[8px] font-black text-red-800 uppercase my-0.5 text-center px-1 leading-tight">
+                    {inspection.inspectorName}
+                  </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
-                    <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
+                    <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
                       {formatDateTime(inspection.createdAt || inspection.date).split(' - ')[0]}
                     </span>
-                    <span className="text-[8px] font-black text-red-600/80 tabular-nums">
+                    <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
                       {formatDateTime(inspection.createdAt || inspection.date).split(' - ')[1]}
                     </span>
                   </div>
@@ -305,15 +408,18 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
               {/* Improved Watermark Stamp for L1 */}
               {inspection.teamLeadSignature && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.3]">
-                  <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform rotate-12 bg-red-50/10">
-                    <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.15em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
+                  <div className="border-[2px] border-red-700 rounded-md px-3 py-1.5 flex flex-col items-center transform rotate-12 bg-red-50/10 shadow-md">
+                    <span className="text-[9px] font-black text-red-700 uppercase tracking-[0.15em] mb-1 border-b border-red-700/30 w-full text-center pb-1 leading-none">
                       XÁC NHẬN L1
                     </span>
+                    <span className="text-[8px] font-black text-red-800 uppercase my-0.5 text-center px-1 leading-tight">
+                      {inspection.teamLeadName}
+                    </span>
                     <div className="flex flex-col items-center gap-0.5 mt-0.5">
-                      <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
+                      <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
                         {formatDateTime(inspection.teamLeadDate || inspection.date).split(' - ')[0]}
                       </span>
-                      <span className="text-[8px] font-black text-red-600/80 tabular-nums">
+                      <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
                         {formatDateTime(inspection.teamLeadDate || inspection.date).split(' - ')[1]}
                       </span>
                     </div>
@@ -378,15 +484,18 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             {/* Improved Watermark Stamp for L2 */}
             {inspection.managerSignature && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.3]">
-                <div className="border-[1.5px] border-red-600/60 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-6 bg-red-50/10">
-                  <span className="text-[9px] font-black text-red-600 uppercase tracking-[0.15em] mb-1 border-b border-red-600/30 w-full text-center pb-1">
+                <div className="border-[2px] border-red-700 rounded-md px-3 py-1.5 flex flex-col items-center transform -rotate-6 bg-red-50/10 shadow-md">
+                  <span className="text-[9px] font-black text-red-700 uppercase tracking-[0.15em] mb-1 border-b border-red-700/30 w-full text-center pb-1 leading-none">
                     PHÊ DUYỆT L2
                   </span>
+                  <span className="text-[8px] font-black text-red-800 uppercase my-0.5 text-center px-1 leading-tight">
+                    {inspection.managerName}
+                  </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
-                    <span className="text-[8px] font-black text-red-600/80 tabular-nums leading-none">
+                    <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
                       {formatDateTime(inspection.updatedAt || inspection.date).split(' - ')[0]}
                     </span>
-                    <span className="text-[8px] font-black text-red-600/80 tabular-nums">
+                    <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
                       {formatDateTime(inspection.updatedAt || inspection.date).split(' - ')[1]}
                     </span>
                   </div>

@@ -127,7 +127,7 @@ export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDef
                   </div>
               </div>
           ) : (
-              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-2">
                   {filteredDefects.map((defect) => (
                       <div 
                           key={defect.id} 

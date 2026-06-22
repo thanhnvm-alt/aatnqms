@@ -29,8 +29,32 @@ interface InspectionDetailProps {
 
 import { TwoTierApproval } from './TwoTierApproval';
 
+import QRCode from 'qrcode';
+
 export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  
+  useEffect(() => {
+    const generateQR = async () => {
+      try {
+        const url = `${window.location.origin}/?share=${inspection.id}`;
+        const dataUrl = await QRCode.toDataURL(url, { 
+          margin: 1,
+          width: 200,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
+        });
+        setQrCodeUrl(dataUrl);
+      } catch (err) {
+        console.error("QR Generation failed", err);
+      }
+    };
+    generateQR();
+  }, [inspection.id]);
+
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [showProductionModal, setShowProductionModal] = useState(false);
   const [viewingNcr, setViewingNcr] = useState<NCR | null>(null);
@@ -50,21 +74,29 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
 
   // --- ISO RBAC LOGIC (CRITICAL) ---
   const isApproved = inspection.status === InspectionStatus.APPROVED;
+  const isGuest = user.role === 'GUEST';
   const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isOwner = inspection.inspectorName === user.name;
   
-  const canModify = canUserModifyInspection(inspection, user);
-  const isLockedForUser = isApproved && !isManagerOrAdmin;
+  const canModify = !isGuest && canUserModifyInspection(inspection, user);
+  const isLockedForUser = isApproved && !isManagerOrAdmin && !isGuest;
 
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
       try {
           const html2pdf = (await import('html2pdf.js')).default;
+          
+          // Format date for filename: DDMMYYYY
+          const dateParts = inspection.date.split('/');
+          const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : inspection.date.replace(/\//g, '');
+          
+          const filename = `PQC_report_${inspection.ma_ct || 'NA'}_${inspection.headcode || inspection.ma_nha_may || 'NA'}_${dateStr}.pdf`;
+
           const opt = {
-            margin:       0.5,
-            filename:     `PQC_Report_${inspection.ma_ct}_${inspection.date.replace(/\//g, '')}.pdf`,
+            margin:       0.2,
+            filename:     filename,
             image:        { type: 'jpeg' as const, quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true },
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
             jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' as const }
           };
           html2pdf().set(opt).from(pdfContainerRef.current).save();
@@ -226,10 +258,20 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
         <div ref={pdfContainerRef} className="max-w-4xl mx-auto space-y-4">
             {/* --- HEADER INFO --- */}
             <div className="bg-white dark:bg-slate-900 rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+                {/* QR Code for Public Verification */}
+                {qrCodeUrl && (
+                  <div className="absolute left-6 top-6 w-16 h-16 border border-slate-100 p-1 bg-white shadow-sm z-10">
+                    <img src={qrCodeUrl} alt="QR Code" className="w-full h-full" />
+                    <p className="text-[6px] font-black text-center text-slate-400 mt-1 uppercase tracking-tighter">Scan to verify</p>
+                  </div>
+                )}
+                
                 <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-7xl rotate-12 select-none">PQC</div>
                 
-                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em] mb-1">{inspection.ten_ct}</p>
-                <h1 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase mb-8 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
+                <div className="flex flex-col items-center mb-6 pt-8 md:pt-4">
+                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em] mb-1">{inspection.ten_ct}</p>
+                    <h1 className="text-[14px] font-black text-slate-900 dark:text-slate-100 uppercase leading-tight tracking-tight text-center">{inspection.ten_hang_muc}</h1>
+                </div>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-8">
                     <div>

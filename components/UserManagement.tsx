@@ -395,7 +395,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   };
 
   return (
-    <div className="space-y-3 animate-in fade-in duration-300 pb-20 md:pb-0">
+    <div className="space-y-3 animate-in fade-in duration-300 pb-2 md:pb-0">
       {/* TOOLBAR */}
       <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
         <div className="flex items-center gap-2 w-full sm:w-auto">

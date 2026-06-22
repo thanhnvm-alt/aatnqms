@@ -67,7 +67,7 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar bg-slate-50 dark:bg-slate-800/50 space-y-6">
-        <div className="max-w-6xl mx-auto space-y-6 pb-20">
+        <div className="max-w-6xl mx-auto space-y-6 pb-2">
           
           {/* Main Info Card */}
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">

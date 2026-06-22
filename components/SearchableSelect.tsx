@@ -73,7 +73,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       <label className="text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest pl-1">{label}</label>
       <div 
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-2.5 py-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold flex items-center justify-between transition-all h-[30px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+        className={`w-full px-2 py-0.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-between transition-all h-[26px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800'}`}
       >
         <span className={`truncate ${values.length > 0 ? 'text-black dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>
           {displayValue}
@@ -82,22 +82,22 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] shadow-2xl z-[100] max-h-64 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-          <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50">
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[100] max-h-56 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/20">
             <div className="relative">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
+               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                <input 
                  autoFocus
                  type="text"
                  value={search}
                  onChange={(e) => setSearch(e.target.value)}
                  placeholder="Tìm nhanh..."
-                 className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100"
+                 className="w-full pl-8 pr-2 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-blue-100"
                  onClick={(e) => e.stopPropagation()}
                />
             </div>
           </div>
-          <div className="overflow-y-auto flex-1 no-scrollbar p-2">
+          <div className="overflow-y-auto flex-1 no-scrollbar p-1">
             <div 
               onClick={(e) => { e.stopPropagation(); onChange([]); }}
               className={`px-3 py-2 text-xs font-black rounded-xl cursor-pointer hover:bg-blue-50 dark:bg-slate-800/80 transition-all mb-1 uppercase tracking-tight ${values.length === 0 ? 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}

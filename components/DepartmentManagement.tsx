@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { Building, Plus, Trash2, Edit2, X, Loader2, Users, FolderTree, ShieldCheck, ChevronDown, Search } from 'lucide-react';
+import { Building, Plus, Trash2, Edit2, X, Loader2, Users, FolderTree, ShieldCheck, ChevronDown, Search, ChevronLeft } from 'lucide-react';
 import { Button } from './Button';
 import { removeVietnameseTones } from '../lib/utils';
 
@@ -35,6 +35,7 @@ export const DepartmentManagement: React.FC = () => {
     const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
     const [selectedDivId, setSelectedDivId] = useState<string | null>(null);
     const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+    const [activeMobileCol, setActiveMobileCol] = useState(0);
 
     // Lists
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -402,7 +403,7 @@ export const DepartmentManagement: React.FC = () => {
     }, [users, selectedDeptId, selectedDivId, selectedTeamId]);
 
     return (
-        <div className="space-y-4 animate-in fade-in duration-300 flex flex-col h-[calc(100vh-100px)]">
+        <div className="space-y-2 lg:space-y-4 animate-in fade-in duration-300 flex flex-col h-[calc(100vh-130px)] lg:h-[calc(100vh-100px)]">
             {/* Header section card */}
             <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
                 <div className="flex items-center gap-3">
@@ -422,12 +423,12 @@ export const DepartmentManagement: React.FC = () => {
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Đang đồng bộ dữ liệu Postgres...</p>
                 </div>
             ) : (
-                <div className="flex-1 flex gap-4 overflow-x-auto snap-x lg:flex-row pb-2 h-full w-full">
+                <div className="flex-1 flex lg:gap-4 lg:flex-row pb-2 h-full w-full">
                     
                     {/* CỘT 1: PHÒNG BAN */}
                     <div 
-                        className="flex-none flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative"
-                        style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[0] : 280 }}
+                        className={`flex-shrink-0 lg:flex-1 flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative w-full lg:w-auto ${activeMobileCol !== 0 ? 'hidden lg:flex' : ''}`}
+                        style={{ minWidth: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[0] : '100%', flexBasis: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[0] : 'auto' }}
                     >
                         <div 
                             className="hidden lg:block absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors"
@@ -446,7 +447,7 @@ export const DepartmentManagement: React.FC = () => {
                             {departments.map(dept => (
                                 <div 
                                     key={dept.id} 
-                                    onClick={() => { setSelectedDeptId(dept.id); setSelectedDivId(null); setSelectedTeamId(null); }}
+                                    onClick={() => { setSelectedDeptId(dept.id); setSelectedDivId(null); setSelectedTeamId(null); if (typeof window !== 'undefined' && window.innerWidth < 1024) setActiveMobileCol(1); }}
                                     className={`p-3.5 rounded-2xl cursor-pointer border transition-all flex flex-col gap-2 group ${selectedDeptId === dept.id ? 'bg-blue-600 border-blue-600 shadow-md transform scale-[1.02]' : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-300 dark:hover:border-slate-700 shadow-sm hover:shadow-md'}`}
                                 >
                                     <div className="flex justify-between items-start">
@@ -461,6 +462,10 @@ export const DepartmentManagement: React.FC = () => {
                                     </div>
                                     <div className={`text-[10px] font-bold flex items-center justify-between ${selectedDeptId === dept.id ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
                                         <span>{divisions.filter(d => d.departmentId === dept.id).length} Bộ phận</span>
+                                        <button onClick={(e) => { e.stopPropagation(); setSelectedDeptId(dept.id); setSelectedDivId(null); setSelectedTeamId(null); if (typeof window !== 'undefined' && window.innerWidth < 1024) setActiveMobileCol(3); }} className={`flex items-center gap-1 transition-colors px-2 py-1 -mr-2 rounded-md ${selectedDeptId === dept.id ? 'hover:bg-white/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                            <Users className="w-3 h-3" />
+                                            <span>{users.filter(u => u.department_id === dept.id).length}</span>
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -472,17 +477,23 @@ export const DepartmentManagement: React.FC = () => {
 
                     {/* CỘT 2: BỘ PHẬN */}
                     <div 
-                        className={`flex-none flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border table-transition border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative ${!selectedDeptId ? 'opacity-50 pointer-events-none' : ''}`}
-                        style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[1] : 280 }}
+                        className={`flex-shrink-0 lg:flex-1 flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border table-transition border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative w-full lg:w-auto ${!selectedDeptId ? 'opacity-50 pointer-events-none' : ''} ${activeMobileCol !== 1 ? 'hidden lg:flex' : ''}`}
+                        style={{ minWidth: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[1] : '100%', flexBasis: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[1] : 'auto' }}
                     >
                         <div 
                             className="hidden lg:block absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors"
                             onMouseDown={startDrag(1)}
                         />
                         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
-                            <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                Bộ phận ({filteredDivisions.length})
-                            </h3>
+                            <div className="flex items-center gap-2">
+                                <button className="lg:hidden p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-700" onClick={() => setActiveMobileCol(0)}>
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 lg:hidden" />
+                                    Bộ phận ({filteredDivisions.length})
+                                </h3>
+                            </div>
                             <button onClick={() => { setDivDeptId(selectedDeptId || ''); setIsDivModalOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-blue-600 dark:text-blue-400" disabled={!selectedDeptId}>
                                 <Plus className="w-4 h-4" />
                             </button>
@@ -496,7 +507,7 @@ export const DepartmentManagement: React.FC = () => {
                             ) : filteredDivisions.map(div => (
                                 <div 
                                     key={div.id} 
-                                    onClick={() => { setSelectedDivId(div.id); setSelectedTeamId(null); }}
+                                    onClick={() => { setSelectedDivId(div.id); setSelectedTeamId(null); if (typeof window !== 'undefined' && window.innerWidth < 1024) setActiveMobileCol(2); }}
                                     className={`p-3.5 rounded-2xl cursor-pointer border transition-all flex flex-col gap-2 group ${selectedDivId === div.id ? 'bg-indigo-600 border-indigo-600 shadow-md transform scale-[1.02]' : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-300 dark:hover:border-slate-700 shadow-sm hover:shadow-md'}`}
                                 >
                                     <div className="flex justify-between items-start">
@@ -506,8 +517,12 @@ export const DepartmentManagement: React.FC = () => {
                                             <button onClick={(e) => { e.stopPropagation(); handleDeleteDiv(div.id, div.name); }} className={`p-1.5 rounded-lg shadow-sm backdrop-blur-sm transition-all ${selectedDivId === div.id ? 'bg-white/20 text-white hover:bg-white/30 hover:text-red-300' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-red-500'}`}><Trash2 className="w-3 h-3" /></button>
                                         </div>
                                     </div>
-                                    <div className={`text-[10px] font-bold flex items-center justify-between ${selectedDivId === div.id ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                                    <div className={`text-[10px] font-bold flex items-center justify-between mt-1 ${selectedDivId === div.id ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
                                         <span>{teams.filter(t => t.divisionId === div.id).length} Tổ (Team)</span>
+                                        <button onClick={(e) => { e.stopPropagation(); setSelectedDivId(div.id); setSelectedTeamId(null); if (typeof window !== 'undefined' && window.innerWidth < 1024) setActiveMobileCol(3); }} className={`flex items-center gap-1 transition-colors px-2 py-1 -mr-2 rounded-md ${selectedDivId === div.id ? 'hover:bg-white/20' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                            <Users className="w-3 h-3" />
+                                            <span>{users.filter(u => u.division_id === div.id).length}</span>
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -519,17 +534,23 @@ export const DepartmentManagement: React.FC = () => {
 
                     {/* CỘT 3: TEAMS */}
                     <div 
-                        className={`flex-none flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border table-transition border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative ${!selectedDivId ? 'opacity-50 pointer-events-none' : ''}`}
-                        style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[2] : 280 }}
+                        className={`flex-shrink-0 lg:flex-1 flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border table-transition border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative w-full lg:w-auto ${!selectedDivId ? 'opacity-50 pointer-events-none' : ''} ${activeMobileCol !== 2 ? 'hidden lg:flex' : ''}`}
+                        style={{ minWidth: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[2] : '100%', flexBasis: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[2] : 'auto' }}
                     >
                         <div 
                             className="hidden lg:block absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors"
                             onMouseDown={startDrag(2)}
                         />
                         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
-                            <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                Tổ / Team ({filteredTeams.length})
-                            </h3>
+                            <div className="flex items-center gap-2">
+                                <button className="lg:hidden p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-700" onClick={() => setActiveMobileCol(1)}>
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <Users className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 lg:hidden" />
+                                    Tổ / Team ({filteredTeams.length})
+                                </h3>
+                            </div>
                             <button onClick={() => { setTeamDivId(selectedDivId || ''); setIsTeamModalOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-blue-600 dark:text-blue-400" disabled={!selectedDivId}>
                                 <Plus className="w-4 h-4" />
                             </button>
@@ -545,7 +566,7 @@ export const DepartmentManagement: React.FC = () => {
                                 return (
                                     <div 
                                         key={team.id} 
-                                        onClick={() => setSelectedTeamId(team.id)}
+                                        onClick={() => { setSelectedTeamId(team.id); if (typeof window !== 'undefined' && window.innerWidth < 1024) setActiveMobileCol(3); }}
                                         className={`p-3.5 rounded-2xl cursor-pointer border transition-all flex flex-col gap-2 group ${selectedTeamId === team.id ? 'bg-emerald-600 border-emerald-600 shadow-md transform scale-[1.02]' : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-300 dark:hover:border-slate-700 shadow-sm hover:shadow-md'}`}
                                     >
                                         <div className="flex justify-between items-start">
@@ -555,9 +576,15 @@ export const DepartmentManagement: React.FC = () => {
                                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team.id, team.name); }} className={`p-1.5 rounded-lg shadow-sm backdrop-blur-sm transition-all ${selectedTeamId === team.id ? 'bg-white/20 text-white hover:bg-white/30 hover:text-red-300' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-red-500'}`}><Trash2 className="w-3 h-3" /></button>
                                             </div>
                                         </div>
-                                        <div className={`text-[10px] font-bold p-2 rounded-xl mt-1 flex items-center gap-1.5 ${selectedTeamId === team.id ? 'bg-white/10 text-emerald-100' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400'}`}>
-                                            <ShieldCheck className="w-3.5 h-3.5" />
-                                            <span className="truncate">{leader ? `${leader.name}` : 'Chưa có tổ trưởng'}</span>
+                                        <div className="flex items-center justify-between mt-1">
+                                            <div className={`text-[10px] font-bold p-1.5 rounded-xl flex items-center gap-1.5 ${selectedTeamId === team.id ? 'bg-white/10 text-emerald-100' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400'}`}>
+                                                <ShieldCheck className="w-3.5 h-3.5" />
+                                                <span className="truncate max-w-[80px]">{leader ? `${leader.name}` : 'Chưa có'}</span>
+                                            </div>
+                                            <button onClick={(e) => { e.stopPropagation(); setSelectedTeamId(team.id); if (typeof window !== 'undefined' && window.innerWidth < 1024) setActiveMobileCol(3); }} className={`text-[10px] font-bold flex items-center gap-1 transition-colors px-2 py-1 -mr-2 rounded-md ${selectedTeamId === team.id ? 'text-emerald-100 hover:bg-white/20' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                                <Users className="w-3 h-3" />
+                                                <span>{users.filter(u => u.team_id === team.id).length}</span>
+                                            </button>
                                         </div>
                                     </div>
                                 );
@@ -570,18 +597,23 @@ export const DepartmentManagement: React.FC = () => {
 
                     {/* CỘT 4: NHÂN SỰ */}
                     <div 
-                        className="flex-none flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative"
-                        style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[3] : 320 }}
+                        className={`flex-shrink-0 lg:flex-1 flex flex-col snap-start bg-slate-50 dark:bg-slate-900/50 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-full relative w-full lg:w-auto ${activeMobileCol !== 3 ? 'hidden lg:flex' : ''}`}
+                        style={{ minWidth: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[3] : '100%', flexBasis: typeof window !== 'undefined' && window.innerWidth >= 1024 ? colSizes[3] : 'auto' }}
                     >
                         <div 
                             className="hidden lg:block absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors"
                             onMouseDown={startDrag(3)}
                         />
                         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
-                            <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                                {selectedTeamId ? 'NS theo Tổ' : selectedDivId ? 'NS theo Bộ phận' : selectedDeptId ? 'NS theo Phòng' : 'Tất cả NS'} ({filteredUsers.length})
-                            </h3>
+                            <div className="flex items-center gap-2">
+                                <button className="lg:hidden p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-700" onClick={() => setActiveMobileCol(selectedTeamId ? 2 : selectedDivId ? 1 : 0)}>
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <h3 className="font-black text-[11px] uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                    {selectedTeamId ? 'NS theo Tổ' : selectedDivId ? 'NS theo Bộ phận' : selectedDeptId ? 'NS theo Phòng' : 'Tất cả NS'} ({filteredUsers.length})
+                                </h3>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar bg-slate-50/50 dark:bg-slate-900/20">
                             {filteredUsers.map(u => {

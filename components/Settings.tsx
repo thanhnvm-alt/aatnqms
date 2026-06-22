@@ -33,7 +33,8 @@ import {
     HardDrive,
     ShieldAlert,
     Building,
-    Activity
+    Activity,
+    ChevronDown
 } from 'lucide-react';
 import { ALL_MODULES } from '../constants';
 import { fetchRoles, saveRole, deleteRole as apiDeleteRole } from '../services/apiService';
@@ -225,8 +226,8 @@ export const Settings: React.FC<SettingsProps> = ({
               ...currentUser,
               name: profileData.name,
               avatar: profileData.avatar,
-              noi_lam_viec: profileData.noi_lam_viec,
-              trinh_do: profileData.trinh_do,
+              workLocation: profileData.workLocation,
+              education: profileData.education,
           };
           await onUpdateUser(updateObj); 
           setIsEditingProfile(false); 
@@ -258,40 +259,57 @@ export const Settings: React.FC<SettingsProps> = ({
   const qcModules = ALL_MODULES.filter(m => m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA');
 
   return (
-    <div className="h-full flex flex-col animate-fade-in pb-20 md:pb-0 bg-slate-50 dark:bg-slate-800/50">
-        <div className="bg-white dark:bg-slate-900 p-3 md:p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-3 sticky top-0 z-20 shadow-sm">
-             <div className="flex items-center justify-end">
-                 {isAdminOrManager && onCheckConnection && (
-                    <Button variant={connStatus === 'ERROR' ? 'danger' : 'secondary'} size="sm" onClick={handleTestConnection} disabled={isChecking} icon={isChecking ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Wifi className="w-4 h-4"/>} className="md:hidden"></Button>
-                 )}
-             </div>
+    <div className="h-full flex flex-col animate-fade-in pb-2 md:pb-0 bg-slate-50 dark:bg-slate-800/50">
+        <div className="bg-white dark:bg-slate-900 p-2 px-3 md:p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-2.5 sticky top-0 z-20 shadow-sm">
              <div className="w-full">
-                 <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 w-full">
+                 <div className="flex overflow-x-auto hide-scrollbar gap-2 w-full pb-1 -mx-3 px-3 md:mx-0 md:px-0 md:flex-wrap md:overflow-visible" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
                      {showTab('TEMPLATE') && (
-                         <button onClick={() => setActiveTab('TEMPLATE')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'TEMPLATE' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><FileCheck className="w-4 h-4"/> <span>Mẫu kiểm tra</span></button>
+                         <button onClick={() => setActiveTab('TEMPLATE')} className={`whitespace-nowrap shrink-0 px-3 py-2 md:px-3 md:py-2 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'TEMPLATE' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><FileCheck className="w-4 h-4 md:w-4 md:h-4"/> <span className="hidden md:inline">Mẫu kiểm tra</span></button>
                      )}
                      {showTab('USERS') && (
-                         <button onClick={() => setActiveTab('USERS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'USERS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Users className="w-4 h-4"/> <span>Người dùng</span></button>
+                         <button onClick={() => setActiveTab('USERS')} className={`whitespace-nowrap shrink-0 px-3 py-2 md:px-3 md:py-2 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'USERS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Users className="w-4 h-4 md:w-4 md:h-4"/> <span className="hidden md:inline">Người dùng</span></button>
                      )}
                      {showTab('WORKSHOPS') && (
-                         <button onClick={() => setActiveTab('WORKSHOPS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'WORKSHOPS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Factory className="w-4 h-4"/> <span>Quản lý xưởng</span></button>
+                         <button onClick={() => setActiveTab('WORKSHOPS')} className={`whitespace-nowrap shrink-0 px-3 py-2 md:px-3 md:py-2 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'WORKSHOPS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Factory className="w-4 h-4 md:w-4 md:h-4"/> <span className="hidden md:inline">Quản lý xưởng</span></button>
                      )}
                      {showTab('DEPARTMENTS') && (
-                         <button onClick={() => setActiveTab('DEPARTMENTS')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'DEPARTMENTS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Building className="w-4 h-4"/> <span>Phòng ban</span></button>
+                         <button onClick={() => setActiveTab('DEPARTMENTS')} className={`whitespace-nowrap shrink-0 px-3 py-2 md:px-3 md:py-2 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'DEPARTMENTS' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><Building className="w-4 h-4 md:w-4 md:h-4"/> <span className="hidden md:inline">Phòng ban</span></button>
                      )}
                      {showTab('PROFILE') && (
-                         <button onClick={() => setActiveTab('PROFILE')} className={`px-2 py-2.5 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'PROFILE' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><UserCircle className="w-4 h-4"/> <span>Cá nhân</span></button>
+                         <button onClick={() => setActiveTab('PROFILE')} className={`whitespace-nowrap shrink-0 px-3 py-2 md:px-3 md:py-2 rounded-lg text-xs md:text-sm font-bold md:font-medium transition-all flex flex-row items-center justify-center gap-1.5 md:gap-2 text-center border ${activeTab === 'PROFILE' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 border-blue-200 dark:border-slate-700 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:text-slate-700 dark:text-slate-300'}`}><UserCircle className="w-4 h-4 md:w-4 md:h-4"/> <span className="hidden md:inline">Cá nhân</span></button>
                      )}
                  </div>
              </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 md:p-6 no-scrollbar">
-            <div className="max-w-5xl mx-auto space-y-4 md:space-y-6">
+        <div className="flex-1 overflow-y-auto px-1.5 py-1.5 md:p-6 no-scrollbar pb-16 md:pb-6">
+            <div className="w-full max-w-none space-y-3 md:space-y-6">
                 {activeTab === 'TEMPLATE' && showTab('TEMPLATE') && (
                     <div className="space-y-4">
-                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm"><h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers className="w-4 h-4" /> Chọn Module cần cấu hình</h3><div className="flex flex-wrap gap-2">{qcModules.map(m => (<button key={m.id} onClick={() => setSelectedModuleForTemplate(m.id)} className={`px-3 py-2 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-tight transition-all border-2 ${selectedModuleForTemplate === m.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:border-slate-600'}`}>{m.label}</button>))}</div></div>
-                        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden"><TemplateEditor key={selectedModuleForTemplate} user={currentUser} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/></div>
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2 shrink-0">
+                                <Layers className="w-4 h-4" /> Cấu hình Module
+                            </h3>
+                            <div className="relative w-full md:w-80">
+                                <select 
+                                    value={selectedModuleForTemplate} 
+                                    onChange={(e) => setSelectedModuleForTemplate(e.target.value)}
+                                    className="w-full pl-4 pr-10 py-3 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl text-xs font-bold uppercase tracking-tight appearance-none focus:border-blue-500 focus:ring-0 focus:outline-none transition-all cursor-pointer text-slate-700 dark:text-slate-200"
+                                >
+                                    {qcModules.map(m => (
+                                        <option key={m.id} value={m.id} className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 py-2">
+                                            {m.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                    <ChevronDown className="w-4 h-4" />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            <TemplateEditor key={selectedModuleForTemplate} user={currentUser} currentTemplate={allTemplates[selectedModuleForTemplate] || []} onSave={(items, subId) => onSaveTemplate(subId || selectedModuleForTemplate, items)} onCancel={onClose} moduleId={selectedModuleForTemplate} allTemplates={allTemplates}/>
+                        </div>
                     </div>
                 )}
                 {activeTab === 'USERS' && showTab('USERS') && (
@@ -391,7 +409,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                         <Lock className="w-2.5 h-2.5 text-slate-300 dark:text-slate-600" />
                                     </div>
                                     <p className="text-xs font-bold text-slate-500 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800 cursor-not-allowed opacity-70 font-mono">
-                                        {profileData.joinDate || profileData.ngay_vao_lam || (profileData as any).ngayVaoLam || 'Chưa thiết lập'}
+                                        {profileData.joinDate || 'Chưa thiết lập'}
                                     </p>
                                 </div>
                                 <div className="space-y-1.5">

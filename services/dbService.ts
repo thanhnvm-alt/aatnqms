@@ -2091,14 +2091,22 @@ export async function updateProject(p: Project, userId: string = 'SYSTEM') {
 // --- NOTIFICATIONS ---
 
 export async function addNotification(userId: string, type: string, title: string, message: string, link: any) {
+    const id = crypto.randomUUID();
     await query(`
         INSERT INTO ${SCHEMA}.notifications (id, user_id, type, title, message, is_read, created_at, data) 
         VALUES ($1, $2, $3, $4, $5, 0, EXTRACT(EPOCH FROM NOW())::BIGINT, $6)
-    `, sanitizeArgs([`notif_${Date.now()}`, userId, type, title, message, { link }]));
+    `, sanitizeArgs([id, userId, type, title, message, { link }]));
 }
 
-export async function getNotifications(userId: string): Promise<Notification[]> {
-    const res = await query(`SELECT * FROM ${SCHEMA}.notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [userId]);
+export async function getNotifications(userId: string, page: number = 1, limit: number = 50): Promise<Notification[]> {
+    const offset = (page - 1) * limit;
+    const res = await query(`
+        SELECT * FROM ${SCHEMA}.notifications 
+        WHERE user_id = $1 AND deleted_at IS NULL
+        ORDER BY created_at DESC 
+        LIMIT $2 OFFSET $3
+    `, [userId, limit, offset]);
+    
     return res.rows.map((r: any) => ({
         id: r.id as string,
         userId: r.user_id as string,

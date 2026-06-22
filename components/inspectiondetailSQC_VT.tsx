@@ -1,6 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
-
+import QRCode from 'qrcode';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Download } from 'lucide-react';
 import { format as formatDateFns, isValid } from 'date-fns';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR, canUserModifyInspection } from '../types';
 import { 
@@ -48,6 +49,45 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
   // Signatures
   const [managerSig, setManagerSig] = useState('');
   const [prodSig, setProdSig] = useState(inspection.productionSignature || '');
+
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const generateQR = async () => {
+      try {
+        const url = `${window.location.origin}/?share=${inspection.id}`;
+        const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 200 });
+        setQrCodeUrl(dataUrl);
+      } catch (err) { console.error(err); }
+    };
+    generateQR();
+  }, [inspection.id]);
+
+  const isGuest = user.role === 'GUEST';
+  const canModify = !isGuest && canUserModifyInspection(inspection, user);
+
+  const handleExportPDF = async () => {
+      if (!pdfContainerRef.current) return;
+      try {
+          const html2pdf = (await import('html2pdf.js')).default;
+          const dateParts = inspection.date.split('/');
+          const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : inspection.date.replace(/\//g, '');
+          const filename = `SQC_VT_report_${inspection.ma_ct || 'NA'}_${inspection.headcode || inspection.ma_nha_may || 'NA'}_${dateStr}.pdf`;
+
+          const opt = {
+            margin:       0.2,
+            filename:     filename,
+            image:        { type: 'jpeg' as const, quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' as const }
+          };
+          html2pdf().set(opt).from(pdfContainerRef.current).save();
+      } catch (err: any) {
+          console.error(err);
+          alert('Không thể xuất PDF: ' + err.message);
+      }
+  };
   const [prodName, setProdName] = useState(inspection.productionName || '');
   const [prodComment, setProdComment] = useState(inspection.productionComment || '');
 
@@ -99,7 +139,6 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
 
   // --- ISO PERMISSION LOGIC ---
   const isOwner = inspection.inspectorName === user.name;
-  const canModify = canUserModifyInspection(inspection, user);
 
   const handleManagerApprove = async () => {
       if (!managerSig) { alert("Vui lòng ký tên trước khi phê duyệt."); return; }

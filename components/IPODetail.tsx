@@ -180,7 +180,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6 pb-20">
+        <div className="max-w-4xl mx-auto space-y-6 pb-2">
           
           <AnimatePresence mode="wait">
             {activeTab === 'info' && (

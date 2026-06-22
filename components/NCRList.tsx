@@ -959,7 +959,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                       <span className="text-slate-400 dark:text-slate-500 font-medium">{desktopItems.length} PHIẾU</span>
                   </h3>
               </div>
-              <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
+              <div className="flex-1 overflow-y-auto no-scrollbar pb-2">
                   {!selectedProjectDesktop ? (
                       <div className="flex flex-col items-center justify-center p-8 text-center h-64">
                           <div className="relative mb-3">

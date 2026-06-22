@@ -356,7 +356,10 @@ export const updateProject = async (proj: Project) => apiFetch('/api/projects', 
     body: JSON.stringify(proj)
 });
 
-export const fetchNotifications = async (userId: string) => apiFetch(`/api/notifications/${userId}`);
+export const fetchNotifications = async (userId: string, page: number = 1, limit: number = 50) => {
+    const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+    return apiFetch(`/api/notifications/${userId}?${params.toString()}`);
+};
 export const markNotificationAsRead = async (id: string) => apiFetch(`/api/notifications/${id}/read`, { method: 'PUT' });
 export const markAllNotificationsAsRead = async (userId: string) => apiFetch(`/api/notifications/read-all/${userId}`, { method: 'PUT' });
 

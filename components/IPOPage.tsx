@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Loader2, Building2, ChevronDown, Download, Upload, Search } from 'lucide-react';
 import { IPODetail } from './IPODetail';
+const _dummy = 0;
 import { IPOItem, User, hasPermission } from '../types';
 import { exportIpoData, importIpoFile } from '../services/apiService';
 

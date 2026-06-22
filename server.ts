@@ -1488,7 +1488,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   // --- NOTIFICATIONS ---
   app.get("/api/notifications/:userId", async (req, res) => {
     try {
-      const result = await db.getNotifications(req.params.userId);
+      const page = parseInt(req.query.page as string || '1');
+      const limit = parseInt(req.query.limit as string || '50');
+      const result = await db.getNotifications(req.params.userId, page, limit);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch notifications' });
