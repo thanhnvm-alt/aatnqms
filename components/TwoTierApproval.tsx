@@ -189,6 +189,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         await onApprove(inspection.id, signature, {
           managerSignature: signature,
           managerName: mgrName,
+          managerDate: nowISO,
           status: 'approved' as InspectionStatus,
           updatedAt: nowISO
         });
@@ -308,7 +309,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
                                 <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform -rotate-6 bg-red-50/5">
                                     <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">APPROVED L2</span>
-                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.confirmedDate || inspection.updatedAt || inspection.date)}</span>
+                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.managerDate || inspection.confirmedDate || inspection.updatedAt || inspection.date)}</span>
                                 </div>
                             </div>
                             </>
@@ -376,10 +377,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
                     <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
-                      {formatDateTime(inspection.createdAt || inspection.date).split(' - ')[0]}
+                      {formatDateTime(inspection.qcDate || inspection.createdAt || inspection.date).split(' - ')[0]}
                     </span>
                     <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
-                      {formatDateTime(inspection.createdAt || inspection.date).split(' - ')[1]}
+                      {formatDateTime(inspection.qcDate || inspection.createdAt || inspection.date).split(' - ')[1]}
                     </span>
                   </div>
                 </div>
@@ -417,10 +418,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                     </span>
                     <div className="flex flex-col items-center gap-0.5 mt-0.5">
                       <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
-                        {formatDateTime(inspection.teamLeadDate || inspection.date).split(' - ')[0]}
+                        {formatDateTime(inspection.teamLeadDate || inspection.qcDate || inspection.date).split(' - ')[0]}
                       </span>
                       <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
-                        {formatDateTime(inspection.teamLeadDate || inspection.date).split(' - ')[1]}
+                        {formatDateTime(inspection.teamLeadDate || inspection.qcDate || inspection.date).split(' - ')[1]}
                       </span>
                     </div>
                   </div>
@@ -493,10 +494,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
                     <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
-                      {formatDateTime(inspection.updatedAt || inspection.date).split(' - ')[0]}
+                      {formatDateTime(inspection.managerDate || inspection.teamLeadDate || inspection.qcDate || inspection.date).split(' - ')[0]}
                     </span>
                     <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
-                      {formatDateTime(inspection.updatedAt || inspection.date).split(' - ')[1]}
+                      {formatDateTime(inspection.managerDate || inspection.teamLeadDate || inspection.qcDate || inspection.date).split(' - ')[1]}
                     </span>
                   </div>
                 </div>

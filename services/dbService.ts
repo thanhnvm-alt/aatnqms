@@ -317,9 +317,45 @@ export async function saveInspection(inspection: Inspection) {
   const existing = await getInspectionById(inspection.id);
   const oldValue = existing ? { ...existing } : null;
 
+  // --- SIGNATURE & TIMESTAMP LOGIC (ISO-QMS Independent) ---
+  const nowEpoch = Math.floor(Date.now() / 1000);
+  
+  // Detect if this is an Approval Action by L1/L2 or a Regular QC Edit
+  const isL1Signing = inspection.teamLeadSignature && (!oldValue || !oldValue.teamLeadSignature);
+  const isL2Signing = inspection.managerSignature && (!oldValue || !oldValue.managerSignature);
+  const isApproving = isL1Signing || isL2Signing;
+  const isLocked = oldValue?.status === InspectionStatus.APPROVED;
+
+  if (!isLocked) {
+      if (isL1Signing) {
+          inspection.teamLeadDate = inspection.teamLeadDate || nowEpoch;
+      }
+      if (isL2Signing) {
+          inspection.managerDate = inspection.managerDate || nowEpoch;
+      }
+      
+      // If regular QC edit (not an approval action), update QC date and reset L1/L2 if they exist
+      if (!isApproving && inspection.status !== InspectionStatus.DRAFT) {
+          inspection.qcDate = nowEpoch;
+          
+          if (oldValue && (oldValue.teamLeadSignature || oldValue.managerSignature)) {
+              console.log(`📡 ISO-DB: QC edited record ${inspection.id}. Resetting L1/L2 signatures.`);
+              inspection.teamLeadSignature = null as any;
+              inspection.teamLeadName = null as any;
+              inspection.teamLeadDate = null as any;
+              inspection.managerSignature = null as any;
+              inspection.managerName = null as any;
+              inspection.managerDate = null as any;
+          }
+      }
+  }
+
   // Ensure dates are parsed as BIGINT epochs for DB (seconds)
   const updatedAt = parseTS(inspection.updatedAt);
   const inspection_date = parseTS(inspection.date);
+  const qcDateTS = parseTS(inspection.qcDate);
+  const teamLeadDateTS = parseTS(inspection.teamLeadDate);
+  const managerDateTS = parseTS(inspection.managerDate);
 
     if (inspection.type === 'PQC') {
       await query(`
@@ -330,7 +366,7 @@ export async function saveInspection(inspection: Inspection) {
           inspector, status, updated_at, items_json, images_json, headcode, date, score, summary, type, 
           production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
           signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
-          signature_teamlead, name_teamlead, date_teamlead,
+          signature_teamlead, name_teamlead, date_teamlead, date_manager, date_qc,
           comments_json, data
         )
         VALUES (
@@ -339,8 +375,8 @@ export async function saveInspection(inspection: Inspection) {
           $9::numeric, $10::numeric, $11::numeric, $12::numeric, 
           $13, $14, $15::bigint, $16::jsonb, $17::jsonb, $18, $19::bigint, $20::numeric, $21, $22, 
           $23, $24, $25::numeric, $26::numeric, $27, $28::text, $29::text, $30::text, $31::text, $32::text, $33::text, 
-          $34::text, $35::text, $36::text,
-          $37::jsonb, $38::jsonb
+          $34::text, $35::text, $36::bigint, $37::bigint, $38::bigint,
+          $39::jsonb, $40::jsonb
         )
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
@@ -362,7 +398,9 @@ export async function saveInspection(inspection: Inspection) {
           comment_production = EXCLUDED.comment_production,
           signature_teamlead = EXCLUDED.signature_teamlead,
           name_teamlead = EXCLUDED.name_teamlead,
-          date_teamlead = COALESCE(${table}.date_teamlead, EXCLUDED.date_teamlead),
+          date_teamlead = EXCLUDED.date_teamlead,
+          date_manager = EXCLUDED.date_manager,
+          date_qc = EXCLUDED.date_qc,
           comments_json = EXCLUDED.comments_json,
           sl_ipo = EXCLUDED.sl_ipo,
           qty_total = EXCLUDED.qty_total,
@@ -386,7 +424,7 @@ export async function saveInspection(inspection: Inspection) {
           inspection.responsiblePerson,
           inspection.signature, inspection.managerSignature, inspection.managerName,
           inspection.productionSignature, inspection.productionName, inspection.productionComment,
-          inspection.teamLeadSignature, inspection.teamLeadName, inspection.teamLeadDate,
+          inspection.teamLeadSignature, inspection.teamLeadName, teamLeadDateTS, managerDateTS, qcDateTS,
           inspection.comments, inspection
       ]));
     } else {
@@ -401,7 +439,7 @@ export async function saveInspection(inspection: Inspection) {
         sl_ipo, qty_total, qty_pass, qty_fail,
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
         responsible_person, ma_nha_may, workshop, stage, headcode, production_comment,
-        signature_teamlead, name_teamlead, date_teamlead, data
+        signature_teamlead, name_teamlead, date_teamlead, date_manager, date_qc, data
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
@@ -410,7 +448,7 @@ export async function saveInspection(inspection: Inspection) {
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42,
-        $43::text, $44::text, $45::text, $46::jsonb
+        $43::text, $44::text, $45::bigint, $46::bigint, $47::bigint, $48::jsonb
       )
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
@@ -431,7 +469,9 @@ export async function saveInspection(inspection: Inspection) {
         comment_production = EXCLUDED.comment_production,
         signature_teamlead = EXCLUDED.signature_teamlead,
         name_teamlead = EXCLUDED.name_teamlead,
-        date_teamlead = COALESCE(${table}.date_teamlead, EXCLUDED.date_teamlead),
+        date_teamlead = EXCLUDED.date_teamlead,
+        date_manager = EXCLUDED.date_manager,
+        date_qc = EXCLUDED.date_qc,
         production_comment = EXCLUDED.production_comment,
         location = EXCLUDED.location,
         comments_json = EXCLUDED.comments_json,
@@ -474,7 +514,7 @@ export async function saveInspection(inspection: Inspection) {
         inspection.responsiblePerson,
         inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode,
         inspection.productionComment,
-        inspection.teamLeadSignature, inspection.teamLeadName, inspection.teamLeadDate,
+        inspection.teamLeadSignature, inspection.teamLeadName, teamLeadDateTS, managerDateTS, qcDateTS,
         JSON.stringify(inspection)
       ]));
     }
@@ -1153,8 +1193,10 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     passedQuantity: Number(row.passed_qty ?? row.qty_pass ?? 0),
                     failedQuantity: Number(row.failed_qty ?? row.qty_fail ?? 0),
                     signature: row.signature_qc as string,
+                    qcDate: row.date_qc as string,
                     managerSignature: row.signature_manager as string,
                     managerName: row.name_manager as string,
+                    managerDate: row.date_manager as string,
                     productionSignature: row.signature_production as string,
                     productionName: row.name_production as string,
                     productionComment: row.comment_production as string,

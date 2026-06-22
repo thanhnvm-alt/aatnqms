@@ -296,9 +296,11 @@ export interface Inspection {
   failedQuantity?: number;
   signature_ref?: string; 
   signature?: string;
+  qcDate?: string;
   manager_signature_ref?: string;
   managerSignature?: string;
   managerName?: string;
+  managerDate?: string;
   teamLeadSignature?: string;
   teamLeadName?: string;
   teamLeadDate?: string;
