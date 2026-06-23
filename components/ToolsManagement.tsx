@@ -340,12 +340,95 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = utils.sheet_to_json(worksheet);
             
-            console.log('Imported data:', jsonData);
-            alert('Chức năng nhập từ Excel đang được phát triển. Dữ liệu đã được đọc thành công (xem console).');
-            // Here you would typically validate and send to backend
+            if (!jsonData || jsonData.length === 0) {
+                alert('File Excel trống!'); 
+                return;
+            }
+
+            const headerRow = Object.keys(jsonData[0] as object);
+            const isCatalog = headerRow.includes('Mã Loại') && headerRow.includes('Tên Danh Mục');
+            const isAsset = headerRow.includes('Mã Tài Sản') && headerRow.includes('Tên Thiết Bị');
+
+            if (isCatalog) {
+                if (!window.confirm(`Tìm thấy ${jsonData.length} danh mục. Tiến hành nhập dữ liệu?`)) return;
+                let successCount = 0;
+                for (const row of jsonData as any[]) {
+                    if (!row['Mã Loại'] || !row['Tên Danh Mục']) continue;
+                    let existing = catalogs.find(c => c.code === row['Mã Loại']);
+                    const catalogId = existing ? existing.id : `CAT_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                    
+                    await saveToolCatalog({
+                        id: catalogId,
+                        code: String(row['Mã Loại']),
+                        name: String(row['Tên Danh Mục']),
+                        type: String(row['Loại / Kiểu'] || 'Chung'),
+                        specifications: String(row['Mô Tả'] || ''),
+                        created_by: existing ? existing.created_by : user.id,
+                        created_at: existing ? existing.created_at : Math.floor(Date.now() / 1000),
+                        updated_at: Math.floor(Date.now() / 1000)
+                    });
+                    successCount++;
+                }
+                alert(`Đã nhập thành công ${successCount} danh mục.`);
+                loadCatalogs();
+            } else if (isAsset) {
+                if (!window.confirm(`Tìm thấy ${jsonData.length} tài sản/công cụ. Tiến hành nhập dữ liệu?`)) return;
+                let successCount = 0;
+                
+                const { fetchToolAssets } = await import('../services/apiService');
+                const allAssets = await fetchToolAssets();
+
+                for (const row of jsonData as any[]) {
+                    if (!row['Mã Tài Sản']) continue;
+                    let existingAsset = allAssets.find((a: ToolAsset) => a.asset_code === row['Mã Tài Sản']);
+                    let catalog_id = existingAsset?.catalog_id;
+                    
+                    if (!catalog_id && row['Mã Loại']) {
+                        let cat = catalogs.find(c => c.code === row['Mã Loại']);
+                        if (cat) catalog_id = cat.id;
+                    }
+                    
+                    if (!catalog_id && !existingAsset) {
+                        let catByName = catalogs.find(c => c.name === row['Tên Thiết Bị']);
+                        if (catByName) catalog_id = catByName.id;
+                        else continue; 
+                    }
+                    
+                    const assetId = existingAsset ? existingAsset.id : `AST_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                    
+                    let nextCalibDate = existingAsset?.next_calibration_date || null;
+                    if (row['Hạn Hiệu Chuẩn']) {
+                        const val = row['Hạn Hiệu Chuẩn'];
+                        if (typeof val === 'number') {
+                            nextCalibDate = Math.floor((val - 25569) * 86400); 
+                        } else if (typeof val === 'string') {
+                            const parts = val.split(/[-/]/);
+                            if (parts.length === 3) {
+                                const d = new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0]));
+                                if (!isNaN(d.getTime())) nextCalibDate = Math.floor(d.getTime()/1000);
+                            }
+                        }
+                    }
+
+                    await saveToolAsset({
+                        id: assetId,
+                        catalog_id: (catalog_id as string),
+                        asset_code: String(row['Mã Tài Sản']),
+                        serial_number: String(row['Số Serial'] || ''),
+                        status: existingAsset ? existingAsset.status : (row['Trạng Thái'] || 'AVAILABLE'),
+                        current_user_id: existingAsset?.current_user_id || undefined,
+                        next_calibration_date: nextCalibDate
+                    });
+                    successCount++;
+                }
+                alert(`Đã nhập thành công ${successCount} tài sản/công cụ.`);
+                loadMyAssets();
+            } else {
+                alert('Tệp Excel không đúng định dạng. Cần chứa cột [Mã Loại, Tên Danh Mục] đối với Danh mục Kho, hoặc [Mã Tài Sản, Tên Thiết Bị] đối với Công cụ con.');
+            }
         } catch (error) {
             console.error('Import failed:', error);
-            alert('Lỗi nhập file Excel');
+            alert('Lỗi nhập file Excel. Hãy chắc chắn tệp đúng định dạng.');
         }
     };
     input.click();
