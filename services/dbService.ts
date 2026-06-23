@@ -328,46 +328,61 @@ export async function saveInspection(inspection: Inspection) {
   const isL1Signing = inspection.teamLeadSignature && (!oldValue || !oldValue.teamLeadSignature);
   const isL2Signing = inspection.managerSignature && (!oldValue || !oldValue.managerSignature);
   const isApproving = isL1Signing || isL2Signing;
-  const isLocked = oldValue?.status === InspectionStatus.APPROVED || (oldValue?.managerSignature && oldValue?.managerSignature.length > 5);
 
-  if (isLocked) {
-      // BỐ TRÍ KHÓA CỨNG: Cấm tuyệt đối chỉnh sửa khi đã có chữ ký L2
-      throw new Error("PHIẾU ĐÃ KHÓA: Giám đốc (L2) đã phê duyệt. Không thể thay đổi bất kỳ thông tin nào.");
-  }
-
-  if (isL1Signing) {
-      inspection.teamLeadDate = inspection.teamLeadDate || nowEpoch;
-      inspection.status = InspectionStatus.VERIFIED;
-  }
-  if (isL2Signing) {
-      inspection.managerDate = inspection.managerDate || nowEpoch;
-      inspection.status = InspectionStatus.APPROVED;
-  }
+  // RULE 2: LOCKING - Tuyệt đối không cho sửa khi L2 (Giám đốc) đã ký duyệt
+  const isLockedByManager = (oldValue?.managerSignature && oldValue.managerSignature.length > 10) || oldValue?.status === InspectionStatus.APPROVED;
   
-  // CRITICAL: Đảm bảo không mất mốc thời gian cũ khi cập nhật các trường khác
+  if (isLockedByManager) {
+      throw new Error("PHIẾU ĐÃ KHÓA: Giám đốc (L2) đã phê duyệt. Mọi hành vi chỉnh sửa (kể cả Admin) đều bị từ chối.");
+  }
+
+  // Khởi tạo qcDate cho phiếu mới
+  if (!oldValue && !inspection.qcDate) {
+      inspection.qcDate = nowEpoch;
+  }
+
+  // Đảm bảo không mất mốc thời gian cũ khi cập nhật các nội dung khác
   if (oldValue) {
       if (!inspection.qcDate && oldValue.qcDate) inspection.qcDate = oldValue.qcDate;
       if (!inspection.teamLeadDate && oldValue.teamLeadDate) inspection.teamLeadDate = oldValue.teamLeadDate;
       if (!inspection.managerDate && oldValue.managerDate) inspection.managerDate = oldValue.managerDate;
   }
 
-  // LOGIC SỬA PHIẾU (QC EDIT): Nếu không phải đang ký duyệt mà là sửa nội dung
-  if (!isApproving && oldValue && oldValue.status !== InspectionStatus.DRAFT) {
-      // Cập nhật mốc thời gian QC mới nhất
-      inspection.qcDate = nowEpoch;
-      
-      // RESET CHỮ KÝ: Khi nội dung thay đổi, các cấp trên phải duyệt lại từ đầu
-      if (oldValue.teamLeadSignature || oldValue.managerSignature) {
-          console.log(`📡 ISO-DB: QC edited record ${inspection.id}. Resetting L1/L2 signatures to force re-approval.`);
-          inspection.teamLeadSignature = null as any;
-          inspection.teamLeadDate = null as any;
-          inspection.teamLeadName = null as any;
-          inspection.managerSignature = null as any;
-          inspection.managerDate = null as any;
-          inspection.managerName = null as any;
-          inspection.status = InspectionStatus.PENDING; // Quay lại trạng thái chờ duyệt
+  // Xử lý mốc thời gian khi Ký duyệt
+  if (isL1Signing) {
+      inspection.teamLeadDate = nowEpoch;
+      inspection.status = InspectionStatus.VERIFIED;
+  }
+  if (isL2Signing) {
+      inspection.managerDate = nowEpoch;
+      inspection.status = InspectionStatus.APPROVED;
+  }
+
+  // RULE 1: QC SỬA PHIẾU - Cập nhật qcDate mới nhất và Reset chữ ký cũ nếu có
+  if (!isApproving && oldValue) {
+      // Xác định xem nội dung biểu mẫu có THỰC SỰ thay đổi hay không (bỏ qua comments)
+      const itemsChanged = JSON.stringify(inspection.items) !== JSON.stringify(oldValue.items);
+      const summaryChanged = inspection.summary !== oldValue.summary;
+      const scoreChanged = inspection.score !== oldValue.score;
+      const isContentEdited = itemsChanged || summaryChanged || scoreChanged;
+
+      if (isContentEdited) {
+          // Chỉ lấy mốc thời gian mới khi thực sự có sửa nội dung
+          inspection.qcDate = nowEpoch;
+          
+          if (oldValue.teamLeadSignature || oldValue.managerSignature) {
+              console.log(`📡 ISO-DB: Records ${inspection.id} modified by QC. Force reset signatures and timestamps for re-approval.`);
+              inspection.teamLeadName = null as any;
+              inspection.teamLeadSignature = null as any;
+              inspection.teamLeadDate = null as any;
+              inspection.managerName = null as any;
+              inspection.managerSignature = null as any;
+              inspection.managerDate = null as any;
+              inspection.status = InspectionStatus.PENDING;
+          }
       }
   }
+
   // Ensure dates are parsed as BIGINT epochs for DB (seconds)
   const updatedAt = parseTS(inspection.updatedAt);
   const inspection_date = parseTS(inspection.date);

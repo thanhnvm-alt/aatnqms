@@ -271,7 +271,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
                                 <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform -rotate-12 bg-red-50/5">
                                     <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">NGƯỜI KÝ</span>
-                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.createdAt || inspection.date)}</span>
+                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.qcDate || inspection.date || inspection.createdAt)}</span>
                                 </div>
                             </div>
                             </>
@@ -290,7 +290,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
                                     <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform rotate-12 bg-red-50/5">
                                     <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">VERIFIED L1</span>
-                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.teamLeadDate || inspection.qcDate)}</span>
+                                    <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.teamLeadDate) || 'N/A'}</span>
                                 </div>
                             </div>
                             </>
@@ -309,7 +309,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.25]">
                             <div className="border border-red-600/50 rounded px-2 py-1 flex flex-col items-center transform -rotate-6 bg-red-50/5">
                                 <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">APPROVED L2</span>
-                                <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.managerDate || inspection.teamLeadDate || inspection.qcDate)}</span>
+                                <span className="text-[7px] font-bold text-red-700">{formatDateTime(inspection.managerDate) || 'N/A'}</span>
                             </div>
                         </div>
                         </>
@@ -377,10 +377,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
                     <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
-                      {formatDateTime(inspection.qcDate || inspection.createdAt).split(' - ')[0]}
+                      {(formatDateTime(inspection.qcDate || inspection.date || inspection.createdAt).split(' - ')[0]) || ' '}
                     </span>
                     <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
-                      {formatDateTime(inspection.qcDate || inspection.createdAt).split(' - ')[1]}
+                      {(formatDateTime(inspection.qcDate || inspection.date || inspection.createdAt).split(' - ')[1]) || ' '}
                     </span>
                   </div>
                 </div>
@@ -418,10 +418,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                     </span>
                     <div className="flex flex-col items-center gap-0.5 mt-0.5">
                       <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
-                        {formatDateTime(inspection.teamLeadDate || inspection.qcDate).split(' - ')[0]}
+                        {inspection.teamLeadDate ? formatDateTime(inspection.teamLeadDate).split(' - ')[0] : ' '}
                       </span>
                       <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
-                        {formatDateTime(inspection.teamLeadDate || inspection.qcDate).split(' - ')[1]}
+                        {inspection.teamLeadDate ? formatDateTime(inspection.teamLeadDate).split(' - ')[1] : ' '}
                       </span>
                     </div>
                   </div>
@@ -494,10 +494,10 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   </span>
                   <div className="flex flex-col items-center gap-0.5 mt-0.5">
                     <span className="text-[8px] font-black text-red-700 tabular-nums leading-none">
-                      {formatDateTime(inspection.managerDate || inspection.teamLeadDate || inspection.qcDate).split(' - ')[0]}
+                      {inspection.managerDate ? formatDateTime(inspection.managerDate).split(' - ')[0] : ' '}
                     </span>
                     <span className="text-[7px] font-bold text-red-700/80 tabular-nums leading-none">
-                      {formatDateTime(inspection.managerDate || inspection.teamLeadDate || inspection.qcDate).split(' - ')[1]}
+                      {inspection.managerDate ? formatDateTime(inspection.managerDate).split(' - ')[1] : ' '}
                     </span>
                   </div>
                 </div>
