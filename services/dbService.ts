@@ -31,6 +31,39 @@ const safeJsonParse = <T>(jsonString: any, defaultValue: T): T => {
 /**
  * Syncs common inspection data to the centralized 'inspections' table
  */
+/**
+ * Helper to parse various date formats into Unix Epoch (seconds)
+ */
+function parseTS(val: any, defaultToNow = true): number | null {
+    if (!val || val === "undefined" || val === "null") return defaultToNow ? Math.floor(Date.now() / 1000) : null;
+    if (typeof val === 'number') {
+        if (isNaN(val) || val <= 0) return defaultToNow ? Math.floor(Date.now() / 1000) : null;
+        if (val > 100000000000) return Math.floor(val / 1000);
+        return Math.floor(val);
+    }
+    const strVal = String(val).trim();
+    if (!strVal || strVal === "0" || strVal === "undefined" || strVal === "null") return defaultToNow ? Math.floor(Date.now() / 1000) : null;
+    
+    if (/^\d+$/.test(strVal)) {
+        const n = parseInt(strVal, 10);
+        if (isNaN(n) || n <= 0) return defaultToNow ? Math.floor(Date.now() / 1000) : null;
+        if (n > 100000000000) return Math.floor(n / 1000);
+        return n;
+    }
+    
+    // Handle DD/MM/YYYY
+    const ddmmmyyyy = strVal.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (ddmmmyyyy) {
+        const [, d, m, y, h, min, s] = ddmmmyyyy;
+        const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), h ? parseInt(h, 10) : 0, min ? parseInt(min, 10) : 0, s ? parseInt(s, 10) : 0);
+        if (!isNaN(date.getTime())) return Math.floor(date.getTime() / 1000);
+    }
+
+    const d = new Date(strVal);
+    if (isNaN(d.getTime())) return defaultToNow ? Math.floor(Date.now() / 1000) : null;
+    return Math.floor(d.getTime() / 1000);
+}
+
 async function syncToInspectionsTable(inspection: Inspection) {
     try {
         const updatedAt = parseTS(inspection.updatedAt);
@@ -91,38 +124,9 @@ async function syncToInspectionsTable(inspection: Inspection) {
     }
 }
 
-const parseTS = (val: any): number => {
-    if (!val) return Math.floor(Date.now() / 1000);
-    if (typeof val === 'number') {
-        if (isNaN(val) || val <= 0) return Math.floor(Date.now() / 1000);
-        // If it's milliseconds (length > 11), convert to seconds
-        if (val > 100000000000) return Math.floor(val / 1000);
-        return Math.floor(val);
-    }
-    const strVal = String(val).trim();
-    if (!strVal || strVal === "0" || strVal === "undefined" || strVal === "null") return Math.floor(Date.now() / 1000);
-    
-    if (/^\d+$/.test(strVal)) {
-        const n = parseInt(strVal, 10);
-        if (isNaN(n) || n <= 0) return Math.floor(Date.now() / 1000);
-        if (n > 100000000000) return Math.floor(n / 1000);
-        return n;
-    }
-    
-    // Handle DD/MM/YYYY
-    const ddmmmyyyy = strVal.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-    if (ddmmmyyyy) {
-        const [, d, m, y, h, min, s] = ddmmmyyyy;
-        const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), h ? parseInt(h, 10) : 0, min ? parseInt(min, 10) : 0, s ? parseInt(s, 10) : 0);
-        if (!isNaN(date.getTime())) return Math.floor(date.getTime() / 1000);
-    }
 
-    const parsed = Date.parse(strVal);
-    if (!isNaN(parsed)) {
-        return Math.floor(parsed / 1000);
-    }
-    return Math.floor(Date.now() / 1000);
-};
+
+
 
 /**
  * Helper to sanitize database arguments
@@ -334,6 +338,19 @@ export async function saveInspection(inspection: Inspection) {
           inspection.managerDate = inspection.managerDate || nowEpoch;
       }
       
+      // CRITICAL: Preserve existing dates if not provided in the request
+      if (oldValue) {
+          if (!inspection.qcDate && oldValue.qcDate) {
+              inspection.qcDate = oldValue.qcDate;
+          }
+          if (!inspection.teamLeadDate && oldValue.teamLeadDate) {
+              inspection.teamLeadDate = oldValue.teamLeadDate;
+          }
+          if (!inspection.managerDate && oldValue.managerDate) {
+              inspection.managerDate = oldValue.managerDate;
+          }
+      }
+
       // If regular QC edit (not an approval action), update QC date and reset L1/L2 if they exist
       if (!isApproving && inspection.status !== InspectionStatus.DRAFT) {
           inspection.qcDate = nowEpoch;
@@ -353,9 +370,9 @@ export async function saveInspection(inspection: Inspection) {
   // Ensure dates are parsed as BIGINT epochs for DB (seconds)
   const updatedAt = parseTS(inspection.updatedAt);
   const inspection_date = parseTS(inspection.date);
-  const qcDateTS = parseTS(inspection.qcDate);
-  const teamLeadDateTS = parseTS(inspection.teamLeadDate);
-  const managerDateTS = parseTS(inspection.managerDate);
+  const qcDateTS = parseTS(inspection.qcDate, false);
+  const teamLeadDateTS = parseTS(inspection.teamLeadDate, false);
+  const managerDateTS = parseTS(inspection.managerDate, false);
 
     if (inspection.type === 'PQC') {
       await query(`
