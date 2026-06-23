@@ -328,45 +328,46 @@ export async function saveInspection(inspection: Inspection) {
   const isL1Signing = inspection.teamLeadSignature && (!oldValue || !oldValue.teamLeadSignature);
   const isL2Signing = inspection.managerSignature && (!oldValue || !oldValue.managerSignature);
   const isApproving = isL1Signing || isL2Signing;
-  const isLocked = oldValue?.status === InspectionStatus.APPROVED;
+  const isLocked = oldValue?.status === InspectionStatus.APPROVED || (oldValue?.managerSignature && oldValue?.managerSignature.length > 5);
 
-  if (!isLocked) {
-      if (isL1Signing) {
-          inspection.teamLeadDate = inspection.teamLeadDate || nowEpoch;
-      }
-      if (isL2Signing) {
-          inspection.managerDate = inspection.managerDate || nowEpoch;
-      }
-      
-      // CRITICAL: Preserve existing dates if not provided in the request
-      if (oldValue) {
-          if (!inspection.qcDate && oldValue.qcDate) {
-              inspection.qcDate = oldValue.qcDate;
-          }
-          if (!inspection.teamLeadDate && oldValue.teamLeadDate) {
-              inspection.teamLeadDate = oldValue.teamLeadDate;
-          }
-          if (!inspection.managerDate && oldValue.managerDate) {
-              inspection.managerDate = oldValue.managerDate;
-          }
-      }
-
-      // If regular QC edit (not an approval action), update QC date and reset L1/L2 if they exist
-      if (!isApproving && inspection.status !== InspectionStatus.DRAFT) {
-          inspection.qcDate = nowEpoch;
-          
-          if (oldValue && (oldValue.teamLeadSignature || oldValue.managerSignature)) {
-              console.log(`📡 ISO-DB: QC edited record ${inspection.id}. Resetting L1/L2 signatures.`);
-              inspection.teamLeadSignature = null as any;
-              inspection.teamLeadName = null as any;
-              inspection.teamLeadDate = null as any;
-              inspection.managerSignature = null as any;
-              inspection.managerName = null as any;
-              inspection.managerDate = null as any;
-          }
-      }
+  if (isLocked) {
+      // BỐ TRÍ KHÓA CỨNG: Cấm tuyệt đối chỉnh sửa khi đã có chữ ký L2
+      throw new Error("PHIẾU ĐÃ KHÓA: Giám đốc (L2) đã phê duyệt. Không thể thay đổi bất kỳ thông tin nào.");
   }
 
+  if (isL1Signing) {
+      inspection.teamLeadDate = inspection.teamLeadDate || nowEpoch;
+      inspection.status = InspectionStatus.VERIFIED;
+  }
+  if (isL2Signing) {
+      inspection.managerDate = inspection.managerDate || nowEpoch;
+      inspection.status = InspectionStatus.APPROVED;
+  }
+  
+  // CRITICAL: Đảm bảo không mất mốc thời gian cũ khi cập nhật các trường khác
+  if (oldValue) {
+      if (!inspection.qcDate && oldValue.qcDate) inspection.qcDate = oldValue.qcDate;
+      if (!inspection.teamLeadDate && oldValue.teamLeadDate) inspection.teamLeadDate = oldValue.teamLeadDate;
+      if (!inspection.managerDate && oldValue.managerDate) inspection.managerDate = oldValue.managerDate;
+  }
+
+  // LOGIC SỬA PHIẾU (QC EDIT): Nếu không phải đang ký duyệt mà là sửa nội dung
+  if (!isApproving && oldValue && oldValue.status !== InspectionStatus.DRAFT) {
+      // Cập nhật mốc thời gian QC mới nhất
+      inspection.qcDate = nowEpoch;
+      
+      // RESET CHỮ KÝ: Khi nội dung thay đổi, các cấp trên phải duyệt lại từ đầu
+      if (oldValue.teamLeadSignature || oldValue.managerSignature) {
+          console.log(`📡 ISO-DB: QC edited record ${inspection.id}. Resetting L1/L2 signatures to force re-approval.`);
+          inspection.teamLeadSignature = null as any;
+          inspection.teamLeadDate = null as any;
+          inspection.teamLeadName = null as any;
+          inspection.managerSignature = null as any;
+          inspection.managerDate = null as any;
+          inspection.managerName = null as any;
+          inspection.status = InspectionStatus.PENDING; // Quay lại trạng thái chờ duyệt
+      }
+  }
   // Ensure dates are parsed as BIGINT epochs for DB (seconds)
   const updatedAt = parseTS(inspection.updatedAt);
   const inspection_date = parseTS(inspection.date);
