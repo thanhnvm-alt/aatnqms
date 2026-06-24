@@ -68,6 +68,7 @@ async function syncToInspectionsTable(inspection: Inspection) {
     try {
         const updatedAt = parseTS(inspection.updatedAt);
         const createdAt = parseTS(inspection.createdAt || inspection.date || Date.now());
+        const inspection_date = parseTS(inspection.date);
         
         await query(`
             INSERT INTO ${SCHEMA}."inspections" (
