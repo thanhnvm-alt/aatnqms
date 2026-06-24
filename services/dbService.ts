@@ -85,7 +85,6 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 status = EXCLUDED.status,
                 score = EXCLUDED.score,
                 updated_at = EXCLUDED.updated_at,
-                created_at = EXCLUDED.created_at,
                 date = EXCLUDED.date,
                 ma_ct = EXCLUDED.ma_ct,
                 ten_ct = EXCLUDED.ten_ct,
