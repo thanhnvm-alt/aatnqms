@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IPOItem } from '../types';
 import { ArrowLeft, FileText, Package, Ruler, Info, BrainCircuit, History, Share2, AlertTriangle, CheckCircle2, ChevronRight, Upload, Search, FileDiff, Edit, Trash2, X } from 'lucide-react';
-import { fetchIpoDetailExtended, saveIpoDrawingRecord, uploadFileToStorage, saveIpoMaterialRecord, saveIpoSampleRecord, updateIpoSampleRecord, deleteIpoSampleRecord, fetchProjectByCode } from '../services/apiService';
+import { fetchIpoDetailExtended, saveIpoDrawingRecord, uploadFileToStorage, saveIpoMaterialRecord, saveIpoSampleRecord, updateIpoSampleRecord, deleteIpoSampleRecord, fetchProjectByCode, fetchInspections } from '../services/apiService';
 import { analyzeIpo } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -18,6 +18,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
   const [drawings, setDrawings] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [samples, setSamples] = useState<any[]>([]);
+  const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
@@ -51,6 +52,9 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
       setDrawings(data.drawings || []);
       setMaterials(data.materials || []);
       setSamples(data.samples || []);
+      
+      const inspData = await fetchInspections({ ma_nha_may: item.ma_nha_may }, 1, 100);
+      setInspections(inspData.items || []);
     } catch (error) {
       console.error("Error loading IPO extended data:", error);
     } finally {
@@ -235,6 +239,49 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                       <p className="text-sm text-slate-600 dark:text-slate-400 dark:text-slate-500 italic leading-relaxed">
                         {extendedDetail?.sample_history || "Chưa có dữ liệu thay đổi mẫu mẫu vật liệu được ghi nhận."}
                       </p>
+                    </div>
+                    <div className="pt-6 border-t border-slate-50">
+                      <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="w-1 h-4 bg-teal-400 rounded-full"></span> QUÁ TRÌNH KIỂM TRA
+                      </h4>
+                      {inspections.length > 0 ? (
+                        <div className="space-y-3">
+                          {inspections.map((insp) => (
+                            <div key={insp.id} className="flex items-start justify-between p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                  {insp.headcode || insp.id} - {insp.type}
+                                </span>
+                                <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium leading-snug max-w-[280px] sm:max-w-[400px]">
+                                  Hạng mục: <span className="text-slate-800 dark:text-slate-300 font-semibold">{insp.ten_hang_muc || 'N/A'}</span>
+                                </span>
+                                <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                                  Công đoạn: <span className="text-slate-800 dark:text-slate-300 font-semibold">{insp.stage || insp.inspectionStage || 'N/A'}</span>
+                                </span>
+                                <span className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                  <History className="w-3 h-3" />
+                                  {new Date(insp.created_at ? (Number(insp.created_at) > 100000000000 ? Number(insp.created_at) : Number(insp.created_at) * 1000) : insp.date ? (Number(insp.date) > 100000000000 ? Number(insp.date) : Number(insp.date) * 1000) : Date.now()).toLocaleString('vi-VN')}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-end gap-2 shrink-0">
+                                <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider ${
+                                  insp.status === 'approved' ? 'bg-teal-100 text-teal-700' :
+                                  insp.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                                  insp.status === 'submitted' ? 'bg-amber-100 text-amber-700' :
+                                  insp.status === 'verified' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {insp.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-600 dark:text-slate-400 dark:text-slate-500 italic leading-relaxed">
+                          Chưa có quá trình kiểm tra nào được ghi nhận cho IPO này.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

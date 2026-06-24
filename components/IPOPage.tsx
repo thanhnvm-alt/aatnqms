@@ -19,6 +19,7 @@ export default function IPOPage({ user }: { user: User }) {
 
   const handleCommitSearch = () => {
     setSearchTerm(searchInput);
+    setPage(1);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

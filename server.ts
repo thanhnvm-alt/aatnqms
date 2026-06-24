@@ -405,24 +405,32 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   app.get("/api/ipo", async (req, res) => {
     try {
       const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { factoryOrder, maTender, page = 1, limit = 50 } = req.query;
+      const { factoryOrder, maTender, material, page = 1, limit = 50 } = req.query;
       const p = parseInt(page as string, 10);
       const l = parseInt(limit as string, 10);
       const offset = (p - 1) * l;
       
       let sql = `SELECT "ID_Factory_Order" as id, "ID_Factory_Order", "Ma_Tender", "Project_name", "Material_description", "Quantity_IPO", "Base_Unit" FROM "${schema}"."ipo" WHERE 1=1`;
+      let countSql = `SELECT COUNT(*) as total FROM "${schema}"."ipo" WHERE 1=1`;
       const params: any[] = [];
       
       if (factoryOrder) {
         sql += ` AND "ID_Factory_Order" = $${params.length + 1}`;
+        countSql += ` AND "ID_Factory_Order" = $${params.length + 1}`;
         params.push(factoryOrder);
       }
       if (maTender) {
         sql += ` AND "Ma_Tender" = $${params.length + 1}`;
+        countSql += ` AND "Ma_Tender" = $${params.length + 1}`;
         params.push(maTender);
       }
-      
-      const countSql = `SELECT COUNT(*) as total FROM "${schema}"."ipo" WHERE 1=1 ${factoryOrder ? `AND "ID_Factory_Order" = $1` : ''} ${maTender ? `AND "Ma_Tender" = $${factoryOrder ? 2 : 1}` : ''}`;
+      if (material) {
+        const pStr = `%${material}%`;
+        const idx = params.length + 1;
+        sql += ` AND ("Ma_Tender" ILIKE $${idx} OR "ID_Factory_Order" ILIKE $${idx} OR "Material_description" ILIKE $${idx})`;
+        countSql += ` AND ("Ma_Tender" ILIKE $${idx} OR "ID_Factory_Order" ILIKE $${idx} OR "Material_description" ILIKE $${idx})`;
+        params.push(pStr);
+      }
       
       const [result, countResult] = await Promise.all([
         query(sql + ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, l, offset]),
@@ -955,7 +963,10 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         project: req.query.project as string,
         type: req.query.type as string,
         startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string
+        endDate: req.query.endDate as string,
+        ma_nha_may: req.query.ma_nha_may as string,
+        unixStart: req.query.unixStart as string,
+        unixEnd: req.query.unixEnd as string
       };
 
       // if mobile and no startDate provided, we now allow everything as requested
@@ -978,7 +989,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         project: req.query.project as string,
         type: req.query.type as string,
         startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string
+        endDate: req.query.endDate as string,
+        unixStart: req.query.unixStart as string,
+        unixEnd: req.query.unixEnd as string
       };
 
       const result = await db.getDashboardInspectionsList(filters, (req as any).user);
@@ -999,7 +1012,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         project: req.query.project as string,
         type: req.query.type as string,
         startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string
+        endDate: req.query.endDate as string,
+        unixStart: req.query.unixStart as string,
+        unixEnd: req.query.unixEnd as string
       };
 
       const stats = await db.getDashboardStats(filters, (req as any).user);
@@ -2493,7 +2508,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             project: req.query.project as string,
             type: req.query.type as string,
             startDate: req.query.startDate as string,
-            endDate: req.query.endDate as string
+            endDate: req.query.endDate as string,
+            unixStart: req.query.unixStart as string,
+            unixEnd: req.query.unixEnd as string
         };
 
         const result = await db.getInspectionsList(filters, 1, 50000);

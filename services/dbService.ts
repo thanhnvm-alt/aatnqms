@@ -701,6 +701,12 @@ function buildBaseWhere(filters: any, user?: User) {
         subArgs.push(...statuses);
     }
 
+    if (filters.ma_nha_may) {
+        const idx = subArgs.length + 1;
+        whereClause += ` AND ma_nha_may = $${idx}`;
+        subArgs.push(filters.ma_nha_may);
+    }
+
     if (filters.search) {
         const searchPattern = `%${filters.search}%`;
         const searchIdx = subArgs.length + 1;
@@ -844,7 +850,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             workshop, status, score, created_at, updated_at, created_by as "inspectorName",
             stage as "inspectionStage", inspected_qty as "inspectedQuantity",
             passed_qty as "passedQuantity", failed_qty as "failedQuantity",
-            so_luong_ipo
+            so_luong_ipo, headcode, stage
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
