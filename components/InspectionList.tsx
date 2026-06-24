@@ -481,7 +481,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
              args.unixEnd = bounds.unixEnd;
       }
       
-      fetchInspections(args, 1, 50).then(res => {
+      fetchInspections(args, 1, 50000).then(res => {
           if (isActive) {
               setLazyLoadedItems(res.items || []);
               setIsItemsLoading(false);
@@ -498,19 +498,6 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       
       if (selectedProjectDesktop !== null && selectedProjectDesktop !== 'ALL') {
           itemsForProject = itemsForProject.filter(i => (i.ma_ct || '') === (selectedProjectDesktop || ''));
-      }
-      
-      // Apply Date/Month filtering on top of lazyLoadedItems
-      if (selectedDateDesktop && selectedDateDesktop !== 'ALL') {
-          itemsForProject = itemsForProject.filter(i => (formatDisplayDate(i.date) || 'KHÔNG RÕ NGÀY') === selectedDateDesktop);
-      } else if (selectedMonthDesktop) {
-          const { month, year } = selectedMonthDesktop;
-          itemsForProject = itemsForProject.filter(i => {
-              const dk = formatDisplayDate(i.date) || 'KHÔNG RÕ NGÀY';
-              if (dk === 'KHÔNG RÕ NGÀY' || dk === '---') return false;
-              const [, m, y] = dk.split('/');
-              return parseInt(m, 10) === month && parseInt(y, 10) === year;
-          });
       }
       
       return { desktopProjectsList: projects, desktopItems: itemsForProject };

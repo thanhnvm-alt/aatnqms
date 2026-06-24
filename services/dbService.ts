@@ -73,17 +73,19 @@ async function syncToInspectionsTable(inspection: Inspection) {
             INSERT INTO ${SCHEMA}."inspections" (
                 id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
                 workshop, status, score, created_at, updated_at, created_by, headcode,
-                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority
+                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority, date
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, 
                 $9::double precision, $10::bigint, $11::bigint, $12, $13,
-                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19
+                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19, $20::bigint
             )
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 score = EXCLUDED.score,
                 updated_at = EXCLUDED.updated_at,
+                created_at = EXCLUDED.created_at,
+                date = EXCLUDED.date,
                 ma_ct = EXCLUDED.ma_ct,
                 ten_ct = EXCLUDED.ten_ct,
                 ma_nha_may = EXCLUDED.ma_nha_may,
@@ -117,7 +119,8 @@ async function syncToInspectionsTable(inspection: Inspection) {
             inspection.passedQuantity || 0,
             inspection.failedQuantity || 0,
             inspection.so_luong_ipo || 0,
-            inspection.priority || null
+            inspection.priority || null,
+            inspection_date
         ]));
     } catch (e) {
         console.error(`❌ ISO-DB: Sync to inspections table failed for ${inspection.id}:`, e);
@@ -414,7 +417,7 @@ export async function saveInspection(inspection: Inspection) {
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
           updated_at = EXCLUDED.updated_at, 
-          date = COALESCE(${table}.date, EXCLUDED.date),
+          date = EXCLUDED.date,
           score = EXCLUDED.score, 
           items_json = EXCLUDED.items_json,
           images_json = EXCLUDED.images_json,
@@ -486,7 +489,7 @@ export async function saveInspection(inspection: Inspection) {
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
         score = EXCLUDED.score, 
-        date = COALESCE(${table}.date, EXCLUDED.date),
+        date = EXCLUDED.date,
         summary = EXCLUDED.summary,
         items_json = EXCLUDED.items_json,
         images_json = EXCLUDED.images_json,
@@ -802,7 +805,7 @@ export async function getInspectionsDatesList(filters: any = {}, user?: User): P
 
     const q = `
         SELECT 
-            to_char(to_timestamp(created_at) AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS date_str,
+            to_char(to_timestamp(COALESCE(date, created_at, updated_at)) AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS date_str,
             COUNT(*) as total_count
         FROM ${SCHEMA}."inspections" ${whereClause}
         GROUP BY 1
@@ -850,7 +853,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             workshop, status, score, created_at, updated_at, created_by as "inspectorName",
             stage as "inspectionStage", inspected_qty as "inspectedQuantity",
             passed_qty as "passedQuantity", failed_qty as "failedQuantity",
-            so_luong_ipo, headcode, stage
+            so_luong_ipo, headcode, stage, date
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
@@ -870,7 +873,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             ...row,
             inspectorName: row.inspectorName || row.created_by,
             created_by: row.created_by || row.inspectorName,
-            date: (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
+            date: (row.date && Number(row.date) > 1000000000) ? row.date :
+                  (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
                   (row.updated_at && Number(row.updated_at) > 1000000000) ? row.updated_at : 
                   row.created_at,
             updatedAt: row.updated_at,
@@ -907,7 +911,7 @@ export async function getDashboardInspectionsList(filters: any = {}, user?: User
             workshop, status, score, created_at, updated_at, created_by as "inspectorName",
             stage as "inspectionStage", inspected_qty as "inspectedQuantity",
             passed_qty as "passedQuantity", failed_qty as "failedQuantity",
-            so_luong_ipo
+            so_luong_ipo, date
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
@@ -925,7 +929,8 @@ export async function getDashboardInspectionsList(filters: any = {}, user?: User
             ...row,
             inspectorName: row.inspectorName || row.created_by,
             created_by: row.created_by || row.inspectorName,
-            date: (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
+            date: (row.date && Number(row.date) > 1000000000) ? row.date :
+                  (row.created_at && Number(row.created_at) > 1000000000) ? row.created_at : 
                   (row.updated_at && Number(row.updated_at) > 1000000000) ? row.updated_at : 
                   row.created_at,
             updatedAt: row.updated_at,
@@ -1214,9 +1219,10 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     ten_hang_muc: row.ten_hang_muc as string,
                     inspectorName: row.inspector as string,
                     status: row.status as InspectionStatus,
-                    date: (row.created_at && Number(row.created_at) > 1000000000) ? String(row.created_at) : 
-                          (row.updated_at && Number(row.updated_at) > 1000000000) ? String(row.updated_at) : 
-                          (row.date as string),
+                    date: (row.date && Number(row.date) > 1000000000) ? String(row.date) :
+                          (row.created_at && Number(row.created_at) > 1000000000) ? String(row.created_at) : 
+                          (row.updated_at && Number(row.updated_at) > 1000000000) ? String(row.updated_at) :
+                          (row.created_at || row.updated_at || row.date),
                     score: row.score as number,
                     summary: row.summary as string,
                     items: safeJsonParse(row.items_json, []),

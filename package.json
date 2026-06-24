@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node server.ts",
-    "build": "vite build",
+    "build": "NODE_OPTIONS=\"--max-old-space-size=4096\" vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
