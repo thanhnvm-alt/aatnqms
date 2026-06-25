@@ -479,7 +479,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
         <button onClick={onCancel} className="h-14 px-8 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-black uppercase tracking-[0.2em] hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 rounded-[1.5rem] transition-all border border-slate-200 dark:border-slate-700 text-[10px]" type="button">HỦY BỎ</button>
         <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="h-14 flex-1 bg-amber-700 text-white font-black uppercase tracking-[0.2em] rounded-[1.5rem] shadow-2xl shadow-amber-500/20 hover:bg-amber-800 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-[10px]" type="button">
             {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
-            <span>HOÀN TẤT SITE QC</span>
+            <span>GỬI DUYỆT SITE QC</span>
         </button>
       </div>
 

@@ -1,49 +1,79 @@
+import { getProxyImageUrl } from '../src/utils';
 
+import ProxyImage from '../src/components/ProxyImage';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, Workshop, NCR } from '../types';
 import { 
-  Save, X, Camera, Image as ImageIcon, ChevronDown, MapPin, Box, AlertTriangle, Trash2, LayoutList, FileText, QrCode, PenTool, Eraser, Loader2, AlertCircle
+  Save, X, Camera, Image as ImageIcon, ChevronDown, 
+  MapPin, Box, AlertTriangle, 
+  Trash2, Info, LayoutList,
+  AlertOctagon, FileText, QrCode,
+  Ruler, Microscope, PenTool, Eraser, Loader2, Sparkles, CheckCircle2, History, Clock,
+  Activity, ShieldCheck, CheckCircle, AlertCircle, ChevronRight
 } from 'lucide-react';
-import { uploadQMSImage } from '../services/apiService';
+import { fetchIpoByFactoryOrder, uploadQMSImage, fetchInspectionById } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
+import { QRScannerModal } from './QRScannerModal';
 import { compressImage } from '../services/imageService';
 import { PersistenceService } from '../services/persistenceService';
-import { getProxyImageUrl } from '../src/utils';
+import { STEP_CHECKLIST_TEMPLATE } from '../constants';
+
+import { SignaturePad } from './SignaturePad';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
   onSave: (inspection: Inspection) => Promise<void>;
   onCancel: () => void;
   workshops: Workshop[];
+  inspections: Inspection[];
   user: User;
+  templates: Record<string, CheckItem[]>;
 }
 
-export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, workshops, user }) => {
+export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, workshops, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
-    id: `STEP-${Date.now()}`, 
-    date: new Date().toISOString().split('T')[0], 
-    status: InspectionStatus.DRAFT, 
-    items: [], 
-    images: [], 
-    score: 0, 
+    ...initialData,
+    id: initialData?.id || `STEP-${Date.now()}`, 
+    date: initialData?.date || new Date().toISOString().split('T')[0], 
+    status: initialData?.status || InspectionStatus.DRAFT, 
+    items: initialData?.items || templates?.['STEP'] || STEP_CHECKLIST_TEMPLATE, 
+    images: initialData?.images || [], 
+    score: initialData?.score || 0, 
+    signature: initialData?.signature || '', 
+    inspectedQuantity: initialData?.inspectedQuantity || 0, 
+    passedQuantity: initialData?.passedQuantity || 0, 
+    failedQuantity: initialData?.failedQuantity || 0, 
     type: 'STEP',
-    ...initialData 
+    ma_nha_may: initialData?.ma_nha_may || '',
+    headcode: initialData?.headcode || '',
+    workshop: initialData?.workshop || '',
+    so_luong_ipo: initialData?.so_luong_ipo || 0,
+    ma_ct: initialData?.ma_ct || '',
+    ten_ct: initialData?.ten_ct || '',
+    ten_hang_muc: initialData?.ten_hang_muc || '',
+    dvt: initialData?.dvt || ''
   });
+  
+  const [searchCode, setSearchCode] = useState(initialData?.ma_nha_may || initialData?.headcode || ''); 
+  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
-  const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'MAIN' | 'ITEM', itemIdx?: number } | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  
+  const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
   useEffect(() => {
     PersistenceService.hasDraft('STEP', user.id).then(setHasDraft);
   }, []);
 
   useEffect(() => {
-    if (formData.ma_ct || (formData.items && formData.items.length > 0)) {
+    if (formData.ma_nha_may || formData.headcode || (formData.items && formData.items.length > 0)) {
         PersistenceService.saveDraft('STEP', user.id, formData);
     }
   }, [formData]);
@@ -61,132 +91,113 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
     setHasDraft(false);
   };
 
-  const handleInputChange = (field: keyof Inspection, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
-  const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
-    const newItems = [...(formData.items || [])]; if (newItems[index]) { newItems[index] = { ...newItems[index], [field]: value }; }
-    setFormData({ ...formData, items: newItems });
-  };
+  const availableStages = useMemo(() => { 
+      const wsCode = formData.workshop;
+      if (!wsCode) return []; 
+      const selectedWorkshop = workshops.find(ws => ws.code === wsCode); 
+      return selectedWorkshop?.stages || []; 
+  }, [formData.workshop, workshops]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !activeUploadContext) return;
-    setIsProcessingImages(true);
-    const { type, itemIdx } = activeUploadContext;
+  const visibleItems = useMemo(() => { 
+      if (!formData.inspectionStage) return (formData.items || []); 
+      return (formData.items || []).filter(item => !item.stage || item.stage === formData.inspectionStage); 
+  }, [formData.items, formData.inspectionStage]);
+  
+  const rates = useMemo(() => {
+    const ins = parseFloat(String(formData.inspectedQuantity || 0));
+    const pas = parseFloat(String(formData.passedQuantity || 0));
+    const fai = parseFloat(String(formData.failedQuantity || 0));
+    if (ins <= 0) return { passRate: '0.0', defectRate: '0.0' };
+    return { 
+        passRate: ((pas / ins) * 100).toFixed(1), 
+        defectRate: ((fai / ins) * 100).toFixed(1) 
+    };
+  }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
+
+  const historicalRecords = useMemo(() => {
+    if (!searchCode) return [];
+    return inspections
+        .filter(ins => ins.type === 'STEP' && (ins.ma_nha_may === searchCode || ins.headcode === searchCode))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [inspections, searchCode]);
+
+  const lookupPlanInfo = async (code: string) => {
+    if (!code) return;
+    setIsLookupLoading(true);
     try {
-        const compressedBase64s = await Promise.all(
-            Array.from(files).map(async (file: File) => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        try {
-                            const compressed = await compressImage(reader.result as string);
-                            resolve(compressed);
-                        } catch (e) {
-                            resolve(reader.result as string);
-                        }
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-            })
-        );
-
-        setFormData(prev => {
-            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...compressedBase64s] };
-            if (type === 'ITEM' && itemIdx !== undefined) {
-                const items = [...(prev.items || [])];
-                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...compressedBase64s] };
-                return { ...prev, items };
-            }
-            return prev;
-        });
-    } catch (err) { 
-        console.error(err); 
-        alert("Lỗi khi xử lý hình ảnh.");
-    } finally { 
-        setIsProcessingImages(false); 
-        e.target.value = ''; 
+        const ipo = await fetchIpoByFactoryOrder(code);
+        if (ipo) {
+            setFormData(prev => ({
+                ...prev,
+                ma_nha_may: ipo.ma_nha_may || code,
+                headcode: ipo.headcode || code,
+                ma_ct: ipo.ma_ct || prev.ma_ct,
+                ten_ct: ipo.ten_ct || prev.ten_ct,
+                ten_hang_muc: ipo.ten_hang_muc || prev.ten_hang_muc,
+                so_luong_ipo: ipo.so_luong_ipo || prev.so_luong_ipo,
+                dvt: ipo.dvt || prev.dvt
+            }));
+            setSearchCode(code);
+        } else {
+            alert("Không tìm thấy dữ liệu IPO cho mã này.");
+        }
+    } catch (e) {
+        console.error("Lookup error:", e);
+    } finally {
+        setIsLookupLoading(false);
     }
   };
 
-  const handleEditImage = (images: string[], index: number, context: any) => { setEditorState({ images, index, context }); };
-  
-  const onImageSave = async (idx: number, updatedImg: string) => {
-      if (!editorState) return;
-      const { type, itemIdx } = editorState.context;
-      
-      setIsProcessingImages(true);
-      try {
-          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
-          
-          setFormData(prev => {
-              if (type === 'MAIN') { const next = [...(prev.images || [])]; next[idx] = finalImg; return { ...prev, images: next }; }
-              if (type === 'ITEM' && itemIdx !== undefined) {
-                  const items = [...(prev.items || [])];
-                  items[itemIdx].images![idx] = finalImg;
-                  return { ...prev, items };
-              }
-              return prev;
-          });
-      } catch (err) {
-          console.error(err);
-          alert("Lỗi khi nén ảnh.");
-      } finally {
-          setIsProcessingImages(false);
-      }
+  const handleInputChange = (field: keyof Inspection, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
+    setFormData(prev => {
+        const newItems = [...(prev.items || [])];
+        if (newItems[index]) {
+            newItems[index] = { ...newItems[index], [field]: value };
+        }
+        return { ...prev, items: newItems };
+    });
   };
 
   const handleSubmit = async () => {
-    if (!formData.ma_ct) { alert("Vui lòng nhập mã dự án."); return; }
-    
-    setIsSaving(true);
-    setUploadProgress(0);
-    try { 
-        const entityId = formData.id || 'new';
-        
-        interface UploadTask {
-            url: string;
-            role: string;
-            path: 'MAIN' | 'ITEM';
-            itemId?: string;
-            originalIndex?: number;
-        }
+    const ins = formData.inspectedQuantity || 0;
+    if (!formData.ma_ct || !formData.workshop || !formData.inspectionStage) { 
+        alert("Vui lòng nhập đủ thông tin xưởng và chọn công đoạn."); 
+        return; 
+    }
+    if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
 
+    setIsSaving(true);
+    try {
+        const entityId = formData.id || 'new';
+        interface UploadTask { url: string; role: string; path: string; originalIndex?: number; itemId?: string; }
         const tasks: UploadTask[] = [];
 
-        // 1. Identify all base64 images
-        (formData.images || []).forEach((img, idx) => {
-            if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx });
-        });
-
+        (formData.images || []).forEach((img, idx) => { if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx }); });
         (formData.items || []).forEach((item) => {
-            (item.images || []).forEach((img, idx) => {
-                if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', itemId: item.id, originalIndex: idx });
-            });
+            (item.images || []).forEach((img, idx) => { if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', itemId: item.id, originalIndex: idx }); });
         });
+        if (formData.signature?.startsWith('data:')) tasks.push({ url: formData.signature, role: 'SIGNATURE_QC', path: 'SIGNATURE' });
 
         const totalTasks = tasks.length;
         let completedCount = 0;
-
-        // Function to update formData state and free memory
         const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
             setFormData(prev => {
                 const next = { ...prev };
                 if (task.path === 'MAIN' && task.originalIndex !== undefined) {
-                    const nextImgs = [...(next.images || [])];
-                    nextImgs[task.originalIndex] = serverUrl;
-                    next.images = nextImgs;
+                    const nextImgs = [...(next.images || [])]; nextImgs[task.originalIndex] = serverUrl; next.images = nextImgs;
                 } else if (task.path === 'ITEM' && task.itemId) {
                     next.items = (next.items || []).map(it => it.id === task.itemId 
-                        ? { ...it, images: (it.images || []).map((img, i) => i === task.originalIndex ? serverUrl : img) }
-                        : it
+                        ? { ...it, images: (it.images || []).map((img, i) => i === task.originalIndex ? serverUrl : img) } : it
                     );
-                }
+                } else if (task.path === 'SIGNATURE') { next.signature = serverUrl; }
                 return next;
             });
         };
 
-        // Execute uploads in parallel
         if (totalTasks > 0) {
             await Promise.all(tasks.map(async (task) => {
                 const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'STEP', role: task.role });
@@ -196,135 +207,157 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
             }));
         }
 
-        // Final save with fresh state
         setFormData(finalForm => {
-            onSave({ 
-                ...finalForm, 
-                status: InspectionStatus.PENDING, 
-                updatedAt: new Date().toISOString() 
-            } as Inspection);
+            const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
+            const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
+            const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
+
+            onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
             clearDraft();
             return finalForm;
         });
 
     } catch (e: any) { 
-        console.error("ISO-SAVE-STEP:", e);
-        alert("Lỗi khi lưu phiếu Step Vecni: " + (e.message || "Không thể tải ảnh lên")); 
-    } finally { 
-        setIsSaving(false); 
-    }
+        alert(`Lỗi lưu báo cáo: ${e.message || "Không xác định"}`); 
+    } finally { setIsSaving(false); }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeUploadId) return;
+    setIsProcessingImages(true);
+    try {
+        const compressedBase64s = await Promise.all(Array.from(files).map(async (file: File) => {
+            return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async () => { try { resolve(await compressImage(reader.result as string)); } catch (e) { resolve(reader.result as string); } };
+                reader.onerror = reject; reader.readAsDataURL(file);
+            });
+        }));
+        if (activeUploadId === 'MAIN') { setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedBase64s] })); }
+        else { setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === activeUploadId ? { ...i, images: [...(i.images || []), ...compressedBase64s] } : i) })); }
+    } catch (err) { alert("Lỗi xử lý ảnh."); } finally { setIsProcessingImages(false); e.target.value = ''; }
+  };
+
+  const handleEditImage = (type: 'MAIN' | 'ITEM', images: string[], index: number, itemId?: string) => { setEditorState({ images, index, context: { type, itemId } }); };
+  const onImageSave = async (idx: number, updatedImg: string) => {
+      if (!editorState) return;
+      const { type, itemId } = editorState.context;
+      setIsProcessingImages(true);
+      try {
+          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
+          if (type === 'MAIN') { setFormData(prev => { const newImgs = [...(prev.images || [])]; newImgs[idx] = finalImg; return { ...prev, images: newImgs }; }); }
+          else if (type === 'ITEM' && itemId) { setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? finalImg : img) } : i) })); }
+      } catch (err) { alert("Lỗi lưu ảnh."); } finally { setIsProcessingImages(false); }
   };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 md:rounded-lg overflow-hidden animate-in slide-in-from-bottom duration-300 relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       {hasDraft && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-in slide-in-from-top-4 duration-500">
-              <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md border border-blue-200 dark:border-slate-700 p-2.5 rounded-lg shadow-xl flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                      <div className="bg-blue-100 dark:bg-blue-900/30 p-1.5 rounded-lg">
-                        <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">Phát hiện bản nháp</span>
-                          <span className="text-[8px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold">Dữ liệu Step Vecni bạn đang nhập chưa được lưu.</span>
-                      </div>
-                  </div>
-                  <div className="flex gap-2">
-                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 dark:text-red-400">Xóa</button>
-                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-200 active:scale-95 transition-all">Khôi phục</button>
-                  </div>
+              <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2"><div className="bg-amber-100 p-1.5 rounded-lg"><AlertCircle className="w-4 h-4 text-amber-600" /></div>
+                  <div className="flex flex-col"><span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">Phát hiện bản nháp</span><span className="text-[8px] text-slate-500 dark:text-slate-400 font-bold">Dữ liệu Step Vecni chưa được lưu.</span></div></div>
+                  <div className="flex gap-2"><button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button><button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all">Khôi phục</button></div>
               </div>
           </div>
       )}
-      {(isProcessingImages || isSaving) && (
+      {(isProcessingImages || isLookupLoading || isSaving) && (
           <div className="absolute inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-2xl flex flex-col items-center gap-4 w-[85%] max-w-sm border border-white/25">
-                  <div className="relative flex items-center justify-center">
-                      <Loader2 className="w-16 h-16 text-blue-600 dark:text-blue-400 animate-spin opacity-20" />
-                      {isSaving && (
-                          <div className="absolute flex flex-col items-center justify-center">
-                              <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{uploadProgress}%</span>
-                          </div>
-                      )}
-                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />}
-                  </div>
-                  
-                  <div className="w-full space-y-2">
-                    <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">
-                        {isSaving ? "Đang tải dữ liệu & ảnh lên server..." : "Đang xử lý hình ảnh..."}
-                    </p>
-                    
-                    {isSaving && (
-                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
-                            <div 
-                                className="h-full bg-blue-600 transition-all duration-300 ease-out" 
-                                style={{ width: `${uploadProgress}%` }}
-                            />
-                        </div>
-                    )}
-                  </div>
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
+                  <div className="relative flex items-center justify-center"><Loader2 className="w-16 h-16 text-blue-600 animate-spin opacity-20" />{isSaving ? <div className="absolute flex flex-col items-center justify-center"><span className="text-xl font-black text-blue-600 font-mono tracking-tighter">{uploadProgress}%</span></div> : <Loader2 className="absolute w-8 h-8 text-blue-600 animate-spin" />}</div>
+                  <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">{isLookupLoading ? "Đang truy xuất..." : isSaving ? "Đang tải lên..." : "Đang xử lý..."}</p>
               </div>
           </div>
       )}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 no-scrollbar bg-slate-50 dark:bg-slate-800/50">
-        <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <h3 className="text-purple-700 border-b border-purple-50 pb-2 mb-2 font-black uppercase tracking-widest flex items-center gap-2"><Box className="w-4 h-4"/> I. THÔNG TIN CÔNG ĐOẠN SƠN</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-1">Mã Dự Án</label><input value={formData.ma_ct || ''} readOnly className="w-full p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-500 dark:text-slate-400 font-bold outline-none"/></div>
-                <div><label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-1">Xưởng Sơn</label><select value={formData.ma_nha_may || ''} onChange={e => handleInputChange('ma_nha_may', e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900 font-bold shadow-sm outline-none"><option value="">-- Chọn xưởng --</option>{workshops.map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 dark:bg-slate-800/50 pb-28">
+        <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+            <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1">
+                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><Box className="w-3.5 h-3.5"/> I. THÔNG TIN SẢN PHẨM</h3>
+                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-full font-bold uppercase tracking-widest flex items-center gap-1 text-[9px]" type="button"><History className="w-3 h-3" /> Lịch sử ({historicalRecords.length})</button>
             </div>
-            <div className="pt-2 border-t border-slate-50">
-                <div className="space-y-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md border border-slate-100 dark:border-slate-800">
-                    <label className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between">ẢNH HIỆN TRƯỜNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">{formData.images?.map((img, i) => (<img key={i} src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover shrink-0" onClick={() => handleEditImage(formData.images!, i, { type: 'MAIN' })} />))}</div>
-                </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã NM</label><div className="relative flex items-center"><input value={searchCode || ''} onChange={e => { setSearchCode(e.target.value); setFormData(prev => ({ ...prev, ma_nha_may: e.target.value, headcode: e.target.value })); }} onBlur={() => lookupPlanInfo(searchCode || '')} onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode || '')} className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" placeholder="Quét/Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-3.5 h-3.5"/></button></div></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
             </div>
-        </div>
-        <div className="space-y-3">
-            <h3 className="font-black text-slate-700 dark:text-slate-300 uppercase tracking-[0.2em] flex items-center gap-2 border-b border-slate-300 dark:border-slate-600 pb-2 px-1 text-xs"><LayoutList className="w-4 h-4 text-purple-600"/> II. KIỂM TRA BƯỚC MÀU ({formData.items?.length || 0})</h3>
-            <div className="space-y-4">
-                {formData.items?.map((item, idx) => (
-                    <div key={item.id} className="bg-white dark:bg-slate-900 rounded-lg p-3.5 border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <div className="flex justify-between items-start mb-3 border-b border-slate-100 dark:border-slate-800 pb-2">
-                            <div className="flex-1"><span className="bg-slate-100 dark:bg-slate-800 text-[8pt] font-black uppercase text-slate-500 dark:text-slate-400 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">{item.category}</span><p className="w-full font-black text-[11pt] text-slate-800 dark:text-slate-200 uppercase tracking-tight mt-1">{item.label}</p></div>
-                        </div>
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-md gap-1 border border-slate-200 dark:border-slate-700 shadow-inner w-fit">
-                            {[CheckStatus.PASS, CheckStatus.FAIL].map(st => (
-                                <button key={st} onClick={() => handleItemChange(idx, 'status', st)} className={`px-4 py-1.5 rounded-md text-[9pt] font-black uppercase tracking-tight transition-all ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-lg' : 'bg-red-600 text-white shadow-lg') : 'text-slate-400 dark:text-slate-500'}`} type="button">{st}</button>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-2 mt-3">
-                            <textarea value={item.notes || ''} onChange={e => handleItemChange(idx, 'notes', e.target.value)} className="flex-1 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md outline-none h-12 text-xs" placeholder="Ghi chú màu sắc..."/>
-                            <div className="flex flex-col gap-1.5">
-                                <button onClick={() => { setActiveUploadContext({ type: 'ITEM', itemIdx: idx }); cameraInputRef.current?.click(); }} className="p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-400 dark:text-slate-500 hover:text-purple-600" type="button"><Camera className="w-4.5 h-4.5" /></button>
-                                <button onClick={() => { setActiveUploadContext({ type: 'ITEM', itemIdx: idx }); fileInputRef.current?.click(); }} className="p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-400 dark:text-slate-500 hover:text-purple-600" type="button"><ImageIcon className="w-4.5 h-4.5" /></button>
-                            </div>
-                        </div>
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[40px] mt-2">
-                            {item.images?.map((img, i) => (
-                                <div key={i} className="relative w-12 h-12 shrink-0 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer group" onClick={() => handleEditImage(item.images!, i, { type: 'ITEM', itemIdx: idx })}>
-                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
-                                    <button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, imageIndex) => imageIndex !== i); handleItemChange(idx, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-600 text-white p-0.5 rounded-bl shadow md:opacity-0 group-hover:opacity-100 transition-opacity" type="button"><X className="w-3 h-3"/></button>
-                                </div>
-                            ))}
-                        </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">SL IPO</label><input value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
+            </div>
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
+            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ÁNH HIỆN TRƯỜNG</h3>
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
+                <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
+                {formData.images?.map((img, idx) => (
+                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
+                        <ProxyImage src={img} alt="Ảnh" className="w-full h-full object-cover" />
+                        <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
             </div>
+        </section>
+
+        <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><MapPin className="w-3.5 h-3.5"/> III. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
+            <div className="grid grid-cols-2 gap-2">
+                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Xưởng sản xuất</label><select value={formData.workshop || ''} onChange={e => handleInputChange('workshop', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn xưởng --</option>{workshops.map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
+                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Công đoạn *</label><select value={formData.inspectionStage || ''} onChange={e => handleInputChange('inspectionStage', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn giai đoạn --</option>{availableStages.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input type="number" value={formData.inspectedQuantity ?? ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold text-[11px] text-center bg-white shadow-sm" /></div>
+                    <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700">{rates.passRate}%</span></div><input type="number" value={formData.passedQuantity ?? ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-green-200 rounded-md font-bold text-[11px] text-center bg-white" /></div>
+                    <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700">{rates.defectRate}%</span></div><input type="number" value={formData.failedQuantity ?? ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-red-200 rounded-md font-bold text-[11px] text-center bg-white" /></div>
+                </div>
+            </div>
+        </section>
+
+        <div className="space-y-2">
+            <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 border-b border-slate-300 pb-2 px-1 text-[11px]"><LayoutList className="w-3.5 h-3.5 text-blue-600"/> IV. NỘI DUNG KIỂM TRA STEP VECNI ({visibleItems.length})</h3>
+            <div className="space-y-3">
+                {visibleItems.map((item, originalIndex) => {
+                    const actualIndex = formData.items?.findIndex(i => i.id === item.id) ?? -1;
+                    return (
+                        <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50' : 'border-slate-200 dark:border-slate-700'}`}>
+                            <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2"><div className="flex-1"><span className="bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 tracking-widest">{item.category}</span><p className="w-full font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-tight mt-1">{item.label}</p></div><button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button></div>
+                            <div className="flex flex-wrap gap-2 items-center"><div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">{[CheckStatus.PASS, CheckStatus.FAIL].map(st => (<button key={st} onClick={() => handleItemChange(actualIndex, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : 'Hỏng'}</button>))}</div><div className="flex items-center gap-1 ml-auto"><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}><ImageIcon className="w-4 h-4"/></div><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}><Camera className="w-4 h-4"/></div></div></div>
+                            <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndex, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg font-medium outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
+                            {item.images && item.images.length > 0 && (<div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">{item.images.map((im, i) => (<div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}><ProxyImage src={im} alt="Ảnh" className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5" type="button"><X className="w-2.5 h-2.5"/></button></div>))}</div>)}
+                        </div>
+                    );
+                })}
+            </div>
         </div>
+
+        <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mt-3">
+            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-3 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><PenTool className="w-3.5 h-3.5"/> V. CHỮ KÝ XÁC NHẬN</h3>
+            <div className="mb-4"><label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Ghi chú QC</label><textarea value={formData.summary || ''} onChange={e => handleInputChange('summary', e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none h-20 resize-none" placeholder="Ghi chú thêm..."/></div>
+            <SignaturePad label={`QC Ký Tên (${user.name})`} value={formData.signature} onChange={sig => setFormData({...formData, signature: sig})} uploadContext={{ entityId: formData.id || 'new', type: 'INSPECTION', role: 'SIGNATURE_QC' }} />
+        </section>
       </div>
-      <div className="p-3 md:p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex justify-end gap-2 shrink-0 shadow-sm z-20">
-        <button onClick={onCancel} className="px-5 py-2 text-slate-500 dark:text-slate-450 font-black uppercase tracking-wider hover:bg-slate-10" type="button">Hủy</button>
-        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="px-10 py-2.5 bg-purple-700 text-white font-black uppercase tracking-wider rounded-md hover:bg-purple-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">
-            {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
-            <span>HOÀN TẤT STEP VECNI</span>
+
+      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white flex items-center justify-between gap-4 sticky bottom-0 z-40 shadow-lg">
+        <button onClick={onCancel} className="px-6 py-2 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 text-[10px]" type="button">Hủy</button>
+        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="flex-1 bg-blue-700 text-white font-black uppercase tracking-[0.2em] rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[10px] py-3">
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
+            <span>GỬI DUYỆT STEP VECNI</span>
         </button>
       </div>
 
+      {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => lookupPlanInfo(data)} />}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}
-      
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileUpload} />
+      <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
     </div>
   );
 };
+
+export default InspectionFormStepVecni;

@@ -10,7 +10,7 @@ async function findInspectionTables() {
     `, []);
     
     console.log("Inspection Tables found:");
-    const tableNames = res.rows.map(r => r.table_name);
+    const tableNames = res.rows.map((r: any) => r.table_name);
     console.log(tableNames);
 
     for (const table of tableNames) {
@@ -22,7 +22,7 @@ async function findInspectionTables() {
             AND column_name IN ('signature_qc', 'signature_teamlead', 'signature_manager', 'date_teamlead', 'date_manager')
         `, [table]);
         console.log(`Table: ${table}`);
-        console.log(columns.rows.map(c => c.column_name));
+        console.log(columns.rows.map((c: any) => c.column_name));
     }
 
   } catch (e) {

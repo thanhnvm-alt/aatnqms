@@ -16,7 +16,7 @@ async function syncSchema() {
                 AND column_name IN ('date_manager', 'date_qc')
             `, [table]);
 
-            const existingCols = res.rows.map(r => r.column_name);
+            const existingCols = res.rows.map((r: any) => r.column_name);
 
             if (!existingCols.includes('date_manager')) {
                 console.log(`Adding date_manager to appQAQC.${table}...`);

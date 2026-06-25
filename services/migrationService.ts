@@ -398,7 +398,8 @@ export async function runMigrations() {
             "passed_qty" NUMERIC,
             "failed_qty" NUMERIC,
             "so_luong_ipo" NUMERIC,
-            "priority" TEXT
+            "priority" TEXT,
+            "date" BIGINT
         );
       `);
       migrationLogs.push(`✅ Ensured table inspections exists in ${schema}`);
@@ -412,6 +413,7 @@ export async function runMigrations() {
     await addColumn('inspections', 'failed_qty', 'NUMERIC');
     await addColumn('inspections', 'so_luong_ipo', 'NUMERIC');
     await addColumn('inspections', 'priority', 'TEXT');
+    await addColumn('inspections', 'date', 'BIGINT');
 
     // Create highly optimized indices for inspections table to speed up dashboard reporting
     try {
@@ -642,6 +644,7 @@ export async function runMigrations() {
         CREATE TABLE IF NOT EXISTS "${schema}"."ipo_details" (
             "id" TEXT PRIMARY KEY,
             "id_factory_order" TEXT UNIQUE NOT NULL,
+            "implementation_date" BIGINT,
             "history_summary" TEXT,
             "material_history" TEXT,
             "sample_history" TEXT,
@@ -650,6 +653,7 @@ export async function runMigrations() {
         );
       `);
       migrationLogs.push(`✅ Ensured table ipo_details exists in ${schema}`);
+      await addColumn('ipo_details', 'implementation_date', 'BIGINT');
       
       await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."ipo_drawing_list" (
@@ -704,10 +708,18 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create ipo tables: ${e.message}`);
     }
 
-    // Tối ưu hóa Database: Giải pháp 2 (Sử dụng Materialized View cho projects)
+    // Tối ưu hóa Database: Giải pháp 2 (Sử dụng View cho projects)
     try {
+      // Drop materialized view if it exists and replace with regular view for real-time data
+      // We do this in a separate try to avoid blocking if we don't have permissions (though we should as owner)
+      try {
+        await query(`DROP MATERIALIZED VIEW IF EXISTS "${schema}"."ipo_projects_mv"`);
+      } catch (dropErr: any) {
+        console.warn(`⚠️ Could not drop ipo_projects_mv Materialized View:`, dropErr.message);
+      }
+      
       await query(`
-        CREATE MATERIALIZED VIEW IF NOT EXISTS "${schema}"."ipo_projects_mv" AS
+        CREATE OR REPLACE VIEW "${schema}"."ipo_projects_mv" AS
         SELECT 
             "Ma_Tender" as ma_ct,
             MAX("Project_name") as name
@@ -715,13 +727,10 @@ export async function runMigrations() {
         WHERE "Ma_Tender" IS NOT NULL AND "Ma_Tender" != ''
         GROUP BY "Ma_Tender";
       `);
-      await query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS "ipo_projects_mv_ma_ct_uidx" ON "${schema}"."ipo_projects_mv" ("ma_ct");
-      `);
-      migrationLogs.push(`✅ Ensured Materialized View ipo_projects_mv exists in ${schema}`);
+      migrationLogs.push(`✅ Ensured View ipo_projects_mv exists in ${schema}`);
     } catch (mvErr: any) {
-      console.warn(`⚠️ Could not create ipo_projects_mv Materialized View:`, mvErr.message);
-      migrationLogs.push(`⚠️ Could not create ipo_projects_mv Materialized View: ${mvErr.message}`);
+      console.warn(`⚠️ Could not create ipo_projects_mv View:`, mvErr.message);
+      migrationLogs.push(`⚠️ Could not create ipo_projects_mv View: ${mvErr.message}`);
     }
 
     // --- DEPARTMENTS TABLE ---

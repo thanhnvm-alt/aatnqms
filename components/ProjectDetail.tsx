@@ -27,6 +27,7 @@ import { InspectionDetailFRS } from './inspectiondetailFRS';
 import { InspectionDetailStepVecni } from './inspectiondetailStepVecni';
 import { InspectionDetailFQC } from './inspectiondetailFQC';
 import { InspectionDetailSPR } from './inspectiondetailSPR';
+import { IPODetail } from './IPODetail';
 import { SITE_CHECKLIST_TEMPLATE } from '../constants';
 
 interface ProjectDetailProps {
@@ -81,6 +82,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [projectSpecificPlans, setProjectSpecificPlans] = useState<IPOItem[]>([]);
   const [isPlansLoading, setIsPlansLoading] = useState(false);
   const [selectedIpoId, setSelectedIpoId] = useState<string | null>(null);
+  const [selectedIpoForDetail, setSelectedIpoForDetail] = useState<IPOItem | null>(null);
 
   // Pagination states for UI
   const [ipoLimit, setIpoLimit] = useState(10);
@@ -256,7 +258,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         if (!i) return false;
         const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
-        const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId;
+        const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
         return matchesProject && matchesSearch && matchesIpo;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [inspections, project, inspectionSearch, selectedIpoId]);
@@ -270,14 +272,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         if (!i || i.status !== InspectionStatus.FLAGGED) return false;
         const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
-        return matchesProject && matchesSearch;
+        const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
+        return matchesProject && matchesSearch && matchesIpo;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, project, ncrSearch]);
+  }, [inspections, project, ncrSearch, selectedIpoId]);
 
   const filteredLayouts = useMemo(() => {
     const term = layoutSearch.toLowerCase().trim();
-    return floorPlans.filter(fp => !term || fp.name.toLowerCase().includes(term));
-  }, [floorPlans, layoutSearch]);
+    return floorPlans.filter(fp => {
+        const matchesSearch = !term || fp.name.toLowerCase().includes(term);
+        const matchesIpo = !selectedIpoId || fp.name.toLowerCase().includes(selectedIpoId.toLowerCase());
+        return matchesSearch && matchesIpo;
+    });
+  }, [floorPlans, layoutSearch, selectedIpoId]);
 
   const stats = useMemo(() => {
     const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
@@ -595,11 +602,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 ) : filteredIpoPlans.length > 0 ? (
                                     <>
                                         {filteredIpoPlans.slice(0, ipoLimit).map((ipo, idx) => (
-                                            <div key={`${ipo.id}-${idx}`} onClick={() => setSelectedIpoId(prev => prev === ipo.ma_nha_may ? null : ipo.ma_nha_may)} className={`p-4 bg-white dark:bg-slate-900 border ${selectedIpoId === ipo.ma_nha_may ? 'border-blue-500 shadow-md bg-blue-50 dark:bg-slate-800/80/30' : 'border-slate-100 dark:border-slate-800'} rounded-2xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3`}>
-                                                <div className={`p-2 rounded-xl shrink-0 ${selectedIpoId === ipo.ma_nha_may ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400'}`}><ClipboardList className="w-4 h-4"/></div>
+                                            <div 
+                                                key={`${ipo.id}-${idx}`} 
+                                                onClick={() => setSelectedIpoId(prev => prev === (ipo.headcode || ipo.ma_nha_may) ? null : (ipo.headcode || ipo.ma_nha_may))} 
+                                                className={`p-4 bg-white dark:bg-slate-900 border ${selectedIpoId === (ipo.headcode || ipo.ma_nha_may) ? 'border-blue-500 shadow-md bg-blue-50 dark:bg-slate-800/80/30' : 'border-slate-100 dark:border-slate-800'} rounded-2xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3`}
+                                            >
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedIpoForDetail(ipo);
+                                                    }}
+                                                    className={`p-2 rounded-xl shrink-0 transition-all active:scale-95 ${selectedIpoId === (ipo.headcode || ipo.ma_nha_may) ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400'} hover:shadow-lg`}
+                                                >
+                                                    <FileText className="w-4 h-4"/>
+                                                </button>
                                                 <div className="flex-1 min-w-0">
                                                     <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-none mb-1.5">{ipo.ten_hang_muc}</h4>
-                                                    <div className="flex justify-between items-center"><p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase">{ipo.ma_nha_may}</p><span className="text-[10px] font-black text-slate-900 dark:text-slate-100">{ipo.so_luong_ipo} {ipo.dvt}</span></div>
+                                                    <div className="flex justify-between items-center">
+                                                        <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase">{ipo.headcode || ipo.ma_nha_may}</p>
+                                                        <span className="text-[10px] font-black text-slate-900 dark:text-slate-100">{ipo.so_luong_ipo} {ipo.dvt}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -893,6 +915,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       )}
 
       {isUploadModalOpen && <FloorPlanUploadModal projectId={project.ma_ct} onClose={() => setIsUploadModalOpen(false)} onSave={async (plan) => { await saveFloorPlan(plan); loadFloorPlans(); }} />}
+
+      {selectedIpoForDetail && (
+          <div className="fixed inset-0 z-[100] bg-white dark:bg-slate-900 animate-in fade-in zoom-in duration-300">
+              <IPODetail 
+                  item={selectedIpoForDetail} 
+                  onBack={() => setSelectedIpoForDetail(null)}
+                  onCreateInspection={() => {}}
+                  onViewInspection={() => {}}
+                  onUpdatePlan={async () => {}}
+              />
+          </div>
+      )}
 
       {isInspectionFormOpen && pendingPinCoord && (
           <div className="absolute inset-0 z-[200] bg-white dark:bg-slate-900 flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">

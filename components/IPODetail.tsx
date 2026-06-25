@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IPOItem } from '../types';
 import { ArrowLeft, FileText, Package, Ruler, Info, BrainCircuit, History, Share2, AlertTriangle, CheckCircle2, ChevronRight, Upload, Search, FileDiff, Edit, Trash2, X } from 'lucide-react';
-import { fetchIpoDetailExtended, saveIpoDrawingRecord, uploadFileToStorage, saveIpoMaterialRecord, saveIpoSampleRecord, updateIpoSampleRecord, deleteIpoSampleRecord, fetchProjectByCode, fetchInspections } from '../services/apiService';
+import { fetchIpoDetailExtended, saveIpoDetailExtended, saveIpoDrawingRecord, uploadFileToStorage, saveIpoMaterialRecord, saveIpoSampleRecord, updateIpoSampleRecord, deleteIpoSampleRecord, fetchProjectByCode, fetchInspections } from '../services/apiService';
 import { analyzeIpo } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -28,12 +28,42 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
   const [projectData, setProjectData] = useState<any>(null);
   const [editingSample, setEditingSample] = useState<any>(null);
 
+  const [isSavingDetail, setIsSavingDetail] = useState(false);
+  const [implementationDate, setImplementationDate] = useState<string>('');
+
   useEffect(() => {
     loadData();
     if (item.ma_ct) {
       handleProjectLookup(item.ma_ct);
     }
   }, [item.ma_nha_may]);
+
+  useEffect(() => {
+    if (extendedDetail?.implementation_date) {
+      const date = new Date(Number(extendedDetail.implementation_date) * 1000);
+      setImplementationDate(date.toISOString().split('T')[0]);
+    }
+  }, [extendedDetail]);
+
+  const handleSaveImplementationDate = async () => {
+    if (!implementationDate) return;
+    setIsSavingDetail(true);
+    try {
+      const timestamp = Math.floor(new Date(implementationDate).getTime() / 1000);
+      await saveIpoDetailExtended({
+        ...extendedDetail,
+        id_factory_order: item.ma_nha_may,
+        implementation_date: timestamp
+      });
+      loadData();
+      alert("Đã cập nhật ngày thực hiện.");
+    } catch (error) {
+      console.error("Failed to save implementation date:", error);
+      alert("Lỗi khi lưu ngày thực hiện.");
+    } finally {
+      setIsSavingDetail(false);
+    }
+  };
 
   const handleProjectLookup = async (code: string) => {
     try {
@@ -195,12 +225,30 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                 className="space-y-6"
               >
                 {/* Status Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1">
                     <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">SỐ LƯỢNG IPO</p>
                     <div className="flex items-end gap-2">
                       <p className="text-3xl font-black text-slate-800 dark:text-slate-200">{item.so_luong_ipo}</p>
                       <p className="text-xs font-black text-slate-400 dark:text-slate-500 mb-1">{item.dvt}</p>
+                    </div>
+                  </div>
+                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1">
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">NGÀY THỰC HIỆN (ISO)</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input 
+                        type="date" 
+                        value={implementationDate}
+                        onChange={(e) => setImplementationDate(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-800 border-none text-sm font-black text-slate-700 dark:text-slate-300 outline-none w-full"
+                      />
+                      <button 
+                        onClick={handleSaveImplementationDate}
+                        disabled={isSavingDetail}
+                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-indigo-600 disabled:opacity-30"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                   <div className="p-6 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-1">

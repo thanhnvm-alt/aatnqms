@@ -67,6 +67,20 @@ export function formatDisplayDate(timestamp: number | string | Date): string {
     }
 }
 
+/**
+ * Implementation Date Priority Logic:
+ * 1. date (from form "Ngày kiểm")
+ * 2. created_at
+ * 3. updated_at
+ */
+export function getImplementationDate(item: any): any {
+    if (!item) return null;
+    if (item.date && item.date !== '') return item.date;
+    if (item.created_at) return item.created_at;
+    if (item.updated_at) return item.updated_at;
+    return null;
+}
+
 export function getGmt7DayBounds(dateStr: string): { unixStart: number, unixEnd: number } {
     const [d, m, y] = dateStr.split('/');
     const isoStart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T00:00:00+07:00`;

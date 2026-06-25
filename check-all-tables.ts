@@ -18,7 +18,7 @@ async function checkAllInspectionTables() {
                 continue;
             }
 
-            const cols = res.rows.map(r => r.column_name);
+            const cols = res.rows.map((r: any) => r.column_name);
             console.log(`Table: ${table}`);
             console.log(`  Has date_teamlead: ${cols.includes('date_teamlead')}`);
             console.log(`  Has date_manager: ${cols.includes('date_manager')}`);

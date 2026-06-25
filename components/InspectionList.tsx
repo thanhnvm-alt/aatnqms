@@ -4,7 +4,7 @@ import { useInspectionContext } from '../src/context/InspectionContext';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User, hasPermission } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
 import { ProxyImage } from '../src/components/ProxyImage';
-import { formatDisplayDate, getGmt7DayBounds, getGmt7MonthBounds } from '../lib/utils';
+import { formatDisplayDate, getGmt7DayBounds, getGmt7MonthBounds, getImplementationDate } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
 import { SearchableSelect } from './SearchableSelect';
 import { 
@@ -850,7 +850,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     <span className="text-[12px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 truncate">{item.inspectorName || item.created_by || '---'}</span>
                                                 </div>
                                                 <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
-                                                    {formatDisplayDate(item.date)}
+                                                    {formatDisplayDate(getImplementationDate(item))}
                                                 </span>
                                             </div>
                                             
@@ -1068,7 +1068,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </div>
                                     <div className="mt-2 flex gap-2 items-center justify-between">
                                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
-                                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{formatDisplayDate(item.date)}</span>
+                                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{formatDisplayDate(getImplementationDate(item))}</span>
                                     </div>
                                 </div>
                             ))}

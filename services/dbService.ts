@@ -98,8 +98,7 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 failed_qty = EXCLUDED.failed_qty,
                 so_luong_ipo = EXCLUDED.so_luong_ipo,
                 priority = EXCLUDED.priority,
-                created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by),
-                created_at = CASE WHEN ${SCHEMA}."inspections".created_at = 0 THEN EXCLUDED.created_at ELSE ${SCHEMA}."inspections".created_at END
+                created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by)
         `, sanitizeArgs([
             inspection.id, 
             inspection.type, 
@@ -1373,6 +1372,7 @@ export async function getIpoDetailById(idFactoryOrder: string) {
     const row = res.rows[0];
     return {
         ...row,
+        implementation_date: row.implementation_date ? Number(row.implementation_date) : null,
         data: safeJsonParse(row.data, {})
     };
 }
@@ -1380,12 +1380,13 @@ export async function getIpoDetailById(idFactoryOrder: string) {
 export async function saveIpoDetail(detail: any) {
     const updatedAt = Math.floor(Date.now() / 1000);
     await query(`
-        INSERT INTO ${SCHEMA}.ipo_details (id, id_factory_order, history_summary, material_history, sample_history, last_analysis_at, data)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO ${SCHEMA}.ipo_details (id, id_factory_order, history_summary, material_history, sample_history, implementation_date, last_analysis_at, data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT(id_factory_order) DO UPDATE SET
             history_summary = EXCLUDED.history_summary,
             material_history = EXCLUDED.material_history,
             sample_history = EXCLUDED.sample_history,
+            implementation_date = EXCLUDED.implementation_date,
             last_analysis_at = EXCLUDED.last_analysis_at,
             data = EXCLUDED.data
     `, sanitizeArgs([
@@ -1394,7 +1395,8 @@ export async function saveIpoDetail(detail: any) {
         detail.history_summary,
         detail.material_history,
         detail.sample_history,
-        updatedAt,
+        detail.implementation_date,
+        detail.last_analysis_at || updatedAt,
         detail.data || {}
     ]));
 }
@@ -2110,11 +2112,11 @@ export async function getProjectsPaginated(search: string = '', page: number = 1
 export async function getProjectByCode(code: string): Promise<Project | null> {
     const res = await query(`
         SELECT 
-            i.ma_ct, 
-            i.name as name,
-            i.name as ten_ct,
-            i.ma_ct as id,
-            i.ma_ct as code,
+            COALESCE(p.ma_ct, i.ma_ct) as ma_ct,
+            COALESCE(p.name, i.name) as name,
+            COALESCE(p.name, i.name) as ten_ct,
+            COALESCE(p.ma_ct, i.ma_ct) as id,
+            COALESCE(p.ma_ct, i.ma_ct) as code,
             COALESCE(p.status, 'Planning') as status,
             p.pm as pm,
             p.pc as pc,
@@ -2128,8 +2130,8 @@ export async function getProjectByCode(code: string): Promise<Project | null> {
             p.data as data,
             COALESCE(p.updated_at, 0) as updated_at
         FROM ${SCHEMA}.ipo_projects_mv i
-        LEFT JOIN ${SCHEMA}.projects p ON i.ma_ct = p.ma_ct
-        WHERE i.ma_ct = $1
+        FULL JOIN ${SCHEMA}.projects p ON TRIM(i.ma_ct) = TRIM(p.ma_ct)
+        WHERE TRIM(i.ma_ct) = TRIM($1) OR TRIM(p.ma_ct) = TRIM($1)
     `, [code]);
     
     if (res.rows.length === 0) return null;
