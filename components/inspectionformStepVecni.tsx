@@ -125,22 +125,26 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
     if (!code) return;
     setIsLookupLoading(true);
     try {
-        const ipo = await fetchIpoByFactoryOrder(code);
-        if (ipo) {
-            setFormData(prev => ({
-                ...prev,
-                ma_nha_may: ipo.ma_nha_may || code,
-                headcode: ipo.headcode || code,
-                ma_ct: ipo.ma_ct || prev.ma_ct,
-                ten_ct: ipo.ten_ct || prev.ten_ct,
-                ten_hang_muc: ipo.ten_hang_muc || prev.ten_hang_muc,
-                so_luong_ipo: ipo.so_luong_ipo || prev.so_luong_ipo,
-                dvt: ipo.dvt || prev.dvt
-            }));
-            setSearchCode(code);
-        } else {
-            alert("Không tìm thấy dữ liệu IPO cho mã này.");
+        if (code.length === 9 || code.length === 13) {
+            const res = await fetchIpoByFactoryOrder(code);
+            const items = res?.items || (Array.isArray(res) ? res : []);
+            if (items && items.length > 0) {
+                const match = items[0];
+                setFormData(prev => ({
+                    ...prev,
+                    ma_nha_may: match.ID_Factory_Order || code,
+                    headcode: match.ID_Factory_Order || code,
+                    ma_ct: match.Ma_Tender || match.Project_name || prev.ma_ct,
+                    ten_ct: match.Project_name || prev.ten_ct,
+                    ten_hang_muc: match.Material_description || prev.ten_hang_muc,
+                    so_luong_ipo: Number(match.Quantity_IPO || match.so_luong_ipo || 0) || prev.so_luong_ipo,
+                    dvt: match.Base_Unit || match.dvt || prev.dvt
+                }));
+                setSearchCode(match.ID_Factory_Order || code);
+                return;
+            }
         }
+        alert("Không tìm thấy dữ liệu IPO cho mã này.");
     } catch (e) {
         console.error("Lookup error:", e);
     } finally {

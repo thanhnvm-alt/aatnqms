@@ -410,17 +410,18 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       if (!code) return;
       setIsLookupLoading(true);
       try {
-          if (code.length === 9) {
-              const ipoItems = await fetchIpoByFactoryOrder(code);
-              if (ipoItems && ipoItems.length > 0) {
-                  const match = ipoItems[0];
+          if (code.length === 9 || code.length === 13) {
+              const res = await fetchIpoByFactoryOrder(code);
+              const items = res?.items || (Array.isArray(res) ? res : []);
+              if (items && items.length > 0) {
+                  const match = items[0];
                   setFormData(prev => ({ 
                     ...prev, 
                     ma_ct: match.Ma_Tender || match.Project_name || '', 
                     ten_ct: match.Project_name || '', 
                     ten_hang_muc: match.Material_description || '', 
-                    dvt: match.Base_Unit || '', 
-                    so_luong_ipo: Number(match.Quantity_IPO || 0), 
+                    dvt: match.Base_Unit || match.dvt || '', 
+                    so_luong_ipo: Number(match.Quantity_IPO || match.so_luong_ipo || 0), 
                     ma_nha_may: match.ID_Factory_Order || '', 
                     headcode: match.ID_Factory_Order || '', 
                     workshop: '', // Do NOT auto-assign factory order to workshop
@@ -428,7 +429,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     passedQuantity: 0,
                     failedQuantity: 0
                   }));
-                  setSearchCode(match.ID_Factory_Order);
+                  setSearchCode(match.ID_Factory_Order || code);
                   return;
               }
           }
