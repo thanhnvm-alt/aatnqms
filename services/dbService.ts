@@ -2451,6 +2451,16 @@ export async function getUserActivityStats(userId: string) {
     };
 }
 
+export async function getEntityAuditLogs(entityType: string, entityId: string) {
+    const res = await query(`
+        SELECT * 
+        FROM ${SCHEMA}.audit_logs 
+        WHERE entity_type = $1 AND entity_id = $2
+        ORDER BY timestamp DESC
+    `, [entityType, entityId]);
+    return res.rows;
+}
+
 // --- MATERIALS ---
 
 export async function getMaterialsPaginated(search: string = '', page: number = 1, limit?: number) {

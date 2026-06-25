@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Inspection, InspectionStatus, User, Role, ModuleId, hasPermission } from '../types';
-import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward, Lock, Clock } from 'lucide-react';
+import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward, Lock, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { getProxyImageUrl } from '../src/utils';
-import { fetchRoles } from '../services/apiService';
+import { fetchRoles, fetchInspectionAuditLogs } from '../services/apiService';
 
 interface TwoTierApprovalProps {
   inspection: Inspection;
@@ -17,6 +17,200 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   const [signature, setSignature] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [isAuditCollapsed, setIsAuditCollapsed] = useState(true);
+
+  useEffect(() => {
+    if (!inspection.id) return;
+    let active = true;
+    setIsAuditLoading(true);
+    fetchInspectionAuditLogs(inspection.id)
+      .then(data => {
+        if (active && Array.isArray(data)) {
+          setAuditLogs(data);
+        }
+      })
+      .catch(err => console.error('Failed to load audit logs:', err))
+      .finally(() => {
+        if (active) setIsAuditLoading(false);
+      });
+    return () => { active = false; };
+  }, [inspection.id]);
+
+  const getChangedFields = (oldVal: any, newVal: any) => {
+    if (!oldVal || !newVal) return null;
+    const changes: { field: string; from: any; to: any }[] = [];
+    const keys = new Set([...Object.keys(oldVal), ...Object.keys(newVal)]);
+    
+    const ignoredKeys = new Set(['updatedAt', 'updated_at', 'created_at', 'id', 'signature', 'teamLeadSignature', 'managerSignature', 'qcDate', 'teamLeadDate', 'managerDate']);
+    
+    for (const key of keys) {
+      if (ignoredKeys.has(key)) continue;
+      
+      const vOld = oldVal[key];
+      const vNew = newVal[key];
+      
+      if (JSON.stringify(vOld) !== JSON.stringify(vNew)) {
+        let fromText = vOld === undefined || vOld === null ? 'Trống' : String(vOld);
+        let toText = vNew === undefined || vNew === null ? 'Trống' : String(vNew);
+        
+        if (key === 'items' && Array.isArray(vOld) && Array.isArray(vNew)) {
+          fromText = `${vOld.length} hạng mục`;
+          toText = `${vNew.length} hạng mục`;
+        } else if (key.toLowerCase().includes('signature')) {
+          fromText = vOld ? 'Đã ký' : 'Chưa ký';
+          toText = vNew ? 'Đã ký' : 'Chưa ký';
+        }
+        
+        let fieldLabel = key;
+        const keyMap: Record<string, string> = {
+          status: 'Trạng thái',
+          inspectorName: 'Người kiểm tra',
+          inspector_name: 'Người kiểm tra',
+          ten_ct: 'Tên công trình/dự án',
+          ma_ct: 'Mã công trình/dự án',
+          ten_hang_muc: 'Tên hạng mục',
+          ma_nha_may: 'Mã nhà máy',
+          workshop: 'Xưởng',
+          line: 'Chuyền',
+          managerName: 'Trưởng phòng duyệt',
+          teamLeadName: 'Tổ trưởng duyệt',
+          summary: 'Kết luận/Ý kiến',
+          ngay_kiem_tra: 'Ngày kiểm tra',
+          po_number: 'Số PO',
+          quantities: 'Số lượng',
+          pass: 'Đạt',
+          fail: 'Không đạt',
+        };
+        
+        if (keyMap[key]) {
+          fieldLabel = keyMap[key];
+        }
+        
+        changes.push({
+          field: fieldLabel,
+          from: fromText,
+          to: toText
+        });
+      }
+    }
+    return changes.length > 0 ? changes : null;
+  };
+
+  const renderAuditTrail = () => {
+    return (
+      <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-4">
+        <button
+          type="button"
+          onClick={() => setIsAuditCollapsed(!isAuditCollapsed)}
+          className="w-full flex items-center justify-between py-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors focus:outline-none"
+        >
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-slate-400" />
+            <span className="text-[11px] font-black uppercase tracking-widest font-mono">
+              Nhật ký truy vết hồ sơ (ISO Audit Trail)
+            </span>
+            {auditLogs.length > 0 && (
+              <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold">
+                {auditLogs.length}
+              </span>
+            )}
+          </div>
+          {isAuditCollapsed ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronUp className="w-4 h-4" />
+          )}
+        </button>
+
+        {!isAuditCollapsed && (
+          <div className="mt-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-1 animate-in fade-in duration-200">
+            {isAuditLoading ? (
+              <div className="flex items-center justify-center py-6 text-slate-400">
+                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                <span className="text-xs font-medium font-mono uppercase">Đang tải nhật ký...</span>
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 dark:text-slate-500 text-xs font-mono uppercase">
+                Không có dữ liệu chỉnh sửa được ghi nhận
+              </div>
+            ) : (
+              <div className="relative border-l-2 border-slate-100 dark:border-slate-800 ml-2.5 pl-4 space-y-4 py-1">
+                {auditLogs.map((log) => {
+                  const logDate = formatDateTime(log.timestamp);
+                  const changes = getChangedFields(log.old_value, log.new_value);
+                  
+                  let actionLabel = log.action;
+                  let actionColor = 'text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800';
+                  
+                  if (log.action === 'CREATE_INSPECTION') {
+                    actionLabel = 'Khởi tạo phiếu';
+                    actionColor = 'text-blue-700 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400';
+                  } else if (log.action === 'UPDATE_INSPECTION') {
+                    actionLabel = 'Chỉnh sửa';
+                    actionColor = 'text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400';
+                  } else if (log.action === 'DELETE_INSPECTION') {
+                    actionLabel = 'Xóa phiếu';
+                    actionColor = 'text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400';
+                  } else if (log.action.includes('APPROVE') || log.action.includes('SIGN')) {
+                    actionLabel = 'Phê duyệt / Ký';
+                    actionColor = 'text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400';
+                  } else if (log.action.includes('REJECT')) {
+                    actionLabel = 'Từ chối / Trả lại';
+                    actionColor = 'text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400';
+                  }
+                  
+                  return (
+                    <div key={log.id} className="relative group/item text-xs text-left">
+                      <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-900 group-hover/item:bg-blue-500 transition-colors" />
+                      
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${actionColor}`}>
+                          {actionLabel}
+                        </span>
+                        <span className="font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">
+                          {log.user_id || 'Hệ thống'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                          {logDate}
+                        </span>
+                      </div>
+                      
+                      {changes ? (
+                        <div className="mt-1.5 ml-1 p-2 bg-slate-50/50 dark:bg-slate-950/40 border border-slate-100/70 dark:border-slate-800/60 rounded-xl space-y-1.5">
+                          {changes.map((change, idx) => (
+                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1 text-[11px] font-medium leading-relaxed">
+                              <span className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider text-[9px] min-w-[100px]">
+                                • {change.field}:
+                              </span>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 px-1 py-0.2 rounded font-mono break-all line-through decoration-red-400">
+                                  {change.from}
+                                </span>
+                                <span className="text-slate-400 text-[10px]">&rarr;</span>
+                                <span className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 px-1 py-0.2 rounded font-mono break-all font-semibold">
+                                  {change.to}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        log.action === 'UPDATE_INSPECTION' && (
+                          <p className="text-[10px] text-slate-400 italic ml-1 mt-0.5">Không ghi nhận thay đổi giá trị thuộc tính chính</p>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     let active = true;
@@ -329,6 +523,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                     Nội dung đã đóng băng theo tiêu chuẩn ISO
                 </div>
             </div>
+            {renderAuditTrail()}
         </div>
     );
   }
@@ -613,6 +808,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           </div>
         </div>
       )}
+      {renderAuditTrail()}
     </section>
   );
 };

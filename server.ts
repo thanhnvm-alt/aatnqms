@@ -1053,6 +1053,15 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     }
   });
 
+  app.get("/api/inspections/:id/audit-logs", authenticate, async (req, res) => {
+    try {
+      const logs = await db.getEntityAuditLogs('inspection', String(req.params.id));
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch audit logs for inspection' });
+    }
+  });
+
   app.post("/api/inspections", authenticate, async (req, res) => {
     try {
       await db.saveInspection(req.body);

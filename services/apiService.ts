@@ -611,3 +611,5 @@ export const saveToolCalibration = async (calib: any) => apiFetch('/api/tool-cal
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(calib)
 });
+
+export const fetchInspectionAuditLogs = async (id: string) => apiFetch(`/api/inspections/${id}/audit-logs`);
