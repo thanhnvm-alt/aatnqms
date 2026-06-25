@@ -56,6 +56,65 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const inspections = propsInspections || contextInspections || [];
   const isInspectionsLoading = propsIsLoading !== undefined ? propsIsLoading : contextIsLoading;
   
+  const getWarningConfig = (item: any) => {
+    let val = item.createdAt || item.created_at || item.date;
+    if (!val) return null;
+    
+    if (typeof val === 'string' && /^\d+$/.test(val)) {
+        val = Number(val);
+    }
+    
+    let createdTime = Date.now();
+    if (typeof val === 'number') {
+        createdTime = val < 1e12 ? val * 1000 : val;
+    } else {
+        const parsed = Date.parse(val);
+        if (!isNaN(parsed)) {
+            createdTime = parsed;
+        } else if (typeof val === 'string' && val.includes('/')) {
+            const parts = val.split('/');
+            if (parts.length === 3) {
+                const [d, m, y] = parts;
+                const parsedGmt7 = new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T00:00:00+07:00`).getTime();
+                if (!isNaN(parsedGmt7)) {
+                    createdTime = parsedGmt7;
+                }
+            }
+        }
+    }
+    
+    const elapsedHours = (Date.now() - createdTime) / (1000 * 60 * 60);
+    const statusLower = String(item.status || '').toLowerCase();
+    
+    // 2. Cảnh báo Đỏ (Trễ hạn > 24h): đối với các phiếu sau mốc thời gian tạo 24h mà vẫn ở trạng thái pending/ verified
+    if (elapsedHours >= 24 && (statusLower === 'pending' || statusLower === 'verified')) {
+        return {
+            type: 'red' as const,
+            bg: 'bg-red-50/70 dark:bg-red-950/20',
+            border: 'border-red-400 dark:border-red-900/50 hover:border-red-500',
+            text: 'text-red-700 dark:text-red-400',
+            badgeBg: 'bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-900/40',
+            badgeText: 'text-red-700 dark:text-red-400',
+            label: 'Trễ hạn duyệt > 24h',
+            accent: 'before:bg-red-600'
+        };
+    } 
+    // 1. Cảnh báo Vàng (Trễ hạn > 12h): đối với các phiếu sau mốc thời gian tạo 12h mà vẫn ở trạng thái pending
+    else if (elapsedHours >= 12 && statusLower === 'pending') {
+        return {
+            type: 'yellow' as const,
+            bg: 'bg-amber-50/70 dark:bg-amber-950/20',
+            border: 'border-amber-400 dark:border-amber-900/50 hover:border-amber-500',
+            text: 'text-amber-700 dark:text-amber-400',
+            badgeBg: 'bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-900/40',
+            badgeText: 'text-amber-700 dark:text-amber-400',
+            label: 'Trễ hạn duyệt > 12h',
+            accent: 'before:bg-amber-600'
+        };
+    }
+    return null;
+  };
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
@@ -811,17 +870,22 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             <div className="space-y-3 pb-2">
                                 {desktopItems.map((item) => {
                                     const cfg = MODULE_CONFIG[item.type || 'PQC'] || MODULE_CONFIG['PQC'];
+                                    const warn = getWarningConfig(item);
                                     return (
                                         <div 
                                             key={item.id}
                                             onClick={() => onSelect(item.id)}
-                                            className="bg-white dark:bg-slate-900 border hover:border-blue-400 border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative"
+                                            className={`border rounded-2xl p-4 shadow-sm transition-all cursor-pointer active:scale-[0.98] group overflow-hidden relative ${
+                                                warn 
+                                                    ? `${warn.bg} ${warn.border}` 
+                                                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                                            }`}
                                         >
                                             <div className="flex flex-col gap-2">
                                                 <div className="flex justify-between items-start gap-2">
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color} uppercase border shadow-sm tracking-tight`}>{cfg.label}</span>
-                                                        <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase">
+                                                        <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase">
                                                             {
                                                                 (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
                                                                 (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
@@ -829,13 +893,21 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                             }
                                                         </span>
                                                     </div>
-                                                    <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                                                        item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
-                                                        item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
-                                                        'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'
-                                                    }`}>
-                                                        {item.status}
-                                                    </span>
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        {warn && (
+                                                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase flex items-center gap-1 animate-pulse ${warn.badgeBg} ${warn.badgeText}`}>
+                                                                <Clock className="w-2.5 h-2.5" />
+                                                                {warn.label}
+                                                            </span>
+                                                        )}
+                                                        <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                                                            item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
+                                                            item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
+                                                            'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                                        }`}>
+                                                            {item.status}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 <h4 className="text-[14px] font-bold text-slate-800 dark:text-slate-200 leading-snug pr-6 group-hover:text-blue-700 transition-colors line-clamp-3">
                                                     {item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ'}
@@ -1032,46 +1104,62 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">Không có hạng mục nào</div>
                     ) : (
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {desktopItems.map(item => (
-                                <div 
-                                    key={item.id}
-                                    onClick={() => handleSelectItemDesktop(item)}
-                                    className={`p-4 hover:bg-blue-50 dark:bg-blue-900/20/50 cursor-pointer transition-colors relative ${selectedItemDesktop?.id === item.id ? 'bg-blue-50 dark:bg-blue-900/20/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white dark:bg-slate-900'}`}
-                                >
-                                    <div className="flex justify-between items-start gap-2 mb-2">
-                                        <h4 className="font-bold text-slate-800 dark:text-slate-200 text-[13px] leading-snug line-clamp-2 pr-6">
-                                            {(item.type === 'IQC' || item.type === 'SQC_VT') 
-                                                ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
-                                        </h4>
-                                    </div>
-                                    <div className="flex flex-col gap-1 mt-2 text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">
-                                        <div className="flex items-center gap-1">
-                                            <span className="font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1 rounded">{
-                                                (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
-                                                (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
-                                                (item.ma_nha_may || item.headcode || '---')
-                                            }</span>
+                            {desktopItems.map(item => {
+                                const warn = getWarningConfig(item);
+                                const isSelected = selectedItemDesktop?.id === item.id;
+                                return (
+                                    <div 
+                                        key={item.id}
+                                        onClick={() => handleSelectItemDesktop(item)}
+                                        className={`p-4 hover:bg-blue-50/80 dark:hover:bg-slate-800/80 cursor-pointer transition-all relative ${
+                                            isSelected 
+                                                ? 'bg-blue-50/90 dark:bg-blue-950/40 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1.5 before:bg-blue-600' 
+                                                : warn 
+                                                    ? `${warn.bg} before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1.5 ${warn.accent}` 
+                                                    : 'bg-white dark:bg-slate-900'
+                                        }`}
+                                    >
+                                        <div className="flex justify-between items-start gap-2 mb-2">
+                                            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-[13px] leading-snug line-clamp-2 pr-6">
+                                                {(item.type === 'IQC' || item.type === 'SQC_VT') 
+                                                    ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                    : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
+                                            </h4>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-blue-600 dark:text-blue-400 font-bold">{item.inspectorName || item.created_by || '---'}</span>
+                                        <div className="flex flex-col gap-1 mt-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                            <div className="flex items-center gap-1">
+                                                <span className="font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1 rounded">{
+                                                    (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
+                                                    (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
+                                                    (item.ma_nha_may || item.headcode || '---')
+                                                }</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-blue-600 dark:text-blue-400 font-bold">{item.inspectorName || item.created_by || '---'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                                                    item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
+                                                    item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
+                                                    'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                                }`}>
+                                                    {item.status}
+                                                </span>
+                                                {warn && (
+                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 animate-pulse ${warn.badgeBg} ${warn.badgeText}`}>
+                                                        <Clock className="w-2.5 h-2.5" />
+                                                        {warn.label}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
-                                                item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
-                                                item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
-                                                'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'
-                                            }`}>
-                                                {item.status}
-                                            </span>
+                                        <div className="mt-2 flex gap-2 items-center justify-between">
+                                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
+                                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{formatDisplayDate(getImplementationDate(item))}</span>
                                         </div>
                                     </div>
-                                    <div className="mt-2 flex gap-2 items-center justify-between">
-                                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
-                                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{formatDisplayDate(getImplementationDate(item))}</span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
