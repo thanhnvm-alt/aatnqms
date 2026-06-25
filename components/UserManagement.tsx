@@ -606,6 +606,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                             label="Vẽ mẫu chữ ký cho NV" 
                                             value={formData.signature_template} 
                                             onChange={(val) => setFormData(prev => ({...prev, signature_template: val, signatureTemplate: val}))} 
+                                            isTemplateEditor={true}
                                           />
                                       </div>
                                   </div>

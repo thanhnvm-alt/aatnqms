@@ -6,7 +6,7 @@ import {
   ArrowLeft, Calendar, User as UserIcon, Building2, Box, FileText, 
   CheckCircle2, Clock, Trash2, Edit3, X, Maximize2, ShieldCheck,
   LayoutList, MessageSquare, Loader2, Eraser, Send, 
-  UserPlus, AlertOctagon, ChevronRight, Hash, Layers
+  UserPlus, AlertOctagon, ChevronRight, Hash, Layers, Camera, Image as ImageIcon
 } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
 import { NCRDetail } from './NCRDetail';
@@ -24,6 +24,7 @@ interface InspectionDetailProps {
 
 import { SignaturePad } from './SignaturePad';
 import { TwoTierApproval } from './TwoTierApproval';
+import { compressImage } from '../src/utils';
 
 export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment, workshops = [] }) => {
   const [newComment, setNewComment] = useState('');
@@ -31,8 +32,11 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
   const [isProcessing, setIsProcessing] = useState(false);
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [viewingNcr, setViewingNcr] = useState<NCR | null>(null);
-  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; context?: string } | null>(null);
   const [managerSig, setManagerSig] = useState('');
+  const [commentAttachments, setCommentAttachments] = useState<string[]>([]);
+  const commentFileRef = useRef<HTMLInputElement>(null);
+  const commentCameraRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user.role === 'ADMIN';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -54,11 +58,50 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
   };
 
   const handlePostComment = async () => {
-      if (!newComment.trim() || !onPostComment) return;
-      setIsSubmittingComment(true);
-      const comment: NCRComment = { id: Date.now().toString(), userId: user.id, userName: user.name, userAvatar: user.avatar, content: newComment, createdAt: new Date().toISOString() };
-      try { await onPostComment(inspection.id, comment); setNewComment(''); } 
-      catch (e) { alert("Lỗi khi gửi phản hồi."); } finally { setIsSubmittingComment(false); }
+    if (!newComment.trim() && commentAttachments.length === 0) return;
+    if (!onPostComment) return;
+    setIsSubmittingComment(true);
+    try {
+        await onPostComment(inspection.id, { 
+            id: `cmt_${Date.now()}`, 
+            userId: user.id, 
+            userName: user.name, 
+            userAvatar: user.avatar, 
+            content: newComment, 
+            createdAt: new Date().toISOString(),
+            attachments: commentAttachments
+        } as any);
+        setNewComment('');
+        setCommentAttachments([]);
+    } catch (e: any) { alert("Lỗi gửi bình luận: " + e.message); } finally { setIsSubmittingComment(false); }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+      try {
+          const { uploadQMSImage } = await import('../services/apiService');
+          const processed = await Promise.all(Array.from(files).map(async (f: File) => {
+              const compressed = await compressImage(f, 500);
+              return await uploadQMSImage(compressed, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+          }));
+          setCommentAttachments(prev => [...prev, ...processed]);
+      } catch (err) {
+          alert("Lỗi tải ảnh lên.");
+      }
+      e.target.value = '';
+  };
+
+  const updateCommentImage = (idx: number, newImg: string) => {
+      setCommentAttachments(prev => {
+          const next = [...prev];
+          next[idx] = newImg;
+          return next;
+      });
+  };
+
+  const handleEditCommentImage = (idx: number) => {
+      setLightboxState({ images: commentAttachments, index: idx, context: 'PENDING_COMMENT' });
   };
 
   if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => setViewingNcr(null)} />;
@@ -97,10 +140,78 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
         </div>
 
         <TwoTierApproval inspection={inspection} user={user} onApprove={onApprove!} />
+
+        {/* --- DISCUSSION SECTION --- */}
+        <section className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Thảo luận hồ sơ</h3>
+            </div>
+            <div className="p-6 space-y-6 max-h-[500px] overflow-y-auto no-scrollbar">
+                {inspection.comments?.map((comment) => (
+                    <div key={comment.id} className="flex gap-4 animate-in slide-in-from-left-2 duration-300">
+                        <img src={getProxyImageUrl(comment.userAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`)} className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm" alt="" referrerPolicy="no-referrer" />
+                        <div className="flex-1 space-y-2">
+                            <div className="flex justify-between items-center px-1">
+                                <span className="font-black text-slate-800 dark:text-slate-200 text-[11px] uppercase tracking-tight">{comment.userName}</span>
+                                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-[1.5rem] rounded-tl-none border border-slate-100 dark:border-slate-800 text-[12px] text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap leading-relaxed shadow-sm">{comment.content}</div>
+                            {comment.attachments && comment.attachments.length > 0 && (
+                                <div className="flex gap-3 flex-wrap pt-2">
+                                    {comment.attachments.map((img, i) => (
+                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
+                                            <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                {commentAttachments.length > 0 && (
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                        {commentAttachments.map((img, idx) => (
+                            <div key={idx} className="relative w-20 h-20 shrink-0 group">
+                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 dark:border-slate-700 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
+                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="flex gap-3 items-end">
+                    <div className="flex-1 relative">
+                        <textarea 
+                            value={newComment} 
+                            onChange={(e) => setNewComment(e.target.value)} 
+                            placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." 
+                            className="w-full pl-5 pr-28 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
+                        />
+                        <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                            <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                            <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
+                        </div>
+                    </div>
+                    <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
+                </div>
+            </div>
+        </section>
       </div>
 
+      <input type="file" ref={commentFileRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
+      <input type="file" ref={commentCameraRef} className="hidden" capture="environment" accept="image/*" onChange={handleImageUpload} />
 
-      {lightboxState && <ImageEditorModal images={lightboxState.images} initialIndex={lightboxState.index} onClose={() => setLightboxState(null)} readOnly={true} />}
+      {lightboxState && (
+          <ImageEditorModal 
+              images={lightboxState.images} 
+              initialIndex={lightboxState.index} 
+              onClose={() => setLightboxState(null)} 
+              onSave={lightboxState.context === 'PENDING_COMMENT' ? (idx, updated) => updateCommentImage(idx, updated) : undefined}
+              readOnly={lightboxState.context !== 'PENDING_COMMENT'} 
+          />
+      )}
     </div>
   );
 };

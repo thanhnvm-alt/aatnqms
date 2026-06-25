@@ -335,7 +335,21 @@ export async function saveInspection(inspection: Inspection) {
   const isLockedByManager = (oldValue?.managerSignature && oldValue.managerSignature.length > 10) || oldValue?.status === InspectionStatus.APPROVED;
   
   if (isLockedByManager) {
-      throw new Error("PHIẾU ĐÃ KHÓA: Giám đốc (L2) đã phê duyệt. Mọi hành vi chỉnh sửa (kể cả Admin) đều bị từ chối.");
+      // Determine if this is a "Comment Only" update by checking if critical fields changed
+      const itemsChanged = JSON.stringify(inspection.items) !== JSON.stringify(oldValue?.items);
+      const summaryChanged = inspection.summary !== oldValue?.summary;
+      const scoreChanged = inspection.score !== oldValue?.score;
+      const statusChanged = inspection.status !== oldValue?.status;
+      const sig1Changed = inspection.signature !== oldValue?.signature;
+      const sig2Changed = inspection.teamLeadSignature !== oldValue?.teamLeadSignature;
+      const sig3Changed = inspection.managerSignature !== oldValue?.managerSignature;
+      
+      const isCriticalEdited = itemsChanged || summaryChanged || scoreChanged || statusChanged || sig1Changed || sig2Changed || sig3Changed;
+
+      // Allow only if critical fields are UNCHANGED
+      if (isCriticalEdited) {
+          throw new Error("PHIẾU ĐÃ KHÓA: Giám đốc (L2) đã phê duyệt. Mọi hành vi chỉnh sửa (kể cả Admin) đều bị từ chối.");
+      }
   }
 
   // Khởi tạo qcDate cho phiếu mới

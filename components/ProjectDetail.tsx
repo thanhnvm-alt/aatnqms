@@ -1,7 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, Inspection, InspectionStatus, CheckStatus, FloorPlan, LayoutPin, ModuleId, User, ViewState, IPOItem, ProjectDocument } from '../types';
+import { Project, Inspection, InspectionStatus, CheckStatus, FloorPlan, LayoutPin, ModuleId, User, ViewState, IPOItem, ProjectDocument, NCR } from '../types';
 import { 
   ArrowLeft, MapPin, Calendar, User as UserIcon, CheckCircle2, 
   AlertTriangle, PieChart as PieChartIcon, 
@@ -10,10 +10,10 @@ import {
   ChevronRight, AlertCircle, FileText,
   ClipboardList, AlertOctagon, Search, ChevronDown, Plus,
   UserCheck, Users, Camera, Image as ImageIcon, Sparkles,
-  ShieldCheck, Clock, Locate, Map as MapIcon, ChevronDown as ChevronDownIcon
+  ShieldCheck, Clock, Locate, Map as MapIcon, ChevronDown as ChevronDownIcon, Eye
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject, uploadQMSImage, fetchProjectDocuments, saveProjectDocument, deleteProjectDocument } from '../services/apiService';
+import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject, uploadQMSImage, fetchProjectDocuments, saveProjectDocument, deleteProjectDocument, fetchNcrById } from '../services/apiService';
 import { FloorPlanLibrary } from './FloorPlanLibrary';
 import { LayoutManager } from './LayoutManager';
 import { InspectionFormSITE } from './inspectionformSITE';
@@ -28,6 +28,7 @@ import { InspectionDetailStepVecni } from './inspectiondetailStepVecni';
 import { InspectionDetailFQC } from './inspectiondetailFQC';
 import { InspectionDetailSPR } from './inspectiondetailSPR';
 import { IPODetail } from './IPODetail';
+import { NCRDetail } from './NCRDetail';
 import { SITE_CHECKLIST_TEMPLATE } from '../constants';
 
 interface ProjectDetailProps {
@@ -106,6 +107,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [fullDetailId, setFullDetailId] = useState<string | null>(null);
   const [fullDetailData, setFullDetailData] = useState<Inspection | null>(null);
   const [isLoadingFullDetail, setIsLoadingFullDetail] = useState(false);
+  const [activeNcr, setActiveNcr] = useState<NCR | null>(null);
+  const [isLoadingNcr, setIsLoadingNcr] = useState(false);
   const [focusedPinId, setFocusedPinId] = useState<string | undefined>(initialFocusedPinId);
 
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -329,8 +332,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           setFullDetailData(data);
       } catch (e) {
           alert("Lỗi tải chi tiết hồ sơ.");
+          setFullDetailId(null);
       } finally {
           setIsLoadingFullDetail(false);
+      }
+  };
+
+  const handleOpenNcr = async (id: string) => {
+      setIsLoadingNcr(true);
+      try {
+          const data = await fetchNcrById(id);
+          setActiveNcr(data);
+      } catch (e) {
+          alert("Lỗi tải chi tiết NCR.");
+      } finally {
+          setIsLoadingNcr(false);
       }
   };
 
@@ -612,9 +628,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                         e.stopPropagation();
                                                         setSelectedIpoForDetail(ipo);
                                                     }}
-                                                    className={`p-2 rounded-xl shrink-0 transition-all active:scale-95 ${selectedIpoId === (ipo.headcode || ipo.ma_nha_may) ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400'} hover:shadow-lg`}
+                                                    className={`px-3 py-1.5 rounded-xl shrink-0 transition-all active:scale-95 flex items-center gap-1.5 ${selectedIpoId === (ipo.headcode || ipo.ma_nha_may) ? 'bg-white text-blue-600' : 'bg-blue-600 text-white'} hover:shadow-lg border border-transparent`}
                                                 >
-                                                    <FileText className="w-4 h-4"/>
+                                                    <Eye className="w-3.5 h-3.5"/>
+                                                    <span className="text-[9px] font-black uppercase tracking-wider">Chi tiết</span>
                                                 </button>
                                                 <div className="flex-1 min-w-0">
                                                     <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-none mb-1.5">{ipo.ten_hang_muc}</h4>
@@ -643,7 +660,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-indigo-50/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md"><FileText className="w-4 h-4" /></div>
-                                    <span className="font-black text-[11px] uppercase tracking-wider text-indigo-900">Phiếu kiểm tra QC</span>
+                                    <div className="flex flex-col">
+                                        <span className="font-black text-[11px] uppercase tracking-wider text-indigo-900">Phiếu kiểm tra QC</span>
+                                        {selectedIpoId && <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-tight">Lọc theo: {selectedIpoId}</span>}
+                                    </div>
                                 </div>
                                 <span className="bg-white dark:bg-slate-900 text-indigo-600 px-2 py-1 rounded-lg border border-indigo-100 text-[10px] font-black">{filteredInspectionsFull.length}</span>
                             </div>
@@ -697,7 +717,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/20/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-red-600 text-white rounded-xl shadow-md"><AlertOctagon className="w-4 h-4" /></div>
-                                    <span className="font-black text-[11px] uppercase tracking-wider text-red-900">Danh sách lỗi NCR</span>
+                                    <div className="flex flex-col">
+                                        <span className="font-black text-[11px] uppercase tracking-wider text-red-900">Danh sách lỗi NCR</span>
+                                        {selectedIpoId && <span className="text-[8px] font-bold text-red-500 uppercase tracking-tight">Lọc theo: {selectedIpoId}</span>}
+                                    </div>
                                 </div>
                                 <span className="bg-white dark:bg-slate-900 text-red-600 dark:text-red-400 px-2 py-1 rounded-lg border border-red-100 text-[10px] font-black">{projectNcrs.length}</span>
                             </div>
@@ -719,7 +742,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 {projectNcrs.length > 0 ? (
                                     <>
                                         {projectNcrs.slice(0, ncrLimit).map((ncr, idx) => (
-                                            <div key={`${ncr.id}-${idx}`} onClick={() => handleOpenFullDetail(ncr.id)} className="p-4 bg-white dark:bg-slate-900 border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
+                                            <div key={`${ncr.id}-${idx}`} onClick={() => handleOpenNcr(ncr.id)} className="p-4 bg-white dark:bg-slate-900 border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
                                                 <div className="flex justify-between items-center"><span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span><span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500">#{ncr.id.split('-').pop()}</span></div>
                                                 <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase line-clamp-2 leading-tight italic">"{ncr.ten_hang_muc}"</h4>
                                                 <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Reported by: {ncr.inspectorName}</p>
@@ -743,7 +766,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-emerald-50/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-md"><Layers className="w-4 h-4" /></div>
-                                    <span className="font-black text-[11px] uppercase tracking-wider text-emerald-900">Bản vẽ kỹ thuật</span>
+                                    <div className="flex flex-col">
+                                        <span className="font-black text-[11px] uppercase tracking-wider text-emerald-900">Bản vẽ kỹ thuật</span>
+                                        {selectedIpoId && <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-tight">Lọc theo: {selectedIpoId}</span>}
+                                    </div>
                                 </div>
                                 <button onClick={() => setIsUploadModalOpen(true)} className="p-1 bg-white dark:bg-slate-900 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"><Plus className="w-4 h-4"/></button>
                             </div>
@@ -911,6 +937,27 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {fullDetailId && (
           <div className="absolute inset-0 z-[150] bg-white dark:bg-slate-900 flex flex-col animate-in slide-in-from-bottom duration-300 shadow-2xl">
               {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-800/50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-blue-400 mb-4"/><p className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (sig || extra.managerSignature) { updated.status = InspectionStatus.APPROVED; updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await saveInspectionToSheet(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await saveInspectionToSheet(updated); setFullDetailData(updated); }} onViewOnPlan={(insp: Inspection) => { setFullDetailId(null); setFullDetailData(null); setFocusedPinId(insp.id); if (insp.floor_plan_id) { const foundPlan = floorPlans.find(fp => fp.id === insp.floor_plan_id); if (foundPlan) { handleSelectPlan(foundPlan); } } }} />; })() : null}
+          </div>
+      )}
+
+      {activeNcr && (
+          <div className="fixed inset-0 z-[300] bg-white dark:bg-slate-900 animate-in slide-in-from-right duration-300 shadow-2xl">
+              <NCRDetail 
+                ncr={activeNcr} 
+                user={user} 
+                onBack={() => setActiveNcr(null)} 
+                onViewInspection={handleOpenFullDetail}
+                onUpdate={() => { if(onUpdate) onUpdate(); }}
+              />
+          </div>
+      )}
+
+      {isLoadingNcr && (
+          <div className="fixed inset-0 z-[350] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl flex flex-col items-center gap-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-red-600" />
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-600">Đang tải hồ sơ NCR...</span>
+              </div>
           </div>
       )}
 

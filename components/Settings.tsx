@@ -495,6 +495,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                             label="Vẽ chữ ký mẫu của bạn (Ký trực tiếp vào khung dưới)" 
                                             value={profileData.signature_template || currentUser.signature_template}
                                             onChange={(val) => setProfileData(prev => ({ ...prev, signature_template: val, signatureTemplate: val }))}
+                                            isTemplateEditor={true}
                                         />
                                     </div>
                                     
