@@ -166,6 +166,19 @@ export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspectio
                         </div>
                         <p className="font-bold text-[12px] text-slate-800 dark:text-slate-200 tracking-tight">{item.label}</p>
                         {item.notes && <p className="text-[11px] italic text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg leading-relaxed">"{item.notes}"</p>}
+                        {item.images && item.images.length > 0 && (
+                            <div className="flex gap-2.5 mt-2.5 overflow-x-auto no-scrollbar py-1">
+                                {item.images.map((img, imgIdx) => (
+                                    <div 
+                                        key={imgIdx} 
+                                        onClick={() => setLightboxState({ images: item.images!, index: imgIdx })} 
+                                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 shrink-0 cursor-zoom-in shadow-sm hover:shadow-md hover:scale-[1.03] active:scale-95 transition-all duration-200 bg-slate-50 dark:bg-slate-950"
+                                    >
+                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="Hạng mục kiểm tra" referrerPolicy="no-referrer" />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>

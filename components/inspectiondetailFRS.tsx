@@ -135,6 +135,19 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
                     <div className="flex justify-between items-start mb-2"><span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded uppercase">{item.category}</span><span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${item.status === CheckStatus.PASS ? 'bg-green-50 dark:bg-green-900/20 text-green-700 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 border-red-200'}`}>{item.status}</span></div>
                     <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200">{item.label}</p>
                     {item.notes && <p className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500 italic mt-1">"{item.notes}"</p>}
+                    {item.images && item.images.length > 0 && (
+                        <div className="flex gap-2.5 mt-2.5 overflow-x-auto no-scrollbar py-1">
+                            {item.images.map((img, imgIdx) => (
+                                <div 
+                                    key={imgIdx} 
+                                    onClick={() => setLightboxState({ images: item.images!, index: imgIdx })} 
+                                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 shrink-0 cursor-zoom-in shadow-sm hover:shadow-md hover:scale-[1.03] active:scale-95 transition-all duration-200 bg-slate-50 dark:bg-slate-950"
+                                >
+                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="Hạng mục kiểm tra" referrerPolicy="no-referrer" />
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             ))}
         </div>
