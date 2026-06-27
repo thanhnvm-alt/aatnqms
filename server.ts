@@ -1064,7 +1064,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.post("/api/inspections", authenticate, async (req, res) => {
     try {
-      await db.saveInspection(req.body);
+      await db.saveInspection(req.body, (req as any).user?.name);
       res.json({ success: true });
     } catch (error: any) {
       console.error("Inspections Save Error:", error);
@@ -2875,7 +2875,7 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
                 if (inspection.passedQuantity === 0) inspection.passedQuantity = cleanNumber(getCol(['sldat', 'sl đạt', 'passedquantity']));
                 if (inspection.failedQuantity === 0) inspection.failedQuantity = cleanNumber(getCol(['slloi', 'sl lỗi', 'sl hồng', 'failedquantity']));
 
-                await db.saveInspection(inspection);
+                await db.saveInspection(inspection, (req as any).user?.name);
                 validResults.push(inspection.id);
             } catch (err: any) {
                 console.error(`❌ Error importing row ${rowIndex}:`, err.message);

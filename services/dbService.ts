@@ -265,7 +265,7 @@ export async function saveLayoutPin(pin: LayoutPin) {
 
 // --- INSPECTIONS ---
 
-export async function saveInspection(inspection: Inspection) {
+export async function saveInspection(inspection: Inspection, performedBy?: string) {
   const table = getTableName(inspection.type);
   
   // Auto-fill project info if missing, especially for "Dùng Chung" cases
@@ -596,7 +596,7 @@ export async function saveInspection(inspection: Inspection) {
   }
 
   sideTasks.push(Promise.all(ncrTasks));
-  sideTasks.push(logAudit(inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection));
+  sideTasks.push(logAudit(performedBy || inspection.inspectorName || 'SYSTEM', oldValue ? 'UPDATE_INSPECTION' : 'CREATE_INSPECTION', 'inspection', inspection.id, oldValue, inspection));
   sideTasks.push(syncToInspectionsTable(inspection));
 
   // Run initial side tasks in parallel
