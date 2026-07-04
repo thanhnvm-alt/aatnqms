@@ -48,6 +48,68 @@ const DETAIL_MAP: Record<string, any> = {
     'FSR': InspectionDetailFRS, 'STEP': InspectionDetailStepVecni, 'FQC': InspectionDetailFQC, 'SPR': InspectionDetailSPR
 };
 
+const formatDate = (dateStr: any) => {
+    if (!dateStr) return 'N/A';
+    
+    let numStr = String(dateStr);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(numStr)) {
+        return numStr;
+    }
+    
+    // Check if it's a numeric string or number (timestamp)
+    if (/^\d+$/.test(numStr)) {
+        const num = parseInt(numStr, 10);
+        // if length is <= 10, it's seconds, else ms
+        const d = new Date(num > 9999999999 ? num : num * 1000);
+        if (!isNaN(d.getTime())) {
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+    }
+    
+    const d = new Date(numStr);
+    if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    }
+    return numStr;
+};
+
+const getInspectionStats = (ins: any) => {
+    let insQty = Number(ins.inspectedQuantity || 0);
+    let pasQty = Number(ins.passedQuantity || 0);
+    let faiQty = Number(ins.failedQuantity || 0);
+
+    if (insQty === 0 && ins.materials && ins.materials.length > 0) {
+        insQty = ins.materials.reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
+        pasQty = ins.materials.reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
+        faiQty = ins.materials.reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
+    }
+
+    if (insQty > 0) {
+        const passPercent = Math.round((pasQty / insQty) * 100);
+        const failPercent = Math.round((faiQty / insQty) * 100);
+        return { passPercent, failPercent: failPercent > 0 ? failPercent : (100 - passPercent) };
+    }
+    
+    if (ins.items && ins.items.length > 0) {
+        const passItems = ins.items.filter((it: any) => it.status === 'PASS' || it.status === 'ĐẠT' || it.status === CheckStatus.PASS).length;
+        const failItems = ins.items.filter((it: any) => it.status === 'FAIL' || it.status === 'KHÔNG ĐẠT' || it.status === CheckStatus.FAIL).length;
+        const total = passItems + failItems;
+        if (total > 0) {
+            const passPercent = Math.round((passItems / total) * 100);
+            return { passPercent, failPercent: 100 - passPercent };
+        }
+    }
+    
+    const passPercent = typeof ins.score === 'number' ? Math.round(ins.score) : 0;
+    return { passPercent, failPercent: 100 - passPercent };
+};
+
 const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#94a3b8'];
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({ 
@@ -261,12 +323,58 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const filteredIpoPlans = useMemo(() => {
     const term = ipoSearch.toLowerCase().trim();
-    return projectSpecificPlans.filter(p => 
+    
+    // Lọc trùng trước
+    const seen = new Set<string>();
+    const unique = projectSpecificPlans.filter(p => {
+        const key = p.headcode || p.ma_nha_may || p.id;
+        if (!key) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    const filtered = unique.filter(p => 
         !term || 
-        p.ten_hang_muc.toLowerCase().includes(term) || 
-        p.ma_nha_may.toLowerCase().includes(term)
+        (p.ten_hang_muc && p.ten_hang_muc.toLowerCase().includes(term)) || 
+        (p.ma_nha_may && p.ma_nha_may.toLowerCase().includes(term)) ||
+        (p.headcode && p.headcode.toLowerCase().includes(term))
     );
-  }, [projectSpecificPlans, ipoSearch]);
+
+    // Sắp xếp theo số lượng phiếu kiểm tra QC (từ lớn đến bé)
+    return filtered.sort((a, b) => {
+        const targetIdA = a.headcode || a.ma_nha_may;
+        const targetIdB = b.headcode || b.ma_nha_may;
+        const countA = projectInspections.filter(i => i && (i.ma_nha_may === targetIdA || i.headcode === targetIdA)).length;
+        const countB = projectInspections.filter(i => i && (i.ma_nha_may === targetIdB || i.headcode === targetIdB)).length;
+        return countB - countA;
+    });
+  }, [projectSpecificPlans, ipoSearch, projectInspections]);
+
+  const productionProgress = useMemo(() => {
+    const seen = new Set<string>();
+    const uniquePlans = projectSpecificPlans.filter(p => {
+        const key = p.headcode || p.ma_nha_may || p.id;
+        if (!key) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    const total = uniquePlans.length;
+    if (total === 0) return 0;
+
+    const completedCount = uniquePlans.filter(p => {
+        const targetId = p.headcode || p.ma_nha_may;
+        const ipoInspections = projectInspections.filter(i => i && (i.ma_nha_may === targetId || i.headcode === targetId));
+        return ipoInspections.some(i => {
+            const stageStr = String(i.inspectionStage || (i as any).stage || '').toLowerCase();
+            return stageStr.includes('p20');
+        });
+    }).length;
+
+    return Math.round((completedCount / total) * 100);
+  }, [projectSpecificPlans, projectInspections]);
 
   const filteredInspectionsFull = useMemo(() => {
     const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
@@ -560,11 +668,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             </div>
                             <div className="mt-6 pt-6 border-t border-slate-50">
                                 <div className="flex justify-between items-end mb-2">
-                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><Activity className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" /> TIẾN ĐỘ THI CÔNG</span>
-                                    <span className="text-xl font-black text-blue-700">{project.progress}%</span>
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><Activity className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" /> TIẾN ĐỘ SẢN XUẤT</span>
+                                    <span className="text-xl font-black text-blue-700">{productionProgress}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner">
-                                    <div className="bg-blue-600 h-full rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(37,99,235,0.4)]" style={{ width: `${project.progress}%` }}></div>
+                                    <div className="bg-blue-600 h-full rounded-full transition-all duration-1000 shadow-[0_0_8px_rgba(37,99,235,0.4)]" style={{ width: `${productionProgress}%` }}></div>
                                 </div>
                             </div>
                         </div>
@@ -634,31 +742,76 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <div className="py-20 flex justify-center"><Loader2 className="w-6 h-6 text-blue-300 animate-spin" /></div>
                                 ) : filteredIpoPlans.length > 0 ? (
                                     <>
-                                        {filteredIpoPlans.slice(0, ipoLimit).map((ipo, idx) => (
-                                            <div 
-                                                key={`${ipo.id}-${idx}`} 
-                                                onClick={() => setSelectedIpoId(prev => prev === (ipo.headcode || ipo.ma_nha_may) ? null : (ipo.headcode || ipo.ma_nha_may))} 
-                                                className={`p-4 bg-white dark:bg-slate-900 border ${selectedIpoId === (ipo.headcode || ipo.ma_nha_may) ? 'border-blue-500 shadow-md bg-blue-50 dark:bg-slate-800/80/30' : 'border-slate-100 dark:border-slate-800'} rounded-2xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3`}
-                                            >
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedIpoForDetail(ipo);
-                                                    }}
-                                                    className={`px-3 py-1.5 rounded-xl shrink-0 transition-all active:scale-95 flex items-center gap-1.5 ${selectedIpoId === (ipo.headcode || ipo.ma_nha_may) ? 'bg-white text-blue-600' : 'bg-blue-600 text-white'} hover:shadow-lg border border-transparent`}
-                                                >
-                                                    <Eye className="w-3.5 h-3.5"/>
-                                                    <span className="text-[9px] font-black uppercase tracking-wider">Chi tiết</span>
-                                                </button>
-                                                <div className="flex-1 min-w-0">
-                                                    <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-none mb-1.5">{ipo.ten_hang_muc}</h4>
-                                                    <div className="flex justify-between items-center">
-                                                        <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase">{ipo.headcode || ipo.ma_nha_may}</p>
-                                                        <span className="text-[10px] font-black text-slate-900 dark:text-slate-100">{ipo.so_luong_ipo} {ipo.dvt}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                        {filteredIpoPlans.slice(0, ipoLimit).map((ipo, idx) => {
+                                             const targetId = ipo.headcode || ipo.ma_nha_may;
+                                             const isSelected = selectedIpoId === targetId;
+                                             const ipoInspections = projectInspections.filter(i => i && (i.ma_nha_may === targetId || i.headcode === targetId));
+                                             const insCount = ipoInspections.length;
+                                             const isCompleted = ipoInspections.some(i => {
+                                                 const stageStr = String(i.inspectionStage || (i as any).stage || '').toLowerCase();
+                                                 return stageStr.includes('p20');
+                                             });
+
+                                             let borderClass = 'border-slate-100 dark:border-slate-800';
+                                             let bgClass = 'bg-white dark:bg-slate-900';
+
+                                             if (isCompleted) {
+                                                 if (isSelected) {
+                                                     borderClass = 'border-green-600 dark:border-green-500 border-2';
+                                                     bgClass = 'bg-green-50/80 dark:bg-green-950/40';
+                                                 } else {
+                                                     borderClass = 'border-green-200 dark:border-green-900/50';
+                                                     bgClass = 'bg-green-50/40 dark:bg-green-950/10';
+                                                 }
+                                             } else {
+                                                 if (isSelected) {
+                                                     borderClass = 'border-blue-500 shadow-md';
+                                                     bgClass = 'bg-blue-50 dark:bg-slate-800/80/30';
+                                                 }
+                                             }
+
+                                             return (
+                                                 <div 
+                                                     key={`${ipo.id}-${idx}`} 
+                                                     onClick={() => setSelectedIpoId(prev => prev === targetId ? null : targetId)} 
+                                                     className={`p-4 ${bgClass} border ${borderClass} rounded-2xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3`}
+                                                 >
+                                                     <div className="flex flex-col items-center gap-1.5 shrink-0 w-[95px]">
+                                                         <button 
+                                                             onClick={(e) => {
+                                                                 e.stopPropagation();
+                                                                 setSelectedIpoForDetail(ipo);
+                                                             }}
+                                                             className={`w-full px-2 py-1.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1 ${
+                                                                 isSelected 
+                                                                     ? (isCompleted ? 'bg-green-600 text-white shadow-sm' : 'bg-white text-blue-600 shadow-sm') 
+                                                                     : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                             } hover:shadow-lg border border-transparent`}
+                                                         >
+                                                             <Eye className="w-3.5 h-3.5"/>
+                                                             <span className="text-[9px] font-black uppercase tracking-wider">Chi tiết</span>
+                                                         </button>
+                                                         
+                                                         <div className="flex items-center gap-1 text-[8px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded-md border border-slate-200/50 dark:border-slate-700/50">
+                                                             <span>{insCount} phiếu QC</span>
+                                                         </div>
+
+                                                         {isCompleted && (
+                                                             <span className="px-1.5 py-0.5 bg-green-500/15 text-green-700 dark:text-green-400 text-[8px] font-black uppercase tracking-wider rounded-md border border-green-500/20 text-center leading-none">
+                                                                 Đã hoàn thiện
+                                                             </span>
+                                                         )}
+                                                     </div>
+                                                     <div className="flex-1 min-w-0">
+                                                         <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-none mb-1.5">{ipo.ten_hang_muc}</h4>
+                                                         <div className="flex justify-between items-center">
+                                                             <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase">{ipo.headcode || ipo.ma_nha_may}</p>
+                                                             <span className="text-[10px] font-black text-slate-900 dark:text-slate-100">{ipo.so_luong_ipo} {ipo.dvt}</span>
+                                                         </div>
+                                                     </div>
+                                                 </div>
+                                             );
+                                        })}
                                         {projectSpecificPlans.length > ipoLimit && (
                                             <button 
                                                 onClick={() => setIpoLimit(Infinity)}
@@ -701,21 +854,49 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
                                 {filteredInspectionsFull.length > 0 ? (
                                     <>
-                                        {filteredInspectionsFull.slice(0, inspectionsLimit).map((ins, idx) => (
-                                            <div key={`${ins.id}-${idx}`} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
-                                                <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
-                                                <div className="flex-1 min-w-0">
-                                                    <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-none mb-1.5">
-                                                        {
-                                                            (ins.type === 'IQC' || ins.type === 'SQC_VT') 
-                                                                ? (ins.materials?.[0]?.name || ins.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                                : (ins.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
-                                                        }
-                                                    </h4>
-                                                    <div className="flex justify-between items-center"><p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase">{ins.date}</p><span className="text-[10px] font-black text-slate-900 dark:text-slate-100">{ins.score}%</span></div>
+                                        {filteredInspectionsFull.slice(0, inspectionsLimit).map((ins, idx) => {
+                                            const { passPercent, failPercent } = getInspectionStats(ins);
+                                            return (
+                                                <div key={`${ins.id}-${idx}`} onClick={() => handleOpenFullDetail(ins.id)} className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group flex items-start gap-3">
+                                                    <div className={`p-2 rounded-xl shrink-0 ${ins.status === InspectionStatus.APPROVED ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500' : 'bg-orange-50 text-orange-600'}`}><CheckCircle2 className="w-4 h-4"/></div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase truncate leading-tight mb-2">
+                                                            {
+                                                                (ins.type === 'IQC' || ins.type === 'SQC_VT') 
+                                                                    ? (ins.materials?.[0]?.name || ins.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                                    : (ins.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
+                                                            }
+                                                        </h4>
+                                                        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[9px] text-slate-500 dark:text-slate-400">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[8px] uppercase tracking-wider text-slate-400 font-bold">Ngày kiểm</span>
+                                                                <span className="font-mono font-black text-slate-700 dark:text-slate-300">{formatDate(ins.date)}</span>
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[8px] uppercase tracking-wider text-slate-400 font-bold">QC Kiểm</span>
+                                                                <span className="font-black text-slate-700 dark:text-slate-300 truncate">{ins.inspectorName || 'Chưa rõ'}</span>
+                                                            </div>
+                                                            <div className="flex flex-col col-span-2">
+                                                                <span className="text-[8px] uppercase tracking-wider text-slate-400 font-bold">Xưởng / Công đoạn</span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-300 truncate">
+                                                                    {ins.workshop || 'N/A'} / {ins.inspectionStage || ins.stage || 'N/A'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-3 mt-2 pt-2 border-t border-slate-100/50 dark:border-slate-800/50">
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                                                                <span className="text-[9px] font-black text-green-600 dark:text-green-400">Đạt: {passPercent}%</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                                                <span className="text-[9px] font-black text-red-600 dark:text-red-400">Lỗi: {failPercent}%</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                         {filteredInspectionsFull.length > inspectionsLimit && (
                                             <button 
                                                 onClick={() => setInspectionsLimit(Infinity)}
@@ -760,7 +941,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <>
                                         {projectNcrs.slice(0, ncrLimit).map((ncr, idx) => (
                                             <div key={`${ncr.id}-${idx}`} onClick={() => handleOpenNcr(ncr.id)} className="p-4 bg-white dark:bg-slate-900 border border-red-100 rounded-2xl hover:shadow-md transition-all cursor-pointer group space-y-2">
-                                                <div className="flex justify-between items-center"><span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase">DEFECT</span><span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500">#{ncr.id.split('-').pop()}</span></div>
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase shrink-0">DEFECT</span>
+                                                        <span className="text-[8px] font-mono font-bold text-red-600 bg-red-50 dark:bg-red-950/20 px-1.5 py-0.5 rounded border border-red-100/50 shrink-0">
+                                                            {formatDate(ncr.date)}
+                                                        </span>
+                                                        {(ncr.headcode || ncr.ma_nha_may) && (
+                                                            <span className="text-[8px] font-mono font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/50 shrink-0">
+                                                                {ncr.headcode || ncr.ma_nha_may}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500">#{ncr.id.split('-').pop()}</span>
+                                                </div>
                                                 <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase line-clamp-2 leading-tight italic">"{ncr.ten_hang_muc}"</h4>
                                                 <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Reported by: {ncr.inspectorName}</p>
                                             </div>
