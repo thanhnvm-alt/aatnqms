@@ -9,7 +9,8 @@ import {
   Trash2, Info, LayoutList,
   AlertOctagon, FileText, QrCode,
   Ruler, Microscope, PenTool, Eraser, Loader2, Sparkles, CheckCircle2, History, Clock,
-  Activity, ShieldCheck, CheckCircle, AlertCircle, ChevronRight
+  Activity, ShieldCheck, CheckCircle, AlertCircle, ChevronRight,
+  Plus, Search
 } from 'lucide-react';
 import { fetchIpoByFactoryOrder, uploadQMSImage, fetchInspectionById } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
@@ -19,6 +20,29 @@ import { PersistenceService } from '../services/persistenceService';
 import { FQC_CHECKLIST_TEMPLATE } from '../constants';
 
 import { SignaturePad } from './SignaturePad';
+
+const PRESET_ADDITIONAL_CRITERIA = [
+  { category: 'Ngoại quan', label: 'Bề mặt sơn phẳng mịn, không bọt khí, bụi sơn' },
+  { category: 'Ngoại quan', label: 'Không trầy xước, nứt vỡ, móp méo gỗ' },
+  { category: 'Ngoại quan', label: 'Màu sắc đồng nhất với bảng mẫu chuẩn' },
+  { category: 'Ngoại quan', label: 'Vệ sinh sạch sẽ toàn bộ mặt trong và mặt ngoài' },
+  { category: 'Ngoại quan', label: 'Độ bóng/mờ sơn đồng đều trên toàn bộ sản phẩm' },
+  { category: 'Ngoại quan', label: 'Vân gỗ tự nhiên hài hòa, không bị loang lổ' },
+  { category: 'Kích thước', label: 'Kiểm tra kích thước tổng thể phủ bì sản phẩm' },
+  { category: 'Kích thước', label: 'Độ vuông góc thùng tủ, mộng ghép và liên kết' },
+  { category: 'Kích thước', label: 'Độ phẳng bề mặt bàn, cánh tủ và hông' },
+  { category: 'Kích thước', label: 'Chiều dày vách, đáy, đợt và mặt cánh tủ' },
+  { category: 'Kích thước', label: 'Khe hở đồng đều giữa các cánh tủ và hộc kéo' },
+  { category: 'Kết cấu', label: 'Liên kết mộng, keo, vít chắc chắn, kín khít' },
+  { category: 'Kết cấu', label: 'Sản phẩm đứng vững, không bập bênh hay rung lắc' },
+  { category: 'Chức năng', label: 'Bản lề, ray giảm chấn trượt êm ái, hoạt động tốt' },
+  { category: 'Chức năng', label: 'Khóa cửa, chốt an toàn và tay nắm hoạt động ổn định' },
+  { category: 'Chức năng', label: 'Nút chân tăng đơ điều chỉnh cân bằng mặt sàn' },
+  { category: 'Đóng gói', label: 'Quy cách đóng thùng carton đạt tiêu chuẩn bảo vệ hàng hóa' },
+  { category: 'Đóng gói', label: 'Nhãn dán đầy đủ mã hàng, mã barcode và thông số' },
+  { category: 'Đóng gói', label: 'Mút xốp chèn góc chắc chắn chống va đập' },
+  { category: 'Đóng gói', label: 'Bộ phụ kiện và tờ hướng dẫn lắp ráp đi kèm đầy đủ' }
+];
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -67,6 +91,11 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [showHistory, setShowHistory] = useState(false);
   
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
+  
+  const [showAddCriteriaModal, setShowAddCriteriaModal] = useState(false);
+  const [criteriaSearch, setCriteriaSearch] = useState('');
+  const [customCategory, setCustomCategory] = useState('Ngoại quan');
+  const [customLabel, setCustomLabel] = useState('');
 
   useEffect(() => {
     PersistenceService.hasDraft('FQC', user.id).then(setHasDraft);
@@ -325,7 +354,12 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
 
         <div className="space-y-2">
-            <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 border-b border-slate-300 pb-2 px-1 text-[11px]"><LayoutList className="w-3.5 h-3.5 text-blue-600"/> IV. NỘI DUNG KIỂM TRA FQC ({visibleItems.length})</h3>
+            <div className="flex justify-between items-center border-b border-slate-300 pb-2 px-1">
+                <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 text-[11px]"><LayoutList className="w-3.5 h-3.5 text-blue-600"/> IV. NỘI DUNG KIỂM TRA FQC ({visibleItems.length})</h3>
+                <button onClick={() => setShowAddCriteriaModal(true)} className="px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 border border-blue-200 transition-all duration-200 active:scale-95" type="button">
+                    <Plus className="w-3.5 h-3.5 text-blue-600" /> Thêm tiêu chí
+                </button>
+            </div>
             <div className="space-y-3">
                 {visibleItems.map((item, originalIndex) => {
                     const actualIndex = formData.items?.findIndex(i => i.id === item.id) ?? -1;
@@ -357,6 +391,189 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
       </div>
 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => lookupPlanInfo(data)} />}
+
+      {showAddCriteriaModal && (
+        <div className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200" style={{ fontFamily: 'var(--font-sans)' }}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/20">
+              <div className="flex items-center gap-2">
+                <LayoutList className="w-4 h-4 text-blue-600 animate-pulse" />
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">CHỌN TIÊU CHÍ CẦN KIỂM TRÊN FQC</h4>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowAddCriteriaModal(false);
+                  setCriteriaSearch('');
+                  setCustomLabel('');
+                }} 
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                type="button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content area */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar">
+              {/* Search preset criteria */}
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
+                  <Search className="w-3.5 h-3.5" />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm tiêu chuẩn có sẵn..."
+                  value={criteriaSearch}
+                  onChange={(e) => setCriteriaSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl font-medium outline-none text-xs focus:ring-1 ring-blue-100 bg-slate-50 dark:bg-slate-950 focus:bg-white"
+                />
+              </div>
+
+              {/* Preset checklist list */}
+              <div className="space-y-2">
+                <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Tiêu chí khuyên dùng</p>
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 no-scrollbar border border-slate-100 dark:border-slate-800 rounded-xl p-2 bg-slate-50/30">
+                  {PRESET_ADDITIONAL_CRITERIA.filter(item => 
+                    item.label.toLowerCase().includes(criteriaSearch.toLowerCase()) || 
+                    item.category.toLowerCase().includes(criteriaSearch.toLowerCase())
+                  ).map((item, idx) => {
+                    const isAdded = formData.items?.some(it => it.label === item.label) ?? false;
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all ${
+                          isAdded 
+                            ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 opacity-75' 
+                            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 pr-3">
+                          <span className="inline-block bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 px-1.5 py-0.5 rounded mr-2 border border-slate-200/50 tracking-wider">
+                            {item.category}
+                          </span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">
+                            {item.label}
+                          </span>
+                        </div>
+                        {isAdded ? (
+                          <span className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider bg-blue-100/50 px-2 py-0.5 rounded">Đã chọn</span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const newItem = {
+                                id: `fqc_add_${Date.now()}_${idx}`,
+                                category: item.category,
+                                label: item.label,
+                                status: CheckStatus.PENDING,
+                                notes: '',
+                                images: [],
+                                stage: formData.inspectionStage || undefined
+                              };
+                              setFormData(prev => ({
+                                ...prev,
+                                items: [...(prev.items || []), newItem]
+                              }));
+                            }}
+                            className="p-1 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all"
+                            type="button"
+                          >
+                            <Plus className="w-3 h-3" /> Thêm
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {PRESET_ADDITIONAL_CRITERIA.filter(item => 
+                    item.label.toLowerCase().includes(criteriaSearch.toLowerCase()) || 
+                    item.category.toLowerCase().includes(criteriaSearch.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-center py-4 text-slate-400 text-[11px] font-bold">Không tìm thấy tiêu chí phù hợp</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Custom criteria input */}
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
+                <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-500" /> Tự nhập tiêu chí mới
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-1 space-y-0.5">
+                    <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Phân loại</label>
+                    <select
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 font-bold outline-none text-[11px]"
+                    >
+                      <option value="Ngoại quan">Ngoại quan</option>
+                      <option value="Kích thước">Kích thước</option>
+                      <option value="Kết cấu">Kết cấu</option>
+                      <option value="Hoàn thiện">Hoàn thiện</option>
+                      <option value="Chức năng">Chức năng</option>
+                      <option value="Đóng gói">Đóng gói</option>
+                      <option value="Hồ sơ">Hồ sơ</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2 space-y-0.5">
+                    <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Nội dung tiêu chuẩn cần kiểm</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="VD: Kiểm tra độ đồng màu chân bàn..."
+                        value={customLabel}
+                        onChange={(e) => setCustomLabel(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg font-bold outline-none text-[11px]"
+                      />
+                      <button
+                        onClick={() => {
+                          if (!customLabel.trim()) {
+                            alert("Vui lòng nhập nội dung tiêu chí.");
+                            return;
+                          }
+                          const newItem = {
+                            id: `fqc_custom_${Date.now()}`,
+                            category: customCategory,
+                            label: customLabel.trim(),
+                            status: CheckStatus.PENDING,
+                            notes: '',
+                            images: [],
+                            stage: formData.inspectionStage || undefined
+                          };
+                          setFormData(prev => ({
+                            ...prev,
+                            items: [...(prev.items || []), newItem]
+                          }));
+                          setCustomLabel('');
+                        }}
+                        className="px-3 bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+                        type="button"
+                      >
+                        Thêm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowAddCriteriaModal(false);
+                  setCriteriaSearch('');
+                  setCustomLabel('');
+                }}
+                className="px-5 py-2 bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                type="button"
+              >
+                Xong
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}
       <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileUpload} />
       <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />

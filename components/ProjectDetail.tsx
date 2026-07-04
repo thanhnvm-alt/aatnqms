@@ -13,7 +13,7 @@ import {
   ShieldCheck, Clock, Locate, Map as MapIcon, ChevronDown as ChevronDownIcon, Eye
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject, uploadQMSImage, fetchProjectDocuments, saveProjectDocument, deleteProjectDocument, fetchNcrById } from '../services/apiService';
+import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject, uploadQMSImage, fetchProjectDocuments, saveProjectDocument, deleteProjectDocument, fetchNcrById, fetchInspections } from '../services/apiService';
 import { FloorPlanLibrary } from './FloorPlanLibrary';
 import { LayoutManager } from './LayoutManager';
 import { InspectionFormSITE } from './inspectionformSITE';
@@ -85,6 +85,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [selectedIpoId, setSelectedIpoId] = useState<string | null>(null);
   const [selectedIpoForDetail, setSelectedIpoForDetail] = useState<IPOItem | null>(null);
 
+  const [projectInspections, setProjectInspections] = useState<Inspection[]>([]);
+  const [isLoadingInspections, setIsLoadingInspections] = useState(false);
+
   // Pagination states for UI
   const [ipoLimit, setIpoLimit] = useState(10);
   const [inspectionsLimit, setInspectionsLimit] = useState(10);
@@ -132,10 +135,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     }
   }, [focusedPinId, inspections, floorPlans]);
 
+  const loadProjectInspections = async () => {
+      setIsLoadingInspections(true);
+      try {
+          const data = await fetchInspections({ project: project.ma_ct }, 1, 10000);
+          setProjectInspections(data.items || []);
+      } catch (e) {
+          console.error("Failed to load project inspections", e);
+      } finally {
+          setIsLoadingInspections(false);
+      }
+  };
+
   useEffect(() => {
       loadFloorPlans();
       loadProjectPlans();
       loadProjectDocuments();
+      loadProjectInspections();
   }, [project.ma_ct, project.id]);
 
   const loadProjectDocuments = async () => {
@@ -257,28 +273,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     const pName = String(project.name || '').trim().toLowerCase();
     const term = inspectionSearch.toLowerCase().trim();
 
-    return inspections.filter(i => {
+    return projectInspections.filter(i => {
         if (!i) return false;
         const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
         const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
         return matchesProject && matchesSearch && matchesIpo;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, project, inspectionSearch, selectedIpoId]);
+  }, [projectInspections, project, inspectionSearch, selectedIpoId]);
 
   const projectNcrs = useMemo(() => {
     const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
     const pName = String(project.name || '').trim().toLowerCase();
     const term = ncrSearch.toLowerCase().trim();
 
-    return inspections.filter(i => {
+    return projectInspections.filter(i => {
         if (!i || i.status !== InspectionStatus.FLAGGED) return false;
         const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
         const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
         return matchesProject && matchesSearch && matchesIpo;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inspections, project, ncrSearch, selectedIpoId]);
+  }, [projectInspections, project, ncrSearch, selectedIpoId]);
 
   const filteredLayouts = useMemo(() => {
     const term = layoutSearch.toLowerCase().trim();
@@ -293,7 +309,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
     const pName = String(project.name || '').trim().toLowerCase();
     
-    const projInspections = inspections.filter(i => {
+    const projInspections = projectInspections.filter(i => {
         if (!i) return false;
         return String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
     });
@@ -309,7 +325,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         drafts, 
         passRate: total > 0 ? Math.round((completed / (completed + flagged)) * 100) || 0 : 0 
     };
-  }, [inspections, project]);
+  }, [projectInspections, project]);
 
   const pieData = [{ name: 'Đạt', value: stats.completed }, { name: 'Lỗi', value: stats.flagged }, { name: 'Nháp', value: stats.drafts }].filter(d => d.value > 0);
 
@@ -362,6 +378,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           setPins(updatedPins);
           setIsInspectionFormOpen(false);
           setPendingPinCoord(null);
+          loadProjectInspections();
           if (onUpdate) onUpdate();
       } catch (err: any) { 
           console.error("Layout Save Detailed Error:", err);
