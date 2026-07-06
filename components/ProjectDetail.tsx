@@ -79,6 +79,30 @@ const formatDate = (dateStr: any) => {
     return numStr;
 };
 
+const parseDateForSort = (dateStr: any) => {
+    if (!dateStr) return 0;
+    
+    let numStr = String(dateStr);
+    
+    // Check if it's DD/MM/YYYY
+    const dmmyyyyMatch = numStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (dmmyyyyMatch) {
+        return new Date(Number(dmmyyyyMatch[3]), Number(dmmyyyyMatch[2]) - 1, Number(dmmyyyyMatch[1])).getTime();
+    }
+    
+    // Check if it's a numeric string or number (timestamp)
+    if (/^\d+$/.test(numStr)) {
+        const num = parseInt(numStr, 10);
+        return num > 9999999999 ? num : num * 1000;
+    }
+    
+    const d = new Date(numStr);
+    if (!isNaN(d.getTime())) {
+        return d.getTime();
+    }
+    return 0;
+};
+
 const getInspectionStats = (ins: any) => {
     let insQty = Number(ins.inspectedQuantity || 0);
     let pasQty = Number(ins.passedQuantity || 0);
@@ -387,7 +411,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
         const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
         return matchesProject && matchesSearch && matchesIpo;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => parseDateForSort(b.date) - parseDateForSort(a.date));
   }, [projectInspections, project, inspectionSearch, selectedIpoId]);
 
   const projectNcrs = useMemo(() => {
@@ -401,7 +425,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
         const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
         return matchesProject && matchesSearch && matchesIpo;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => parseDateForSort(b.date) - parseDateForSort(a.date));
   }, [projectInspections, project, ncrSearch, selectedIpoId]);
 
   const filteredLayouts = useMemo(() => {
@@ -716,7 +740,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         
                         {/* 1. IPO COLUMN */}
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-blue-50 dark:bg-slate-800/80/30 flex items-center justify-between shrink-0">
+                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-blue-50 dark:bg-slate-800/80/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><ClipboardList className="w-4 h-4" /></div>
                                     <span className="font-black text-[11px] uppercase tracking-wider text-blue-900">Danh sách IPO</span>
@@ -827,7 +851,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                         {/* 2. INSPECTIONS COLUMN */}
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-indigo-50/30 flex items-center justify-between shrink-0">
+                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-indigo-50/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md"><FileText className="w-4 h-4" /></div>
                                     <div className="flex flex-col">
@@ -912,7 +936,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                         {/* 3. NCR COLUMN */}
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/20/30 flex items-center justify-between shrink-0">
+                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/20/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-red-600 text-white rounded-xl shadow-md"><AlertOctagon className="w-4 h-4" /></div>
                                     <div className="flex flex-col">
@@ -974,7 +998,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                         {/* 4. LAYOUTS COLUMN */}
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-emerald-50/30 flex items-center justify-between shrink-0">
+                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-emerald-50/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-md"><Layers className="w-4 h-4" /></div>
                                     <div className="flex flex-col">

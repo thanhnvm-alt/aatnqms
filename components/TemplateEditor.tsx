@@ -50,7 +50,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
 
   const excelInputRef = useRef<HTMLInputElement>(null);
 
-  const isStandardPQC = moduleId === 'PQC';
+  const isStandardPQC = moduleId === 'PQC' || moduleId === 'FQC';
   const isCustomStagePQC = moduleId === 'SQC_BTP';
   const isPQC = isStandardPQC || isCustomStagePQC;
   const isIQC = moduleId === 'IQC' || moduleId === 'SQC_MAT';
@@ -111,7 +111,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
     const newItem: CheckItem = {
       id: Date.now().toString(),
       stage: isPQC ? (stageOrCategory || activeStage || 'CHUNG') : undefined,
-      category: isIQC ? (stageOrCategory || activeGroup || 'Nhóm mới') : (isPQC ? (moduleId === 'SQC_BTP' ? 'SQC' : 'PQC') : 'Chung'),
+      category: isIQC ? (stageOrCategory || activeGroup || 'Nhóm mới') : (isPQC ? (moduleId === 'SQC_BTP' ? 'SQC' : moduleId === 'FQC' ? 'FQC' : 'PQC') : 'Chung'),
       label: 'Hạng mục kiểm tra mới',
       method: '',
       standard: '',
@@ -167,7 +167,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
         const importedItems: CheckItem[] = json.map((row, idx) => ({
           id: `imp_${Date.now()}_${idx}`,
           stage: isPQC ? (row['Nhóm/Công đoạn'] || row['Công đoạn'] || activeStage) : undefined,
-          category: isIQC ? (row['Nhóm/Công đoạn'] || row['Nhóm'] || activeGroup) : (isPQC ? (moduleId === 'SQC_BTP' ? 'SQC' : 'PQC') : 'Chung'),
+          category: isIQC ? (row['Nhóm/Công đoạn'] || row['Nhóm'] || activeGroup) : (isPQC ? (moduleId === 'SQC_BTP' ? 'SQC' : moduleId === 'FQC' ? 'FQC' : 'PQC') : 'Chung'),
           label: row['Hạng mục kiểm tra'] || row['Hạng mục'] || 'N/A',
           method: row['Phương pháp'] || '',
           standard: row['Tiêu chuẩn ISO'] || row['Tiêu chuẩn'] || '',
@@ -437,7 +437,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
         {/* PQC / SQC_BTP CONFIGURATION UI */}
         {isPQC && (
           <div className="space-y-4">
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex gap-3 items-start"><Factory className="w-5 h-5 text-indigo-500 mt-1" /><div className="text-xs text-indigo-900"><p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_BTP' ? 'SQC - Bán Thành Phẩm' : 'PQC 2 Lớp (ISO Compliance)'}</p><p>{isCustomStagePQC ? "Tự do quản lý danh sách công đoạn và các tiêu chí kiểm tra cho Bán thành phẩm." : "Hạng mục được gán trực tiếp vào Công đoạn sản xuất. Dữ liệu công đoạn được đồng bộ từ module Quản lý xưởng."}</p></div></div>
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex gap-3 items-start"><Factory className="w-5 h-5 text-indigo-500 mt-1" /><div className="text-xs text-indigo-900"><p className="font-black uppercase tracking-tight mb-1">Cấu hình {moduleId === 'SQC_BTP' ? 'SQC - Bán Thành Phẩm' : moduleId === 'FQC' ? 'FQC - Thành Phẩm' : 'PQC 2 Lớp (ISO Compliance)'}</p><p>{isCustomStagePQC ? "Tự do quản lý danh sách công đoạn và các tiêu chí kiểm tra cho Bán thành phẩm." : "Hạng mục được gán trực tiếp vào Công đoạn sản xuất. Dữ liệu công đoạn được đồng bộ từ module Quản lý xưởng."}</p></div></div>
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4"><div className="flex flex-col md:flex-row gap-4 items-start md:items-end"><div className="flex-1 w-full"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1.5 ml-1">Chọn Công Đoạn Cần Cấu Hình</label><div className="relative"><select value={activeStage} onChange={e => setActiveStage(e.target.value)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 text-sm focus:ring-2 focus:ring-blue-100 outline-none appearance-none cursor-pointer"><option value="" disabled>-- Chọn công đoạn --</option>{stageOptions.map(s => <option key={s} value={s}>{s}</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" /></div></div>{isCustomStagePQC && (<div className="flex gap-2 w-full md:w-auto"><button onClick={handleAddCustomStage} className="flex-1 md:flex-none h-[46px] px-4 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> Thêm mới</button>
 <button onClick={handleCopyFromPQC} className="flex-1 md:flex-none h-[46px] px-4 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all"> Sao chép PQC</button>
 {activeStage && (<><button onClick={handleRenameCustomStage} className="h-[46px] w-[46px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-900/20 transition-all"><Pencil className="w-4 h-4"/></button><button onClick={handleDeleteCustomStage} className="h-[46px] w-[46px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/20 transition-all"><Trash2 className="w-4 h-4"/></button></>)}</div>)}</div></div>

@@ -60,7 +60,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
     id: initialData?.id || `FQC-${Date.now()}`, 
     date: initialData?.date || new Date().toISOString().split('T')[0], 
     status: initialData?.status || InspectionStatus.DRAFT, 
-    items: initialData?.items || templates?.['FQC'] || FQC_CHECKLIST_TEMPLATE, 
+    items: initialData?.items || [], 
     images: initialData?.images || [], 
     score: initialData?.score || 0, 
     signature: initialData?.signature || '', 
@@ -182,7 +182,27 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+        const next = { ...prev, [field]: value };
+        if (field === 'workshop') {
+            next.inspectionStage = '';
+        }
+        if (field === 'inspectionStage') {
+            const fqcTemplate = templates['FQC'] || [];
+            if (fqcTemplate.length > 0) {
+               // Load items that belong to the selected stage, or all items if FQC template has no stage info
+               const stageItems = fqcTemplate.filter(item => item.stage === value || !item.stage).map(item => ({ 
+                   ...item, 
+                   id: `fqc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, 
+                   status: CheckStatus.PENDING, 
+                   notes: '', 
+                   images: [] 
+               }));
+               next.items = stageItems;
+            }
+        }
+        return next;
+    });
   };
 
   const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
@@ -360,19 +380,30 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <Plus className="w-3.5 h-3.5 text-blue-600" /> Thêm tiêu chí
                 </button>
             </div>
-            <div className="space-y-3">
-                {visibleItems.map((item, originalIndex) => {
-                    const actualIndex = formData.items?.findIndex(i => i.id === item.id) ?? -1;
-                    return (
-                        <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50' : 'border-slate-200 dark:border-slate-700'}`}>
-                            <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2"><div className="flex-1"><span className="bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 tracking-widest">{item.category}</span><p className="w-full font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-tight mt-1">{item.label}</p></div><button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button></div>
-                            <div className="flex flex-wrap gap-2 items-center"><div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">{[CheckStatus.PASS, CheckStatus.FAIL].map(st => (<button key={st} onClick={() => handleItemChange(actualIndex, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : 'Hỏng'}</button>))}</div><div className="flex items-center gap-1 ml-auto"><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}><ImageIcon className="w-4 h-4"/></div><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}><Camera className="w-4 h-4"/></div></div></div>
-                            <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndex, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg font-medium outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
-                            {item.images && item.images.length > 0 && (<div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">{item.images.map((im, i) => (<div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}><ProxyImage src={im} alt="Ảnh" className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5" type="button"><X className="w-2.5 h-2.5"/></button></div>))}</div>)}
+            {formData.inspectionStage ? (
+                <div className="space-y-3">
+                    {visibleItems.length > 0 ? (
+                        visibleItems.map((item, originalIndex) => {
+                            const actualIndex = formData.items?.findIndex(i => i.id === item.id) ?? -1;
+                            return (
+                                <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2"><div className="flex-1"><span className="bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 tracking-widest">{item.category}</span><p className="w-full font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-tight mt-1">{item.label}</p></div><button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button></div>
+                                    <div className="flex flex-wrap gap-2 items-center"><div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">{[CheckStatus.PASS, CheckStatus.FAIL].map(st => (<button key={st} onClick={() => handleItemChange(actualIndex, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : 'Hỏng'}</button>))}</div><div className="flex items-center gap-1 ml-auto"><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}><ImageIcon className="w-4 h-4"/></div><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}><Camera className="w-4 h-4"/></div></div></div>
+                                    <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndex, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg font-medium outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
+                                    {item.images && item.images.length > 0 && (<div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">{item.images.map((im, i) => (<div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}><ProxyImage src={im} alt="Ảnh" className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5" type="button"><X className="w-2.5 h-2.5"/></button></div>))}</div>)}
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <div className="p-8 text-center text-slate-400 dark:text-slate-500 italic bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                            <p className="text-[10px] font-bold uppercase">Không có dữ liệu mẫu cho công đoạn này</p>
+                            <p className="text-[9px]">Vui lòng nhấn "+ Thêm Tiêu Chí" bên trên</p>
                         </div>
-                    );
-                })}
-            </div>
+                    )}
+                </div>
+            ) : (
+                <div className="bg-orange-50 border border-orange-100 p-6 rounded-2xl text-center space-y-1 animate-pulse"><Info className="w-6 h-6 text-orange-300 mx-auto" /><p className="font-bold text-orange-800 uppercase tracking-widest text-[10px]">Vui lòng chọn Công đoạn tại Mục III</p></div>
+            )}
         </div>
 
         <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mt-3">
