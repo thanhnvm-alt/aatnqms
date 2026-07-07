@@ -13,7 +13,7 @@ import {
   ShieldCheck, Clock, Locate, Map as MapIcon, ChevronDown as ChevronDownIcon, Eye
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject, uploadQMSImage, fetchProjectDocuments, saveProjectDocument, deleteProjectDocument, fetchNcrById, fetchInspections } from '../services/apiService';
+import { updateProject, fetchFloorPlans, saveFloorPlan, deleteFloorPlan, fetchLayoutPins, saveLayoutPin, saveInspectionToSheet, fetchInspectionById, fetchPlansByProject, uploadQMSImage, fetchProjectDocuments, saveProjectDocument, deleteProjectDocument, fetchNcrById, fetchInspections, fetchNcrs } from '../services/apiService';
 import { FloorPlanLibrary } from './FloorPlanLibrary';
 import { LayoutManager } from './LayoutManager';
 import { InspectionFormSITE } from './inspectionformSITE';
@@ -172,6 +172,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [selectedIpoForDetail, setSelectedIpoForDetail] = useState<IPOItem | null>(null);
 
   const [projectInspections, setProjectInspections] = useState<Inspection[]>([]);
+  const [projectActualNcrs, setProjectActualNcrs] = useState<NCR[]>([]);
   const [isLoadingInspections, setIsLoadingInspections] = useState(false);
 
   // Pagination states for UI
@@ -233,11 +234,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       }
   };
 
+  const loadProjectNcrs = async () => {
+      try {
+          const data = await fetchNcrs({ project: project.ma_ct }, 1, 10000);
+          setProjectActualNcrs(data.items || []);
+      } catch (e) {
+          console.error("Failed to load project NCRs", e);
+      }
+  };
+
   useEffect(() => {
       loadFloorPlans();
       loadProjectPlans();
       loadProjectDocuments();
       loadProjectInspections();
+      loadProjectNcrs();
   }, [project.ma_ct, project.id]);
 
   const loadProjectDocuments = async () => {
@@ -415,18 +426,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   }, [projectInspections, project, inspectionSearch, selectedIpoId]);
 
   const projectNcrs = useMemo(() => {
-    const pMaCt = String(project.ma_ct || '').trim().toLowerCase();
-    const pName = String(project.name || '').trim().toLowerCase();
     const term = ncrSearch.toLowerCase().trim();
-
-    return projectInspections.filter(i => {
-        if (!i || i.status !== InspectionStatus.FLAGGED) return false;
-        const matchesProject = String(i.ma_ct || '').toLowerCase() === pMaCt || String(i.ten_ct || '').toLowerCase() === pName;
-        const matchesSearch = !term || (i.ten_hang_muc || '').toLowerCase().includes(term);
-        const matchesIpo = !selectedIpoId || i.ma_nha_may === selectedIpoId || i.headcode === selectedIpoId;
-        return matchesProject && matchesSearch && matchesIpo;
-    }).sort((a, b) => parseDateForSort(b.date) - parseDateForSort(a.date));
-  }, [projectInspections, project, ncrSearch, selectedIpoId]);
+    return projectActualNcrs.filter(ncr => {
+        const matchesSearch = !term || 
+            (ncr.issueDescription || '').toLowerCase().includes(term) || 
+            (ncr.ten_hang_muc || '').toLowerCase().includes(term);
+        const matchesIpo = !selectedIpoId || ncr.workshop === selectedIpoId;
+        return matchesSearch && matchesIpo;
+    });
+  }, [projectActualNcrs, ncrSearch, selectedIpoId]);
 
   const filteredLayouts = useMemo(() => {
     const term = layoutSearch.toLowerCase().trim();
@@ -969,11 +977,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase shrink-0">DEFECT</span>
                                                         <span className="text-[8px] font-mono font-bold text-red-600 bg-red-50 dark:bg-red-950/20 px-1.5 py-0.5 rounded border border-red-100/50 shrink-0">
-                                                            {formatDate(ncr.date)}
+                                                            {formatDate(ncr.createdDate)}
                                                         </span>
-                                                        {(ncr.headcode || ncr.ma_nha_may) && (
+                                                        {ncr.workshop && (
                                                             <span className="text-[8px] font-mono font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/50 shrink-0">
-                                                                {ncr.headcode || ncr.ma_nha_may}
+                                                                {ncr.workshop}
                                                             </span>
                                                         )}
                                                     </div>

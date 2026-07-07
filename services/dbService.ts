@@ -1729,6 +1729,11 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
         args.push(filters.workshop);
     }
     
+    if (filters.project && filters.project !== 'ALL') {
+        where += ` AND i.ma_ct = $${args.length + 1}`;
+        args.push(filters.project);
+    }
+    
     if (filters.search) {
         const p = `%${filters.search}%`;
         const searchIndex = args.length + 1;

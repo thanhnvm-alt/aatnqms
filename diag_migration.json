@@ -1,6 +1,6 @@
 {
   "schema": "appQAQC",
-  "timestamp": "2026-06-24T12:11:07.659Z",
+  "timestamp": "2026-07-07T07:29:27.689Z",
   "logs": [
     "✅ Ensured table audit_logs exists in appQAQC",
     "✅ Ensured table status_history exists in appQAQC",
@@ -30,7 +30,6 @@
     "✅ Ensured table projects exists in appQAQC",
     "✅ Ensured table project_documents exists in appQAQC",
     "✅ Ensured table ipo_details exists in appQAQC",
-    "✅ Added column implementation_date to appQAQC.ipo_details",
     "✅ Ensured table ipo_drawing_list exists in appQAQC",
     "✅ Ensured table ipo_material_history exists in appQAQC",
     "✅ Ensured table ipo_sample_history exists in appQAQC",
