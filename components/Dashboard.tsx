@@ -150,6 +150,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     ].filter(item => item.value > 0);
   }, [stats]);
 
+  const monthlyData = useMemo(() => {
+    if (!dashboardStats?.monthlyData) return [];
+    
+    return dashboardStats.monthlyData.map((m: any) => {
+        let passRate = 0;
+        let failRate = 0;
+        
+        if (m.inspected > 0) {
+            passRate = Number(((m.passed / m.inspected) * 100).toFixed(1));
+            failRate = Number(((m.failed / m.inspected) * 100).toFixed(1));
+        } else if (m.count > 0) {
+            // fallback if no qty
+            passRate = Number(((m.fallbackScore / (m.count * 100)) * 100).toFixed(1));
+            failRate = Number((100 - passRate).toFixed(1));
+        }
+        
+        return {
+            name: m.month,
+            passRate,
+            failRate,
+            inspected: m.inspected,
+            count: m.count
+        };
+    });
+  }, [dashboardStats]);
+
   const workshopData = useMemo(() => {
     if (!dashboardStats?.workshopData) return [];
     
@@ -429,6 +455,61 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
                         </Bar>
                         <Line type="monotone" dataKey="failRate" name="Tỷ Lệ Lỗi %" stroke={COLORS.fail} strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }}>
                            <LabelList dataKey="failRate" position="top" offset={10} style={{ fill: '#dc2626', fontSize: 9, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
+                        </Line>
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                 </div>
+              </div>
+            )}
+
+            {/* Monthly Quality Chart */}
+            {monthlyData.length > 0 && (
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+                 <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2 flex items-center justify-between">
+                    CHẤT LƯỢNG THEO THÁNG
+                 </h3>
+                 <div className="h-64 w-full min-h-[256px]">
+                    <ResponsiveContainer width="99%" height={256}>
+                      <ComposedChart data={monthlyData} margin={{ top: 20, right: 0, left: -20, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}} 
+                          angle={-45}
+                          textAnchor="end"
+                        />
+                        <YAxis 
+                          yAxisId="left"
+                          domain={[0, 100]} 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fontSize: 8, fontWeight: '900', fill: '#94a3b8'}}
+                        />
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          domain={[0, 'auto']} 
+                          hide
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                          itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                          labelStyle={{ fontSize: '11px', fontWeight: '900', color: '#1e293b', marginBottom: '4px' }}
+                        />
+                        <Legend 
+                          iconType="circle" 
+                          wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} 
+                        />
+                        <Bar yAxisId="left" dataKey="passRate" name="Tỷ Lệ Đạt %" fill={COLORS.pass} barSize={24} radius={[4, 4, 0, 0]}>
+                          {monthlyData.map((entry: any, index: number) => (
+                             <Cell key={`cell-${index}`} fill={COLORS.pass} />
+                          ))}
+                          <LabelList dataKey="passRate" position="insideTop" style={{ fill: '#fff', fontSize: 8, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
+                        </Bar>
+                        <Line yAxisId="right" type="monotone" dataKey="failRate" name="Tỷ Lệ Lỗi %" stroke={COLORS.fail} strokeWidth={2} dot={{ r: 4, strokeWidth: 2 }}>
+                          <LabelList dataKey="failRate" position="top" offset={10} style={{ fill: '#dc2626', fontSize: 9, fontWeight: '900' }} formatter={(val: any) => `${val}%`} />
                         </Line>
                       </ComposedChart>
                     </ResponsiveContainer>

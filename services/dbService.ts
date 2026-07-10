@@ -1033,13 +1033,30 @@ export async function getDashboardStats(filters: any = {}, user?: User): Promise
         LIMIT 5
     `;
 
+    // 6. Monthly Aggregation query
+    const monthlyQuery = `
+        SELECT
+            EXTRACT(MONTH FROM TO_TIMESTAMP(created_at)) as month,
+            EXTRACT(YEAR FROM TO_TIMESTAMP(created_at)) as year,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(inspected_qty, 0) ELSE 0 END) as inspected,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(passed_qty, 0) ELSE 0 END) as passed,
+            SUM(CASE WHEN COALESCE(inspected_qty, 0) > 0 THEN COALESCE(failed_qty, 0) ELSE 0 END) as failed,
+            SUM(COALESCE(score, 0)) as fallback_score,
+            COUNT(*) as count
+        FROM ${SCHEMA}."inspections"
+        ${whereClause} AND status != 'DRAFT'
+        GROUP BY year, month
+        ORDER BY year ASC, month ASC
+    `;
+
     try {
-        const [statsRes, workshopRes, stageRes, projectRes, criticalRes] = await Promise.all([
+        const [statsRes, workshopRes, stageRes, projectRes, criticalRes, monthlyRes] = await Promise.all([
             query(statsQuery, subArgs),
             query(workshopQuery, subArgs),
             query(stageQuery, subArgs),
             query(projectQuery, subArgs),
-            query(criticalQuery, subArgs)
+            query(criticalQuery, subArgs),
+            query(monthlyQuery, subArgs)
         ]);
 
         const statsRow = statsRes.rows[0] || {};
@@ -1102,6 +1119,15 @@ export async function getDashboardStats(filters: any = {}, user?: User): Promise
             };
         });
 
+        const mappedMonthly = monthlyRes.rows.map((r: any) => ({
+            month: `${r.month.toString().padStart(2, '0')}/${r.year}`,
+            inspected: Number(r.inspected || 0),
+            passed: Number(r.passed || 0),
+            failed: Number(r.failed || 0),
+            fallbackScore: Number(r.fallback_score || 0),
+            count: parseInt(r.count || 0, 10)
+        }));
+
         return {
             stats: {
                 total,
@@ -1114,7 +1140,8 @@ export async function getDashboardStats(filters: any = {}, user?: User): Promise
             workshopData: mappedWorkshops,
             stageData: mappedStages,
             projectData: mappedProjects,
-            recentCritical: mappedCritical
+            recentCritical: mappedCritical,
+            monthlyData: mappedMonthly
         };
     } catch (e) {
         console.error("ISO-DB: getDashboardStats failed", e);
@@ -1123,7 +1150,8 @@ export async function getDashboardStats(filters: any = {}, user?: User): Promise
             workshopData: [],
             stageData: [],
             projectData: [],
-            recentCritical: []
+            recentCritical: [],
+            monthlyData: []
         };
     }
 }
@@ -2060,18 +2088,8 @@ export async function saveTemplate(moduleId: string, items: CheckItem[]) {
 // --- PROJECTS ---
 
 export async function refreshProjectsMV() {
-    try {
-        await query(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${SCHEMA}.ipo_projects_mv`);
-        console.log("✅ Successfully refreshed ipo_projects_mv materialized view");
-    } catch (err: any) {
-        console.warn("⚠️ Failed to refresh concurrently, trying default refresh:", err.message);
-        try {
-            await query(`REFRESH MATERIALIZED VIEW ${SCHEMA}.ipo_projects_mv`);
-            console.log("✅ Successfully refreshed ipo_projects_mv materialized view (non-concurrent)");
-        } catch (err2: any) {
-            console.error("❌ Failed to refresh ipo_projects_mv materialized view", err2);
-        }
-    }
+    // ipo_projects_mv is a standard view, no refresh needed.
+    console.log("✅ (No-op) ipo_projects_mv is a standard view");
 }
 
 export async function getProjectsPaginated(search: string = '', page: number = 1, limit?: number) {
