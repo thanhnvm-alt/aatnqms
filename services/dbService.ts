@@ -1534,11 +1534,26 @@ export async function deleteIpoSampleRecord(id: string) {
 
 // --- SUPPLIERS ---
 
-export async function getSuppliersPaginated(search: string = '', page: number = 1, limit: number = 20): Promise<{ items: Supplier[], total: number }> {
+export async function getSuppliersPaginated(search: string = '', page: number = 1, limit: number = 20, sortBy: string = 'reports'): Promise<{ items: Supplier[], total: number }> {
     const offset = (page - 1) * limit;
     
     // Group by supplierName from material table and join with suppliers table for details
+    // Include CTE to count reports for sorting if needed
     let sql = `
+        WITH supplier_reports AS (
+            SELECT supplier, COUNT(id) as total_reports FROM (
+                SELECT id, supplier FROM ${SCHEMA}."forms_iqc" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_sqc_vt" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_sqc_btp" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_fsr" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_step" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_fqc" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_spr" UNION ALL
+                SELECT id, supplier FROM ${SCHEMA}."forms_site"
+            ) as all_forms
+            WHERE supplier IS NOT NULL AND supplier != ''
+            GROUP BY supplier
+        )
         SELECT 
             m."supplierName" as name,
             COALESCE(MAX(s.id), 'SUP-' || m."supplierName") as id,
@@ -1549,9 +1564,11 @@ export async function getSuppliersPaginated(search: string = '', page: number = 
             MAX(s.email) as email,
             COALESCE(MAX(s.category), 'Raw Materials') as category,
             COALESCE(MAX(s.status), 'ACTIVE') as status,
-            MAX(s.updated_at) as updated_at
+            MAX(s.updated_at) as updated_at,
+            COALESCE(MAX(sr.total_reports), 0) as total_reports
         FROM ${SCHEMA}.material m
         LEFT JOIN ${SCHEMA}.suppliers s ON m."supplierName" = s.name
+        LEFT JOIN supplier_reports sr ON m."supplierName" = sr.supplier
         WHERE m."supplierName" IS NOT NULL AND m."supplierName" != ''
         AND (s.deleted_at IS NULL OR s.id IS NULL)
     `;
@@ -1564,10 +1581,17 @@ export async function getSuppliersPaginated(search: string = '', page: number = 
     
     sql += ` GROUP BY m."supplierName"`;
     
+    let orderBySql = 'ORDER BY name ASC';
+    if (sortBy === 'reports') {
+        orderBySql = 'ORDER BY total_reports DESC NULLS LAST, name ASC';
+    } else if (sortBy === 'updated_at') {
+        orderBySql = 'ORDER BY updated_at DESC NULLS LAST, name ASC';
+    }
+
     const countSql = `SELECT COUNT(DISTINCT m."supplierName") as total FROM ${SCHEMA}.material m LEFT JOIN ${SCHEMA}.suppliers s ON m."supplierName" = s.name WHERE m."supplierName" IS NOT NULL AND m."supplierName" != '' ${search ? 'AND (m."supplierName" ILIKE $1 OR m."purchaseDocument" ILIKE $1 OR s.code ILIKE $1 OR s.category ILIKE $1)' : ''}`;
     
     const [res, countRes] = await Promise.all([
-        query(sql + ` ORDER BY name ASC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
+        query(sql + ` ${orderBySql} LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, limit, offset]),
         query(countSql, args)
     ]);
     
@@ -1760,6 +1784,21 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
     if (filters.project && filters.project !== 'ALL') {
         where += ` AND i.ma_ct = $${args.length + 1}`;
         args.push(filters.project);
+    }
+    
+    if (filters.unixStart && filters.unixStart !== 'NaN' && filters.unixStart !== 'undefined') {
+        const ts = parseInt(filters.unixStart, 10);
+        if (!isNaN(ts)) {
+            where += " AND n.created_at >= $" + (args.length + 1);
+            args.push(ts);
+        }
+    }
+    if (filters.unixEnd && filters.unixEnd !== 'NaN' && filters.unixEnd !== 'undefined') {
+        const ts = parseInt(filters.unixEnd, 10);
+        if (!isNaN(ts)) {
+            where += " AND n.created_at <= $" + (args.length + 1);
+            args.push(ts);
+        }
     }
     
     if (filters.search) {

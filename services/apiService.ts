@@ -172,8 +172,8 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
     return data.url;
 };
 
-export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20) => {
-    const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString() });
+export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20, sortBy: string = 'reports') => {
+    const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString(), sortBy });
     return apiFetch(`/api/suppliers?${params.toString()}`);
 };
 export const saveSupplier = async (s: Supplier) => apiFetch('/api/suppliers', {

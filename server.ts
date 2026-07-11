@@ -1380,8 +1380,8 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
   // --- SUPPLIERS ---
   app.get("/api/suppliers", async (req, res) => {
     try {
-      const { search, page = 1, limit = 20 } = req.query;
-      const result = await db.getSuppliersPaginated(String(search || ''), Number(page), Number(limit));
+      const { search, page = 1, limit = 20, sortBy = 'reports' } = req.query;
+      const result = await db.getSuppliersPaginated(String(search || ''), Number(page), Number(limit), String(sortBy));
       res.json(result);
     } catch (error) {
       console.error('Error fetching suppliers:', error);
