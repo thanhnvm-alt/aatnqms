@@ -198,7 +198,16 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                     <div><p className="mb-1 flex items-center gap-1.5"><Box className="w-3 h-3"/> MÃ CÔNG TRÌNH</p><p className="text-sm text-slate-800 dark:text-slate-200 tracking-tight uppercase">{inspection.ma_ct}</p></div>
                     <div><p className="mb-1 flex items-center gap-1.5"><MapPin className="w-3 h-3"/> VỊ TRÍ LẮP ĐẶT</p><p className="text-sm text-slate-800 dark:text-slate-200 tracking-tight">{inspection.location || 'Hồ Chí Minh'}</p></div>
                     <div><p className="mb-1 flex items-center gap-1.5"><UserIcon className="w-3 h-3"/> QC HIỆN TRƯỜNG</p><p className="text-sm text-slate-800 dark:text-slate-200 tracking-tight">{inspection.inspectorName}</p></div>
-                    <div><p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> NGÀY KIỂM TRA</p><p className="text-sm text-slate-800 dark:text-slate-200 tracking-tight font-mono">{inspection.date}</p></div>
+                    <div><p className="mb-1 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> NGÀY KIỂM TRA</p><p className="text-sm text-slate-800 dark:text-slate-200 tracking-tight font-mono">
+{(() => {
+    if (!inspection.date) return '---';
+    const strVal = String(inspection.date);
+    if (/^\d{10}$/.test(strVal)) return new Date(Number(strVal) * 1000).toLocaleDateString('vi-VN');
+    if (/^\d{13}$/.test(strVal)) return new Date(Number(strVal)).toLocaleDateString('vi-VN');
+    if (strVal.includes('-')) return strVal.split('-').reverse().join('/');
+    return strVal;
+})()}
+</p></div>
                 </div>
 
                 {inspection.coord_x !== undefined && (
