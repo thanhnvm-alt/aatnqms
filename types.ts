@@ -210,6 +210,7 @@ export interface NCR {
 export interface CheckItem {
   id: string;
   stage?: string;
+  subStage?: string;
   category: string;
   label: string;
   method?: string;
@@ -290,6 +291,7 @@ export interface Inspection {
   ma_xuong?: string;
   inspectionStage?: string;
   stage?: string;
+  subStage?: string;
   dvt?: string;
   so_luong_ipo: number;
   inspectedQuantity?: number;

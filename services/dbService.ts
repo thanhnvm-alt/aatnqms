@@ -416,7 +416,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
           production_comment, floor_plan_id, coord_x, coord_y, responsible_person,
           signature_qc, signature_manager, name_manager, signature_production, name_production, comment_production,
           signature_teamlead, name_teamlead, date_teamlead, date_manager, date_qc,
-          comments_json, data
+          comments_json, data, sub_stage
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, 
@@ -425,7 +425,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
           $13, $14, $15::bigint, $16::jsonb, $17::jsonb, $18, $19::bigint, $20::numeric, $21, $22, 
           $23, $24, $25::numeric, $26::numeric, $27, $28::text, $29::text, $30::text, $31::text, $32::text, $33::text, 
           $34::text, $35::text, $36::bigint, $37::bigint, $38::bigint,
-          $39::jsonb, $40::jsonb
+          $39::jsonb, $40::jsonb, $41::text
         )
         ON CONFLICT(id) DO UPDATE SET 
           status = EXCLUDED.status, 
@@ -461,6 +461,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
           failed_qty = EXCLUDED.failed_qty,
           workshop = EXCLUDED.workshop,
           stage = EXCLUDED.stage,
+          sub_stage = EXCLUDED.sub_stage,
           data = EXCLUDED.data
       `, sanitizeArgs([
           inspection.id, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc, 
@@ -474,7 +475,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
           inspection.signature, inspection.managerSignature, inspection.managerName,
           inspection.productionSignature, inspection.productionName, inspection.productionComment,
           inspection.teamLeadSignature, inspection.teamLeadName, teamLeadDateTS, managerDateTS, qcDateTS,
-          inspection.comments, inspection
+          inspection.comments, inspection, inspection.subStage
       ]));
     } else {
     // ISO Standard mapping cho các module: SITE, IQC, SQC, FQC...
@@ -488,7 +489,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
         sl_ipo, qty_total, qty_pass, qty_fail,
         dvt, updated_at, floor_plan_id, coord_x, coord_y, location, supplier_address, supporting_docs_json,
         responsible_person, ma_nha_may, workshop, stage, headcode, production_comment,
-        signature_teamlead, name_teamlead, date_teamlead, date_manager, date_qc, data
+        signature_teamlead, name_teamlead, date_teamlead, date_manager, date_qc, data, sub_stage
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
@@ -497,7 +498,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $25::numeric, $26::numeric, $27::numeric, $28::numeric, 
         $29, $30::bigint, $31, $32::numeric, $33::numeric, $34, $35, $36::jsonb, $37, $38, $39, $40, $41, $42,
-        $43::text, $44::text, $45::bigint, $46::bigint, $47::bigint, $48::jsonb
+        $43::text, $44::text, $45::bigint, $46::bigint, $47::bigint, $48::jsonb, $49::text
       )
       ON CONFLICT(id) DO UPDATE SET 
         status = EXCLUDED.status, 
@@ -548,6 +549,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
         stage = EXCLUDED.stage,
         headcode = EXCLUDED.headcode,
         dvt = EXCLUDED.dvt,
+        sub_stage = EXCLUDED.sub_stage,
         data = EXCLUDED.data
     `, sanitizeArgs([
         inspection.id, inspection.type, inspection.ma_ct, inspection.ten_ct, inspection.ten_hang_muc,
@@ -564,7 +566,8 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
         inspection.ma_nha_may, inspection.workshop, inspection.inspectionStage, inspection.headcode,
         inspection.productionComment,
         inspection.teamLeadSignature, inspection.teamLeadName, teamLeadDateTS, managerDateTS, qcDateTS,
-        JSON.stringify(inspection)
+        JSON.stringify(inspection),
+        inspection.subStage
       ]));
     }
 
@@ -866,7 +869,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             workshop, status, score, created_at, updated_at, created_by as "inspectorName",
             stage as "inspectionStage", inspected_qty as "inspectedQuantity",
             passed_qty as "passedQuantity", failed_qty as "failedQuantity",
-            so_luong_ipo, headcode, stage, date
+            so_luong_ipo, headcode, stage, sub_stage as "subStage", date
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
@@ -1273,6 +1276,7 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
                     supplier: row.supplier as string,
                     workshop: row.workshop as string,
                     inspectionStage: row.stage as string,
+                    subStage: row.sub_stage as string,
                     dvt: row.dvt as string,
                     so_luong_ipo: Number(row.so_luong_ipo ?? row.sl_ipo ?? row.qty_ipo ?? 0),
                     inspectedQuantity: Number(row.inspected_qty ?? row.qty_total ?? 0),

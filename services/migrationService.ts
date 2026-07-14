@@ -374,6 +374,7 @@ export async function runMigrations() {
         await addColumn(table, 'report_images_json', 'TEXT');
         await addColumn(table, 'date', 'TEXT');
         await addColumn(table, 'supporting_docs_json', 'TEXT');
+        await addColumn(table, 'sub_stage', 'TEXT');
     }
 
     // 7.5 Centralized inspections table
@@ -414,6 +415,7 @@ export async function runMigrations() {
     await addColumn('inspections', 'so_luong_ipo', 'NUMERIC');
     await addColumn('inspections', 'priority', 'TEXT');
     await addColumn('inspections', 'date', 'BIGINT');
+    await addColumn('inspections', 'sub_stage', 'TEXT');
 
     // Create highly optimized indices for inspections table to speed up dashboard reporting
     try {

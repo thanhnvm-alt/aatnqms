@@ -311,9 +311,23 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
 
         <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><MapPin className="w-3.5 h-3.5"/> III. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
-            <div className="grid grid-cols-2 gap-2">
-                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Xưởng sản xuất</label><select value={formData.workshop || ''} onChange={e => handleInputChange('workshop', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn xưởng --</option>{workshops.map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
-                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Công đoạn *</label><select value={formData.inspectionStage || ''} onChange={e => handleInputChange('inspectionStage', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn giai đoạn --</option>{availableStages.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Xưởng sản xuất</label><select value={formData.workshop || ''} onChange={e => {
+                        handleInputChange('workshop', e.target.value);
+                        const wsCode = e.target.value;
+                        const selectedWorkshop = workshops.find(ws => ws.code === wsCode);
+                        const stages = selectedWorkshop?.stages || [];
+                        const p18 = stages.find(s => s.toLowerCase().includes('p18')) || 'P18 - Sơn - Vecni - PVD - UPH - Đan Mây';
+                        handleInputChange('inspectionStage', p18);
+                        handleInputChange('subStage', '');
+                    }} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn xưởng --</option>{workshops.map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
+                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Công đoạn *</label><select value={formData.inspectionStage || ''} onChange={e => {
+                        handleInputChange('inspectionStage', e.target.value);
+                        if (!e.target.value.toLowerCase().includes('p18')) handleInputChange('subStage', '');
+                    }} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn giai đoạn --</option>{availableStages.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                 {formData.inspectionStage?.toLowerCase().includes('p18') && (
+                     <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Công đoạn con</label><select value={formData.subStage || ''} onChange={e => handleInputChange('subStage', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn công đoạn con --</option>{['Lót 1', 'Lót 2', 'Lót 3', 'Bóng 1', 'Bóng 2'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                 )}
             </div>
             <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 space-y-3">
                 <div className="grid grid-cols-3 gap-2">

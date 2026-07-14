@@ -1218,7 +1218,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     </div>
                                     <div>
                                         <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Công Đoạn Kiểm Tra:</label>
-                                        <p className="text-[14px] font-medium text-slate-800 dark:text-slate-200">{selectedItemDesktop.inspectionStage || selectedItemDesktop.type || '---'}</p>
+                                        <p className="text-[14px] font-medium text-slate-800 dark:text-slate-200">{selectedItemDesktop.inspectionStage || selectedItemDesktop.type || '---'} {selectedItemDesktop.subStage ? `(${selectedItemDesktop.subStage})` : ''}</p>
                                     </div>
                                 </div>
                                 

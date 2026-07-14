@@ -93,6 +93,8 @@ export const InspectionDetailStepVecni: React.FC<InspectionDetailProps> = ({ ins
             <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600 dark:text-slate-400 dark:text-slate-500">
                 <p>Dự án: {inspection.ma_ct}</p>
                 <p>Xưởng: {inspection.workshop || 'N/A'}</p>
+                {inspection.inspectionStage && <p>Công đoạn: {inspection.inspectionStage}</p>}
+                {inspection.subStage && <p>Công đoạn con: {inspection.subStage}</p>}
             </div>
         </div>
         <div className="space-y-3">
