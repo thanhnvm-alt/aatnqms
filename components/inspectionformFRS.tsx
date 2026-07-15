@@ -438,21 +438,48 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                 <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center block">SL Kiểm tra</label>
-                        <input type="number" value={formData.inspectedQuantity ?? ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md font-bold text-[11px] text-center bg-white dark:bg-slate-900 shadow-sm" />
+                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={formData.inspectedQuantity ?? ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md font-bold text-[11px] text-center bg-white dark:bg-slate-900 shadow-sm" />
                     </div>
                     <div className="space-y-1">
                         <div className="flex justify-between items-center px-1">
                             <label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase tracking-wider">Đạt</label>
                             <span className="text-[8px] font-bold text-green-700">{rates.passRate}%</span>
                         </div>
-                        <input type="number" value={formData.passedQuantity ?? ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-green-200 dark:border-green-800 rounded-md font-bold text-[11px] text-center bg-white dark:bg-slate-900" />
+                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={formData.passedQuantity ?? ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-green-200 dark:border-green-800 rounded-md font-bold text-[11px] text-center bg-white dark:bg-slate-900" />
                     </div>
                     <div className="space-y-1">
                         <div className="flex justify-between items-center px-1">
                             <label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">Lỗi</label>
                             <span className="text-[8px] font-bold text-red-700">{rates.defectRate}%</span>
                         </div>
-                        <input type="number" value={formData.failedQuantity ?? ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-red-200 rounded-md font-bold text-[11px] text-center bg-white dark:bg-slate-900" />
+                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={formData.failedQuantity ?? ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-red-200 rounded-md font-bold text-[11px] text-center bg-white dark:bg-slate-900" />
                     </div>
                 </div>
             </div>

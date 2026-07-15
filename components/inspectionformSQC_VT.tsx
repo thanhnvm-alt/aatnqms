@@ -246,7 +246,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
         let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = parseFloat(String(value)) || 0; }
+        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = value; }
         let mat = { ...nextMaterials[idx], [field]: val };
         
         if (field === 'category') {
@@ -849,7 +849,16 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">SL Giao(DN)</label>
-                                        <input type="number" step="any" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
+                                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">ĐVT</label>
@@ -868,15 +877,42 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-teal-600 uppercase block text-center">SL Kiểm tra</label>
-                                        <input type="number" step="any" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1 border border-teal-300 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm text-teal-700"/>
+                                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1 border border-teal-300 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm text-teal-700"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase flex items-center justify-between px-1"><span>Đạt</span><span className="text-[8px] bg-green-100 dark:bg-green-900/30 px-1 rounded">{passRate}%</span></label>
-                                        <input type="number" step="any" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
+                                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center justify-between px-1"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label>
-                                        <input type="number" step="any" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
+                                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white dark:bg-slate-900 text-[11px] h-9 shadow-sm"/>
                                     </div>
                                 </div>
 

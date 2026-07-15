@@ -491,35 +491,58 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
           
           // ISO VALIDATION & AUTO-CALCULATION LOGIC
           if (field === 'inspectedQuantity') {
-              let val = parseFloat(String(value)) || 0;
+              let val = value;
+              let parsedVal = parseFloat(String(val));
+              if (isNaN(parsedVal)) parsedVal = 0;
               const ipo = parseFloat(String(next.so_luong_ipo || 0));
               
-              if (val > ipo) val = ipo;
-              if (val < 0) val = 0;
-              
-              next.inspectedQuantity = val;
-              next.passedQuantity = val;
-              next.failedQuantity = 0;
+              if (parsedVal > ipo) {
+                  next.inspectedQuantity = ipo;
+                  next.passedQuantity = ipo;
+                  next.failedQuantity = 0;
+              } else if (parsedVal < 0) {
+                  next.inspectedQuantity = 0;
+                  next.passedQuantity = 0;
+                  next.failedQuantity = 0;
+              } else {
+                  next.inspectedQuantity = val;
+                  next.passedQuantity = val;
+                  next.failedQuantity = 0;
+              }
           }
           else if (field === 'passedQuantity') {
-              let val = parseFloat(String(value)) || 0;
+              let val = value;
+              let parsedVal = parseFloat(String(val));
+              if (isNaN(parsedVal)) parsedVal = 0;
               const ins = parseFloat(String(next.inspectedQuantity || 0));
               
-              if (val > ins) val = ins;
-              if (val < 0) val = 0;
-              
-              next.passedQuantity = val;
-              next.failedQuantity = Number((ins - val).toFixed(2));
+              if (parsedVal > ins) {
+                  next.passedQuantity = ins;
+                  next.failedQuantity = 0;
+              } else if (parsedVal < 0) {
+                  next.passedQuantity = 0;
+                  next.failedQuantity = ins;
+              } else {
+                  next.passedQuantity = val;
+                  next.failedQuantity = Number((ins - parsedVal).toFixed(2));
+              }
           }
           else if (field === 'failedQuantity') {
-              let val = parseFloat(String(value)) || 0;
+              let val = value;
+              let parsedVal = parseFloat(String(val));
+              if (isNaN(parsedVal)) parsedVal = 0;
               const ins = parseFloat(String(next.inspectedQuantity || 0));
               
-              if (val > ins) val = ins;
-              if (val < 0) val = 0;
-              
-              next.failedQuantity = val;
-              next.passedQuantity = Number((ins - val).toFixed(2));
+              if (parsedVal > ins) {
+                  next.failedQuantity = ins;
+                  next.passedQuantity = 0;
+              } else if (parsedVal < 0) {
+                  next.failedQuantity = 0;
+                  next.passedQuantity = ins;
+              } else {
+                  next.failedQuantity = val;
+                  next.passedQuantity = Number((ins - parsedVal).toFixed(2));
+              }
           }
           else {
               (next as any)[field] = value;
@@ -845,7 +868,16 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Số lượng IPO</label><input type="number" step="0.01" value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md font-black text-blue-600 dark:text-blue-400 shadow-inner outline-none text-[11px]"/></div>
+                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Số lượng IPO</label><input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} type="text" inputMode="decimal" value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md font-black text-blue-600 dark:text-blue-400 shadow-inner outline-none text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner uppercase text-[11px]"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md font-bold shadow-inner outline-none text-[11px] h-8 h-auto"/></div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold shadow-inner uppercase text-[11px]"/></div>
@@ -889,9 +921,17 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <div className="grid grid-cols-3 gap-1.5 sm:gap-4">
                     <div className="space-y-1">
                         <label className="text-[8px] sm:text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center block leading-none truncate">SL Kiểm tra</label>
-                        <input 
-                            type="number" 
-                            step="any" 
+                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} 
+                            type="text" inputMode="decimal" 
                             value={formData.inspectedQuantity ?? ''} 
                             onChange={e => handleInputChange('inspectedQuantity', e.target.value)} 
                             className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`} 
@@ -908,9 +948,17 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             <label className="text-[8px] sm:text-[9px] font-bold text-green-600 dark:text-green-500 uppercase tracking-wider">Đạt</label>
                             <span className="text-[7px] sm:text-[8px] font-bold text-green-700 bg-green-50 dark:bg-green-900/20 px-0.5 sm:px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span>
                         </div>
-                        <input 
-                            type="number" 
-                            step="any" 
+                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} 
+                            type="text" inputMode="decimal" 
                             value={formData.passedQuantity ?? ''} 
                             onChange={e => handleInputChange('passedQuantity', e.target.value)} 
                             className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-green-200 dark:border-green-800 bg-white dark:bg-slate-900`} 
@@ -921,16 +969,24 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             <label className="text-[8px] sm:text-[9px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">Lỗi</label>
                             <span className="text-[7px] sm:text-[8px] font-bold text-red-700 bg-red-50 dark:bg-red-900/20 px-0.5 sm:px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span>
                         </div>
-                        <input 
-                            type="number" 
-                            step="any" 
+                        <input onKeyDown={(e) => { 
+    if(e.key === ',') { 
+        e.preventDefault(); 
+        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
+    }
+    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+    if (['e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+    }
+}} 
+                            type="text" inputMode="decimal" 
                             value={formData.failedQuantity ?? ''} 
                             onChange={e => handleInputChange('failedQuantity', e.target.value)} 
                             className={`w-full px-1.5 py-1 sm:px-2 sm:py-1.5 border rounded-md font-bold text-[10px] sm:text-[11px] text-center shadow-sm border-red-200 bg-white dark:bg-slate-900`} 
                         />
                     </div>
                 </div>
-                {((formData.passedQuantity || 0) + (formData.failedQuantity || 0)) > (formData.inspectedQuantity || 0) && (
+                {((Number(formData.passedQuantity) || 0) + (Number(formData.failedQuantity) || 0)) > (Number(formData.inspectedQuantity) || 0) && (
                     <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 p-1.5 rounded-lg border border-red-100">
                         <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
                         <p className="text-[8px] text-red-700 font-bold uppercase leading-none">Lỗi: (Đạt + Lỗi) &gt; Số lượng kiểm tra</p>
