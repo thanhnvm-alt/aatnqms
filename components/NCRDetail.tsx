@@ -12,7 +12,7 @@ import {
 import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage, createNotification, fetchUsers, fetchRoles } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { getProxyImageUrl, compressImage } from '../src/utils';
+import { getProxyImageUrl } from '../src/utils';
 
 interface NCRDetailProps {
   ncr: NCR;
@@ -282,7 +282,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       
       try {
           const base64Images = await Promise.all(
-              Array.from(files).map((file: File) => compressImage(file, 500))
+              Array.from(files).map(async (file: File) => await uploadQMSImage(file, { entityId: "new", type: "COMMENT", role: "ATTACHMENT" }))
           );
           
           if (type === 'COMMENT') {

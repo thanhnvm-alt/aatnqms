@@ -12,7 +12,6 @@ import {
 import { fetchPlans, uploadQMSImage, fetchMaterials } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
-import { compressImage } from '../services/imageService';
 import { PersistenceService } from '../services/persistenceService';
 
 interface InspectionFormProps {
@@ -318,97 +317,38 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0 || !activeUploadContext) return;
+    if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
-    const { type, matIdx, itemIdx } = activeUploadContext;
     try {
-        const compressedBase64s = await Promise.all(
+        const uploadedUrls = await Promise.all(
             Array.from(files).map(async (file: File) => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        try {
-                            const compressed = await compressImage(reader.result as string);
-                            resolve(compressed);
-                        } catch (e) {
-                            resolve(reader.result as string);
-                        }
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
+                return await uploadQMSImage(file, { 
+                    entityId: formData.id || 'new', 
+                    type: 'INSPECTION', 
+                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
                 });
             })
         );
-
-        setFormData(prev => {
-            if (type === 'MAIN') return { ...prev, images: [...(prev.images || []), ...compressedBase64s] };
-            if (type === 'DELIVERY') return { ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...compressedBase64s] };
-            if (type === 'REPORT') return { ...prev, reportImages: [...(prev.reportImages || []), ...compressedBase64s] };
-            if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-                const nextMats = [...(prev.materials || [])];
-                const items = [...nextMats[matIdx].items];
-                items[itemIdx] = { ...items[itemIdx], images: [...(items[itemIdx].images || []), ...compressedBase64s] };
-                nextMats[matIdx] = { ...nextMats[matIdx], items };
-                return { ...prev, materials: nextMats };
-            }
-            if (type === 'MATERIAL' && matIdx !== undefined) {
-                const nextMats = [...(prev.materials || [])];
-                nextMats[matIdx] = { ...nextMats[matIdx], images: [...(nextMats[matIdx].images || []), ...compressedBase64s] };
-                return { ...prev, materials: nextMats };
-            }
-            return prev;
-        });
+        
+        if (activeUploadId === 'MAIN') {
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
+        } else {
+            setFormData(prev => ({ 
+                ...prev, 
+                items: prev.items?.map(i => 
+                    i.id === activeUploadId 
+                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
+                        : i
+                ) 
+            }));
+        }
     } catch (err) { 
-        console.error("ISO-LOCAL-STORAGE: Failed", err); 
-        alert("Lỗi xử lý ảnh.");
+        console.error("ISO-UPLOAD: Failed", err); 
+        alert("Lỗi tải ảnh lên.");
     } finally { 
         setIsProcessingImages(false); 
         e.target.value = ''; 
     }
-  };
-
-  const handleEditImage = (images: string[], index: number, context: any) => { setEditorState({ images, index, context }); };
-  
-  const onImageSave = async (idx: number, updatedImg: string) => {
-      if (!editorState) return;
-      const { type, matIdx, itemIdx } = editorState.context;
-      
-      setIsProcessingImages(true);
-      try {
-          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
-          
-          setFormData(prev => {
-              if (type === 'MAIN') { const next = [...(prev.images || [])]; next[idx] = finalImg; return { ...prev, images: next }; }
-              if (type === 'DELIVERY') { const next = [...(prev.deliveryNoteImages || [])]; next[idx] = finalImg; return { ...prev, deliveryNoteImages: next }; }
-              if (type === 'REPORT') { const next = [...(prev.reportImages || [])]; next[idx] = finalImg; return { ...prev, reportImages: next }; }
-              if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-                  const nextMats = [...(prev.materials || [])];
-                  nextMats[matIdx].items[itemIdx].images![idx] = finalImg;
-                  return { ...prev, materials: nextMats };
-              }
-              if (type === 'MATERIAL' && matIdx !== undefined) {
-                  const nextMats = [...(prev.materials || [])];
-                  nextMats[matIdx].images![idx] = finalImg;
-                  return { ...prev, materials: nextMats };
-              }
-              return prev;
-          });
-      } catch (err) {
-          console.error(err);
-          alert("Lỗi khi nén ảnh.");
-      } finally {
-          setIsProcessingImages(false);
-      }
-  };
-
-  const toggleDoc = (id: string) => {
-      setFormData(prev => ({ ...prev, supportingDocs: prev.supportingDocs?.map(d => d.id === id ? { ...d, verified: !d.verified } : d) }));
-  };
-
-  const addCustomDoc = () => {
-      if (!newDocName.trim()) return;
-      setFormData(prev => ({ ...prev, supportingDocs: [...(prev.supportingDocs || []), { id: `doc_${Date.now()}`, name: newDocName.trim(), verified: true }] }));
-      setNewDocName('');
   };
 
   const handleSubmit = async () => {

@@ -16,7 +16,6 @@ import { generateNCRSuggestions } from '../services/geminiService';
 import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, fetchPlans, saveDefectLibraryItem } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
-import { compressImage } from '../services/imageService';
 import { PersistenceService } from '../services/persistenceService';
 
 import { SignaturePad } from './SignaturePad';
@@ -583,87 +582,6 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     setUploadProgress(0);
     try {
         const entityId = formData.id || 'new';
-        
-        // Helper to prepare upload tasks
-        interface UploadTask {
-            url: string;
-            role: string;
-            path: string; // To identify where to update in formData
-            originalIndex?: number;
-            itemId?: string;
-            ncrType?: 'BEFORE' | 'AFTER';
-        }
-
-        const tasks: UploadTask[] = [];
-
-        // 1. Identify all base64 images that need uploading
-        (formData.images || []).forEach((img, idx) => {
-            if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx });
-        });
-
-        (formData.items || []).forEach((item) => {
-            (item.images || []).forEach((img, idx) => {
-                if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', itemId: item.id, originalIndex: idx });
-            });
-            if (item.ncr) {
-                (item.ncr.imagesBefore || []).forEach((img, idx) => {
-                    if (img.startsWith('data:')) tasks.push({ url: img, role: 'NCR_BEFORE', path: 'NCR', itemId: item.id, originalIndex: idx, ncrType: 'BEFORE' });
-                });
-                (item.ncr.imagesAfter || []).forEach((img, idx) => {
-                    if (img.startsWith('data:')) tasks.push({ url: img, role: 'NCR_AFTER', path: 'NCR', itemId: item.id, originalIndex: idx, ncrType: 'AFTER' });
-                });
-            }
-        });
-
-        if (formData.signature?.startsWith('data:')) tasks.push({ url: formData.signature, role: 'SIGNATURE_QC', path: 'SIGNATURE' });
-        if (formData.productionSignature?.startsWith('data:')) tasks.push({ url: formData.productionSignature, role: 'SIGNATURE_PROD', path: 'SIGNATURE_PROD' });
-
-        const totalTasks = tasks.length;
-        let completedCount = 0;
-
-        // Function to update formData state and free memory
-        const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
-            setFormData(prev => {
-                const next = { ...prev };
-                if (task.path === 'MAIN' && task.originalIndex !== undefined) {
-                    const nextImgs = [...(next.images || [])];
-                    nextImgs[task.originalIndex] = serverUrl;
-                    next.images = nextImgs;
-                } else if (task.path === 'ITEM' && task.itemId) {
-                    next.items = (next.items || []).map(it => it.id === task.itemId 
-                        ? { ...it, images: (it.images || []).map((img, i) => i === task.originalIndex ? serverUrl : img) }
-                        : it
-                    );
-                } else if (task.path === 'NCR' && task.itemId) {
-                    next.items = (next.items || []).map(it => {
-                        if (it.id !== task.itemId || !it.ncr) return it;
-                        const ncr = { ...it.ncr };
-                        if (task.ncrType === 'BEFORE') {
-                            ncr.imagesBefore = (ncr.imagesBefore || []).map((img, i) => i === task.originalIndex ? serverUrl : img);
-                        } else {
-                            ncr.imagesAfter = (ncr.imagesAfter || []).map((img, i) => i === task.originalIndex ? serverUrl : img);
-                        }
-                        return { ...it, ncr };
-                    });
-                } else if (task.path === 'SIGNATURE') {
-                    next.signature = serverUrl;
-                } else if (task.path === 'SIGNATURE_PROD') {
-                    next.productionSignature = serverUrl;
-                }
-                return next;
-            });
-        };
-
-        // Execute uploads in parallel but track progress
-        if (totalTasks > 0) {
-            await Promise.all(tasks.map(async (task) => {
-                const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'INSPECTION', role: task.role });
-                updateStateWithUrl(task, serverUrl);
-                completedCount++;
-                setUploadProgress(Math.round((completedCount / totalTasks) * 100));
-            }));
-        }
-
         // Final snapshot for saving (must fetch fresh state because setFormData is async)
         // However, since we are about to call onSave, we can construct the final object from what we know
         setFormData(finalForm => {
@@ -749,7 +667,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       setIsProcessingImages(true);
       try {
           // Compress edited image
-          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
+          const finalImg = updatedImg;
           
           // Convert to File for upload
           const res = await fetch(finalImg);

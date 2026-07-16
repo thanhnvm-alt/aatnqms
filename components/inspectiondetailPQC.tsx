@@ -1,4 +1,4 @@
-import { getProxyImageUrl, compressImage } from '../src/utils';
+import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR, canUserModifyInspection } from '../types';
@@ -206,8 +206,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       try {
           const { uploadQMSImage } = await import('../services/apiService');
           const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-              const compressed = await compressImage(f, 500);
-              return await uploadQMSImage(compressed, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+              return await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
           }));
           setCommentAttachments(prev => [...prev, ...processed]);
       } catch (err) {

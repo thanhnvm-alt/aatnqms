@@ -14,7 +14,6 @@ import {
 import { fetchIpoByFactoryOrder, uploadQMSImage, fetchInspectionById } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
-import { compressImage } from '../services/imageService';
 import { PersistenceService } from '../services/persistenceService';
 import { FSR_CHECKLIST_TEMPLATE } from '../constants';
 
@@ -305,7 +304,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
       const { type, itemId } = editorState.context;
       setIsProcessingImages(true);
       try {
-          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
+          const finalImg = updatedImg;
           if (type === 'MAIN') { 
               setFormData(prev => { 
                   const newImgs = [...(prev.images || [])]; 

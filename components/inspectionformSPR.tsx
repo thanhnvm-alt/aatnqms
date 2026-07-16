@@ -14,7 +14,6 @@ import {
 import { fetchIpoByFactoryOrder, uploadQMSImage, fetchInspectionById } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
-import { compressImage } from '../services/imageService';
 import { PersistenceService } from '../services/persistenceService';
 import { SPR_CHECKLIST_TEMPLATE } from '../constants';
 
@@ -249,7 +248,7 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
       const { type, itemId } = editorState.context;
       setIsProcessingImages(true);
       try {
-          const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
+          const finalImg = updatedImg;
           if (type === 'MAIN') { setFormData(prev => { const newImgs = [...(prev.images || [])]; newImgs[idx] = finalImg; return { ...prev, images: newImgs }; }); }
           else if (type === 'ITEM' && itemId) { setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? finalImg : img) } : i) })); }
       } catch (err) { alert("Lỗi lưu ảnh."); } finally { setIsProcessingImages(false); }

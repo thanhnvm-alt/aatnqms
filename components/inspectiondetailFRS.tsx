@@ -24,7 +24,7 @@ interface InspectionDetailProps {
 
 import { SignaturePad } from './SignaturePad';
 import { TwoTierApproval } from './TwoTierApproval';
-import { compressImage } from '../src/utils';
+import { } from '../src/utils';
 
 export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment, workshops = [] }) => {
   const [newComment, setNewComment] = useState('');
@@ -82,8 +82,7 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
       try {
           const { uploadQMSImage } = await import('../services/apiService');
           const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-              const compressed = await compressImage(f, 500);
-              return await uploadQMSImage(compressed, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+              return await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
           }));
           setCommentAttachments(prev => [...prev, ...processed]);
       } catch (err) {

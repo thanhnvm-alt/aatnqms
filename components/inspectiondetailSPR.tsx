@@ -1,4 +1,4 @@
-import { getProxyImageUrl, compressImage } from '../src/utils';
+import { getProxyImageUrl } from '../src/utils';
 import React, { useState, useRef, useEffect } from 'react';
 import { Inspection, InspectionStatus, CheckStatus, User, Workshop, canUserModifyInspection, NCRComment } from '../types';
 import { ArrowLeft, Box, Edit3, Trash2, ClipboardList, CheckCircle2, AlertOctagon, X, Loader2, Eraser, PenTool } from 'lucide-react';
@@ -76,8 +76,7 @@ export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspectio
       try {
           const { uploadQMSImage } = await import('../services/apiService');
           const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-              const compressed = await compressImage(f, 500);
-              return await uploadQMSImage(compressed, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+              return await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
           }));
           setCommentAttachments(prev => [...prev, ...processed]);
       } catch (err) {

@@ -13,7 +13,6 @@ import { ImageEditorModal } from './ImageEditorModal';
 // Added missing QRScannerModal import
 import { QRScannerModal } from './QRScannerModal';
 import { SITE_TEMPLATES } from '../constants';
-import { compressImage } from '../services/imageService';
 import { PersistenceService } from '../services/persistenceService';
 
 interface InspectionFormProps {
@@ -133,63 +132,34 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        const compressedBase64s = await Promise.all(
+        const uploadedUrls = await Promise.all(
             Array.from(files).map(async (file: File) => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        try {
-                            const compressed = await compressImage(reader.result as string);
-                            resolve(compressed);
-                        } catch (e) {
-                            resolve(reader.result as string); // Fallback
-                        }
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
+                return await uploadQMSImage(file, { 
+                    entityId: formData.id || 'new', 
+                    type: 'INSPECTION', 
+                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
                 });
             })
         );
-        if (activeUploadId === 'MAIN') setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedBase64s] }));
-        else setFormData(prev => ({ ...prev, items: prev.items?.map(it => it.id === activeUploadId ? { ...it, images: [...(it.images || []), ...compressedBase64s] } : it) }));
-    } catch (err) {
-        console.error("ISO-COMPRESS: Failed", err);
-        alert("Lỗi nén ảnh.");
-    } finally { setIsProcessingImages(false); e.target.value = ''; }
-  };
-
-  const handleEditImage = (images: string[], index: number, context: any) => {
-    setEditorState({ images, index, context });
-  };
-
-  const onImageSave = async (idx: number, updatedImg: string) => {
-    if (!editorState) return;
-    setIsProcessingImages(true);
-    try {
-        const { context } = editorState;
-        // Compress edited image
-        const finalImg = updatedImg.startsWith('data:') ? await compressImage(updatedImg) : updatedImg;
-
-        if (context.itemId === 'MAIN') {
-            setFormData(prev => {
-                const next = [...(prev.images || [])];
-                next[idx] = finalImg;
-                return { ...prev, images: next };
-            });
+        
+        if (activeUploadId === 'MAIN') {
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
         } else {
-            setFormData(prev => ({
-                ...prev,
-                items: prev.items?.map(it => it.id === context.itemId ? {
-                    ...it,
-                    images: it.images?.map((img, i) => i === idx ? finalImg : img)
-                } : it)
+            setFormData(prev => ({ 
+                ...prev, 
+                items: prev.items?.map(i => 
+                    i.id === activeUploadId 
+                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
+                        : i
+                ) 
             }));
         }
-    } catch (e) {
-        console.error("Failed to save edited image:", e);
-        alert("Không thể lưu ảnh đã chỉnh sửa.");
-    } finally {
-        setIsProcessingImages(false);
+    } catch (err) { 
+        console.error("ISO-UPLOAD: Failed", err); 
+        alert("Lỗi tải ảnh lên.");
+    } finally { 
+        setIsProcessingImages(false); 
+        e.target.value = ''; 
     }
   };
 
