@@ -67,6 +67,21 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
   
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
+  const [isMaCtManual, setIsMaCtManual] = useState(!initialData?.ma_ct);
+  const [isTenCtManual, setIsTenCtManual] = useState(!initialData?.ten_ct);
+
+  useEffect(() => {
+    if (!formData.ma_ct) {
+      setIsMaCtManual(true);
+    }
+  }, [formData.ma_ct]);
+
+  useEffect(() => {
+    if (!formData.ten_ct) {
+      setIsTenCtManual(true);
+    }
+  }, [formData.ten_ct]);
+
   useEffect(() => {
     PersistenceService.hasDraft('FSR', user.id).then(setHasDraft);
   }, []);
@@ -82,6 +97,8 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
     if (saved) {
       setFormData(saved as Inspection);
       setHasDraft(false);
+      setIsMaCtManual(!saved.ma_ct);
+      setIsTenCtManual(!saved.ten_ct);
     }
   };
 
@@ -129,23 +146,31 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
             const items = res?.items || (Array.isArray(res) ? res : []);
             if (items && items.length > 0) {
                 const match = items[0];
+                const fetchedMaCt = match.Ma_Tender || match.Project_name || '';
+                const fetchedTenCt = match.Project_name || '';
                 setFormData(prev => ({
                     ...prev,
                     ma_nha_may: match.ID_Factory_Order || code,
                     headcode: match.ID_Factory_Order || code,
-                    ma_ct: match.Ma_Tender || match.Project_name || prev.ma_ct,
-                    ten_ct: match.Project_name || prev.ten_ct,
+                    ma_ct: fetchedMaCt || prev.ma_ct,
+                    ten_ct: fetchedTenCt || prev.ten_ct,
                     ten_hang_muc: match.Material_description || prev.ten_hang_muc,
                     so_luong_ipo: Number(match.Quantity_IPO || match.so_luong_ipo || 0) || prev.so_luong_ipo,
                     dvt: match.Base_Unit || match.dvt || prev.dvt
                 }));
                 setSearchCode(match.ID_Factory_Order || code);
+                setIsMaCtManual(!fetchedMaCt);
+                setIsTenCtManual(!fetchedTenCt);
                 return;
             }
         }
         alert("Không tìm thấy dữ liệu IPO cho mã này.");
+        setIsMaCtManual(true);
+        setIsTenCtManual(true);
     } catch (e) {
         console.error("Lookup error:", e);
+        setIsMaCtManual(true);
+        setIsTenCtManual(true);
     } finally {
         setIsLookupLoading(false);
     }
@@ -396,8 +421,24 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                         <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 dark:text-slate-500" type="button"><QrCode className="w-3.5 h-3.5"/></button>
                     </div>
                 </div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-400 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-400 font-bold shadow-inner text-[11px]"/></div>
+                <div className="space-y-0.5">
+                    <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mã dự án</label>
+                    <input 
+                        value={formData.ma_ct || ''} 
+                        readOnly={!isMaCtManual}
+                        onChange={isMaCtManual ? e => handleInputChange('ma_ct', e.target.value) : undefined}
+                        className={`w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] ${!isMaCtManual ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 shadow-inner' : 'bg-white dark:bg-slate-900 focus:ring-1 ring-blue-100 outline-none text-slate-800 dark:text-slate-200'}`}
+                    />
+                </div>
+                <div className="space-y-0.5">
+                    <label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Tên công trình</label>
+                    <input 
+                        value={formData.ten_ct || ''} 
+                        readOnly={!isTenCtManual}
+                        onChange={isTenCtManual ? e => handleInputChange('ten_ct', e.target.value) : undefined}
+                        className={`w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] ${!isTenCtManual ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 shadow-inner' : 'bg-white dark:bg-slate-900 focus:ring-1 ring-blue-100 outline-none text-slate-800 dark:text-slate-200'}`}
+                    />
+                </div>
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Tên hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-400 font-bold shadow-inner text-[11px]"/></div>
             </div>
 
