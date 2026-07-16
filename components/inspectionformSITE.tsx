@@ -109,6 +109,26 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: any } | null>(null);
 
+  const handleEditImage = (images: string[], index: number, context: any) => {
+    setEditorState({ images, index, context });
+  };
+
+  const onImageSave = async (index: number, newImageUrl: string) => {
+    if (!editorState) return;
+    const newImages = [...editorState.images];
+    newImages[index] = newImageUrl;
+    setEditorState({ ...editorState, images: newImages });
+    const { itemId } = editorState.context || {};
+    if (itemId) {
+      setFormData(prev => ({
+        ...prev,
+        items: prev.items?.map(it => it.id === itemId ? { ...it, images: newImages } : it)
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, images: newImages }));
+    }
+  };
+
   const handleInputChange = (field: keyof Inspection, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
 
   const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
@@ -231,22 +251,20 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
         }
 
         // Final save with fresh state
-        setFormData(finalForm => {
+        const finalForm = formData;
             const hasFail = (finalForm.items || []).some(it => it.status === CheckStatus.FAIL);
             let statusToSave = finalForm.status;
             if (statusToSave === InspectionStatus.DRAFT) {
                 statusToSave = hasFail ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
             }
 
-            onSave({ 
-                ...finalForm, 
+            await onSave({ ...finalForm, 
                 status: statusToSave, 
                 updatedAt: new Date().toISOString() 
             } as Inspection);
             
             clearDraft();
-            return finalForm;
-        });
+            
 
     } catch (e: any) { 
         console.error("ISO-SAVE-SITE:", e);

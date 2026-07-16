@@ -94,7 +94,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     const grouped: Record<string, { dateLabel: string; count: number, originalDate: Date }> = {};
     
     ncrList.forEach(ncr => {
-        const d = ncr.createdDate ? new Date(ncr.createdDate) : new Date(ncr.createdAt ? ncr.createdAt * 1000 : Date.now());
+        const d = ncr.createdDate ? new Date(ncr.createdDate) : new Date();
         if (isNaN(d.getTime())) return;
         
         let key = '';
@@ -133,7 +133,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
   const filteredNcrList = useMemo(() => {
       if (!selectedNcrDateKey) return ncrList;
       return ncrList.filter(ncr => {
-          const d = ncr.createdDate ? new Date(ncr.createdDate) : new Date(ncr.createdAt ? ncr.createdAt * 1000 : Date.now());
+          const d = ncr.createdDate ? new Date(ncr.createdDate) : new Date();
           if (isNaN(d.getTime())) return false;
           let key = '';
           if (ncrGroupRange === 'DAY') {
@@ -160,7 +160,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
                 ten_hang_muc: ncr.ten_hang_muc,
                 workshop: ncr.workshop,
                 createdDate: ncr.createdDate,
-                createdAt: ncr.createdAt,
+                createdAt: ncr.createdDate,
                 inspectorName: ncr.inspectorName,
                 ncrCount: 1,
             });

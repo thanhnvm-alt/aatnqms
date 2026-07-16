@@ -228,9 +228,26 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         let val = value;
         if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = value; }
         let mat = { ...nextMaterials[idx], [field]: val };
-        if (field === 'inspectQty') { if (parseFloat(String(value)||0) > mat.deliveryQty) value = mat.deliveryQty; if (parseFloat(String(value)||0) < 0) value = 0; mat.inspectQty = value; mat.passQty = value; mat.failQty = 0; }
-        else if (field === 'passQty') { if (parseFloat(String(value)||0) > mat.inspectQty) value = mat.inspectQty; if (parseFloat(String(value)||0) < 0) value = 0; mat.passQty = value; mat.failQty = Number((mat.inspectQty - parseFloat(String(value)||0)).toFixed(2)); }
-        else if (field === 'failQty') { if (parseFloat(String(value)||0) > mat.inspectQty) value = mat.inspectQty; if (parseFloat(String(value)||0) < 0) value = 0; mat.failQty = value; mat.passQty = Number((mat.inspectQty - parseFloat(String(value)||0)).toFixed(2)); }
+        const valNum = parseFloat(String(value || 0)) || 0;
+        if (field === 'inspectQty') {
+            const deliveryQty = parseFloat(String(mat.deliveryQty || 0)) || 0;
+            const finalVal = valNum > deliveryQty ? deliveryQty : (valNum < 0 ? 0 : valNum);
+            mat.inspectQty = finalVal;
+            mat.passQty = finalVal;
+            mat.failQty = 0;
+        }
+        else if (field === 'passQty') {
+            const inspectQty = parseFloat(String(mat.inspectQty || 0)) || 0;
+            const finalVal = valNum > inspectQty ? inspectQty : (valNum < 0 ? 0 : valNum);
+            mat.passQty = finalVal;
+            mat.failQty = Number((inspectQty - finalVal).toFixed(2));
+        }
+        else if (field === 'failQty') {
+            const inspectQty = parseFloat(String(mat.inspectQty || 0)) || 0;
+            const finalVal = valNum > inspectQty ? inspectQty : (valNum < 0 ? 0 : valNum);
+            mat.failQty = finalVal;
+            mat.passQty = Number((inspectQty - finalVal).toFixed(2));
+        }
         if (field === 'category') {
             const iqcTpl = templates['IQC'] || [];
             mat.items = iqcTpl.filter(i => i.category === value).map(i => ({ ...i, id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, status: CheckStatus.PENDING, notes: '', images: [] }));
@@ -280,9 +297,45 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       setNewDocName('');
   };
 
+  const handleEditImage = (images: string[], index: number, context: any) => {
+      setEditorState({ images, index, context });
+  };
+
+  const onImageSave = async (index: number, newImageUrl: string) => {
+      if (!editorState) return;
+      const newImages = [...editorState.images];
+      newImages[index] = newImageUrl;
+      setEditorState({ ...editorState, images: newImages });
+      const { type, matIdx, itemIdx } = editorState.context || {};
+      
+      if (type === 'MAIN') {
+          setFormData(prev => ({ ...prev, images: newImages }));
+      } else if (type === 'DELIVERY') {
+          setFormData(prev => ({ ...prev, deliveryNoteImages: newImages }));
+      } else if (type === 'REPORT') {
+          setFormData(prev => ({ ...prev, reportImages: newImages }));
+      } else if (type === 'MATERIAL' && matIdx !== undefined) {
+          setFormData(prev => {
+              const next = { ...prev };
+              if (next.materials && next.materials[matIdx]) {
+                  next.materials[matIdx].images = newImages;
+              }
+              return next;
+          });
+      } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+          setFormData(prev => {
+              const next = { ...prev };
+              if (next.materials && next.materials[matIdx] && next.materials[matIdx].items && next.materials[matIdx].items[itemIdx]) {
+                  next.materials[matIdx].items[itemIdx].images = newImages;
+              }
+              return next;
+          });
+      }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0 || !activeUploadId) return;
+    if (!files || files.length === 0 || !activeUploadContext) return;
     setIsProcessingImages(true);
     try {
         const uploadedUrls = await Promise.all(
@@ -290,22 +343,34 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 return await uploadQMSImage(file, { 
                     entityId: formData.id || 'new', 
                     type: 'INSPECTION', 
-                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+                    role: activeUploadContext.type
                 });
             })
         );
         
-        if (activeUploadId === 'MAIN') {
+        const { type, matIdx, itemIdx } = activeUploadContext;
+        if (type === 'MAIN') {
             setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
-        } else {
-            setFormData(prev => ({ 
-                ...prev, 
-                items: prev.items?.map(i => 
-                    i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
-                        : i
-                ) 
-            }));
+        } else if (type === 'DELIVERY') {
+            setFormData(prev => ({ ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...uploadedUrls] }));
+        } else if (type === 'REPORT') {
+            setFormData(prev => ({ ...prev, reportImages: [...(prev.reportImages || []), ...uploadedUrls] }));
+        } else if (type === 'MATERIAL' && matIdx !== undefined) {
+            setFormData(prev => {
+                const next = { ...prev };
+                if (next.materials && next.materials[matIdx]) {
+                    next.materials[matIdx].images = [...(next.materials[matIdx].images || []), ...uploadedUrls];
+                }
+                return next;
+            });
+        } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+            setFormData(prev => {
+                const next = { ...prev };
+                if (next.materials && next.materials[matIdx] && next.materials[matIdx].items && next.materials[matIdx].items[itemIdx]) {
+                    next.materials[matIdx].items[itemIdx].images = [...(next.materials[matIdx].items[itemIdx].images || []), ...uploadedUrls];
+                }
+                return next;
+            });
         }
     } catch (err) { 
         console.error("ISO-UPLOAD: Failed", err); 
@@ -419,13 +484,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         }
 
         // Final snap for saving
-        setFormData(finalForm => {
+        const finalForm = formData;
             const totalInspected = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
             const totalPassed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
             const totalFailed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
 
-            onSave({ 
-                ...finalForm,
+            await onSave({ ...finalForm,
                 status: InspectionStatus.PENDING,
                 inspectedQuantity: totalInspected,
                 passedQuantity: totalPassed,
@@ -434,8 +498,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             } as Inspection);
             
             clearDraft();
-            return finalForm;
-        });
+            
 
     } catch (e: any) { 
         console.error("ISO-SAVE: Error uploading images or saving", e);

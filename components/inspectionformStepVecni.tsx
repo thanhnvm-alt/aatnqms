@@ -166,7 +166,7 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
   };
 
   const handleSubmit = async () => {
-    const ins = formData.inspectedQuantity || 0;
+    const ins = Number(formData.inspectedQuantity || 0);
     if (!formData.ma_ct || !formData.workshop || !formData.inspectionStage) { 
         alert("Vui lòng nhập đủ thông tin xưởng và chọn công đoạn."); 
         return; 
@@ -210,15 +210,14 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
             }));
         }
 
-        setFormData(finalForm => {
+        const finalForm = formData;
             const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
             const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
             const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
 
-            onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
+            await onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
             clearDraft();
-            return finalForm;
-        });
+            
 
     } catch (e: any) { 
         alert(`Lỗi lưu báo cáo: ${e.message || "Không xác định"}`); 

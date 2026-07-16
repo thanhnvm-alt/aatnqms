@@ -72,6 +72,16 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const [matSearch, setMatSearch] = useState('');
   const [matSearchInput, setMatSearchInput] = useState('');
 
+  const toggleDoc = (id: string) => {
+      setFormData(prev => ({ ...prev, supportingDocs: prev.supportingDocs?.map(d => d.id === id ? { ...d, verified: !d.verified } : d) }));
+  };
+
+  const addCustomDoc = () => {
+      if (!newDocName.trim()) return;
+      setFormData(prev => ({ ...prev, supportingDocs: [...(prev.supportingDocs || []), { id: `doc_${Date.now()}`, name: newDocName.trim(), verified: true }] }));
+      setNewDocName('');
+  };
+
   const handleGetLocation = () => {
       setIsGettingLocation(true);
       if ("geolocation" in navigator) {
@@ -315,9 +325,45 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       setFormData(prev => ({ ...prev, materials: nextMaterials }));
   };
 
+  const handleEditImage = (images: string[], index: number, context: any) => {
+      setEditorState({ images, index, context });
+  };
+
+  const onImageSave = async (index: number, newImageUrl: string) => {
+      if (!editorState) return;
+      const newImages = [...editorState.images];
+      newImages[index] = newImageUrl;
+      setEditorState({ ...editorState, images: newImages });
+      const { type, matIdx, itemIdx } = editorState.context || {};
+      
+      if (type === 'MAIN') {
+          setFormData(prev => ({ ...prev, images: newImages }));
+      } else if (type === 'DELIVERY') {
+          setFormData(prev => ({ ...prev, deliveryNoteImages: newImages }));
+      } else if (type === 'REPORT') {
+          setFormData(prev => ({ ...prev, reportImages: newImages }));
+      } else if (type === 'MATERIAL' && matIdx !== undefined) {
+          setFormData(prev => {
+              const next = { ...prev };
+              if (next.materials && next.materials[matIdx]) {
+                  next.materials[matIdx].images = newImages;
+              }
+              return next;
+          });
+      } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+          setFormData(prev => {
+              const next = { ...prev };
+              if (next.materials && next.materials[matIdx] && next.materials[matIdx].items && next.materials[matIdx].items[itemIdx]) {
+                  next.materials[matIdx].items[itemIdx].images = newImages;
+              }
+              return next;
+          });
+      }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0 || !activeUploadId) return;
+    if (!files || files.length === 0 || !activeUploadContext) return;
     setIsProcessingImages(true);
     try {
         const uploadedUrls = await Promise.all(
@@ -325,22 +371,34 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                 return await uploadQMSImage(file, { 
                     entityId: formData.id || 'new', 
                     type: 'INSPECTION', 
-                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+                    role: activeUploadContext.type
                 });
             })
         );
         
-        if (activeUploadId === 'MAIN') {
+        const { type, matIdx, itemIdx } = activeUploadContext;
+        if (type === 'MAIN') {
             setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
-        } else {
-            setFormData(prev => ({ 
-                ...prev, 
-                items: prev.items?.map(i => 
-                    i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
-                        : i
-                ) 
-            }));
+        } else if (type === 'DELIVERY') {
+            setFormData(prev => ({ ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...uploadedUrls] }));
+        } else if (type === 'REPORT') {
+            setFormData(prev => ({ ...prev, reportImages: [...(prev.reportImages || []), ...uploadedUrls] }));
+        } else if (type === 'MATERIAL' && matIdx !== undefined) {
+            setFormData(prev => {
+                const next = { ...prev };
+                if (next.materials && next.materials[matIdx]) {
+                    next.materials[matIdx].images = [...(next.materials[matIdx].images || []), ...uploadedUrls];
+                }
+                return next;
+            });
+        } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+            setFormData(prev => {
+                const next = { ...prev };
+                if (next.materials && next.materials[matIdx] && next.materials[matIdx].items && next.materials[matIdx].items[itemIdx]) {
+                    next.materials[matIdx].items[itemIdx].images = [...(next.materials[matIdx].items[itemIdx].images || []), ...uploadedUrls];
+                }
+                return next;
+            });
         }
     } catch (err) { 
         console.error("ISO-UPLOAD: Failed", err); 
@@ -452,13 +510,12 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         }
 
         // Final snap for saving
-        setFormData(finalForm => {
+        const finalForm = formData;
             const totalInspected = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
             const totalPassed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
             const totalFailed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
 
-            onSave({ 
-                ...finalForm,
+            await onSave({ ...finalForm,
                 status: InspectionStatus.PENDING,
                 inspectedQuantity: totalInspected,
                 passedQuantity: totalPassed,
@@ -467,8 +524,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             } as Inspection);
             
             clearDraft();
-            return finalForm;
-        });
+            
 
     } catch (e: any) { 
         console.error("ISO-SAVE-VT:", e);

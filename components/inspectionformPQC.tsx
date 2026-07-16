@@ -565,8 +565,8 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleSubmit = async () => {
-    const ins = formData.inspectedQuantity || 0;
-    const ipo = formData.so_luong_ipo || 0;
+    const ins = Number(formData.inspectedQuantity || 0);
+    const ipo = Number(formData.so_luong_ipo || 0);
 
     if (!formData.ma_ct || !formData.workshop || !formData.inspectionStage) { alert("Vui lòng nhập đủ thông tin xưởng và chọn công đoạn."); return; }
     
@@ -579,13 +579,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         const entityId = formData.id || 'new';
         // Final snapshot for saving (must fetch fresh state because setFormData is async)
         // However, since we are about to call onSave, we can construct the final object from what we know
-        setFormData(finalForm => {
+        const finalForm = formData;
             const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
             const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
             const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
 
-            onSave({ 
-                ...finalForm, 
+            await onSave({ ...finalForm, 
                 items: itemsToSave,
                 status: finalStatus, 
                 inspectorName: user.name, 
@@ -593,8 +592,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
             } as Inspection);
             
             clearDraft();
-            return finalForm;
-        });
+            
 
     } catch (e: any) { 
         console.error("ISO-SAVE: Error uploading images or saving", e);
