@@ -230,16 +230,35 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        const compressedBase64s = await Promise.all(Array.from(files).map(async (file: File) => {
-            return new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = async () => { try { resolve(await compressImage(reader.result as string)); } catch (e) { resolve(reader.result as string); } };
-                reader.onerror = reject; reader.readAsDataURL(file);
-            });
-        }));
-        if (activeUploadId === 'MAIN') { setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedBase64s] })); }
-        else { setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === activeUploadId ? { ...i, images: [...(i.images || []), ...compressedBase64s] } : i) })); }
-    } catch (err) { alert("Lỗi xử lý ảnh."); } finally { setIsProcessingImages(false); e.target.value = ''; }
+        const uploadedUrls = await Promise.all(
+            Array.from(files).map(async (file: File) => {
+                return await uploadQMSImage(file, { 
+                    entityId: formData.id || 'new', 
+                    type: 'INSPECTION', 
+                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+                });
+            })
+        );
+        
+        if (activeUploadId === 'MAIN') {
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
+        } else {
+            setFormData(prev => ({ 
+                ...prev, 
+                items: prev.items?.map(i => 
+                    i.id === activeUploadId 
+                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
+                        : i
+                ) 
+            }));
+        }
+    } catch (err) { 
+        console.error("ISO-UPLOAD: Failed", err); 
+        alert("Lỗi tải ảnh lên.");
+    } finally { 
+        setIsProcessingImages(false); 
+        e.target.value = ''; 
+    }
   };
 
   const handleEditImage = (type: 'MAIN' | 'ITEM', images: string[], index: number, itemId?: string) => { setEditorState({ images, index, context: { type, itemId } }); };
@@ -248,10 +267,38 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
       const { type, itemId } = editorState.context;
       setIsProcessingImages(true);
       try {
-          const finalImg = updatedImg;
-          if (type === 'MAIN') { setFormData(prev => { const newImgs = [...(prev.images || [])]; newImgs[idx] = finalImg; return { ...prev, images: newImgs }; }); }
-          else if (type === 'ITEM' && itemId) { setFormData(prev => ({ ...prev, items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? finalImg : img) } : i) })); }
-      } catch (err) { alert("Lỗi lưu ảnh."); } finally { setIsProcessingImages(false); }
+          // Convert base64 to File
+          const res = await fetch(updatedImg);
+          const blob = await res.blob();
+          const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          
+          // Upload immediately
+          const uploadedUrl = await uploadQMSImage(file, { 
+              entityId: formData.id || 'new', 
+              type: 'INSPECTION', 
+              role: type === 'MAIN' ? 'MAIN' : 'ITEM' 
+          });
+
+          if (type === 'MAIN') { 
+              setFormData(prev => { 
+                  const newImgs = [...(prev.images || [])]; 
+                  newImgs[idx] = uploadedUrl; 
+                  return { ...prev, images: newImgs }; 
+              }); 
+          }
+          else if (type === 'ITEM' && itemId) { 
+              setFormData(prev => ({ 
+                  ...prev, 
+                  items: prev.items?.map(i => i.id === itemId 
+                      ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) } 
+                      : i) 
+              })); 
+          }
+      } catch (err) { 
+          alert("Lỗi lưu ảnh chỉnh sửa."); 
+      } finally { 
+          setIsProcessingImages(false); 
+      }
   };
 
   return (

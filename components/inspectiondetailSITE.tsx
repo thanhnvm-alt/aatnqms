@@ -61,9 +61,8 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
       try {
           const { uploadQMSImage } = await import('../services/apiService');
           const processed = await Promise.all(Array.from(files).map(async (f: File) => {
-              const compressedBase64 = await compressImage(f, 500);
-              const result = await uploadQMSImage(compressedBase64, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
-              return { id: Math.random().toString(36).substring(7), url: result, compressedUrl: compressedBase64 };
+              const result = await uploadQMSImage(f, { entityId: inspection.id || 'new', type: 'COMMENT', role: 'ATTACHMENT' });
+              return { id: Math.random().toString(36).substring(7), url: result, compressedUrl: result };
           }));
           setCommentAttachments(prev => [...prev, ...processed]);
       } catch (err) {

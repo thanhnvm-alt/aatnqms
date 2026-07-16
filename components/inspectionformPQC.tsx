@@ -84,13 +84,8 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                         const reader = new FileReader();
                         reader.onload = async () => {
                             try {
-                                const compressed = await compressImage(reader.result as string);
-                                const compressedFile = await fetch(compressed).then(r => r.blob()).then(b => new File([b], file.name, { type: 'image/jpeg' }));
-                                const url = await uploadQMSImage(compressedFile, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget });
-                                resolve(url);
-                            } catch (e) {
-                                uploadQMSImage(file, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget }).then(resolve).catch(reject);
-                            }
+                                const url = await uploadQMSImage(file, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget }); resolve(url);
+                            } catch(e) { reject(e); }
                         };
                         reader.onerror = reject;
                         reader.readAsDataURL(file);
@@ -620,39 +615,31 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
     try {
-        const compressedBase64s = await Promise.all(
+        const uploadedUrls = await Promise.all(
             Array.from(files).map(async (file: File) => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                        try {
-                            const compressed = await compressImage(reader.result as string);
-                            resolve(compressed);
-                        } catch (e) {
-                            resolve(reader.result as string); // Fallback
-                        }
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
+                return await uploadQMSImage(file, { 
+                    entityId: formData.id || 'new', 
+                    type: 'INSPECTION', 
+                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
                 });
             })
         );
         
         if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedBase64s] }));
+            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
         } else {
             setFormData(prev => ({ 
                 ...prev, 
                 items: prev.items?.map(i => 
                     i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...compressedBase64s] } 
+                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
                         : i
                 ) 
             }));
         }
     } catch (err) { 
-        console.error("ISO-LOCAL-STORAGE: Failed", err); 
-        alert("Lỗi xử lý ảnh.");
+        console.error("ISO-UPLOAD: Failed", err); 
+        alert("Lỗi tải ảnh lên.");
     } finally { 
         setIsProcessingImages(false); 
         e.target.value = ''; 
@@ -663,17 +650,14 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const onImageSave = async (idx: number, updatedImg: string) => {
       if (!editorState) return;
       const { type, itemId } = editorState.context;
-      
       setIsProcessingImages(true);
       try {
-          // Compress edited image
-          const finalImg = updatedImg;
-          
-          // Convert to File for upload
-          const res = await fetch(finalImg);
+          // Convert base64 to File
+          const res = await fetch(updatedImg);
           const blob = await res.blob();
           const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
           
+          // Upload immediately
           const uploadedUrl = await uploadQMSImage(file, { 
               entityId: formData.id || 'new', 
               type: 'INSPECTION', 
@@ -686,17 +670,19 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                   newImgs[idx] = uploadedUrl; 
                   return { ...prev, images: newImgs }; 
               }); 
-          } else if (type === 'ITEM' && itemId) { 
+          }
+          else if (type === 'ITEM' && itemId) { 
               setFormData(prev => ({ 
                   ...prev, 
-                  items: prev.items?.map(i => i.id === itemId ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) } : i) 
+                  items: prev.items?.map(i => i.id === itemId 
+                      ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) } 
+                      : i) 
               })); 
           }
-      } catch (err) {
-          console.error("ISO-SAVE-EDIT: Failed", err);
-          alert("Lỗi lưu ảnh chỉnh sửa.");
-      } finally {
-          setIsProcessingImages(false);
+      } catch (err) { 
+          alert("Lỗi lưu ảnh chỉnh sửa."); 
+      } finally { 
+          setIsProcessingImages(false); 
       }
   };
 
