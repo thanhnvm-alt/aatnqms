@@ -81,6 +81,17 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'DELIVERY' | 'REPORT' | 'ITEM' | 'MATERIAL' | 'DRAWING', matIdx?: number, itemIdx?: number } | null>(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).current_ma_ct = formData.ma_ct || '';
+    }
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).current_ma_ct === formData.ma_ct) {
+        (window as any).current_ma_ct = undefined;
+      }
+    };
+  }, [formData.ma_ct]);
+
+  useEffect(() => {
     PersistenceService.hasDraft('SQC_BTP', user.id).then(setHasDraft);
   }, []);
 

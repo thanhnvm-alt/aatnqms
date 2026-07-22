@@ -83,6 +83,17 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
   const [selectedGroup, setSelectedGroup] = useState<keyof typeof SITE_TEMPLATES>('BAN');
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).current_ma_ct = formData.ma_ct || '';
+    }
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).current_ma_ct === formData.ma_ct) {
+        (window as any).current_ma_ct = undefined;
+      }
+    };
+  }, [formData.ma_ct]);
+
+  useEffect(() => {
     PersistenceService.hasDraft('SITE', user.id).then(setHasDraft);
   }, []);
 

@@ -68,6 +68,17 @@ export const InspectionFormStepVecni: React.FC<InspectionFormProps> = ({ initial
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).current_ma_ct = formData.ma_ct || '';
+    }
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).current_ma_ct === formData.ma_ct) {
+        (window as any).current_ma_ct = undefined;
+      }
+    };
+  }, [formData.ma_ct]);
+
+  useEffect(() => {
     PersistenceService.hasDraft('STEP', user.id).then(setHasDraft);
   }, []);
 

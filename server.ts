@@ -94,6 +94,62 @@ try {
   console.error("Error configuring Google Drive:", err);
 }
 
+// Helper functions for organizing Google Drive hierarchical folders
+async function getOrCreateFolder(parentFolderId: string, folderName: string): Promise<string> {
+  if (!drive) throw new Error("Google Drive is not configured");
+  
+  const query = `name = '${folderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '${parentFolderId}' in parents and trashed = false`;
+  
+  const response = await drive.files.list({
+    q: query,
+    spaces: 'drive',
+    fields: 'files(id, name)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  
+  const files = response.data.files || [];
+  if (files.length > 0 && files[0].id) {
+    return files[0].id;
+  }
+  
+  const createResponse = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId],
+    },
+    fields: 'id',
+    supportsAllDrives: true,
+  });
+  
+  if (!createResponse.data.id) {
+    throw new Error(`Failed to create Google Drive folder: ${folderName}`);
+  }
+  
+  return createResponse.data.id;
+}
+
+async function resolveDriveUploadFolder(ma_ct?: string): Promise<string> {
+  const rootFolderId = "15X82uMuF1V1NuTsl7Bw_6FDMd-6pSD9h";
+  
+  // 1. Resolve Project Folder
+  const projectFolderName = (ma_ct && ma_ct.trim()) ? ma_ct.trim() : "CHUA_PHAN_LOAI";
+  const projectFolderId = await getOrCreateFolder(rootFolderId, projectFolderName);
+  
+  // 2. Resolve Date Folder
+  const d = new Date();
+  const tzOffset = 7 * 60 * 60 * 1000; // ICT (UTC+7)
+  const localTime = new Date(d.getTime() + tzOffset);
+  const year = localTime.getUTCFullYear();
+  const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(localTime.getUTCDate()).padStart(2, '0');
+  const uploadDate = `${year}-${month}-${day}`;
+  
+  const dateFolderId = await getOrCreateFolder(projectFolderId, uploadDate);
+  return dateFolderId;
+}
+
 // Configure Cloudinary safely
 if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
   cloudinary.config({
@@ -343,12 +399,19 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       }
 
       const user = (req as any).user;
-      const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+      const ma_ct = req.body.ma_ct;
+      let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+      try {
+        targetFolderId = await resolveDriveUploadFolder(ma_ct);
+      } catch (fErr) {
+        console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
+      }
 
       // Upload to Google Drive via server stream
       const fileMetadata = {
-        name: req.file.filename,
-        parents: folderId ? [folderId] : []
+        name: req.file.originalname || req.file.filename || `qms_image_${Date.now()}`,
+        parents: targetFolderId ? [targetFolderId] : []
       };
 
       const fileStream = req.file.path ? fs.createReadStream(req.file.path) : Readable.from(req.file.buffer);
@@ -1988,10 +2051,18 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         bufferStream.push(req.file.buffer);
         bufferStream.push(null);
 
+        const ma_ct = req.body.ma_ct;
+        let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+        try {
+          targetFolderId = await resolveDriveUploadFolder(ma_ct);
+        } catch (fErr) {
+          console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
+        }
+
         const driveResponse = await drive.files.create({
           requestBody: {
             name: `qms_${Date.now()}_${req.file.originalname}`,
-            parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : [],
+            parents: targetFolderId ? [targetFolderId] : [],
           },
           media: {
             mimeType: req.file.mimetype,

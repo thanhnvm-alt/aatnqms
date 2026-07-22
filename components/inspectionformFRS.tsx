@@ -83,6 +83,17 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
   }, [formData.ten_ct]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).current_ma_ct = formData.ma_ct || '';
+    }
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).current_ma_ct === formData.ma_ct) {
+        (window as any).current_ma_ct = undefined;
+      }
+    };
+  }, [formData.ma_ct]);
+
+  useEffect(() => {
     PersistenceService.hasDraft('FSR', user.id).then(setHasDraft);
   }, []);
 

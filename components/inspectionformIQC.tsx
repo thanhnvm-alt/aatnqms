@@ -89,6 +89,17 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [activeUploadContext, setActiveUploadContext] = useState<{ type: 'MAIN' | 'DELIVERY' | 'REPORT' | 'ITEM' | 'MATERIAL', matIdx?: number, itemIdx?: number } | null>(null);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).current_ma_ct = formData.ma_ct || '';
+    }
+    return () => {
+      if (typeof window !== 'undefined' && (window as any).current_ma_ct === formData.ma_ct) {
+        (window as any).current_ma_ct = undefined;
+      }
+    };
+  }, [formData.ma_ct]);
+
+  useEffect(() => {
     PersistenceService.hasDraft('IQC', user.id).then(setHasDraft);
   }, []);
 

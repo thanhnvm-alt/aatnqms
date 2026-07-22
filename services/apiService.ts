@@ -114,7 +114,7 @@ export const saveLayoutPin = async (pin: LayoutPin) => apiFetch('/api/layout-pin
  * ISO-Compliant File Upload
  * Uploads file to storage service and returns a permanent URL
  */
-export const uploadFileToStorage = async (file: File | string, fileName: string): Promise<string> => {
+export const uploadFileToStorage = async (file: File | string, fileName: string, ma_ct?: string): Promise<string> => {
     let fileToUpload: File | Blob;
     
     if (typeof file === 'string') {
@@ -149,6 +149,11 @@ export const uploadFileToStorage = async (file: File | string, fileName: string)
 
     const formData = new FormData();
     formData.append('image', fileToUpload, fileName);
+    
+    const finalMaCt = ma_ct || (typeof window !== 'undefined' ? (window as any).current_ma_ct : undefined);
+    if (finalMaCt) {
+        formData.append('ma_ct', finalMaCt);
+    }
     
     const response = await fetch('/api/upload', {
         method: 'POST',
@@ -186,19 +191,21 @@ export const fetchSupplierStats = async (name: string) => apiFetch(`/api/supplie
 export const fetchSupplierInspections = async (name: string) => apiFetch(`/api/suppliers/inspections?name=${encodeURIComponent(name)}`);
 export const fetchSupplierMaterials = async (name: string) => apiFetch(`/api/suppliers/materials?name=${encodeURIComponent(name)}`);
 
-export const uploadQMSImage = async (file: File | string, entityIdOrContext: string | { entityId: string, type: any, role: any }, type?: any, role?: any): Promise<string> => {
+export const uploadQMSImage = async (file: File | string, entityIdOrContext: string | { entityId: string, type: any, role: any, ma_ct?: string }, type?: any, role?: any): Promise<string> => {
     let entityId: string;
     let finalType: any;
+    let finalMaCt: string | undefined = undefined;
     
     if (typeof entityIdOrContext === 'object') {
         entityId = entityIdOrContext.entityId;
         finalType = entityIdOrContext.type;
+        finalMaCt = entityIdOrContext.ma_ct;
     } else {
         entityId = entityIdOrContext;
         finalType = type;
     }
     
-    return await uploadFileToStorage(file, `qms_${finalType}_${entityId}_${Date.now()}.jpg`);
+    return await uploadFileToStorage(file, `qms_${finalType}_${entityId}_${Date.now()}.jpg`, finalMaCt);
 };
 
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
