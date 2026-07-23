@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import html2pdf from 'html2pdf.js';
 import { Inspection, InspectionStatus, CheckStatus, User, MaterialIQC, NCRComment, canUserModifyInspection } from '../types';
 import { 
   ArrowLeft, Calendar, User as UserIcon, Building2, Box, FileText, 
@@ -135,7 +136,6 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const handleExportPDF = async () => {
       if (!pdfRef.current) return;
       try {
-          const html2pdf = (await import('html2pdf.js')).default;
           // Format date for filename: DDMMYYYY
           const dateParts = (inspection.date || '').split('/');
           const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : (inspection.date || '').replace(/\//g, '');

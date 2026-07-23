@@ -1,6 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import html2pdf from 'html2pdf.js';
 import { format as formatDateFns, isValid } from 'date-fns';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR, canUserModifyInspection } from '../types';
 import { 
@@ -67,7 +68,6 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
       try {
-          const html2pdf = (await import('html2pdf.js')).default;
           const dateParts = inspection.date.split('/');
           const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : inspection.date.replace(/\//g, '');
           const filename = `SQC_BTP_report_${inspection.ma_ct || 'NA'}_${inspection.headcode || inspection.ma_nha_may || 'NA'}_${dateStr}.pdf`;

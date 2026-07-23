@@ -515,7 +515,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       // Clear selected item when project changes to avoid stale detail view
       setSelectedItemDesktop(null);
 
-      if (!searchTerm && (!selectedProjectDesktop || selectedProjectDesktop === 'ALL')) {
+      if (!searchTerm && !selectedDateDesktop && !selectedMonthDesktop && !startDate && !endDate) {
           setLazyLoadedItems([]);
           return;
       }
@@ -556,7 +556,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
       let itemsForProject = lazyLoadedItems;
       
       if (selectedProjectDesktop !== null && selectedProjectDesktop !== 'ALL') {
-          itemsForProject = itemsForProject.filter(i => (i.ma_ct || '') === (selectedProjectDesktop || ''));
+          if (selectedProjectDesktop === '__UNASSIGNED__') {
+              itemsForProject = itemsForProject.filter(i => !i.ma_ct || i.ma_ct === '');
+          } else {
+              itemsForProject = itemsForProject.filter(i => (i.ma_ct || '') === selectedProjectDesktop);
+          }
       }
       
       return { desktopProjectsList: projects, desktopItems: itemsForProject };
@@ -830,22 +834,43 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">Không có dự án</div>
                         ) : (
                             <div className="space-y-2">
-                                {desktopProjectsList.map(p => (
-                                    <button 
-                                        key={p.ma_ct}
-                                        onClick={() => {
-                                            setSelectedProjectDesktop(p.ma_ct);
-                                            if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
-                                        }}
-                                        className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 ring-2 ring-blue-500/20' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}
-                                    >
-                                        <div className="flex flex-col min-w-0 pr-4">
-                                            <span className={`text-[14px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-800 dark:text-slate-200'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
-                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium mt-0.5">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
-                                        </div>
-                                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{p.count}</span>
-                                    </button>
-                                ))}
+                                {/* TẤT CẢ DỰ ÁN */}
+                                <button 
+                                    onClick={() => {
+                                        setSelectedProjectDesktop('ALL');
+                                        if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
+                                    }}
+                                    className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${selectedProjectDesktop === 'ALL' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 ring-2 ring-blue-500/20' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}
+                                >
+                                    <div className="flex flex-col min-w-0 pr-4">
+                                        <span className={`text-[14px] font-bold ${selectedProjectDesktop === 'ALL' ? 'text-blue-900' : 'text-slate-800 dark:text-slate-200'}`}>TẤT CẢ DỰ ÁN</span>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Xem toàn bộ hạng mục</span>
+                                    </div>
+                                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${selectedProjectDesktop === 'ALL' ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                                        {desktopProjectsList.reduce((acc, p) => acc + (p.count || 0), 0)}
+                                    </span>
+                                </button>
+
+                                {desktopProjectsList.map((p, idx) => {
+                                    const projCode = p.ma_ct || '__UNASSIGNED__';
+                                    const isSelected = selectedProjectDesktop === projCode;
+                                    return (
+                                        <button 
+                                            key={`${projCode}_${idx}`}
+                                            onClick={() => {
+                                                setSelectedProjectDesktop(projCode);
+                                                if (window.innerWidth < 768) setTimeout(() => setMobileViewStep(3), 150);
+                                            }}
+                                            className={`w-full flex justify-between items-center text-left p-4 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 ring-2 ring-blue-500/20' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}
+                                        >
+                                            <div className="flex flex-col min-w-0 pr-4">
+                                                <span className={`text-[14px] font-bold line-clamp-2 ${isSelected ? 'text-blue-900' : 'text-slate-800 dark:text-slate-200'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                                <span className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium mt-0.5">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
+                                            </div>
+                                            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-md shrink-0 ${isSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{p.count}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -856,7 +881,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             <div className="flex flex-col items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                             </div>
-                        ) : !searchTerm && (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
+                        ) : !searchTerm && selectedProjectDesktop === null ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
                                 <Building2 className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-[12px] font-medium text-center">Vui lòng chọn <br/><strong>Dự Án</strong> ở bước 2</p>
@@ -1057,21 +1082,45 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     return <div className="p-4 text-center text-[11px] text-slate-400 dark:text-slate-500">Không có dự án</div>;
                                 }
 
-                                return desktopProjectsList.map(p => (
-                                    <button 
-                                        key={p.ma_ct}
-                                        onClick={() => setSelectedProjectDesktop(p.ma_ct)}
-                                        className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-100 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
-                                    >
-                                        <div className="flex items-center justify-between w-full">
-                                            <div className="flex flex-col min-w-0 pr-2">
-                                                <span className={`text-[13px] font-bold line-clamp-2 ${selectedProjectDesktop === p.ma_ct ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
-                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
+                                return (
+                                    <>
+                                        {/* TẤT CẢ DỰ ÁN */}
+                                        <button 
+                                            onClick={() => setSelectedProjectDesktop('ALL')}
+                                            className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors mb-1 ${selectedProjectDesktop === 'ALL' ? 'bg-blue-100 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
+                                        >
+                                            <div className="flex items-center justify-between w-full">
+                                                <div className="flex flex-col min-w-0 pr-2">
+                                                    <span className={`text-[13px] font-bold ${selectedProjectDesktop === 'ALL' ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>TẤT CẢ DỰ ÁN</span>
+                                                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Xem toàn bộ hạng mục</span>
+                                                </div>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === 'ALL' ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                                    {desktopProjectsList.reduce((acc, p) => acc + (p.count || 0), 0)}
+                                                </span>
                                             </div>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === p.ma_ct ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{p.count}</span>
-                                        </div>
-                                    </button>
-                                ));
+                                        </button>
+
+                                        {desktopProjectsList.map((p, idx) => {
+                                            const projCode = p.ma_ct || '__UNASSIGNED__';
+                                            const isSelected = selectedProjectDesktop === projCode;
+                                            return (
+                                                <button 
+                                                    key={`${projCode}_${idx}`}
+                                                    onClick={() => setSelectedProjectDesktop(projCode)}
+                                                    className={`w-full flex flex-col text-left px-3 py-2 rounded-lg transition-colors ${isSelected ? 'bg-blue-100 dark:bg-blue-900/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
+                                                >
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <div className="flex flex-col min-w-0 pr-2">
+                                                            <span className={`text-[13px] font-bold line-clamp-2 ${isSelected ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
+                                                        </div>
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${isSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{p.count}</span>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </>
+                                );
                             })()}
                         </>
                     )}
@@ -1091,7 +1140,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-0">
-                    {!searchTerm && (selectedProjectDesktop === null || selectedProjectDesktop === 'ALL') ? (
+                    {!searchTerm && selectedProjectDesktop === null ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 p-4 text-center">
                             <Building2 className="w-8 h-8 mb-2 opacity-20" />
                             <p className="text-[11px] font-medium">Vui lòng chọn <br/><strong>Công trình / Dự án</strong></p>

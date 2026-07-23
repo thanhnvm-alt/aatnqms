@@ -755,10 +755,14 @@ function buildBaseWhere(filters: any, user?: User) {
     }
 
     if (filters.project && filters.project !== 'ALL') {
-        const projects = filters.project.split(',').map((s: string) => s.trim());
-        const placeholders = projects.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
-        whereClause += ` AND ma_ct IN (${placeholders})`;
-        subArgs.push(...projects);
+        if (filters.project === '__UNASSIGNED__') {
+            whereClause += ` AND (ma_ct IS NULL OR ma_ct = '')`;
+        } else {
+            const projects = filters.project.split(',').map((s: string) => s.trim());
+            const placeholders = projects.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+            whereClause += ` AND ma_ct IN (${placeholders})`;
+            subArgs.push(...projects);
+        }
     }
 
     if (filters.startDate && filters.startDate !== 'undefined') {

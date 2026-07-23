@@ -1,6 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import html2pdf from 'html2pdf.js';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, NCR, canUserModifyInspection } from '../types';
 import { 
   ArrowLeft, Calendar, User as UserIcon, Map, MapPin, 
@@ -79,7 +80,6 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
       try {
-          const html2pdf = (await import('html2pdf.js')).default;
           const dateParts = (inspection.date || '').split('/');
           const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : (inspection.date || '').replace(/\//g, '');
           const filename = `SITE_report_${inspection.ma_ct || 'NA'}_${inspection.headcode || inspection.ma_nha_may || 'NA'}_${dateStr}.pdf`;

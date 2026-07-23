@@ -1,6 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import html2pdf from 'html2pdf.js';
 import { Inspection, InspectionStatus, CheckStatus, User, NCRComment, Workshop, NCR, canUserModifyInspection } from '../types';
 import { 
   ArrowLeft, User as UserIcon, Building2, Box, Edit3, Trash2, X, Maximize2, ShieldCheck,
@@ -84,7 +85,6 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
       try {
-          const html2pdf = (await import('html2pdf.js')).default;
           
           // Format date for filename: DDMMYYYY
           const dateParts = inspection.date.split('/');

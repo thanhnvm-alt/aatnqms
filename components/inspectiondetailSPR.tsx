@@ -1,5 +1,6 @@
 import { getProxyImageUrl } from '../src/utils';
 import React, { useState, useRef, useEffect } from 'react';
+import html2pdf from 'html2pdf.js';
 import { Inspection, InspectionStatus, CheckStatus, User, Workshop, canUserModifyInspection, NCRComment } from '../types';
 import { ArrowLeft, Box, Edit3, Trash2, ClipboardList, CheckCircle2, AlertOctagon, X, Loader2, Eraser, PenTool } from 'lucide-react';
 
@@ -106,7 +107,6 @@ export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspectio
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
       try {
-          const html2pdf = (await import('html2pdf.js')).default;
           const dateParts = (inspection.date || '').split('/');
           const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : (inspection.date || '').replace(/\//g, '');
           const filename = `SPR_report_${inspection.ma_ct || 'NA'}_${inspection.headcode || inspection.ma_nha_may || 'NA'}_${dateStr}.pdf`;

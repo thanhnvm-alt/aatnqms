@@ -1,6 +1,7 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
+import html2pdf from 'html2pdf.js';
 import { Inspection, InspectionStatus, User, Workshop, CheckStatus, canUserModifyInspection, NCRComment } from '../types';
 import { ArrowLeft, Box, Edit3, Trash2, ShieldCheck, ScanEye, CheckCircle2, AlertOctagon, X, Loader2, Eraser, Calendar, Image as ImageIcon, Maximize2, Download } from 'lucide-react';
 import { ImageEditorModal } from './ImageEditorModal';
@@ -132,7 +133,6 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
       try {
-          const html2pdf = (await import('html2pdf.js')).default;
           
           const dateParts = inspection.date.split('/');
           const dateStr = dateParts.length === 3 ? `${dateParts[0]}${dateParts[1]}${dateParts[2]}` : inspection.date.replace(/\//g, '');
