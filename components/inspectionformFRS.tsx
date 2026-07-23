@@ -59,6 +59,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState<number | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
@@ -297,6 +298,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
     const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadId) return;
     setIsProcessingImages(true);
+    setImageUploadProgress(0);
     try {
         const uploadedUrls = await Promise.all(
             Array.from(files).map(async (file: File) => {
@@ -304,6 +306,8 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                     entityId: formData.id || 'new', 
                     type: 'INSPECTION', 
                     role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
+                }, undefined, undefined, (percent) => {
+                    setImageUploadProgress(percent);
                 });
             })
         );
@@ -325,6 +329,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
         alert("Lỗi tải ảnh lên.");
     } finally { 
         setIsProcessingImages(false); 
+        setImageUploadProgress(null);
         e.target.value = ''; 
     }
   };
@@ -334,6 +339,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
       if (!editorState) return;
       const { type, itemId } = editorState.context;
       setIsProcessingImages(true);
+      setImageUploadProgress(0);
       try {
           // Convert base64 to File
           const res = await fetch(updatedImg);
@@ -345,6 +351,8 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
               entityId: formData.id || 'new', 
               type: 'INSPECTION', 
               role: type === 'MAIN' ? 'MAIN' : 'ITEM' 
+          }, undefined, undefined, (percent) => {
+              setImageUploadProgress(percent);
           });
 
           if (type === 'MAIN') { 
@@ -366,6 +374,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
           alert("Lỗi lưu ảnh chỉnh sửa."); 
       } finally { 
           setIsProcessingImages(false); 
+          setImageUploadProgress(null);
       }
   };
 
@@ -395,16 +404,29 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
               <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
                   <div className="relative flex items-center justify-center">
                       <Loader2 className="w-16 h-16 text-blue-600 dark:text-blue-400 animate-spin opacity-20" />
-                      {isSaving && (
+                      {isSaving ? (
                           <div className="absolute flex flex-col items-center justify-center">
                               <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{uploadProgress}%</span>
                           </div>
+                      ) : isProcessingImages && imageUploadProgress !== null ? (
+                          <div className="absolute flex flex-col items-center justify-center">
+                              <span className="text-sm font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{imageUploadProgress}%</span>
+                          </div>
+                      ) : (
+                          <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                       )}
-                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />}
                   </div>
                   <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">
-                      {isLookupLoading ? "Đang truy xuất dữ liệu..." : isSaving ? "Đang tải dữ liệu & ảnh..." : "Đang xử lý hình ảnh..."}
+                      {isLookupLoading ? "Đang truy xuất dữ liệu..." : isSaving ? "Đang tải dữ liệu & ảnh..." : isProcessingImages ? "Đang tải ảnh..." : "Đang xử lý hình ảnh..."}
                   </p>
+                  {isProcessingImages && imageUploadProgress !== null && (
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden shadow-inner">
+                          <div 
+                              className="bg-blue-600 dark:bg-blue-500 h-full rounded-full transition-all duration-300" 
+                              style={{ width: `${imageUploadProgress}%` }}
+                          />
+                      </div>
+                  )}
               </div>
           </div>
       )}

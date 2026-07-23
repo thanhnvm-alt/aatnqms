@@ -65,6 +65,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const [showHistory, setShowHistory] = useState(false);
   const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState<number | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [hasDraft, setHasDraft] = useState(false);
   const [newDocName, setNewDocName] = useState('');
@@ -376,6 +377,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadContext) return;
     setIsProcessingImages(true);
+    setImageUploadProgress(0);
     try {
         const uploadedUrls = await Promise.all(
             Array.from(files).map(async (file: File) => {
@@ -383,6 +385,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                     entityId: formData.id || 'new', 
                     type: 'INSPECTION', 
                     role: activeUploadContext.type
+                }, undefined, undefined, (percent) => {
+                    setImageUploadProgress(percent);
                 });
             })
         );
@@ -416,6 +420,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         alert("Lỗi tải ảnh lên.");
     } finally { 
         setIsProcessingImages(false); 
+        setImageUploadProgress(null);
         e.target.value = ''; 
     }
   };
@@ -571,17 +576,22 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
               <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] shadow-2xl flex flex-col items-center gap-5 w-[80%] max-w-sm border border-white/20">
                   <div className="relative flex items-center justify-center">
                       <Loader2 className="w-16 h-16 text-blue-600 dark:text-blue-400 animate-spin opacity-20" />
-                      {isSaving && (
+                      {isSaving ? (
                           <div className="absolute flex flex-col items-center justify-center">
                               <span className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{uploadProgress}%</span>
                           </div>
+                      ) : isProcessingImages && imageUploadProgress !== null ? (
+                          <div className="absolute flex flex-col items-center justify-center">
+                              <span className="text-sm font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{imageUploadProgress}%</span>
+                          </div>
+                      ) : (
+                          <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
                       )}
-                      {!isSaving && <Loader2 className="absolute w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />}
                   </div>
                   
                   <div className="w-full space-y-2">
                     <p className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest text-center">
-                        {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : isSaving ? "Đang tải dữ liệu & ảnh lên server..." : "Đang xử lý hình ảnh..."}
+                        {isLookupLoading ? "Đang truy xuất dữ liệu Plan..." : isSaving ? "Đang tải dữ liệu & ảnh lên server..." : isProcessingImages ? "Đang tải ảnh..." : "Đang xử lý hình ảnh..."}
                     </p>
                     
                     {isSaving && (
@@ -589,6 +599,14 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                             <div 
                                 className="h-full bg-blue-600 transition-all duration-300 ease-out" 
                                 style={{ width: `${uploadProgress}%` }}
+                            />
+                        </div>
+                    )}
+                    {isProcessingImages && imageUploadProgress !== null && (
+                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
+                            <div 
+                                className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300 ease-out" 
+                                style={{ width: `${imageUploadProgress}%` }}
                             />
                         </div>
                     )}

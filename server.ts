@@ -94,40 +94,81 @@ try {
   console.error("Error configuring Google Drive:", err);
 }
 
-// Helper functions for organizing Google Drive hierarchical folders
+// Memory caches to prevent duplicate API requests and handle concurrent execution safely
+const folderCache = new Map<string, string>(); // key: parentFolderId::folderName, value: folderId
+const ongoingFolderCreations = new Map<string, Promise<string>>(); // key: parentFolderId::folderName, value: Promise
+
 async function getOrCreateFolder(parentFolderId: string, folderName: string): Promise<string> {
   if (!drive) throw new Error("Google Drive is not configured");
   
-  const query = `name = '${folderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '${parentFolderId}' in parents and trashed = false`;
+  const cacheKey = `${parentFolderId}::${folderName}`;
   
-  const response = await drive.files.list({
-    q: query,
-    spaces: 'drive',
-    fields: 'files(id, name)',
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
-  
-  const files = response.data.files || [];
-  if (files.length > 0 && files[0].id) {
-    return files[0].id;
+  // 1. Check memory cache first
+  if (folderCache.has(cacheKey)) {
+    const cachedId = folderCache.get(cacheKey)!;
+    console.log(`[Google Drive] Memory cache HIT for "${folderName}" (ID: ${cachedId}) inside parent ${parentFolderId}`);
+    return cachedId;
   }
   
-  const createResponse = await drive.files.create({
-    requestBody: {
-      name: folderName,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentFolderId],
-    },
-    fields: 'id',
-    supportsAllDrives: true,
-  });
-  
-  if (!createResponse.data.id) {
-    throw new Error(`Failed to create Google Drive folder: ${folderName}`);
+  // 2. Check if there is an ongoing resolution/creation for this folder
+  if (ongoingFolderCreations.has(cacheKey)) {
+    console.log(`[Google Drive] Ongoing folder resolution detected for "${folderName}", waiting...`);
+    return await ongoingFolderCreations.get(cacheKey)!;
   }
   
-  return createResponse.data.id;
+  // 3. Create a new resolution/creation promise and register it
+  const creationPromise = (async () => {
+    const query = `name = '${folderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '${parentFolderId}' in parents and trashed = false`;
+    
+    console.log(`[Google Drive] Checking existence of folder "${folderName}" inside parent ID: ${parentFolderId}...`);
+    // First, list existing folders inside this parent matching the name
+    const response = await drive.files.list({
+      q: query,
+      spaces: 'drive',
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    
+    const files = response.data.files || [];
+    if (files.length > 0 && files[0].id) {
+      const existingId = files[0].id;
+      console.log(`[Google Drive] Thư mục "${folderName}" ĐÃ TỒN TẠI (ID: ${existingId}). Sẽ sử dụng thư mục hiện có này.`);
+      folderCache.set(cacheKey, existingId);
+      return existingId;
+    }
+    
+    // If not found, create it
+    console.log(`[Google Drive] Thư mục "${folderName}" CHƯA TỒN TẠI. Tiến hành tạo mới thư mục này...`);
+    const createResponse = await drive.files.create({
+      requestBody: {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId],
+      },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+    
+    const newId = createResponse.data.id;
+    if (!newId) {
+      throw new Error(`Failed to create Google Drive folder: ${folderName}`);
+    }
+    
+    console.log(`[Google Drive] Tạo thành công thư mục "${folderName}" mới (ID: ${newId})`);
+    folderCache.set(cacheKey, newId);
+    return newId;
+  })();
+  
+  ongoingFolderCreations.set(cacheKey, creationPromise);
+  
+  try {
+    return await creationPromise;
+  } finally {
+    // Delete from ongoing map to allow fresh status if the folder is modified in the future,
+    // but the resolved ID is permanently cached in folderCache.
+    ongoingFolderCreations.delete(cacheKey);
+  }
 }
 
 async function resolveDriveUploadFolder(ma_ct?: string): Promise<string> {
@@ -170,6 +211,15 @@ try {
   }
 } catch (err) {
   console.warn("Could not create upload directory:", err);
+}
+
+const imageCacheDir = path.join('/tmp', 'qms_image_cache');
+try {
+  if (!fs.existsSync(imageCacheDir)) {
+    fs.mkdirSync(imageCacheDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn("Could not create image cache directory:", err);
 }
 
 const storage = multer.diskStorage({
@@ -1910,96 +1960,142 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
     return res.status(401).json({ error: 'Unauthorized: Authentication required' });
   }, async (req, res) => {
     try {
-      const imageUrl = req.query.url as string;
-      if (!imageUrl) return res.status(400).send('Missing url');
-      
-      let fileId = '';
+    const imageUrl = req.query.url as string;
+    if (!imageUrl) return res.status(400).send('Missing url');
+    
+    let fileId = '';
 
-      // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID or /d/FILE_ID
-      if (imageUrl.includes('googleusercontent.com/u/0/d/') || imageUrl.includes('googleusercontent.com/d/')) {
-          const splitPart = imageUrl.includes('/u/0/d/') ? '/u/0/d/' : '/d/';
-          fileId = imageUrl.split(splitPart)[1]?.split('=')[0]?.split('?')[0]?.split('&')[0]?.split('/')[0];
-      } 
-      // Pattern 2: drive.google.com/file/d/FILE_ID/view
-      else if (imageUrl.includes('drive.google.com/file/d/')) {
-          fileId = imageUrl.split('/d/')[1]?.split('/')[0]?.split('?')[0]?.split('&')[0];
-      }
-      // Pattern 3: drive.google.com/open?id=FILE_ID or uc?id=FILE_ID
-      else if (imageUrl.includes('id=')) {
-          const urlParams = new URLSearchParams(imageUrl.split('?')[1]?.split('&token')[0]); // try to isolate params if malformed
-          // fallback string parsing if URLSearchParams fails
-          const idMatch = imageUrl.match(/id=([^&?]+)/);
-          fileId = idMatch ? idMatch[1] : (urlParams.get('id') || '');
-      }
+    // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID or /d/FILE_ID
+    if (imageUrl.includes('googleusercontent.com/u/0/d/') || imageUrl.includes('googleusercontent.com/d/')) {
+        const splitPart = imageUrl.includes('/u/0/d/') ? '/u/0/d/' : '/d/';
+        fileId = imageUrl.split(splitPart)[1]?.split('=')[0]?.split('?')[0]?.split('&')[0]?.split('/')[0];
+    } 
+    // Pattern 2: drive.google.com/file/d/FILE_ID/view
+    else if (imageUrl.includes('drive.google.com/file/d/')) {
+        fileId = imageUrl.split('/d/')[1]?.split('/')[0]?.split('?')[0]?.split('&')[0];
+    }
+    // Pattern 3: drive.google.com/open?id=FILE_ID or uc?id=FILE_ID
+    else if (imageUrl.includes('id=')) {
+        const urlParams = new URLSearchParams(imageUrl.split('?')[1]?.split('&token')[0]); // try to isolate params if malformed
+        // fallback string parsing if URLSearchParams fails
+        const idMatch = imageUrl.match(/id=([^&?]+)/);
+        fileId = idMatch ? idMatch[1] : (urlParams.get('id') || '');
+    }
 
-      if (fileId && fileId.length > 20) {
-          // Attempt 1: Using configured Google Drive client (Auth access)
-          if (drive) {
-            try {
-              const response = await drive.files.get({
-                  fileId: fileId,
-                  alt: 'media',
-                  supportsAllDrives: true
-              }, { responseType: 'stream' });
-              
-              const rawContentType = response.headers['content-type'];
-              const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || 'image/jpeg';
-              res.set('Content-Type', contentType);
-              res.set('Access-Control-Allow-Origin', '*');
-              res.set('Cache-Control', 'public, max-age=31536000');
-              res.set('X-Content-Type-Options', 'nosniff');
-              
-              await pipelineAsync(response.data, res);
-              return;
-            } catch (driveErr: any) {
-              // Extract a clean status and message from the Google API error response
-              const status = driveErr.response?.status || driveErr.code || 500;
-              let msg = '';
-              
-              if (driveErr.response?.data?.error?.message) {
-                  msg = driveErr.response.data.error.message;
-              } else if (typeof driveErr.message === 'string') {
-                  msg = driveErr.message;
-              } else {
-                  msg = 'Upstream Error';
-              }
-              
-              // Ensure message is a single line and truncated
-              msg = msg.replace(/[\r\n]+/g, ' ').trim();
-              if (msg.length > 200) {
-                 msg = msg.substring(0, 150) + '...';
-              }
-              
-              const isNotFound = status === 404;
-              const logMsg = `[Drive Proxy] Auth fetch ${isNotFound ? 'rejected (404 Not Found)' : `failed: ${status}`} for ${fileId}${isNotFound ? '' : ` - ${msg}`}. Trying public fallback...`;
-              console.warn(logMsg);
+    const cacheKey = fileId || crypto.createHash('sha256').update(imageUrl).digest('hex');
+    const cachePath = path.join(imageCacheDir, `${cacheKey}.bin`);
+    const metaPath = path.join(imageCacheDir, `${cacheKey}.meta`);
+
+    // Check disk cache first
+    if (fs.existsSync(cachePath) && fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        res.set('Content-Type', meta.contentType || 'image/jpeg');
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Cache-Control', 'public, max-age=31536000');
+        res.set('X-Cache', 'HIT');
+        
+        const readStream = fs.createReadStream(cachePath);
+        await pipelineAsync(readStream, res);
+        return;
+      } catch (cacheErr) {
+        console.warn(`[Proxy Cache] Failed to read disk cache for ${cacheKey}:`, cacheErr);
+      }
+    }
+
+    if (fileId && fileId.length > 20) {
+        // Attempt 1: Using configured Google Drive client (Auth access)
+        if (drive) {
+          try {
+            const response = await drive.files.get({
+                fileId: fileId,
+                alt: 'media',
+                supportsAllDrives: true
+            }, { responseType: 'stream' });
+            
+            const rawContentType = response.headers['content-type'];
+            const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || 'image/jpeg';
+            res.set('Content-Type', contentType);
+            res.set('Access-Control-Allow-Origin', '*');
+            res.set('Cache-Control', 'public, max-age=31536000');
+            res.set('X-Content-Type-Options', 'nosniff');
+            res.set('X-Cache', 'MISS');
+            
+            // Capture stream to memory buffer to write cache in the background
+            const chunks: any[] = [];
+            response.data.on('data', (chunk: any) => chunks.push(chunk));
+            response.data.on('end', () => {
+              const buffer = Buffer.concat(chunks);
+              fs.writeFile(cachePath, buffer, (err) => {
+                if (!err) fs.writeFile(metaPath, JSON.stringify({ contentType }), () => {});
+              });
+            });
+            
+            await pipelineAsync(response.data, res);
+            return;
+          } catch (driveErr: any) {
+            // Extract a clean status and message from the Google API error response
+            const status = driveErr.response?.status || driveErr.code || 500;
+            let msg = '';
+            
+            if (driveErr.response?.data?.error?.message) {
+                msg = driveErr.response.data.error.message;
+            } else if (typeof driveErr.message === 'string') {
+                msg = driveErr.message;
+            } else {
+                msg = 'Upstream Error';
             }
+            
+            // Ensure message is a single line and truncated
+            msg = msg.replace(/[\r\n]+/g, ' ').trim();
+            if (msg.length > 200) {
+               msg = msg.substring(0, 150) + '...';
+            }
+            
+            const isNotFound = status === 404;
+            const logMsg = `[Drive Proxy] Auth fetch ${isNotFound ? 'rejected (404 Not Found)' : `failed: ${status}`} for ${fileId}${isNotFound ? '' : ` - ${msg}`}. Trying public fallback...`;
+            console.warn(logMsg);
           }
+        }
 
-          // Attempt 2: Public fallback (for files shared as "Anyone with link")
-          const fallbackData = await fetchGoogleDrivePublicFile(fileId);
-          if (fallbackData) {
-              res.set('Content-Type', fallbackData.contentType);
-              res.set('Access-Control-Allow-Origin', '*');
-              res.set('Cache-Control', 'public, max-age=31536000');
-              res.send(fallbackData.buffer);
-              return;
-          }
+        // Attempt 2: Public fallback (for files shared as "Anyone with link")
+        const fallbackData = await fetchGoogleDrivePublicFile(fileId);
+        if (fallbackData) {
+            res.set('Content-Type', fallbackData.contentType);
+            res.set('Access-Control-Allow-Origin', '*');
+            res.set('Cache-Control', 'public, max-age=31536000');
+            res.set('X-Cache', 'MISS');
+            res.send(fallbackData.buffer);
+            
+            // Write to cache in background
+            fs.writeFile(cachePath, fallbackData.buffer, (err) => {
+              if (!err) fs.writeFile(metaPath, JSON.stringify({ contentType: fallbackData.contentType }), () => {});
+            });
+            return;
+        }
 
-          // Attempt 3: Final fallback to redirect to the original URL if proxy fails entirely.
-          console.warn(`[Drive Proxy] All proxied fetches failed for ${fileId}, redirecting to original URL.`);
-          return res.redirect(imageUrl);
-      }
+        // Attempt 3: Final fallback to redirect to the original URL if proxy fails entirely.
+        console.warn(`[Drive Proxy] All proxied fetches failed for ${fileId}, redirecting to original URL.`);
+        return res.redirect(imageUrl);
+    }
 
-      // Fallback for non-drive URLs
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error(`Failed to fetch fallback: ${response.status} - ${response.statusText}`);
-      
-      const buffer = await response.arrayBuffer();
-      res.set('Content-Type', response.headers.get('content-type') || 'image/jpeg');
-      res.set('Access-Control-Allow-Origin', '*');
-      res.set('Cache-Control', 'public, max-age=31536000');
-      res.send(Buffer.from(buffer));
+    // Fallback for non-drive URLs
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error(`Failed to fetch fallback: ${response.status} - ${response.statusText}`);
+    
+    const buffer = await response.arrayBuffer();
+    const nodeBuffer = Buffer.from(buffer);
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    res.set('Content-Type', contentType);
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cache-Control', 'public, max-age=31536000');
+    res.set('X-Cache', 'MISS');
+    res.send(nodeBuffer);
+
+    // Write to cache in background
+    fs.writeFile(cachePath, nodeBuffer, (err) => {
+      if (!err) fs.writeFile(metaPath, JSON.stringify({ contentType }), () => {});
+    });
     } catch (error: any) {
       if (!res.headersSent) {
         console.error('Proxy error:', error.message || error);

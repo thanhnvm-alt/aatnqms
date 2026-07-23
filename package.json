@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
-    "test:db": "node test-connection.js"
+    "test:db": "node test-connection.js",
+    "clean-drive": "tsx scripts/clean-duplicate-drive-folders.ts --execute"
   },
   "dependencies": {
     "@google/genai": "latest",

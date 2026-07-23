@@ -114,7 +114,12 @@ export const saveLayoutPin = async (pin: LayoutPin) => apiFetch('/api/layout-pin
  * ISO-Compliant File Upload
  * Uploads file to storage service and returns a permanent URL
  */
-export const uploadFileToStorage = async (file: File | string, fileName: string, ma_ct?: string): Promise<string> => {
+export const uploadFileToStorage = async (
+    file: File | string, 
+    fileName: string, 
+    ma_ct?: string, 
+    onProgress?: (percent: number) => void
+): Promise<string> => {
     let fileToUpload: File | Blob;
     
     if (typeof file === 'string') {
@@ -134,7 +139,7 @@ export const uploadFileToStorage = async (file: File | string, fileName: string,
     if (fileToUpload.type && fileToUpload.type.startsWith('image/')) {
         try {
             const options = {
-                maxSizeMB: 0.7, // Target ~700KB
+                maxSizeMB: 0.45, // Target < 500KB (approx 450KB)
                 maxWidthOrHeight: 1600,
                 useWebWorker: true,
                 fileType: 'image/jpeg',
@@ -155,26 +160,52 @@ export const uploadFileToStorage = async (file: File | string, fileName: string,
         formData.append('ma_ct', finalMaCt);
     }
     
-    const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    
-    if (!response.ok) {
-        let errorMsg = `Upload failed (${response.status})`;
-        try {
-            const errorData = await response.json();
-            if (errorData && errorData.error) errorMsg = errorData.error;
-        } catch (e) {}
+    return new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
         
-        if (response.status === 413) {
-            errorMsg = "Ảnh quá lớn để tải lên server (Giới hạn 10MB).";
+        const authHeaders = getAuthHeaders();
+        for (const [key, value] of Object.entries(authHeaders)) {
+            xhr.setRequestHeader(key, value);
         }
-        throw new Error(errorMsg);
-    }
-    const data = await response.json();
-    return data.url;
+
+        if (onProgress) {
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    onProgress(percent);
+                }
+            };
+        }
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    resolve(data.url || data.fileUrl || data.path);
+                } catch (e) {
+                    resolve(xhr.responseText);
+                }
+            } else {
+                let errorMsg = `Upload failed (${xhr.status})`;
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    if (errorData && errorData.error) errorMsg = errorData.error;
+                } catch (e) {}
+                
+                if (xhr.status === 413) {
+                    errorMsg = "Ảnh quá lớn để tải lên server (Giới hạn 10MB).";
+                }
+                reject(new Error(errorMsg));
+            }
+        };
+
+        xhr.onerror = () => {
+            reject(new Error("Lỗi kết nối mạng khi tải ảnh lên."));
+        };
+
+        xhr.send(formData);
+    });
 };
 
 export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20, sortBy: string = 'reports') => {
@@ -191,7 +222,13 @@ export const fetchSupplierStats = async (name: string) => apiFetch(`/api/supplie
 export const fetchSupplierInspections = async (name: string) => apiFetch(`/api/suppliers/inspections?name=${encodeURIComponent(name)}`);
 export const fetchSupplierMaterials = async (name: string) => apiFetch(`/api/suppliers/materials?name=${encodeURIComponent(name)}`);
 
-export const uploadQMSImage = async (file: File | string, entityIdOrContext: string | { entityId: string, type: any, role: any, ma_ct?: string }, type?: any, role?: any): Promise<string> => {
+export const uploadQMSImage = async (
+    file: File | string, 
+    entityIdOrContext: string | { entityId: string, type: any, role: any, ma_ct?: string }, 
+    type?: any, 
+    role?: any,
+    onProgress?: (percent: number) => void
+): Promise<string> => {
     let entityId: string;
     let finalType: any;
     let finalMaCt: string | undefined = undefined;
@@ -205,7 +242,7 @@ export const uploadQMSImage = async (file: File | string, entityIdOrContext: str
         finalType = type;
     }
     
-    return await uploadFileToStorage(file, `qms_${finalType}_${entityId}_${Date.now()}.jpg`, finalMaCt);
+    return await uploadFileToStorage(file, `qms_${finalType}_${entityId}_${Date.now()}.jpg`, finalMaCt, onProgress);
 };
 
 export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
