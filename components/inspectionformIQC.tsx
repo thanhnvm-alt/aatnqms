@@ -187,7 +187,10 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     }
   };
 
-  const handleInputChange = (field: keyof Inspection, value: any) => { 
+  const handleInputChange = (field: keyof Inspection, value: any) => {
+    if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    }  
     setFormData(prev => ({ ...prev, [field]: value })); 
   };
 
@@ -234,6 +237,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const updateMaterial = (idx: number, field: keyof MaterialIQC, value: any) => {
+    if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    } 
     setFormData(prev => {
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
@@ -812,10 +818,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">Giao(DN)</label><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -827,30 +830,21 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         <datalist id="unit-list">{UNIT_OPTIONS.map(opt => <option key={opt} value={opt} />)}</datalist>
                                     </div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase block text-center">Kiểm tra</label><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
 }} type="text" inputMode="decimal" value={mat.inspectQty ?? 0} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-1 py-1 border rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-7 ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-blue-300 text-blue-700'}`}/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase block text-center">Đạt</label><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
 }} type="text" inputMode="decimal" value={mat.passQty ?? 0} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white dark:bg-slate-900 text-[11px] h-7"/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase block text-center">Hỏng</label><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();

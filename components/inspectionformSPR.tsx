@@ -164,6 +164,9 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
+    if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    } 
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -406,30 +409,21 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
             <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 space-y-3">
                 <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
 }} type="text" inputMode="decimal" value={formData.inspectedQuantity ?? ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold text-[11px] text-center bg-white shadow-sm" /></div>
                     <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700">{rates.passRate}%</span></div><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
 }} type="text" inputMode="decimal" value={formData.passedQuantity ?? ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-green-200 rounded-md font-bold text-[11px] text-center bg-white" /></div>
                     <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700">{rates.defectRate}%</span></div><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();

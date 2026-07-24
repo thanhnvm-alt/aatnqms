@@ -141,7 +141,10 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     }
   };
 
-  const handleInputChange = (field: keyof Inspection, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
+  const handleInputChange = (field: keyof Inspection, value: any) => {
+    if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    }  setFormData(prev => ({ ...prev, [field]: value })); };
 
   const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
     const newItems = [...(formData.items || [])];

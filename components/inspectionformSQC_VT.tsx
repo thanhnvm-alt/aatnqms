@@ -233,7 +233,10 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
   };
 
-  const handleInputChange = (field: keyof Inspection, value: any) => { 
+  const handleInputChange = (field: keyof Inspection, value: any) => {
+    if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    }  
     setFormData(prev => ({ ...prev, [field]: value })); 
   };
   
@@ -263,6 +266,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   };
 
   const updateMaterial = (idx: number, field: keyof MaterialIQC, value: any) => {
+    if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    } 
     setFormData(prev => {
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
@@ -875,10 +881,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">SL Giao(DN)</label>
                                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -903,10 +906,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-teal-600 uppercase block text-center">SL Kiểm tra</label>
                                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -916,10 +916,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase flex items-center justify-between px-1"><span>Đạt</span><span className="text-[8px] bg-green-100 dark:bg-green-900/30 px-1 rounded">{passRate}%</span></label>
                                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -929,10 +926,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center justify-between px-1"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label>
                                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();

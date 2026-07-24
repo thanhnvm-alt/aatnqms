@@ -491,7 +491,10 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       }
   };
 
-  const handleInputChange = (field: keyof Inspection, value: any) => { 
+  const handleInputChange = (field: keyof Inspection, value: any) => {
+    if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    }  
       setFormData(prev => {
           const next = { ...prev };
           
@@ -804,10 +807,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Số lượng IPO</label><input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -857,10 +857,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                     <div className="space-y-1">
                         <label className="text-[8px] sm:text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wider text-center block leading-none truncate">SL Kiểm tra</label>
                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -884,10 +881,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             <span className="text-[7px] sm:text-[8px] font-bold text-green-700 bg-green-50 dark:bg-green-900/20 px-0.5 sm:px-1 py-0.5 rounded border border-green-100">{rates.passRate}%</span>
                         </div>
                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -905,10 +899,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             <span className="text-[7px] sm:text-[8px] font-bold text-red-700 bg-red-50 dark:bg-red-900/20 px-0.5 sm:px-1 py-0.5 rounded border border-red-100">{rates.defectRate}%</span>
                         </div>
                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();

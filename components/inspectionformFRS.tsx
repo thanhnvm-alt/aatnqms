@@ -189,6 +189,9 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
+    if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
+        value = value.replace(/,/g, '.');
+    } 
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -521,10 +524,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                     <div className="space-y-1">
                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center block">SL Kiểm tra</label>
                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -537,10 +537,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                             <span className="text-[8px] font-bold text-green-700">{rates.passRate}%</span>
                         </div>
                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
@@ -553,10 +550,7 @@ export const InspectionFormFRS: React.FC<InspectionFormProps> = ({ initialData, 
                             <span className="text-[8px] font-bold text-red-700">{rates.defectRate}%</span>
                         </div>
                         <input onKeyDown={(e) => { 
-    if(e.key === ',') { 
-        e.preventDefault(); 
-        alert('Vui lòng sử dụng dấu chấm (.) cho số thập phân'); 
-    }
+    
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
