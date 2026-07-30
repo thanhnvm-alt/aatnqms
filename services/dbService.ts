@@ -284,6 +284,11 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
     }
   }
 
+  // Normalize project code to UPPERCASE to prevent capitalization mismatches (e.g. Ct25-075 vs CT25-075)
+  if (inspection.ma_ct) {
+      inspection.ma_ct = inspection.ma_ct.trim().toUpperCase();
+  }
+
   // Final forced check for Shared materials (Vật tư dùng chung)
   const tUpper = String(inspection.type || '').trim().toUpperCase();
   
@@ -758,18 +763,26 @@ function buildBaseWhere(filters: any, user?: User) {
         if (filters.project === '__UNASSIGNED__') {
             whereClause += ` AND (ma_ct IS NULL OR ma_ct = '')`;
         } else {
-            const projects = filters.project.split(',').map((s: string) => s.trim());
+            const projects = filters.project.split(',').map((s: string) => s.trim().toUpperCase());
             const placeholders = projects.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
-            whereClause += ` AND ma_ct IN (${placeholders})`;
+            whereClause += ` AND UPPER(ma_ct) IN (${placeholders})`;
             subArgs.push(...projects);
         }
+    }
+
+    const stageVal = filters.stage || filters.inspectionStage;
+    if (stageVal && stageVal !== 'ALL') {
+        const stages = stageVal.split(',').map((s: string) => s.trim());
+        const placeholders = stages.map((_: any, i: number) => `$${subArgs.length + 1 + i}`).join(', ');
+        whereClause += ` AND stage IN (${placeholders})`;
+        subArgs.push(...stages);
     }
 
     if (filters.startDate && filters.startDate !== 'undefined') {
         const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
         if (!isNaN(ts)) {
             const idx = subArgs.length + 1;
-            whereClause += ` AND created_at >= $${idx}`;
+            whereClause += ` AND COALESCE(date, created_at, updated_at) >= $${idx}`;
             subArgs.push(ts);
         }
     }
@@ -780,7 +793,7 @@ function buildBaseWhere(filters: any, user?: User) {
         const ts = Math.floor(d.getTime() / 1000);
         if (!isNaN(ts)) {
             const idx = subArgs.length + 1;
-            whereClause += ` AND created_at <= $${idx}`;
+            whereClause += ` AND COALESCE(date, created_at, updated_at) <= $${idx}`;
             subArgs.push(ts);
         }
     }
@@ -789,7 +802,7 @@ function buildBaseWhere(filters: any, user?: User) {
         const ts = parseInt(filters.unixStart, 10);
         if (!isNaN(ts)) {
             const idx = subArgs.length + 1;
-            whereClause += ` AND created_at >= $${idx}`;
+            whereClause += ` AND COALESCE(date, created_at, updated_at) >= $${idx}`;
             subArgs.push(ts);
         }
     }
@@ -798,7 +811,7 @@ function buildBaseWhere(filters: any, user?: User) {
         const ts = parseInt(filters.unixEnd, 10);
         if (!isNaN(ts)) {
             const idx = subArgs.length + 1;
-            whereClause += ` AND created_at <= $${idx}`;
+            whereClause += ` AND COALESCE(date, created_at, updated_at) <= $${idx}`;
             subArgs.push(ts);
         }
     }

@@ -53,6 +53,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
   const [filterStatus, setFilterStatus] = useState<string[]>(() => filters?.status ? filters.status.split(',').filter(Boolean) : []);
   const [filterType, setFilterType] = useState<string[]>(() => filters?.type ? filters.type.split(',').filter(Boolean) : []);
   const [filterProject, setFilterProject] = useState<string[]>(() => filters?.project ? filters.project.split(',').filter(Boolean) : []);
+  const [filterStage, setFilterStage] = useState<string[]>(() => filters?.stage ? filters.stage.split(',').filter(Boolean) : (filters?.inspectionStage ? filters.inspectionStage.split(',').filter(Boolean) : []));
   const [startDate, setStartDate] = useState(() => filters?.startDate || '');
   const [endDate, setEndDate] = useState(() => filters?.endDate || '');
   const [projectOptions, setProjectOptions] = useState<any[]>([]);
@@ -211,6 +212,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       return isRoleQC || dept.includes('QA') || dept.includes('QC') || dept.includes('CHẤT LƯỢNG') || dept.includes('CHAT LUONG');
     });
 
+    const workshopStages = workshops.flatMap(w => w.stages || []);
+    const allStages = Array.from(new Set([
+      ...workshopStages,
+      'P18 - sơn - vecni - PVD - UPH - Đan mây',
+      'P18 - Sơn - Vecni - PVD - UPH - Đan Mây',
+    ].filter(Boolean))).sort() as string[];
+
     return {
       inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (qaqcUsers.map(u => u.name) || []))),
       workshops: Array.from(new Set([
@@ -219,11 +227,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       ])),
       types: Object.keys(MODULE_CONFIG),
       projects: projectOptions.map(p => p.ma_ct),
-      statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
+      statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED],
+      stages: allStages
     };
   }, [user, users, workshops, projectOptions]);
 
-  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || filterProject.length > 0 || startDate !== '' || endDate !== '';
+  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || filterProject.length > 0 || filterStage.length > 0 || startDate !== '' || endDate !== '';
 
   const handleApplyFilters = () => {
     if (onFilterChange) {
@@ -233,6 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
         status: filterStatus.join(','),
         type: filterType.join(','),
         project: filterProject.join(','),
+        stage: filterStage.join(','),
         startDate,
         endDate
       });
@@ -245,6 +255,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     setFilterStatus([]);
     setFilterType([]);
     setFilterProject([]);
+    setFilterStage([]);
     setStartDate('');
     setEndDate('');
     if (onFilterChange) onFilterChange({});
@@ -401,40 +412,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
             </div>
             
             {isFilterOpen && (
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in slide-in-from-top-2 duration-200">
                     <SearchableSelect 
                         label="Loại phiếu"
                         values={filterType}
                         options={filterOptions.types}
-                        onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), project: filterProject.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate }); }}
                         optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
                     />
                     <SearchableSelect 
                         label="Dự án"
                         values={filterProject}
                         options={filterOptions.projects}
-                        onChange={(vals) => { setFilterProject(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: vals.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterProject(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: vals.join(','), stage: filterStage.join(','), startDate, endDate }); }}
                         optionLabels={projectLabels}
                     />
                     <SearchableSelect 
                         label="Xưởng Sản Xuất"
                         values={filterWorkshop}
                         options={filterOptions.workshops}
-                        onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate }); }}
                         optionLabels={workshopLabels}
+                    />
+                    <SearchableSelect 
+                        label="Công đoạn kiểm tra"
+                        values={filterStage}
+                        options={filterOptions.stages}
+                        onChange={(vals) => { setFilterStage(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: vals.join(','), startDate, endDate }); }}
                     />
                     <SearchableSelect 
                         label="QC Kiểm tra"
                         values={filterQC}
                         options={filterOptions.inspectors}
-                        onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate }); }}
                     />
                     <DateRangePicker 
                         label="Khoảng ngày"
                         startDate={startDate}
                         endDate={endDate}
-                        onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate: d, endDate }); }}
-                        onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), startDate, endDate: d }); }}
+                        onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate: d, endDate }); }}
+                        onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate: d }); }}
                     />
                 </div>
             )}

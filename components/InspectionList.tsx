@@ -230,6 +230,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [filterQC, setFilterQC] = useState<string[]>([]);
   const [filterWorkshop, setFilterWorkshop] = useState<string[]>([]);
   const [filterProject, setFilterProject] = useState<string[]>([]);
+  const [filterStage, setFilterStage] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
@@ -266,11 +267,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         workshop: filterWorkshop.join(','),
         project: finalProject,
         type: filterType.join(','),
+        stage: filterStage.join(','),
         startDate: finalStartDate,
         endDate: finalEndDate
       });
     }
-  }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, startDate, endDate, selectedMonthDesktop, selectedProjectDesktop]);
+  }, [filterStatus, searchTerm, filterQC, filterWorkshop, filterProject, filterType, filterStage, startDate, endDate, selectedMonthDesktop, selectedProjectDesktop]);
 
   const workshopLabels = useMemo(() => {
     const map: Record<string, string> = {};
@@ -308,6 +310,9 @@ export const InspectionList: React.FC<InspectionListProps> = ({
 
       // Also include people who have actually performed inspections in the current list
       const actualInspectors = inspections.map(i => i.inspectorName).filter((n): n is string => !!n);
+      const workshopStages = workshops.flatMap(w => w.stages || []);
+      const actualStages = inspections.map(i => i.stage || i.inspectionStage).filter((s): s is string => !!s);
+      const allStages = Array.from(new Set([...workshopStages, ...actualStages])).sort();
       
       return {
           inspectors: Array.from(new Set([...allPotentialInspectors, ...actualInspectors])),
@@ -320,11 +325,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
               ...inspections.map(i => i.ma_ct).filter((s): s is string => !!s)
           ])).sort(),
           types: Object.keys(MODULE_CONFIG),
-          statuses: [InspectionStatus.PENDING, InspectionStatus.VERIFIED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED]
+          statuses: [InspectionStatus.PENDING, InspectionStatus.VERIFIED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED],
+          stages: allStages
       };
   }, [user, users, workshops, projects, inspections]);
 
-  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterProject.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
+  const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterProject.length > 0 || filterStage.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -333,6 +339,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         qc: filterQC.join(','),
         workshop: filterWorkshop.join(','),
         project: filterProject.join(','),
+        stage: filterStage.join(','),
         status: filterStatus.join(','),
         type: filterType.join(','),
         search: searchTerm,
@@ -559,7 +566,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           if (selectedProjectDesktop === '__UNASSIGNED__') {
               itemsForProject = itemsForProject.filter(i => !i.ma_ct || i.ma_ct === '');
           } else {
-              itemsForProject = itemsForProject.filter(i => (i.ma_ct || '') === selectedProjectDesktop);
+              itemsForProject = itemsForProject.filter(i => (i.ma_ct || '').trim().toUpperCase() === selectedProjectDesktop.trim().toUpperCase());
           }
       }
       
@@ -659,6 +666,12 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             optionLabels={workshopLabels}
                           />
                           <SearchableSelect 
+                            label="CÔNG ĐOẠN KIỂM TRA" 
+                            values={filterStage} 
+                            options={filterOptions.stages} 
+                            onChange={vals => setFilterStage(vals)} 
+                          />
+                          <SearchableSelect 
                             label="MÃ DỰ ÁN" 
                             values={filterProject} 
                             options={filterOptions.projects} 
@@ -672,7 +685,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                             onEndDateChange={setEndDate}
                           />
                           <div className="pt-1.5">
-                             <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-black dark:text-white rounded-lg text-[10px] font-black uppercase hover:bg-slate-200 transition-all border border-slate-200 dark:border-slate-700 tracking-tighter">XÓA BỘ LỌC</button>
+                             <button onClick={() => { setFilterType([]); setFilterQC([]); setFilterWorkshop([]); setFilterProject([]); setFilterStage([]); setFilterStatus([]); setSearchTerm(''); setStartDate(''); setEndDate(''); setIsFilterOpen(false); }} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-black dark:text-white rounded-lg text-[10px] font-black uppercase hover:bg-slate-200 transition-all border border-slate-200 dark:border-slate-700 tracking-tighter">XÓA BỘ LỌC</button>
                           </div>
                       </div>
                   </div>

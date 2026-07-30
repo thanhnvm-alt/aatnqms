@@ -1079,7 +1079,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         endDate: req.query.endDate as string,
         ma_nha_may: req.query.ma_nha_may as string,
         unixStart: req.query.unixStart as string,
-        unixEnd: req.query.unixEnd as string
+        unixEnd: req.query.unixEnd as string,
+        stage: (req.query.stage || req.query.inspectionStage) as string,
+        inspectionStage: (req.query.inspectionStage || req.query.stage) as string
       };
 
       // if mobile and no startDate provided, we now allow everything as requested
@@ -1104,7 +1106,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
         unixStart: req.query.unixStart as string,
-        unixEnd: req.query.unixEnd as string
+        unixEnd: req.query.unixEnd as string,
+        stage: (req.query.stage || req.query.inspectionStage) as string,
+        inspectionStage: (req.query.inspectionStage || req.query.stage) as string
       };
 
       const result = await db.getDashboardInspectionsList(filters, (req as any).user);
@@ -1127,7 +1131,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
         unixStart: req.query.unixStart as string,
-        unixEnd: req.query.unixEnd as string
+        unixEnd: req.query.unixEnd as string,
+        stage: (req.query.stage || req.query.inspectionStage) as string,
+        inspectionStage: (req.query.inspectionStage || req.query.stage) as string
       };
 
       const stats = await db.getDashboardStats(filters, (req as any).user);
@@ -2686,7 +2692,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
             startDate: req.query.startDate as string,
             endDate: req.query.endDate as string,
             unixStart: req.query.unixStart as string,
-            unixEnd: req.query.unixEnd as string
+            unixEnd: req.query.unixEnd as string,
+            stage: (req.query.stage || req.query.inspectionStage) as string,
+            inspectionStage: (req.query.inspectionStage || req.query.stage) as string
         };
 
         const result = await db.getInspectionsList(filters, 1, 50000);

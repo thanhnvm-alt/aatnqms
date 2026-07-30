@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { Inspection } from '../../types';
 import { fetchInspectionsDates, fetchInspectionsProjects, fetchInspections } from '../../services/apiService';
+import { getGmt7DayBounds, getGmt7MonthBounds } from '../../lib/utils';
 
 interface InspectionContextType {
   inspections: Inspection[];
@@ -49,19 +50,14 @@ export const InspectionProvider: React.FC<{ children: ReactNode }> = ({ children
     try {
       const args = { ...filters };
       if (selectedDateDesktop && selectedDateDesktop !== 'ALL') {
-          const [d, m, y] = selectedDateDesktop.split('/');
-          const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
-          const start = Math.floor(dateObj.getTime() / 1000);
-          const end = start + 86399; // 24h later
-          args.unixStart = start;
-          args.unixEnd = end;
+          const bounds = getGmt7DayBounds(selectedDateDesktop);
+          args.unixStart = bounds.unixStart;
+          args.unixEnd = bounds.unixEnd;
       } else if (selectedMonthDesktop) {
           const { year, month } = selectedMonthDesktop;
-          const mapDays = new Date(year, month, 0).getDate();
-          const start = Math.floor(new Date(year, month - 1, 1).getTime() / 1000);
-          const end = Math.floor(new Date(year, month - 1, mapDays, 23, 59, 59, 999).getTime() / 1000);
-          args.unixStart = start;
-          args.unixEnd = end;
+          const bounds = getGmt7MonthBounds(year, month);
+          args.unixStart = bounds.unixStart;
+          args.unixEnd = bounds.unixEnd;
       }
 
       const res = await fetchInspectionsProjects(args);
