@@ -270,7 +270,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
             </div>
 
             {/* --- QUANTITY STATS SECTION --- */}
-            <div className="bg-slate-50 dark:bg-slate-800/50/80 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                     <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
                         <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Số IPO</p>
@@ -284,7 +284,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         <p className="text-[9px] font-black text-green-600 dark:text-green-500 uppercase tracking-widest">Đạt</p>
                         <p className="text-lg font-black text-green-600 dark:text-green-500">{stats.pas}</p>
                     </div>
-                    <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20/50 rounded-xl py-1">
+                    <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20 rounded-xl py-1">
                         <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">Tỷ lệ đạt</p>
                         <p className="text-lg font-black text-green-700">{stats.passRate}%</p>
                     </div>
@@ -292,7 +292,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         <p className="text-[9px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest">Hỏng</p>
                         <p className="text-lg font-black text-red-600 dark:text-red-400">{stats.fai}</p>
                     </div>
-                    <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20/50 rounded-xl py-1">
+                    <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20 rounded-xl py-1">
                         <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">Tỷ lệ hỏng</p>
                         <p className="text-lg font-black text-red-700">{stats.failRate}%</p>
                     </div>
@@ -310,7 +310,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         <span>Hiện trường / Hàng hóa</span>
                         <span className="text-[8px] bg-blue-50 dark:bg-slate-800/80 px-1.5 py-0.5 rounded">{(inspection.images || []).length} ảnh</span>
                     </label>
-                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 min-h-[60px]">
+                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 min-h-[60px]">
                         {inspection.images?.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 group cursor-zoom-in shadow-sm transition-all hover:scale-105" onClick={() => setLightboxState({ images: inspection.images!, index: idx })}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
@@ -324,7 +324,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         <span>Phiếu Giao Nhận</span>
                         <span className="text-[8px] bg-indigo-50 px-1.5 py-0.5 rounded">{deliveryNoteImages.length} ảnh</span>
                     </label>
-                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 min-h-[60px]">
+                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 min-h-[60px]">
                         {deliveryNoteImages.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 group cursor-zoom-in shadow-sm transition-all hover:scale-105" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
@@ -338,7 +338,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                         <span>Báo Cáo NCC / CO-CQ</span>
                         <span className="text-[8px] bg-emerald-50 px-1.5 py-0.5 rounded">{reportImages.length} ảnh</span>
                     </label>
-                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 min-h-[60px]">
+                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-800 min-h-[60px]">
                         {reportImages.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 group cursor-zoom-in shadow-sm transition-all hover:scale-105" onClick={() => setLightboxState({ images: reportImages, index: idx })}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" />
@@ -368,7 +368,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                                 {isExp ? <ChevronUp className="w-5 h-5 text-teal-500"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
                             </div>
                             {isExp && (
-                                <div className="p-5 border-t border-slate-50 bg-slate-50 dark:bg-slate-800/50/50 space-y-4">
+                                <div className="p-5 border-t border-slate-50 bg-slate-50 dark:bg-slate-800/50 space-y-4">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
                                         <div>
                                             <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Loại kiểm</p>
@@ -482,7 +482,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {inspection.items?.filter(item => item.notes).map((item, iIdx) => (
-                                    <div key={iIdx} className="group bg-slate-50 dark:bg-slate-800/50/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md transition-all">
+                                    <div key={iIdx} className="group bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md transition-all">
                                         <div className="flex justify-between items-start mb-2">
                                             <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight leading-none truncate flex-1">{item.label}</p>
                                             <span className={`text-[8px] font-black px-1.5 py-0.5 rounded leading-none shrink-0 ml-2 ${item.status === CheckStatus.PASS ? 'bg-green-100 dark:bg-green-900/30 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.status}</span>
@@ -500,7 +500,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
 
         {/* --- DISCUSSION SECTION --- */}
         <section className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50 flex items-center gap-2">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Thảo luận hồ sơ</h3>
             </div>
@@ -528,7 +528,7 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
                 ))}
                 {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-[10px] text-slate-300 py-10 font-black uppercase tracking-[0.3em]">Hệ thống chưa ghi nhận ý kiến</p>}
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                 {commentAttachments.length > 0 && (
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                         {commentAttachments.map((img, idx) => (

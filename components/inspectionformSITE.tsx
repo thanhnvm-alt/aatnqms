@@ -430,7 +430,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
             </div>
             <div className="space-y-3">
                 {Array.isArray(formData.items) && formData.items.map((item, idx) => (
-                    <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-2xl p-4 border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-2xl p-4 border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                         <div className="flex justify-between items-start mb-3 border-b border-slate-50 pb-2">
                             <div className="flex-1">
                                 <span className="bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 dark:text-slate-400 dark:text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 tracking-widest">{item.category}</span>

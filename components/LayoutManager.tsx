@@ -455,7 +455,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
             <div className="flex-1 relative overflow-hidden flex">
                 <div className="hidden lg:flex w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 flex flex-col shrink-0 z-30 shadow-sm">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                             <input 
@@ -612,7 +612,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                 <button onClick={() => setSelectedPin(null)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-2xl text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
                             </header>
 
-                            <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-6 bg-slate-50 dark:bg-slate-800/50/30">
+                            <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-6 bg-slate-50 dark:bg-slate-800/30">
                                 <div className="space-y-2">
                                     <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Hạng mục thẩm định</p>
                                     <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -664,7 +664,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                         {(quickDetail.images?.length === 0) && (
                                             <div 
                                                 onClick={() => quickCameraRef.current?.click()}
-                                                className="col-span-2 py-12 flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/80/50 transition-all cursor-pointer group"
+                                                className="col-span-2 py-12 flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/50 transition-all cursor-pointer group"
                                             >
                                                 <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center mb-3 group-hover:bg-blue-100 dark:bg-blue-900/30 group-hover:scale-110 transition-all">
                                                     <Camera className="w-6 h-6 text-slate-300 group-hover:text-blue-500 dark:text-blue-400" />
@@ -779,7 +779,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                             <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-xs tracking-widest">Phân công nhân sự</h3>
                             <button onClick={() => setIsUserSelectorOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"><X className="w-6 h-6"/></button>
                         </header>
-                        <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 shrink-0">
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                                 <input value={userSearchInput} onChange={e => setUserSearchInput(e.target.value)} onBlur={handleCommitUserSearch} onKeyDown={handleUserKeyDown} className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />

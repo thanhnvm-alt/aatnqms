@@ -210,7 +210,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
                 </div>
 
                 {inspection.coord_x !== undefined && (
-                    <div className="mt-4 p-4 bg-blue-50 dark:bg-slate-800/80/50 border border-blue-100 dark:border-slate-700 rounded-2xl flex items-center justify-between">
+                    <div className="mt-4 p-4 bg-blue-50 dark:bg-slate-800/50 border border-blue-100 dark:border-slate-700 rounded-2xl flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <Layers className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                             <div>
@@ -285,7 +285,7 @@ export const InspectionDetailSITE: React.FC<InspectionDetailProps> = ({ inspecti
 
             {/* Discussion section */}
             <section className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50 flex items-center gap-2">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-amber-600" />
                     <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Thảo luận / Ghi chú hệ thống</h3>
                 </div>

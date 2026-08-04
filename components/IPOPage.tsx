@@ -213,7 +213,7 @@ export default function IPOPage({ user }: { user: User }) {
 
                     return (
                         <div key={groupKey} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm transition-all hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-700">
-                            <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20/40 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-800' : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}>
+                            <div onClick={() => toggleGroup(groupKey)} className={`p-4 cursor-pointer flex items-center justify-between ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/40 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-800' : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}>
                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
                                     <div className={`p-2.5 rounded-xl shrink-0 ${isExpanded ? 'bg-blue-600 dark:bg-blue-600 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}><Building2 className="w-4.5 h-4.5" /></div>
                                     <h3 className="font-bold text-sm uppercase truncate text-slate-800 dark:text-slate-200 tracking-tight">{groupKey}</h3>
@@ -221,7 +221,7 @@ export default function IPOPage({ user }: { user: User }) {
                                 <ChevronDown className={`w-5 h-5 text-slate-300 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600 dark:text-blue-400' : ''}`} />
                             </div>
                             {isExpanded && (
-                                <div className="p-2.5 space-y-2 bg-slate-50 dark:bg-slate-800/50/30 dark:bg-slate-900 animate-in slide-in-from-top-1">
+                                <div className="p-2.5 space-y-2 bg-slate-50 dark:bg-slate-800/30 dark:bg-slate-900 animate-in slide-in-from-top-1">
                                     {groupItems.map((item, idx) => (
                                         <div 
                                             key={idx} 

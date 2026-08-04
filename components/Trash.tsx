@@ -245,7 +245,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                             <div className="overflow-x-auto no-scrollbar">
                                 <table className="w-full text-left border-collapse table-fixed md:table-auto min-w-[320px] md:min-w-full">
                                     <thead>
-                                        <tr className="bg-slate-50 dark:bg-slate-800/50/80 border-b border-slate-200 dark:border-slate-700">
+                                        <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                                             <th className="px-2 md:px-6 py-3 md:py-5 w-8 md:w-16">
                                                 <button onClick={toggleSelectAll} className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 transition-colors">
                                                     {selectedIds.length === filteredItems.length ? <CheckSquare className="w-4 md:w-5 h-4 md:h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-4 md:w-5 h-4 md:h-5" />}
@@ -260,7 +260,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                         {filteredItems.map(item => (
-                                            <tr key={item.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-colors group cursor-pointer ${selectedIds.includes(item.id) ? 'bg-blue-50 dark:bg-slate-800/80/30' : ''}`} onClick={() => handleReview(item.id)}>
+                                            <tr key={item.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-colors group cursor-pointer ${selectedIds.includes(item.id) ? 'bg-blue-50 dark:bg-slate-800/30' : ''}`} onClick={() => handleReview(item.id)}>
                                                 <td className="px-2 md:px-6 py-3 md:py-5" onClick={e => e.stopPropagation()}>
                                                     <button onClick={() => toggleSelect(item.id)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 transition-colors">
                                                         {selectedIds.includes(item.id) ? <CheckSquare className="w-4 md:w-5 h-4 md:h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-4 md:w-5 h-4 md:h-5" />}
@@ -332,7 +332,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
             {reviewItem && (
                 <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 lg:p-8 animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-[3rem] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in duration-300 border border-white/20">
-                        <header className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50/50 shrink-0">
+                        <header className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 shrink-0">
                             <div className="flex items-center gap-4">
                                 <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-200">
                                     <FileText className="w-6 h-6" />
@@ -463,7 +463,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                                                 <div key={mat.id} className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-all">
                                                     <div 
                                                         onClick={() => setExpandedMaterial(isExp ? null : mat.id)} 
-                                                        className={`p-5 flex items-center justify-between cursor-pointer ${isExp ? 'bg-blue-50 dark:bg-blue-900/20/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50/50'}`}
+                                                        className={`p-5 flex items-center justify-between cursor-pointer ${isExp ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                                     >
                                                         <div className="flex items-center gap-4">
                                                             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs ${isExp ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'}`}>{idx + 1}</div>
@@ -477,7 +477,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                                                         {isExp ? <ChevronUp className="w-5 h-5 text-blue-600 dark:text-blue-400"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}
                                                     </div>
                                                     {isExp && (
-                                                        <div className="p-6 space-y-4 border-t border-slate-50 bg-slate-50 dark:bg-slate-800/50/30">
+                                                        <div className="p-6 space-y-4 border-t border-slate-50 bg-slate-50 dark:bg-slate-800/30">
                                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-inner">
                                                                 <div>
                                                                     <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Phân loại</p>
@@ -528,7 +528,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                                 <div className="grid grid-cols-1 gap-4">
                                     {(reviewItem.items || []).map((chk: any, idx: number) => (
                                         <div key={idx} className={`p-6 rounded-[2rem] border transition-all ${
-                                            chk.status === CheckStatus.FAIL ? 'bg-red-50 dark:bg-red-900/20/30 border-red-100' : 'bg-slate-50 dark:bg-slate-800/50/50 border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md'
+                                            chk.status === CheckStatus.FAIL ? 'bg-red-50 dark:bg-red-900/20 border-red-100' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md'
                                         }`}>
                                             <div className="flex justify-between items-start gap-4 mb-4">
                                                 <div className="flex-1">

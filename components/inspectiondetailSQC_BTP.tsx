@@ -247,7 +247,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
           </div>
 
             {/* --- QUANTITY STATS SECTION --- */}
-            <div className="bg-slate-50 dark:bg-slate-800/50/80 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                     <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
                         <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Số IPO</p>
@@ -261,7 +261,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                         <p className="text-[9px] font-black text-green-600 dark:text-green-500 uppercase tracking-widest">Đạt</p>
                         <p className="text-lg font-black text-green-600 dark:text-green-500">{stats.pas}</p>
                     </div>
-                    <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20/50 rounded-xl py-1">
+                    <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20 rounded-xl py-1">
                         <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">Tỷ lệ đạt</p>
                         <p className="text-lg font-black text-green-700">{stats.passRate}%</p>
                     </div>
@@ -269,7 +269,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                         <p className="text-[9px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest">Hỏng</p>
                         <p className="text-lg font-black text-red-600 dark:text-red-400">{stats.fai}</p>
                     </div>
-                    <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20/50 rounded-xl py-1">
+                    <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20 rounded-xl py-1">
                         <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">Tỷ lệ hỏng</p>
                         <p className="text-lg font-black text-red-700">{stats.failRate}%</p>
                     </div>
@@ -283,7 +283,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400"/> Ảnh Giao Nhận ({deliveryNoteImages.length})</p>
                     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                         {deliveryNoteImages.map((img, idx) => (
-                            <ProxyImage key={idx} src={img} alt="Ảnh giao nhận" className="w-20 h-20 rounded-xl cursor-zoom-in transition-transform hover:scale-105" />
+                            <ProxyImage key={idx} src={img} alt="Ảnh giao nhận" className="w-20 h-20 rounded-xl cursor-zoom-in transition-transform hover:scale-105" onClick={() => setLightboxState({ images: deliveryNoteImages, index: idx })} />
                         ))}
                     </div>
                 </div>
@@ -293,7 +293,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                     <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><FileText className="w-3.5 h-3.5 text-emerald-500"/> Báo cáo NCC ({reportImages.length})</p>
                     <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                         {reportImages.map((img, idx) => (
-                            <ProxyImage key={idx} src={img} alt="Ảnh báo cáo" className="w-20 h-20 rounded-xl cursor-zoom-in transition-transform hover:scale-105" />
+                            <ProxyImage key={idx} src={img} alt="Ảnh báo cáo" className="w-20 h-20 rounded-xl cursor-zoom-in transition-transform hover:scale-105" onClick={() => setLightboxState({ images: reportImages, index: idx })} />
                         ))}
                     </div>
                 </div>
@@ -327,7 +327,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                             <div className="p-5 space-y-4 border-t border-slate-50">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {mat.items?.map(item => (
-                                        <div key={item.id} className="bg-slate-50 dark:bg-slate-800/50/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 transition-all hover:bg-white dark:bg-slate-900 hover:shadow-md">
+                                        <div key={item.id} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3 transition-all hover:bg-white dark:bg-slate-900 hover:shadow-md">
                                             <div className="flex justify-between items-start">
                                                 <p className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase leading-snug tracking-tight">{item.label}</p>
                                                 <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200'} border`}>{item.status}</span>
@@ -380,7 +380,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {inspection.materials?.map(mat => 
                                 mat.items?.filter(item => item.notes).map(item => (
-                                    <div key={item.id} className="group bg-slate-50 dark:bg-slate-800/50/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md transition-all">
+                                    <div key={item.id} className="group bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md transition-all">
                                         <div className="flex justify-between items-start mb-2">
                                             <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight leading-none truncate flex-1">{mat.name}</p>
                                             <span className="text-[8px] font-black bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded leading-none shrink-0 ml-2">{item.label}</span>
@@ -402,7 +402,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
 
         {/* --- DISCUSSION SECTION --- */}
         <section className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50 flex items-center gap-2">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Thảo luận hồ sơ</h3>
             </div>
@@ -430,7 +430,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
                 ))}
                 {(!inspection.comments || inspection.comments.length === 0) && <p className="text-center text-[10px] text-slate-300 py-10 font-black uppercase tracking-[0.3em]">Hệ thống chưa ghi nhận ý kiến</p>}
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                 {commentAttachments.length > 0 && (
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                         {commentAttachments.map((img, idx) => (

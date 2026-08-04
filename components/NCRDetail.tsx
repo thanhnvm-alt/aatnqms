@@ -536,7 +536,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
             {/* TECHNICAL ANALYSIS SECTION */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50/50">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
                     <div className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-purple-600" /><h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Phân tích Kỹ thuật & Hành động</h3></div>
                     {isEditing && (
                         <button onClick={handleRunAI} disabled={isAiLoading || !formData.issueDescription} className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-30 transition-all">
@@ -551,7 +551,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         {isEditing ? (
                             <textarea value={formData.rootCause} onChange={e => setFormData({...formData, rootCause: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border-2 border-slate-100 dark:border-slate-800 text-[12px] font-medium outline-none focus:border-blue-200 dark:border-slate-700 transition-all" rows={2} />
                         ) : (
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 rounded-2xl text-[12px] font-bold text-slate-700 dark:text-slate-300 italic leading-relaxed border border-slate-100 dark:border-slate-800 shadow-inner">
+                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-[12px] font-bold text-slate-700 dark:text-slate-300 italic leading-relaxed border border-slate-100 dark:border-slate-800 shadow-inner">
                                 {formData.rootCause || 'Đang chờ phân tích kỹ thuật...'}
                             </div>
                         )}
@@ -559,9 +559,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                     <div className="space-y-2">
                         <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-2 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 dark:text-green-400" /> Action Plan (Biện pháp xử lý)</label>
                         {isEditing ? (
-                            <textarea value={formData.solution} onChange={e => setFormData({...formData, solution: e.target.value})} className="w-full p-4 bg-blue-50 dark:bg-slate-800/80/30 rounded-2xl border-2 border-blue-50 text-[12px] font-black outline-none focus:border-blue-200 dark:border-slate-700 text-blue-900 transition-all" rows={2} />
+                            <textarea value={formData.solution} onChange={e => setFormData({...formData, solution: e.target.value})} className="w-full p-4 bg-blue-50 dark:bg-slate-800/30 rounded-2xl border-2 border-blue-50 text-[12px] font-black outline-none focus:border-blue-200 dark:border-slate-700 text-blue-900 transition-all" rows={2} />
                         ) : (
-                            <div className="p-4 bg-blue-50 dark:bg-slate-800/80/30 rounded-2xl border border-blue-100 dark:border-slate-700 text-[12px] font-black text-blue-900 leading-relaxed shadow-inner">
+                            <div className="p-4 bg-blue-50 dark:bg-slate-800/30 rounded-2xl border border-blue-100 dark:border-slate-700 text-[12px] font-black text-blue-900 leading-relaxed shadow-inner">
                                 {formData.solution || 'Chưa cập nhật biện pháp khắc phục.'}
                             </div>
                         )}
@@ -572,7 +572,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
             {/* VISUAL EVIDENCE GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-red-50 dark:bg-red-900/20/20">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-red-50 dark:bg-red-900/20">
                         <label className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-widest flex items-center gap-2">
                             <AlertOctagon className="w-4 h-4"/> HIỆN TRẠNG LỖI (BEFORE)
                         </label>
@@ -595,7 +595,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-green-50 dark:bg-green-900/20/20">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-green-50 dark:bg-green-900/20">
                         <label className="text-[10px] font-black text-green-600 dark:text-green-500 uppercase tracking-widest flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4"/> MINH CHỨNG XỬ LÝ (AFTER)
                         </label>
@@ -620,7 +620,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
             {/* DISCUSSION SECTION */}
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50 flex items-center gap-2">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Nhật ký xử lý & Thảo luận</h3>
                 </div>
@@ -647,7 +647,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 </div>
 
                 {!isLocked && (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                         {commentAttachments.length > 0 && (
                             <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                                 {commentAttachments.map((img, idx) => (

@@ -288,7 +288,7 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-all"><X className="w-7 h-7"/></button>
             </div>
-            <div className="p-8 space-y-6 bg-slate-50 dark:bg-slate-800/50/30 overflow-y-auto max-h-[70vh] no-scrollbar">
+            <div className="p-8 space-y-6 bg-slate-50 dark:bg-slate-800/30 overflow-y-auto max-h-[70vh] no-scrollbar">
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Mã NCC *</label><input value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-black focus:ring-4 ring-blue-100 outline-none uppercase" placeholder="NCC-XXXX" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Trạng thái</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold bg-white dark:bg-slate-900 outline-none"><option value="ACTIVE">ACTIVE (Đang hợp tác)</option><option value="INACTIVE">INACTIVE (Dừng hợp tác)</option></select></div>

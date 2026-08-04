@@ -748,7 +748,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         
                         {/* 1. IPO COLUMN */}
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-blue-50 dark:bg-slate-800/80/30 flex items-center justify-between shrink-0">
+                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-blue-50 dark:bg-slate-800/30 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><ClipboardList className="w-4 h-4" /></div>
                                     <span className="font-black text-[11px] uppercase tracking-wider text-blue-900">Danh sách IPO</span>
@@ -798,7 +798,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                              } else {
                                                  if (isSelected) {
                                                      borderClass = 'border-blue-500 shadow-md';
-                                                     bgClass = 'bg-blue-50 dark:bg-slate-800/80/30';
+                                                     bgClass = 'bg-blue-50 dark:bg-slate-800/30';
                                                  }
                                              }
 
@@ -944,7 +944,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                         {/* 3. NCR COLUMN */}
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden max-h-[700px]">
-                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/20/30 flex items-center justify-between shrink-0">
+                            <div className="px-4 py-1.5 border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/20 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-red-600 text-white rounded-xl shadow-md"><AlertOctagon className="w-4 h-4" /></div>
                                     <div className="flex flex-col">
@@ -1115,7 +1115,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                      </thead>
                                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 dark:text-slate-500">
                                          {filteredDocs.map(doc => (
-                                             <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50/50 transition-colors">
+                                             <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-colors">
                                                  <td className="px-6 py-4">
                                                      <div className="flex items-center gap-3">
                                                          <div className="p-2.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-2xl">
@@ -1239,7 +1239,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-colors active:scale-90"><X className="w-8 h-8"/></button>
                   </div>
 
-                  <div className="p-8 space-y-8 overflow-y-auto bg-slate-50 dark:bg-slate-800/50/30 flex-1 no-scrollbar">
+                  <div className="p-8 space-y-8 overflow-y-auto bg-slate-50 dark:bg-slate-800/30 flex-1 no-scrollbar">
                       
                       {/* Thumbnail & Basic Identity */}
                       <div className="flex flex-col md:flex-row gap-8 items-start">
@@ -1390,7 +1390,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </div>
 
                   {/* Modal Body */}
-                  <form onSubmit={handleSaveDoc} className="p-6 space-y-5 overflow-y-auto bg-slate-50 dark:bg-slate-800/50/50 flex-1 no-scrollbar-all">
+                  <form onSubmit={handleSaveDoc} className="p-6 space-y-5 overflow-y-auto bg-slate-50 dark:bg-slate-800/50 flex-1 no-scrollbar-all">
                       <div className="space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-3">Tên tài liệu / Bản vẽ *</label>
                           <input 
@@ -1482,7 +1482,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
                           {/* Upload Progress */}
                           {uploadProgress && (
-                              <div className="mt-2 text-center bg-blue-50 dark:bg-slate-800/80/50 rounded-2xl p-3 border border-blue-100 dark:border-slate-700/30 flex items-center justify-center gap-2">
+                              <div className="mt-2 text-center bg-blue-50 dark:bg-slate-800/50 rounded-2xl p-3 border border-blue-100 dark:border-slate-700/30 flex items-center justify-center gap-2">
                                   <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
                                   <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">ĐANG TẢI LÊN STORAGE...</span>
                               </div>

@@ -69,7 +69,7 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
                 
                 {/* Visual Evidence */}
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50/50">
+                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50">
                         <Camera className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Bằng chứng hình ảnh</h3>
                     </div>
@@ -98,7 +98,7 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
 
                 {/* Analysis & Root Cause */}
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50/50">
+                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50">
                         <BrainCircuit className="w-5 h-5 text-purple-600" />
                         <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Phân tích kỹ thuật</h3>
                     </div>
@@ -126,7 +126,7 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
 
             {/* Resolution Tracking */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50/50">
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50">
                     <Clock className="w-5 h-5 text-indigo-600" />
                     <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Theo dõi xử lý lỗi</h3>
                 </div>

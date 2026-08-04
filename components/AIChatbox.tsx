@@ -244,7 +244,7 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800/50/50 no-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800/50 no-scrollbar">
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                 {msg.role === 'model' && (

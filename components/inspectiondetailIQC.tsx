@@ -243,7 +243,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
 
                 return (
                     <div key={mat.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
-                        <div onClick={() => setExpandedMaterial(isExp ? null : mat.id)} className={`p-4 flex items-center justify-between cursor-pointer ${isExp ? 'bg-blue-50 dark:bg-slate-800/80/30' : ''}`}>
+                        <div onClick={() => setExpandedMaterial(isExp ? null : mat.id)} className={`p-4 flex items-center justify-between cursor-pointer ${isExp ? 'bg-blue-50 dark:bg-slate-800/30' : ''}`}>
                             <div className="flex items-center gap-3">
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${isExp ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{idx + 1}</div>
                                 <div>
@@ -326,7 +326,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
         <TwoTierApproval inspection={inspection} user={user} onApprove={onApprove!} />
 
         <section className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50 flex items-center gap-2">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Thảo luận hồ sơ</h3>
             </div>
@@ -353,7 +353,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                     </div>
                 ))}
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                 {commentAttachments.length > 0 && (
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                         {commentAttachments.map((img, idx) => (

@@ -179,7 +179,7 @@ export const DefectList: React.FC<DefectListProps> = ({ currentUser, onSelectDef
                               </div>
                           </div>
 
-                          <div className={`px-4 py-2.5 border-t flex items-center justify-between transition-colors ${defect.status === 'CLOSED' ? 'bg-green-50 dark:bg-green-900/20/50 border-green-100' : 'bg-orange-50/50 border-orange-100'}`}>
+                          <div className={`px-4 py-2.5 border-t flex items-center justify-between transition-colors ${defect.status === 'CLOSED' ? 'bg-green-50 dark:bg-green-900/20 border-green-100' : 'bg-orange-50/50 border-orange-100'}`}>
                               <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(defect.status)}`}>
                                   {defect.status}
                               </span>

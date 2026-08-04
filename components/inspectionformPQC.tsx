@@ -163,9 +163,9 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                     <h3 className="text-red-700 flex items-center gap-2 font-bold uppercase tracking-wide text-xs"><AlertOctagon className="w-4 h-4" /> Báo cáo sự không phù hợp (NCR)</h3>
                     <button onClick={onClose} className="p-1.5 hover:bg-red-100 rounded-full transition-colors"><X className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500"/></button>
                 </div>
-                <div className="p-4 space-y-3 overflow-y-auto flex-1 no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+                <div className="p-4 space-y-3 overflow-y-auto flex-1 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
                     <div className="border border-blue-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
-                        <button onClick={() => setShowLibrary(!showLibrary)} className="w-full p-2.5 flex justify-between items-center text-blue-700 font-bold bg-blue-50 dark:bg-slate-800/80/50 text-[11px]" type="button">
+                        <button onClick={() => setShowLibrary(!showLibrary)} className="w-full p-2.5 flex justify-between items-center text-blue-700 font-bold bg-blue-50 dark:bg-slate-800/50 text-[11px]" type="button">
                             <span className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5"/> Chọn lỗi từ thư viện chuẩn</span>
                             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showLibrary ? 'rotate-180' : ''}`} />
                         </button>
@@ -206,7 +206,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                     </div>
 
                     {!ncrData.defect_code && (
-                        <div className="bg-blue-50 dark:bg-slate-800/80/50 p-2 rounded-xl border border-blue-100 dark:border-slate-700 space-y-2">
+                        <div className="bg-blue-50 dark:bg-slate-800/50 p-2 rounded-xl border border-blue-100 dark:border-slate-700 space-y-2">
                             <label className="flex items-center gap-2 cursor-pointer group">
                                 <input 
                                     type="checkbox" 
@@ -929,7 +929,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                       visibleItems.map((item, originalIndex) => {
                         const actualIndexInFullList = formData.items?.findIndex(i => i.id === item.id) ?? -1;
                         return (
-                            <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                            <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                                 <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
                                     <div className="flex-1"><input value={item.label || ''} onChange={e => handleItemChange(actualIndexInFullList, 'label', e.target.value)} className="w-full font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-[11px]" placeholder="Nội dung..." /><div className="mt-1.5 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 space-y-1"><div className="flex items-start gap-2"><Microscope className="w-3 h-3 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 dark:text-slate-400 dark:text-slate-500 leading-tight"><span className="font-bold text-slate-800 dark:text-slate-200">PP:</span> {item.method || '---'}</div></div><div className="flex items-start gap-2"><Ruler className="w-3 h-3 text-orange-500 shrink-0 mt-0.5" /><div className="text-[10px] text-slate-600 dark:text-slate-400 dark:text-slate-500 leading-tight"><span className="font-bold text-slate-800 dark:text-slate-200">TC:</span> {item.standard || '---'}</div></div></div></div>
                                     <button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500 dark:text-red-400" type="button"><Trash2 className="w-3.5 h-3.5"/></button>
@@ -988,7 +988,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       {showHistory && (
           <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in duration-200">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50/50">
+                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                       <div className="flex items-center gap-3">
                           <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-lg">
                               <History className="w-5 h-5" />
@@ -1008,7 +1008,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                           </div>
                       ) : (
                           historicalRecords.map(rec => (
-                              <div key={rec.id} onClick={() => handleOpenQuickReview(rec.id)} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:border-slate-700 hover:bg-blue-50 dark:bg-slate-800/80/20 transition-all group flex items-center justify-between gap-4 cursor-pointer active:scale-[0.98]">
+                              <div key={rec.id} onClick={() => handleOpenQuickReview(rec.id)} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-200 dark:border-slate-700 hover:bg-blue-50 dark:bg-slate-800/20 transition-all group flex items-center justify-between gap-4 cursor-pointer active:scale-[0.98]">
                                   <div className="flex items-center gap-4">
                                       <div className={`p-2.5 rounded-xl shrink-0 ${rec.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500' : 'bg-orange-100 text-orange-600'}`}>
                                           <CheckCircle2 className="w-5 h-5" />

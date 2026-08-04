@@ -9,6 +9,7 @@ interface ProxyImageProps {
   fallbackSrc?: string;
   timestamp?: string | number;
   showTimestamp?: boolean;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
 /**
@@ -22,7 +23,8 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({
   className = '', 
   fallbackSrc = 'https://picsum.photos/seed/broken/400/300',
   timestamp,
-  showTimestamp = false
+  showTimestamp = false,
+  onClick
 }) => {
   const [error, setError] = React.useState(false);
 
@@ -38,7 +40,7 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({
   const proxiedSrc = React.useMemo(() => getProxyImageUrl(src), [src]);
 
   return (
-    <div className="flex flex-col gap-1 w-fit">
+    <div className="flex flex-col gap-1 w-fit" onClick={onClick}>
       <div className={`relative overflow-hidden bg-slate-100 dark:bg-slate-800 rounded-xl ${className}`}>
         <img
           src={error ? fallbackSrc : proxiedSrc}

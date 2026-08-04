@@ -206,7 +206,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
         <div className="space-y-2">
             <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1">Chi tiết hạng mục</h3>
             {inspection.items.map((item, i) => (
-                <div key={i} className={`bg-white dark:bg-slate-900 p-3 rounded-xl border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                <div key={i} className={`bg-white dark:bg-slate-900 p-3 rounded-xl border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                     <div className="flex items-start gap-3">
                         <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${item.status === CheckStatus.PASS ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <div className="flex-1 min-w-0">

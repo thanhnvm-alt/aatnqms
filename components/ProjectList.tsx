@@ -289,7 +289,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                     <div key={groupName} className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
                         <div 
                             onClick={() => toggleGroup(groupName)}
-                            className={`p-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20/50 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}
+                            className={`p-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}
                         >
                             <div className="flex items-center gap-4">
                                 <div className={`p-3 rounded-2xl ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
@@ -304,7 +304,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                         </div>
 
                         {isExpanded && (
-                            <div className={`p-6 bg-slate-50 dark:bg-slate-800/50/30 animate-in fade-in slide-in-from-top-2 duration-300 ${
+                            <div className={`p-6 bg-slate-50 dark:bg-slate-800/30 animate-in fade-in slide-in-from-top-2 duration-300 ${
                                 viewMode === 'GRID' 
                                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6' 
                                 : 'flex flex-col gap-3'

@@ -297,7 +297,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                               {/* Stage Header */}
                               <div 
                                   onClick={() => toggleStage(stage)}
-                                  className={`p-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20/50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-700' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}
+                                  className={`p-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50 dark:bg-blue-900/20 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-700' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800'}`}
                               >
                                   <div className="flex items-center gap-4">
                                       <div className={`p-3 rounded-2xl ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
@@ -316,7 +316,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                               {isExpanded && (
                                   <div className="overflow-x-auto bg-white dark:bg-slate-900 animate-in slide-in-from-top-2 duration-300">
                                       <table className="w-full text-left border-collapse min-w-[800px]">
-                                          <thead className="bg-slate-50 dark:bg-slate-800/50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[9px]">
+                                          <thead className="bg-slate-50 dark:bg-slate-800/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[9px]">
                                               <tr>
                                                   <th className={`${paddingClass} w-64`}>Mã & Tên Lỗi</th>
                                                   <th className={`${paddingClass} w-44`}>Phân loại</th>
@@ -399,7 +399,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-full transition-colors"><X className="w-7 h-7 text-slate-300"/></button>
                   </div>
                   
-                  <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh] no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+                  <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh] no-scrollbar bg-slate-50 dark:bg-slate-800/30">
                       <div className="grid grid-cols-2 gap-6">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mã Lỗi Hệ Thống</label>
@@ -465,7 +465,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                               <label className="text-[10px] font-black text-green-600 dark:text-green-500 uppercase flex items-center gap-1.5 ml-1"><CheckCircle className="w-3 h-3" /> Hình ảnh chuẩn (ĐÚNG)</label>
                               <div 
                                 onClick={() => correctImgRef.current?.click()}
-                                className="aspect-video bg-green-50 dark:bg-green-900/20/50 border-2 border-dashed border-green-200 dark:border-green-800 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-100 dark:bg-green-900/30/50 transition-all overflow-hidden relative group shadow-sm"
+                                className="aspect-video bg-green-50 dark:bg-green-900/20 border-2 border-dashed border-green-200 dark:border-green-800 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-green-100 dark:bg-green-900/50 transition-all overflow-hidden relative group shadow-sm"
                               >
                                   {formData.correctImage ? (
                                       <img src={getProxyImageUrl(formData.correctImage)} className="w-full h-full object-cover" />
@@ -482,7 +482,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                               <label className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase flex items-center gap-1.5 ml-1"><XCircle className="w-3 h-3" /> Hình ảnh lỗi (SAI)</label>
                               <div 
                                 onClick={() => incorrectImgRef.current?.click()}
-                                className="aspect-video bg-red-50 dark:bg-red-900/20/50 border-2 border-dashed border-red-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-red-100/50 transition-all overflow-hidden relative group shadow-sm"
+                                className="aspect-video bg-red-50 dark:bg-red-900/20 border-2 border-dashed border-red-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-red-100/50 transition-all overflow-hidden relative group shadow-sm"
                               >
                                   {formData.incorrectImage ? (
                                       <img src={getProxyImageUrl(formData.incorrectImage)} className="w-full h-full object-cover" />
@@ -507,7 +507,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           <label className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase ml-1 flex items-center gap-1.5">
                               <SlidersHorizontal className="w-3 h-3" /> Biện pháp khắc phục gợi ý
                           </label>
-                          <textarea value={formData.suggestedAction} onChange={e => setFormData({...formData, suggestedAction: e.target.value})} className="w-full px-5 py-4 border border-blue-100 dark:border-slate-700 rounded-3xl font-bold bg-blue-50 dark:bg-slate-800/80/20 text-sm focus:ring-4 focus:ring-blue-100 outline-none resize-none shadow-sm" rows={2} placeholder="Nhập hướng dẫn xử lý cho QC..."/>
+                          <textarea value={formData.suggestedAction} onChange={e => setFormData({...formData, suggestedAction: e.target.value})} className="w-full px-5 py-4 border border-blue-100 dark:border-slate-700 rounded-3xl font-bold bg-blue-50 dark:bg-slate-800/20 text-sm focus:ring-4 focus:ring-blue-100 outline-none resize-none shadow-sm" rows={2} placeholder="Nhập hướng dẫn xử lý cho QC..."/>
                       </div>
                   </div>
 

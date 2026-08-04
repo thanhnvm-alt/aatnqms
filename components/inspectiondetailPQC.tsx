@@ -305,7 +305,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     </div>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-800/50/80 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                         <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
                             <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">SỐ IPO</p>
@@ -319,7 +319,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                             <p className="text-[9px] font-black text-green-600 dark:text-green-500 uppercase tracking-widest">ĐẠT</p>
                             <p className="text-lg font-black text-green-600 dark:text-green-500">{stats.pas}</p>
                         </div>
-                        <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20/50 rounded-xl py-1">
+                        <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20 rounded-xl py-1">
                             <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">TỶ LỆ ĐẠT</p>
                             <p className="text-lg font-black text-green-700">{stats.passRate}%</p>
                         </div>
@@ -327,7 +327,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                             <p className="text-[9px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest">HỎNG</p>
                             <p className="text-lg font-black text-red-600 dark:text-red-400">{stats.fai}</p>
                         </div>
-                        <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20/50 rounded-xl py-1">
+                        <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20 rounded-xl py-1">
                             <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">TỶ LỆ HỎNG</p>
                             <p className="text-lg font-black text-red-700">{stats.failRate}%</p>
                         </div>
@@ -367,7 +367,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <Activity className="w-4 h-4" /> Chi tiết kết quả kiểm tra
                 </h3>
                 {inspection.items.map((item, idx) => (
-                    <div key={idx} className={`bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div key={idx} className={`bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex flex-wrap gap-2">
                                 <span className={`px-3 py-0.5 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : item.status === CheckStatus.FAIL ? 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>{item.status}</span>
@@ -470,7 +470,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                         )}
 
                         {inspection.productionComment && (
-                            <div className="relative p-6 bg-blue-50 dark:bg-slate-800/80/30 rounded-[2rem] border border-blue-100 dark:border-slate-700 flex gap-4 items-start">
+                            <div className="relative p-6 bg-blue-50 dark:bg-slate-800/30 rounded-[2rem] border border-blue-100 dark:border-slate-700 flex gap-4 items-start">
                                 <div className="shrink-0 w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shadow-inner">
                                     <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                 </div>
@@ -488,7 +488,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {inspection.items.filter(i => i.notes).map((item, iIdx) => (
-                                        <div key={iIdx} className="group bg-slate-50 dark:bg-slate-800/50/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md transition-all">
+                                        <div key={iIdx} className="group bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-white dark:bg-slate-900 hover:shadow-md transition-all">
                                             <div className="flex justify-between items-start mb-2">
                                                 <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight leading-none truncate flex-1">{item.label}</p>
                                                 <span className={`text-[8px] font-black px-1.5 py-0.5 rounded leading-none shrink-0 ml-2 ${item.status === CheckStatus.PASS ? 'bg-green-100 dark:bg-green-900/30 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.status}</span>
@@ -508,7 +508,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
 
             {/* --- DISCUSSION --- */}
             <section className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col mb-10">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50/50 flex items-center gap-2">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Thảo luận hồ sơ</h3>
                 </div>
@@ -535,7 +535,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                         </div>
                     ))}
                 </div>
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/50/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                     {commentAttachments.length > 0 && (
                         <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
                             {commentAttachments.map((img, idx) => (
@@ -608,7 +608,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
           <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
                   <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0"><div className="flex items-center gap-3"><div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner"><UserPlus className="w-6 h-6" /></div><h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-sm tracking-tight">Sản xuất / Xưởng xác nhận</h3></div><button onClick={() => setShowProductionModal(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"><X className="w-7 h-7 text-slate-400 dark:text-slate-500"/></button></div>
-                  <div className="p-8 space-y-6 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/50/30 flex-1">
+                  <div className="p-8 space-y-6 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/30 flex-1">
                       <div className="space-y-5">
                           <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2 flex items-center gap-1.5"><UserIcon className="w-4 h-4 text-indigo-500" /> Họ tên người đại diện *</label><input value={prodName} onChange={e => setProdName(e.target.value.toUpperCase())} className="w-full px-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] font-black text-sm uppercase outline-none focus:ring-4 focus:ring-indigo-100 shadow-sm transition-all" placeholder="NHẬP HỌ TÊN ĐẠI DIỆN XƯỞNG..." /></div>
                           <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4 text-indigo-500" /> Ý kiến phản hồi / Ghi chú</label><textarea value={prodComment} onChange={e => setProdComment(e.target.value)} className="w-full px-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] font-bold text-xs outline-none focus:ring-4 focus:ring-indigo-100 h-32 resize-none shadow-sm transition-all" placeholder="Ghi chú phản hồi từ sản xuất (nếu có)..." /></div>

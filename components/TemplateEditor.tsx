@@ -329,7 +329,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
          </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-6 no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-6 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
         {/* IQC / SQC_MAT CONFIGURATION UI */}
         {isIQC && (
             <div className="space-y-4">
@@ -394,7 +394,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
                             <button onClick={() => handleDeleteGroup(activeGroup)} className="flex items-center justify-center gap-2 px-4 py-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-xl font-bold text-xs transition-colors"><Trash2 className="w-4 h-4" /> Xóa nhóm</button>
                         </div>
 
-                        <div className="p-4 space-y-4 bg-slate-50 dark:bg-slate-800/50/30">
+                        <div className="p-4 space-y-4 bg-slate-50 dark:bg-slate-800/30">
                             {iqcGroups[activeGroup].map((item) => (
                                 <div key={item.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group relative">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -425,7 +425,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ user, currentTem
                                     <button onClick={() => handleRemoveItem(item.id)} className="absolute -top-2 -right-2 bg-white dark:bg-slate-900 text-slate-300 hover:text-red-500 dark:text-red-400 p-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 md:opacity-0 group-hover:opacity-100 transition-all hover:scale-110"><Trash2 className="w-4 h-4"/></button>
                                 </div>
                             ))}
-                            <button onClick={() => handleAddItem(activeGroup)} className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/80/50 text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"><div className="p-1 bg-slate-200 dark:bg-slate-700 rounded-full group-hover:bg-blue-200 transition-colors"><Plus className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400" /></div> Thêm tiêu chí vào {activeGroup}</button>
+                            <button onClick={() => handleAddItem(activeGroup)} className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:border-blue-400 hover:bg-blue-50 dark:bg-slate-800/50 text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 group"><div className="p-1 bg-slate-200 dark:bg-slate-700 rounded-full group-hover:bg-blue-200 transition-colors"><Plus className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400" /></div> Thêm tiêu chí vào {activeGroup}</button>
                         </div>
                     </div>
                 ) : (

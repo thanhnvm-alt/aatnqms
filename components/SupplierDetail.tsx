@@ -145,7 +145,7 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
               </div>
 
               <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50/50">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
                   <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2"><ListChecks className="w-5 h-5 text-indigo-500" /> Nhật ký kiểm tra (PO History)</h3>
                   <span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">{inspections.length} Phiếu</span>
                 </div>

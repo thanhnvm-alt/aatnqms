@@ -69,7 +69,7 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
             ) : plans.length === 0 ? (
                 <div 
                     onClick={onUploadPlan}
-                    className="py-16 md:py-24 border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:border-blue-300 hover:text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80/50 transition-all cursor-pointer group"
+                    className="py-16 md:py-24 border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:border-blue-300 hover:text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/50 transition-all cursor-pointer group"
                 >
                     <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center mb-4 md:mb-6 group-hover:scale-110 transition-transform">
                         <Upload className="w-8 h-8 md:w-10 md:h-10" />

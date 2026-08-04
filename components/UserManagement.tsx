@@ -578,7 +578,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                       <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-colors active:scale-90"><X className="w-7 h-7"/></button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+                  <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                           {/* Avatar & Basic */}
                           <div className="space-y-6 flex flex-col items-center">
@@ -1047,7 +1047,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                       <button onClick={() => { setIsActivityOpen(false); setSelectedActUserId(null); }} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-colors active:scale-90"><X className="w-7 h-7"/></button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-6 md:p-8 no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+                  <div className="flex-1 overflow-y-auto p-6 md:p-8 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
                       <UserActivityList userId={selectedActUserId} />
                   </div>
               </div>

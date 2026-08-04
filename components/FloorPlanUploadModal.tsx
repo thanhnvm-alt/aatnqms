@@ -107,11 +107,11 @@ export const FloorPlanUploadModal: React.FC<FloorPlanUploadModalProps> = ({ proj
                     <button onClick={onClose} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-all"><X className="w-6 h-6"/></button>
                 </div>
 
-                <div className="p-8 space-y-6 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/50/30">
+                <div className="p-8 space-y-6 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/30">
                     {!file ? (
                         <div 
                             onClick={() => fileInputRef.current?.click()}
-                            className="aspect-[16/10] border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[2rem] flex flex-col items-center justify-center text-slate-300 hover:border-blue-300 hover:text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80/50 transition-all cursor-pointer group"
+                            className="aspect-[16/10] border-4 border-dashed border-slate-200 dark:border-slate-700 rounded-[2rem] flex flex-col items-center justify-center text-slate-300 hover:border-blue-300 hover:text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/50 transition-all cursor-pointer group"
                         >
                             <Upload className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform" />
                             <p className="font-black uppercase tracking-widest text-xs">Kéo thả hoặc click để chọn file</p>

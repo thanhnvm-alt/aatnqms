@@ -662,7 +662,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
             {/* Evidence Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-50">
-                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
                     <label className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between">ẢNH HIỆN TRƯỜNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.images?.map((img, i) => (
@@ -679,7 +679,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                         ))}
                     </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
                     <label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">PHIẾU GIAO HÀNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.deliveryNoteImages?.map((img, i) => (
@@ -696,7 +696,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                         ))}
                     </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
                     <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">BÁO CÁO NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
                         {formData.reportImages?.map((img, i) => (
@@ -962,7 +962,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                     </div>
 
                                     {(mat.items || []).map((item, itemIdx) => (
-                                        <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/20/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                                        <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                                             <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
                                                 <div className="flex-1 pr-2">
                                                     <input 
@@ -1075,7 +1075,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                                             </div>
                                         ))}
                                         {(!mat.images || mat.images.length === 0) && (
-                                            <div className="flex-1 h-14 flex items-center justify-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-800/50/30">
+                                            <div className="flex-1 h-14 flex items-center justify-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-800/30">
                                                 <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">CHƯA CÓ ẢNH SẢN PHẨM</p>
                                             </div>
                                         )}

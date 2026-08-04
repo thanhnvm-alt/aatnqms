@@ -712,10 +712,20 @@ export async function runMigrations() {
 
     // Tối ưu hóa Database: Giải pháp 2 (Sử dụng View cho projects)
     try {
-      // Drop materialized view if it exists and replace with regular view for real-time data
-      // We do this in a separate try to avoid blocking if we don't have permissions (though we should as owner)
+      // Drop materialized view if it exists as a materialized view, and replace with regular view for real-time data
+      // We check pg_class to see if it is currently a materialized view ('m') before dropping it.
       try {
-        await query(`DROP MATERIALIZED VIEW IF EXISTS "${schema}"."ipo_projects_mv"`);
+        const relCheck = await query(`
+          SELECT c.relkind 
+          FROM pg_class c 
+          JOIN pg_namespace n ON n.oid = c.relnamespace 
+          WHERE c.relname = 'ipo_projects_mv' AND n.nspname = $1
+        `, [schema]);
+        
+        if (relCheck.rows.length > 0 && relCheck.rows[0].relkind === 'm') {
+          await query(`DROP MATERIALIZED VIEW "${schema}"."ipo_projects_mv"`);
+          console.log(`✅ Safely dropped existing Materialized View ipo_projects_mv in ${schema}`);
+        }
       } catch (dropErr: any) {
         console.warn(`⚠️ Could not drop ipo_projects_mv Materialized View:`, dropErr.message);
       }

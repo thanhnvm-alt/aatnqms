@@ -263,7 +263,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
 
                 {/* History Summary */}
                 <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50/50">
+                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm">
                         <History className="w-5 h-5 text-indigo-500" />
@@ -704,13 +704,13 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack }) => {
                            </div>
                            <h4 className="font-black text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-widest">Tóm tắt lộ trình thay đổi</h4>
                          </div>
-                         <p className="text-sm text-slate-700 dark:text-slate-300 font-bold leading-relaxed bg-slate-50 dark:bg-slate-800/50/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
+                         <p className="text-sm text-slate-700 dark:text-slate-300 font-bold leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
                            {aiResult.Field_Group_History_Summary}
                          </p>
                        </div>
 
                        {/* Risk Correlation */}
-                       <div className="col-span-full p-8 bg-red-50 dark:bg-red-900/20/50 rounded-[3rem] border border-red-100 space-y-4">
+                       <div className="col-span-full p-8 bg-red-50 dark:bg-red-900/20 rounded-[3rem] border border-red-100 space-y-4">
                          <div className="flex items-center gap-3 mb-2 text-red-700">
                            <AlertTriangle className="w-6 h-6" />
                            <h4 className="font-black text-[11px] uppercase tracking-widest">Đối chiếu rủi ro chất lượng (Quality Correlation)</h4>

@@ -4,6 +4,7 @@ import { useInspectionContext } from '../src/context/InspectionContext';
 import { Inspection, InspectionStatus, CheckStatus, Workshop, ModuleId, User, hasPermission } from '../types';
 import { exportInspections, deleteInspection, importInspectionsFile, fetchInspectionById } from '../services/apiService';
 import { ProxyImage } from '../src/components/ProxyImage';
+import { getProxyImageUrl } from '../src/utils';
 import { formatDisplayDate, getGmt7DayBounds, getGmt7MonthBounds, getImplementationDate } from '../lib/utils';
 import { DateRangePicker } from './DateRangePicker';
 import { SearchableSelect } from './SearchableSelect';
@@ -988,7 +989,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         <div className="hidden md:flex flex-1 h-full w-full bg-white dark:bg-slate-900 divide-x divide-slate-200 dark:divide-slate-800 overflow-x-auto overflow-y-hidden text-sm">
             
             {/* COLUMN 1: DATES */}
-            <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50/50 relative" style={{ width: colSizes[0] }}>
+            <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50 relative" style={{ width: colSizes[0] }}>
                 <div 
                     className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                     onMouseDown={startDrag(0)}
@@ -1241,7 +1242,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                         </button>
                     )}
                 </div>
-                <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-slate-50 dark:bg-slate-800/50/30">
+                <div className="flex-1 overflow-y-auto no-scrollbar p-6 bg-slate-50 dark:bg-slate-800/30">
                     {!selectedItemDesktop ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
                             <Info className="w-12 h-12 mb-4 opacity-20" />
@@ -1392,19 +1393,19 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex flex-col transition-all">
               <div className="flex justify-between items-center p-4 text-white/50 shrink-0">
                   <div className="text-xs font-bold tracking-widest">{lightboxState.index + 1} / {lightboxState.images.length}</div>
-                  <button onClick={() => setLightboxState(null)} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-full transition-colors">
+                  <button onClick={() => setLightboxState(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                       <X className="w-6 h-6 text-white"/>
                   </button>
               </div>
               <div className="flex-1 min-h-0 relative flex items-center justify-center p-4">
-                  <img src={lightboxState.images[lightboxState.index]} className="max-w-full max-h-full object-contain rounded-lg" referrerPolicy="no-referrer" />
+                  <img src={getProxyImageUrl(lightboxState.images[lightboxState.index])} className="max-w-full max-h-full object-contain rounded-lg" referrerPolicy="no-referrer" />
                   {lightboxState.index > 0 && (
-                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index - 1 })} className="absolute left-4 p-3 bg-black/50 hover:bg-white dark:bg-slate-900/20 text-white rounded-full backdrop-blur-md transition-colors">
+                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index - 1 })} className="absolute left-4 p-3 bg-black/50 hover:bg-white/10 text-white rounded-full backdrop-blur-md transition-colors">
                           <ChevronLeft className="w-6 h-6" />
                       </button>
                   )}
                   {lightboxState.index < lightboxState.images.length - 1 && (
-                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index + 1 })} className="absolute right-4 p-3 bg-black/50 hover:bg-white dark:bg-slate-900/20 text-white rounded-full backdrop-blur-md transition-colors">
+                      <button onClick={() => setLightboxState({ ...lightboxState, index: lightboxState.index + 1 })} className="absolute right-4 p-3 bg-black/50 hover:bg-white/10 text-white rounded-full backdrop-blur-md transition-colors">
                           <ChevronRight className="w-6 h-6" />
                       </button>
                   )}

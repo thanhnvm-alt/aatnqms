@@ -780,7 +780,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                                           "{ncr.issueDescription}"
                                       </div>
                                   </div>
-                                  <div className={`px-3 py-2 border-t flex items-center justify-between ${ncr.status === 'CLOSED' ? 'bg-green-50 dark:bg-green-900/20/50 border-green-100' : 'bg-slate-50 dark:bg-slate-800/50/50 border-slate-100 dark:border-slate-800'}`}>
+                                  <div className={`px-3 py-2 border-t flex items-center justify-between ${ncr.status === 'CLOSED' ? 'bg-green-50 dark:bg-green-900/20 border-green-100' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
                                       <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${getStatusStyle(ncr.status)}`}>
                                           {ncr.status}
                                       </span>
@@ -798,7 +798,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
       <div className="hidden md:flex flex-1 h-full w-full bg-white dark:bg-slate-900 divide-x divide-slate-200 dark:divide-slate-800 overflow-x-auto overflow-y-hidden text-sm">
           
           {/* COLUMN 1: DATES */}
-          <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50/50 relative" style={{ width: colSizes[0] }}>
+          <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50 relative" style={{ width: colSizes[0] }}>
               <div 
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(0)}
@@ -948,7 +948,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
           </div>
 
           {/* COLUMN 3: ITEMS */}
-          <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50/50 relative" style={{ width: colSizes[2] }}>
+          <div className="flex flex-col shrink-0 bg-slate-50 dark:bg-slate-800/50 relative" style={{ width: colSizes[2] }}>
               <div 
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 z-10 transition-colors" 
                   onMouseDown={startDrag(2)}
@@ -978,7 +978,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
                               <div 
                                   key={item.id} 
                                   onClick={() => handleSelectNcrDesktop(item)}
-                                  className={`p-4 hover:bg-blue-50 dark:bg-blue-900/20/50 cursor-pointer transition-colors relative ${selectedNcrDesktop?.id === item.id ? 'bg-blue-50 dark:bg-blue-900/20/80 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white dark:bg-slate-900'}`}
+                                  className={`p-4 hover:bg-blue-50 dark:bg-blue-900/20 cursor-pointer transition-colors relative ${selectedNcrDesktop?.id === item.id ? 'bg-blue-50 dark:bg-blue-900/50 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-blue-600' : 'bg-white dark:bg-slate-900'}`}
                               >
                                   <div className="flex items-start justify-between gap-3 mb-2">
                                       <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1119,7 +1119,7 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               ) : (
                   <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 space-y-6">
                       <div className="relative">
-                          <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/30/50 rounded-full blur-2xl block"></div>
+                          <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/30 rounded-full blur-2xl block"></div>
                           <FileText className="w-20 h-20 text-slate-200 relative z-10" strokeWidth={1} />
                       </div>
                       <p className="text-[11px] font-bold tracking-widest uppercase">Hãy chọn một phiếu NCR để xem tóm tắt</p>

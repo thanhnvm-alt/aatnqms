@@ -83,7 +83,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
             </div>
 
             {/* List: Tối ưu hiển thị mobile */}
-            <div className="flex-1 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/50/30 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/30 no-scrollbar">
                 {notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 text-slate-300">
                         <Bell className="w-16 h-16 opacity-10 mb-4" />
