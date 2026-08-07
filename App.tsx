@@ -9,7 +9,8 @@ import {
   IQC_CHECKLIST_TEMPLATE, 
   PQC_CHECKLIST_TEMPLATE, 
   SQC_MAT_CHECKLIST_TEMPLATE, 
-  SQC_BTP_CHECKLIST_TEMPLATE, 
+  SQC_BTP_CHECKLIST_TEMPLATE,
+  SQC_TP_CHECKLIST_TEMPLATE, 
   FSR_CHECKLIST_TEMPLATE,
   STEP_CHECKLIST_TEMPLATE,
   FQC_CHECKLIST_TEMPLATE,
@@ -51,6 +52,7 @@ const InspectionFormPQC = lazy(() => import('./components/inspectionformPQC').th
 const InspectionFormIQC = lazy(() => import('./components/inspectionformIQC').then(m => ({ default: m.InspectionFormIQC })));
 const InspectionFormSQC_VT = lazy(() => import('./components/inspectionformSQC_VT').then(m => ({ default: m.InspectionFormSQC_VT })));
 const InspectionFormSQC_BTP = lazy(() => import('./components/inspectionformSQC_BTP').then(m => ({ default: m.InspectionFormSQC_BTP })));
+const InspectionFormSQC_TP = lazy(() => import('./components/inspectionformSQC_TP').then(m => ({ default: m.InspectionFormSQC_TP })));
 const InspectionFormFRS = lazy(() => import('./components/inspectionformFRS').then(m => ({ default: m.InspectionFormFRS })));
 const InspectionFormStepVecni = lazy(() => import('./components/inspectionformStepVecni').then(m => ({ default: m.InspectionFormStepVecni })));
 const InspectionFormFQC = lazy(() => import('./components/inspectionformFQC').then(m => ({ default: m.InspectionFormFQC })));
@@ -61,6 +63,7 @@ const InspectionDetailPQC = lazy(() => import('./components/inspectiondetailPQC'
 const InspectionDetailIQC = lazy(() => import('./components/inspectiondetailIQC').then(m => ({ default: m.InspectionDetailIQC })));
 const InspectionDetailSQC_VT = lazy(() => import('./components/inspectiondetailSQC_VT').then(m => ({ default: m.InspectionDetailSQC_VT })));
 const InspectionDetailSQC_BTP = lazy(() => import('./components/inspectiondetailSQC_BTP').then(m => ({ default: m.InspectionDetailSQC_BTP })));
+const InspectionDetailSQC_TP = lazy(() => import('./components/inspectiondetailSQC_TP').then(m => ({ default: m.InspectionDetailSQC_TP })));
 const InspectionDetailFRS = lazy(() => import('./components/inspectiondetailFRS').then(m => ({ default: m.InspectionDetailFRS })));
 const InspectionDetailStepVecni = lazy(() => import('./components/inspectiondetailStepVecni').then(m => ({ default: m.InspectionDetailStepVecni })));
 const InspectionDetailFQC = lazy(() => import('./components/inspectiondetailFQC').then(m => ({ default: m.InspectionDetailFQC })));
@@ -89,7 +92,7 @@ const DETAIL_COMPONENT_MAP: Record<string, any> = {
     'IQC': InspectionDetailIQC,
     'SQC_MAT': InspectionDetailSQC_VT,
     'SQC_VT': InspectionDetailSQC_VT,
-    'SQC_BTP': InspectionDetailSQC_BTP,
+    'SQC_BTP': InspectionDetailSQC_BTP, 'SQC_TP': InspectionDetailSQC_TP,
     'PQC': InspectionDetailPQC,
     'FSR': InspectionDetailFRS,
     'STEP': InspectionDetailStepVecni,
@@ -158,7 +161,7 @@ const App = () => {
       'SITE_SAN': SITE_TEMPLATES.SAN,
       'SITE_CUA': SITE_TEMPLATES.CUA,
       'PQC': PQC_CHECKLIST_TEMPLATE, 'IQC': IQC_CHECKLIST_TEMPLATE,
-      'SQC_MAT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_VT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_BTP': SQC_BTP_CHECKLIST_TEMPLATE, 
+      'SQC_MAT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_VT': SQC_MAT_CHECKLIST_TEMPLATE, 'SQC_BTP': SQC_BTP_CHECKLIST_TEMPLATE, 'SQC_TP': SQC_TP_CHECKLIST_TEMPLATE, 
       'FSR': FSR_CHECKLIST_TEMPLATE, 'STEP': STEP_CHECKLIST_TEMPLATE, 'FQC': FQC_CHECKLIST_TEMPLATE, 'SPR': SPR_CHECKLIST_TEMPLATE
   });
   
@@ -497,6 +500,7 @@ const App = () => {
                     activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
                     activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
                     activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
+                    activeInspection?.type === 'SQC_TP' || initialFormState?.type === 'SQC_TP' ? <InspectionFormSQC_TP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
                     activeInspection?.type === 'FSR' || initialFormState?.type === 'FSR' ? <InspectionFormFRS initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} inspections={inspections} /> :
                     activeInspection?.type === 'FQC' || initialFormState?.type === 'FQC' ? <InspectionFormFQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} inspections={inspections} /> :
                     activeInspection?.type === 'SPR' || initialFormState?.type === 'SPR' ? <InspectionFormSPR initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} inspections={inspections} /> :

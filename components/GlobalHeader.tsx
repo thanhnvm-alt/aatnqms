@@ -105,6 +105,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         case 'IQC': return 'IQC Inspection';
         case 'SQC_MAT': return 'SQC Material';
         case 'SQC_BTP': return 'SQC Semi-Product';
+        case 'SQC_TP': return 'SQC Final Product';
         case 'PQC': return 'PQC Inspection';
         case 'FSR': return 'FSR Sample';
         case 'STEP': return 'Step Vecni';
@@ -140,6 +141,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         case 'IQC': return 'Kiểm soát vật liệu đầu vào';
         case 'SQC_MAT': return 'Gia công ngoài - Vật tư';
         case 'SQC_BTP': return 'Gia công ngoài - Bán thành phẩm';
+        case 'SQC_TP': return 'Gia công ngoài - Thành phẩm';
         case 'PQC': return 'Kiểm tra quá trình sản xuất';
         case 'FSR': return 'Thẩm định mẫu đầu tiên';
         case 'STEP': return 'Kiểm soát các bước màu';

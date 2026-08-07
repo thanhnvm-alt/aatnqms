@@ -1,6 +1,6 @@
 {
   "schema": "appQAQC",
-  "timestamp": "2026-07-15T02:06:36.332Z",
+  "timestamp": "2026-08-05T05:06:07.756Z",
   "logs": [
     "✅ Ensured table audit_logs exists in appQAQC",
     "✅ Ensured table status_history exists in appQAQC",
@@ -11,6 +11,7 @@
     "✅ Ensured table forms_iqc exists in appQAQC",
     "✅ Ensured table forms_sqc_vt exists in appQAQC",
     "✅ Ensured table forms_sqc_btp exists in appQAQC",
+    "✅ Ensured table forms_sqc_tp exists in appQAQC",
     "✅ Ensured table forms_sqc_mat exists in appQAQC",
     "✅ Ensured table forms_fsr exists in appQAQC",
     "✅ Ensured table forms_step exists in appQAQC",

@@ -25,7 +25,7 @@ async function seedAdmin() {
       '2024-01-01', 
       'University', 
       '', 
-      JSON.stringify({ allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'] })
+      JSON.stringify({ allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'] })
     ]);
     console.log('Admin user seeded successfully with password 123');
   } catch (e) {

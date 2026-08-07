@@ -142,7 +142,7 @@ const sanitizeArgs = (args: any[]): any[] => {
     });
 };
 
-export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'sqc', 'fsr', 'step', 'fqc', 'spr', 'site'];
+export const MODULE_TABLES = ['iqc', 'pqc', 'sqc_mat', 'sqc_vt', 'sqc_btp', 'sqc_tp', 'sqc', 'fsr', 'step', 'fqc', 'spr', 'site'];
 
 /**
  * Get the table name based on inspection type
@@ -152,6 +152,7 @@ export const getTableName = (type: string = 'PQC'): string => {
     
     if (t === 'SQC' || t === 'SQC_VT' || t === 'SQC-VT' || t === 'VẬT TƯ' || t === 'VAT TU') return `${SCHEMA}."forms_sqc_vt"`;
     if (t === 'SQC_BTP' || t === 'SQC-BTP' || t === 'BÁN THÀNH PHẨM' || t === 'BAN THANH PHAM') return `${SCHEMA}."forms_sqc_btp"`;
+    if (t === 'SQC_TP' || t === 'SQC-TP' || t === 'THÀNH PHẨM' || t === 'THANH PHAM') return `${SCHEMA}."forms_sqc_tp"`;
     if (t === 'SQC_MAT' || t === 'SQC-MAT') return `${SCHEMA}."forms_sqc_mat"`;
     if (t === 'PQC') return `${SCHEMA}."forms_pqc"`;
     if (t === 'IQC') return `${SCHEMA}."forms_iqc"`;
@@ -231,7 +232,7 @@ export async function getLayoutPins(floorPlanId: string): Promise<LayoutPin[]> {
     const pins = res.rows as any[];
     for (const pin of pins) {
         if (pin.inspection_id) {
-            const tables = ['forms_site', 'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr'];
+            const tables = ['forms_site', 'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_tp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr'];
             for (const table of tables) {
                 try {
                     const rowRes = await query(`SELECT headcode, type, status FROM ${SCHEMA}."${table}" WHERE id = $1`, [pin.inspection_id]);
@@ -295,7 +296,7 @@ export async function saveInspection(inspection: Inspection, performedBy?: strin
   // Set accurate workshop values automatically based on type/id
   if (tUpper === 'IQC' || tUpper === 'SQC_MAT') {
       inspection.workshop = 'VẬT TƯ';
-  } else if (tUpper === 'SQC_BTP') {
+  } else if (tUpper === 'SQC_BTP' || tUpper === 'SQC_TP') {
       inspection.workshop = 'GCN';
   } else if (tUpper === 'SITE') {
       inspection.workshop = 'LẮP ĐẶT';
@@ -1264,7 +1265,7 @@ export async function getInspectionsProjectsByMonth(year: number, month: number,
  * Locates an inspection across all module tables.
  */
 export async function getInspectionById(id: string): Promise<Inspection | null> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_tp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         try {
             const res = await query(`SELECT * FROM ${SCHEMA}."${table}" WHERE id = $1`, [id]);
@@ -1337,7 +1338,7 @@ export async function getInspectionById(id: string): Promise<Inspection | null> 
  * Removes an inspection from all module tables.
  */
 export async function deleteInspection(id: string) {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_tp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     const inspection = await getInspectionById(id);
     if (!inspection) return;
 
@@ -1917,10 +1918,10 @@ export function getAdvisoryModules(phong_ban: string, bo_phan: string): string[]
             return ['FQC', 'SPR', 'SITE'];
         }
         if (bp.includes('qc')) {
-            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP'];
+            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP'];
         }
     } else if (pb.includes('sản xuất') || pb.includes('san xuat')) {
-        return ['PQC', 'SQC_BTP', 'STEP'];
+        return ['PQC', 'SQC_BTP', 'SQC_TP', 'STEP'];
     } else if (pb.includes('vật tư') || pb.includes('vat tu')) {
         return ['IQC', 'SQC_MAT'];
     } else if (pb.includes('sd') || pb.includes('drawing') || pb.includes('thiết kế') || pb.includes('thiet ke')) {
@@ -2702,7 +2703,7 @@ export async function deleteProjectDocument(docId: string, deletedAt: number = D
  * Fetches all deleted inspections across all modules.
  */
 export async function getDeletedInspections(): Promise<any[]> {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_tp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     let allDeleted: any[] = [];
     
     for (const table of tables) {
@@ -2721,7 +2722,7 @@ export async function getDeletedInspections(): Promise<any[]> {
  * Restores a soft-deleted inspection.
  */
 export async function restoreInspection(id: string) {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_tp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         await query(`UPDATE ${SCHEMA}."${table}" SET deleted_at = NULL WHERE id = $1`, [id]);
     }
@@ -2731,7 +2732,7 @@ export async function restoreInspection(id: string) {
  * Permanently deletes an inspection from the database.
  */
 export async function hardDeleteInspection(id: string) {
-    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
+    const tables = ['forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_sqc_tp', 'forms_sqc_mat', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site'];
     for (const table of tables) {
         await query(`DELETE FROM ${SCHEMA}."${table}" WHERE id = $1`, [id]);
     }

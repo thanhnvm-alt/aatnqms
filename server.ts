@@ -1183,7 +1183,28 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
 
   app.post("/api/inspections", authenticate, async (req, res) => {
     try {
-      await db.saveInspection(req.body, (req as any).user?.name);
+      const payload = req.body;
+      const userName = (req as any).user?.name;
+      
+      // Tách phiếu (Split) logic for SQC_TP if needed
+      if (payload.type === 'SQC_TP' && payload.splitRequired && Array.isArray(payload.materials) && payload.materials.length > 0) {
+          for (let i = 0; i < payload.materials.length; i++) {
+              const mat = payload.materials[i];
+              const childPayload = {
+                  ...payload,
+                  id: `${payload.id}-${i + 1}`,
+                  ma_ct: mat.po_number || mat.ma_ct || mat.projectCode || payload.ma_ct, // PO from item
+                  materials: [mat],
+                  // Remove split flag for safety
+                  splitRequired: false
+              };
+              await db.saveInspection(childPayload, userName);
+          }
+          try { await db.deleteInspection(payload.id); } catch(e){}
+      } else {
+          await db.saveInspection(payload, userName);
+      }
+      
       res.json({ success: true });
     } catch (error: any) {
       console.error("Inspections Save Error:", error);

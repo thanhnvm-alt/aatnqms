@@ -27,7 +27,7 @@ export enum Priority {
 export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH' | 'TOOLS';
 
 export type ModuleId = 
-  | 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'TOOLS'
+  | 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'SQC_TP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'TOOLS'
   | 'DASHBOARD' | 'LIST' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'MATERIALS' | 'IPO' | 'TRASH'
   | 'SETTINGS_TEMPLATE' | 'SETTINGS_USERS' | 'SETTINGS_ROLES' | 'SETTINGS_WORKSHOPS' | 'SETTINGS_PROFILE' | 'SETTINGS_DEPARTMENTS' | 'SYSTEM_ADMIN';
 
@@ -295,6 +295,7 @@ export interface Inspection {
   dvt?: string;
   so_luong_ipo: number;
   inspectedQuantity?: number;
+  splitRequired?: boolean;
   passedQuantity?: number;
   failedQuantity?: number;
   signature_ref?: string; 

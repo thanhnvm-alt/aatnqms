@@ -50,10 +50,10 @@ export function getLocalAdvisoryModules(phong_ban: string, bo_phan: string): str
             return ['FQC', 'SPR', 'SITE'];
         }
         if (bp.includes('qc')) {
-            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP'];
+            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP'];
         }
     } else if (pb.includes('sản xuất') || pb.includes('san xuat')) {
-        return ['PQC', 'SQC_BTP', 'STEP'];
+        return ['PQC', 'SQC_BTP', 'SQC_TP', 'STEP'];
     } else if (pb.includes('vật tư') || pb.includes('vat tu')) {
         return ['IQC', 'SQC_MAT'];
     } else if (pb.includes('sd') || pb.includes('drawing') || pb.includes('thiết kế') || pb.includes('thiet ke')) {
@@ -841,7 +841,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                   return ['VIEW', 'VIEW_ALL', 'EXPORT'];
                                               }
                                               // 2. Main workflow modules (KIỂM TRA CHẤT LƯỢNG & some main modules)
-                                              if (['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'LIST', 'NCR_LIST', 'TOOLS'].includes(mid)) {
+                                              if (['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'LIST', 'NCR_LIST', 'TOOLS'].includes(mid)) {
                                                   return ['VIEW', 'VIEW_ALL', 'CREATE', 'EDIT_OWN', 'EDIT_ALL', 'DELETE_OWN', 'DELETE_ALL', 'IMPORT', 'EXPORT', 'SIGN1', 'SIGN2'];
                                               }
                                               // 3. Simple inventory / config / CRUD tables with import/export (PROJECTS has no import/export but has CRUD)

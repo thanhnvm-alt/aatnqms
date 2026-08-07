@@ -39,6 +39,7 @@ const MODULE_CONFIG: Record<string, { label: string }> = {
     'SQC_MAT': { label: 'SQC-VT' },
     'SQC_VT': { label: 'SQC-VT' },
     'SQC_BTP': { label: 'SQC-BTP' },
+    'SQC_TP': { label: 'SQC-TP' },
     'FQC': { label: 'FQC' },
     'SITE': { label: 'SITE' },
     'SPR': { label: 'SPR' },
@@ -193,6 +194,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     });
     map['VẬT TƯ'] = 'Vật Tư (VẬT TƯ)';
     map['GCN'] = 'GCN (Gia Công Ngoài)';
+    map['SQC_TP'] = 'SQC - Thành Phẩm';
     map['LẮP ĐẶT'] = 'Lắp Đặt (SITE)';
     return map;
   }, [workshops]);

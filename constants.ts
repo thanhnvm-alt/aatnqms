@@ -43,6 +43,15 @@ export const SQC_BTP_CHECKLIST_TEMPLATE = [
     { id: 'sqc_b_6', category: 'Kết cấu', label: 'Độ chắc chắn của mối ghép (nếu có)', status: CheckStatus.PENDING, notes: '' },
 ];
 
+export const SQC_TP_CHECKLIST_TEMPLATE = [
+  { id: 'sqctp_1', stage: 'Chuẩn bị', category: 'Thi công', label: 'Vệ sinh khu vực', status: CheckStatus.PENDING, notes: '' },
+  { id: 'sqctp_2', stage: 'Gia công', category: 'Thi công', label: 'Cắt phôi', status: CheckStatus.PENDING, notes: '' },
+  { id: 'sqctp_3', stage: 'Lắp ráp', category: 'Thi công', label: 'Lắp ráp chi tiết', status: CheckStatus.PENDING, notes: '' },
+  { id: 'sqctp_4', stage: 'Đóng gói', category: 'Đóng gói', label: 'Quy cách đóng gói', status: CheckStatus.PENDING, notes: '' },
+  { id: 'sqctp_5', stage: 'Tem nhãn', category: 'Tem nhãn', label: 'Kiểm tra tem nhãn', status: CheckStatus.PENDING, notes: '' },
+  { id: 'sqctp_6', stage: 'Testing', category: 'Testing', label: 'Kiểm tra hoạt động/Testing', status: CheckStatus.PENDING, notes: '' },
+];
+
 export const FSR_CHECKLIST_TEMPLATE = [
     { id: 'fsr_1', category: 'Hồ sơ', label: 'Bản vẽ kỹ thuật & Bảng mẫu màu (Color Swatch)', status: CheckStatus.PENDING, notes: '' },
     { id: 'fsr_2', category: 'Kích thước', label: 'Kích thước tổng thể (Dài x Rộng x Cao)', status: CheckStatus.PENDING, notes: '' },
@@ -252,6 +261,7 @@ export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   { id: 'IQC', label: 'IQC - Đầu Vào', group: 'KIỂM TRA CHẤT LƯỢNG' },
   { id: 'SQC_MAT', label: 'SQC - Vật Tư Ngoài', group: 'KIỂM TRA CHẤT LƯỢNG' },
   { id: 'SQC_BTP', label: 'SQC - Bán Thành Phẩm', group: 'KIỂM TRA CHẤT LƯỢNG' },
+  { id: 'SQC_TP', label: 'SQC - Thành Phẩm', group: 'KIỂM TRA CHẤT LƯỢNG' },
   { id: 'PQC', label: 'PQC - Sản Xuất', group: 'KIỂM TRA CHẤT LƯỢNG' },
   { id: 'FSR', label: 'FSR - Mẫu Đầu Tiên', group: 'KIỂM TRA CHẤT LƯỢNG' },
   { id: 'STEP', label: 'Step Vecni - Bước màu', group: 'KIỂM TRA CHẤT LƯỢNG' },
@@ -294,7 +304,7 @@ export const MOCK_USERS: User[] = [
     name: 'Administrator',
     role: 'ADMIN',
     avatar: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff',
-    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'],
+    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'],
     msnv: 'MS-001',
     // Added missing position property
     position: 'Giám đốc hệ thống',
@@ -310,7 +320,7 @@ export const MOCK_USERS: User[] = [
     name: 'Trần Văn Quản Lý',
     role: 'MANAGER',
     avatar: 'https://ui-avatars.com/api/?name=Manager&background=6366f1&color=fff',
-    allowedModules: ['IQC', 'PQC', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
+    allowedModules: ['IQC', 'PQC', 'SQC_BTP', 'SQC_TP', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
     msnv: 'MS-002',
     // Added missing position property
     position: 'Quản lý QC',
@@ -326,7 +336,7 @@ export const MOCK_USERS: User[] = [
     name: 'Nguyễn Văn QC',
     role: 'QC',
     avatar: 'https://ui-avatars.com/api/?name=QC&background=10b981&color=fff',
-    allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'FSR'],
+    allowedModules: ['PQC', 'SITE', 'IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'FSR'],
     msnv: 'MS-003',
     // Added missing position property
     position: 'Nhân viên QC',

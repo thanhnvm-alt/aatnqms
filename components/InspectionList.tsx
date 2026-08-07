@@ -12,7 +12,7 @@ import {
   Search, RefreshCw, FolderOpen, Clock, Upload,
   Loader2, X, ChevronDown, ChevronRight, ChevronLeft, Maximize2,
   Filter, Building2, SlidersHorizontal,
-  PackageCheck, Factory, Truck, Box, ShieldCheck, MapPin,
+  PackageCheck, Package, Factory, Truck, Box, ShieldCheck, MapPin,
   Calendar, RotateCcw, CheckCircle2, AlertOctagon, UserCheck, LayoutGrid, CheckSquare,
   ClipboardList, AlertTriangle, Info, User as UserIcon, CheckCircle, Image as ImageIcon,
   CalendarDays, ArrowRight, Check, FileText, Download, Trash2, Edit, Eye
@@ -42,6 +42,7 @@ const MODULE_CONFIG: Record<string, { label: string; color: string; bg: string; 
     'SQC_MAT': { label: 'SQC-VT', color: 'text-teal-600', bg: 'bg-teal-50', icon: Truck },
     'SQC_VT': { label: 'SQC-VT', color: 'text-teal-600', bg: 'bg-teal-50', icon: Truck },
     'SQC_BTP': { label: 'SQC-BTP', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: Box },
+    'SQC_TP': { label: 'SQC-TP', color: 'text-teal-600', bg: 'bg-teal-50', icon: Package },
     'FQC': { label: 'FQC', color: 'text-indigo-600', bg: 'bg-indigo-50', icon: ShieldCheck },
     'SITE': { label: 'SITE', color: 'text-amber-600', bg: 'bg-amber-50', icon: MapPin },
     'SPR': { label: 'SPR', color: 'text-slate-600 dark:text-slate-400 dark:text-slate-500', bg: 'bg-slate-50 dark:bg-slate-800/50', icon: Filter },
@@ -282,6 +283,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
     });
     map['VẬT TƯ'] = 'Vật Tư (VẬT TƯ)';
     map['GCN'] = 'GCN (Gia Công Ngoài)';
+    map['SQC_TP'] = 'SQC - Thành Phẩm';
     map['LẮP ĐẶT'] = 'Lắp Đặt (SITE)';
     return map;
   }, [workshops]);
@@ -927,7 +929,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                         <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase">
                                                             {
                                                                 (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
-                                                                (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
+                                                                (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP' || item.type === 'SQC_TP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
                                                                 (item.ma_nha_may || item.headcode || '---')
                                                             }
                                                         </span>
@@ -1193,7 +1195,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                             <div className="flex items-center gap-1">
                                                 <span className="font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1 rounded">{
                                                     (item.type === 'PQC') ? (item.ma_nha_may || item.headcode || '---') :
-                                                    (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
+                                                    (item.type === 'IQC' || item.type === 'SQC_VT' || item.type === 'SQC_BTP' || item.type === 'SQC_TP') ? (item.po_number || item.ma_ct || item.ma_nha_may || '---') :
                                                     (item.ma_nha_may || item.headcode || '---')
                                                 }</span>
                                             </div>

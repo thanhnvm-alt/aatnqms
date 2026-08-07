@@ -23,6 +23,7 @@ import { InspectionDetailPQC } from './inspectiondetailPQC';
 import { InspectionDetailIQC } from './inspectiondetailIQC';
 import { InspectionDetailSQC_VT } from './inspectiondetailSQC_VT';
 import { InspectionDetailSQC_BTP } from './inspectiondetailSQC_BTP';
+import { InspectionDetailSQC_TP } from './inspectiondetailSQC_TP';
 import { InspectionDetailFRS } from './inspectiondetailFRS';
 import { InspectionDetailStepVecni } from './inspectiondetailStepVecni';
 import { InspectionDetailFQC } from './inspectiondetailFQC';
@@ -44,7 +45,7 @@ interface ProjectDetailProps {
 
 const DETAIL_MAP: Record<string, any> = {
     'SITE': InspectionDetailSITE, 'PQC': InspectionDetailPQC, 'IQC': InspectionDetailIQC,
-    'SQC_VT': InspectionDetailSQC_VT, 'SQC_MAT': InspectionDetailSQC_VT, 'SQC_BTP': InspectionDetailSQC_BTP,
+    'SQC_VT': InspectionDetailSQC_VT, 'SQC_MAT': InspectionDetailSQC_VT, 'SQC_BTP': InspectionDetailSQC_BTP, 'SQC_TP': InspectionDetailSQC_TP,
     'FSR': InspectionDetailFRS, 'STEP': InspectionDetailStepVecni, 'FQC': InspectionDetailFQC, 'SPR': InspectionDetailSPR
 };
 
