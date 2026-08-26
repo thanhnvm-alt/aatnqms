@@ -402,8 +402,12 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
   };
 
   const handleSubmit = async (targetStatus: InspectionStatus = InspectionStatus.PENDING) => {
-    if (!formData.po_number || !formData.supplier || !formData.supplierAddress) { alert("Vui lòng nhập đầy đủ thông tin."); return; }
-    if (!formData.signature) { alert("QC bắt buộc ký tên."); return; }
+    if (targetStatus === InspectionStatus.PENDING) {
+      if (!formData.po_number || !formData.supplier || !formData.supplierAddress) { alert("Vui lòng nhập đầy đủ thông tin."); return; }
+      if (!formData.signature) { alert("QC bắt buộc ký tên."); return; }
+    } else {
+      if (!formData.po_number) { alert("Vui lòng nhập mã lệnh sản xuất / PO để lưu nháp."); return; }
+    }
     setIsSaving(true);
     setUploadProgress(0);
     try {
