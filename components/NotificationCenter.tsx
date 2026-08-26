@@ -96,7 +96,23 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                 key={n.id}
                                 onClick={() => {
                                     onMarkRead(n.id);
-                                    if (n.link) onNavigate(n.link.view, n.link.id);
+                                    if (n.link) {
+                                        const linkObj = n.link as any;
+                                        let targetView = linkObj.view;
+                                        let targetId = linkObj.id;
+                                        
+                                        if (!targetView && linkObj.inspectionId) {
+                                            targetView = 'DETAIL';
+                                            targetId = linkObj.inspectionId;
+                                        } else if (!targetView && linkObj.ncrId) {
+                                            targetView = 'NCR_LIST';
+                                            targetId = linkObj.ncrId;
+                                        }
+                                        
+                                        if (targetView) {
+                                            onNavigate(targetView as any, targetId);
+                                        }
+                                    }
                                     onClose();
                                 }}
                                 className={`p-1.5 flex gap-2 rounded-xl transition-all cursor-pointer group relative border ${

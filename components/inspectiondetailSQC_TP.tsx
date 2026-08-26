@@ -192,7 +192,7 @@ export const InspectionDetailSQC_TP: React.FC<InspectionDetailProps> = ({
           <div className="flex items-center gap-2">
               <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors active:scale-90 border border-slate-200 dark:border-slate-700 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400 dark:text-slate-500" /></button>
               <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight">Review: SQC - Bán thành phẩm</h2>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight">Review: SQC - Thành phẩm</h2>
                   <div className="flex items-center gap-2">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border tracking-widest ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>{inspection.status}</span>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono font-medium uppercase tracking-tight">#{inspection.id.split('-').pop()}</span>
@@ -223,7 +223,7 @@ export const InspectionDetailSQC_TP: React.FC<InspectionDetailProps> = ({
                 
                 <div className="flex flex-col items-center mb-8 pt-8 md:pt-4">
                     <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{inspection.ten_ct}</p>
-                    <h1 className="text-[14px] font-black text-slate-900 dark:text-slate-100 uppercase leading-tight tracking-tight text-center">BÁO CÁO KIỂM TRA BÁN THÀNH PHẨM (SQC-TP)</h1>
+                    <h1 className="text-[14px] font-black text-slate-900 dark:text-slate-100 uppercase leading-tight tracking-tight text-center">BÁO CÁO KIỂM TRA THÀNH PHẨM (SQC-TP)</h1>
                 </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-8">
@@ -301,7 +301,7 @@ export const InspectionDetailSQC_TP: React.FC<InspectionDetailProps> = ({
         </div>
 
         <div className="space-y-3">
-            <h3 className="text-[11px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-teal-600" /> V. Chi tiết Bán thành phẩm</h3>
+            <h3 className="text-[11px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-teal-600" /> V. Chi tiết Thành phẩm</h3>
             {(inspection.materials || []).map((mat, idx) => {
                 const isExp = expandedMaterial === mat.id;
                 const matIns = Number(mat.inspectQty || 0);

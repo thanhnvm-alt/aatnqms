@@ -365,15 +365,24 @@ const App = () => {
     setReturnView(view);
     setIsDetailLoading(true); 
     try { 
+      if (!id) {
+        throw new Error("Không tìm thấy mã hồ sơ trong liên kết.");
+      }
       const fullInspection = await fetchInspectionById(id); 
       if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); } 
       else { alert("Không tìm thấy phiếu."); }
-    } catch (error) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); } 
+    } catch (error) { 
+      console.error("Lỗi tải chi tiết:", error);
+      alert("Lỗi tải chi tiết: " + (error instanceof Error ? error.message : String(error))); 
+    } finally { setIsDetailLoading(false); } 
   };
 
   const handleEditInspection = async (id: string) => { 
     setIsDetailLoading(true); 
     try { 
+      if (!id) {
+        throw new Error("Không tìm thấy mã hồ sơ.");
+      }
       const fullInspection = await fetchInspectionById(id); 
       if (fullInspection) {
         if (!canUserModifyInspection(fullInspection, user)) {
@@ -383,7 +392,10 @@ const App = () => {
         }
         setActiveInspection(fullInspection); setInitialFormState(fullInspection); setView('FORM'); 
       } 
-    } catch (e) { alert("Lỗi tải chi tiết."); } finally { setIsDetailLoading(false); }
+    } catch (e) { 
+      console.error("Lỗi tải chi tiết:", e);
+      alert("Lỗi tải chi tiết: " + (e instanceof Error ? e.message : String(e))); 
+    } finally { setIsDetailLoading(false); }
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => { 
@@ -410,7 +422,28 @@ const App = () => {
   };
 
   const handleNavigateToRecord = (targetView: ViewState, id: string) => {
-      if (targetView === 'DETAIL') { handleSelectInspection(id); } else { setView(targetView); }
+      let resolvedView = targetView;
+      let resolvedId = id;
+      
+      // Support link object if passed as targetView or targetId
+      if (targetView && typeof targetView === 'object') {
+          const obj = targetView as any;
+          resolvedView = obj.view;
+          resolvedId = obj.id || obj.inspectionId || obj.ncrId;
+          if (!resolvedView && obj.inspectionId) resolvedView = 'DETAIL';
+          if (!resolvedView && obj.ncrId) resolvedView = 'NCR_LIST';
+      } else if (id && typeof id === 'object') {
+          const obj = id as any;
+          resolvedId = obj.id || obj.inspectionId || obj.ncrId;
+          if (!resolvedView && obj.inspectionId) resolvedView = 'DETAIL';
+          if (!resolvedView && obj.ncrId) resolvedView = 'NCR_LIST';
+      }
+
+      if (resolvedView === 'DETAIL') { 
+          handleSelectInspection(resolvedId); 
+      } else if (resolvedView) { 
+          setView(resolvedView); 
+      }
   };
 
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
