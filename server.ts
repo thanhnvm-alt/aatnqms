@@ -464,20 +464,49 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         parents: targetFolderId ? [targetFolderId] : []
       };
 
-      const fileStream = req.file.path ? fs.createReadStream(req.file.path) : Readable.from(req.file.buffer);
+      let fileStream;
+      let tempFilePath = "";
+      if (req.file.path) {
+        fileStream = fs.createReadStream(req.file.path);
+      } else if (req.file.buffer) {
+        tempFilePath = path.join("/tmp", `qms_upload_${Date.now()}_${req.file.originalname || 'file'}`);
+        fs.writeFileSync(tempFilePath, req.file.buffer);
+        fileStream = fs.createReadStream(tempFilePath);
+      } else {
+        return res.status(400).json({ error: 'No file data found' });
+      }
+
       const media = {
         mimeType: req.file.mimetype,
         body: fileStream
       };
 
-      const driveRes = await drive.files.create({
-        requestBody: fileMetadata,
-        media: media,
-        fields: 'id, webViewLink',
-        supportsAllDrives: true
-      });
-
-      const fileId = driveRes.data.id;
+      let fileId = "";
+      try {
+        const driveRes = await drive.files.create({
+          requestBody: fileMetadata,
+          media: media,
+          fields: 'id, webViewLink',
+          supportsAllDrives: true
+        });
+        fileId = driveRes.data.id || "";
+      } finally {
+        // Clean up local temp file as soon as the request ends
+        if (tempFilePath) {
+          try {
+            fs.unlinkSync(tempFilePath);
+          } catch (err) {
+            console.error("Failed to delete temp file:", err);
+          }
+        }
+        if (req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (err) {
+            console.error("Failed to delete temp file:", err);
+          }
+        }
+      }
 
       // Audit Trail (ISO Requirement)
       await logAudit(
@@ -493,15 +522,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
           driveId: fileId
         }
       );
-
-      // Clean up local temp file
-      if (req.file.path) {
-        try {
-          fs.unlinkSync(req.file.path);
-        } catch (err) {
-          console.error("Failed to delete temp file:", err);
-        }
-      }
 
       res.json({ 
         id: fileId, 
@@ -2170,10 +2190,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         filename = result.public_id;
       } else if (drive) {
         console.log("Uploading to Google Drive...");
-        const bufferStream = new Readable();
-        bufferStream.push(req.file.buffer);
-        bufferStream.push(null);
-
         const ma_ct = req.body.ma_ct;
         let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
         try {
@@ -2182,20 +2198,50 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
           console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
         }
 
-        const driveResponse = await drive.files.create({
-          requestBody: {
-            name: `qms_${Date.now()}_${req.file.originalname}`,
-            parents: targetFolderId ? [targetFolderId] : [],
-          },
-          media: {
-            mimeType: req.file.mimetype,
-            body: bufferStream,
-          },
-          fields: 'id, webViewLink, webContentLink',
-          supportsAllDrives: true,
-        });
+        let fileStream;
+        let tempFilePath = "";
+        if (req.file.path) {
+          fileStream = fs.createReadStream(req.file.path);
+        } else if (req.file.buffer) {
+          tempFilePath = path.join("/tmp", `qms_upload_${Date.now()}_${req.file.originalname || 'file'}`);
+          fs.writeFileSync(tempFilePath, req.file.buffer);
+          fileStream = fs.createReadStream(tempFilePath);
+        } else {
+          return res.status(400).json({ error: 'No file data found' });
+        }
 
-        const fileId = driveResponse.data.id;
+        let fileId = "";
+        try {
+          const driveResponse = await drive.files.create({
+            requestBody: {
+              name: `qms_${Date.now()}_${req.file.originalname}`,
+              parents: targetFolderId ? [targetFolderId] : [],
+            },
+            media: {
+              mimeType: req.file.mimetype,
+              body: fileStream,
+            },
+            fields: 'id, webViewLink, webContentLink',
+            supportsAllDrives: true,
+          });
+          fileId = driveResponse.data.id || "";
+        } finally {
+          if (tempFilePath) {
+            try {
+              fs.unlinkSync(tempFilePath);
+            } catch (err) {
+              console.error("Failed to delete temp file:", err);
+            }
+          }
+          if (req.file.path) {
+            try {
+              fs.unlinkSync(req.file.path);
+            } catch (err) {
+              console.error("Failed to delete temp file:", err);
+            }
+          }
+        }
+
         console.log("File uploaded to Drive. ID:", fileId);
         
         // Native proxy URL from the backend
