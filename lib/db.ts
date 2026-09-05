@@ -46,7 +46,7 @@ const getPool = async (): Promise<any> => {
         max: 20,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 60000,
-        query_timeout: 60000,
+        statement_timeout: 60000, // Safe server-side statement timeout instead of corrupting the TCP socket
       });
 
       newPool.on('error', (err: any) => {
@@ -110,15 +110,27 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
       console.error('Full error object:', error);
 
       // If the connection is terminated or timed out, reset the pool so the next request starts fresh
-      if (error.message.includes('terminated') || error.message.includes('timeout') || error.message.includes('Connection') || error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-        console.log('Resetting pool due to connection or SSL error');
+      if (
+        error.message.includes('terminated') || 
+        error.message.includes('timeout') || 
+        error.message.includes('Connection') || 
+        error.message.includes('cancel') || 
+        error.code === '57014' || // PostgreSQL statement timeout error code
+        error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT'
+      ) {
+        console.log('Resetting pool due to connection, timeout or SSL error');
         pool = null;
         poolPromise = null;
       }
       
-      // Auto-retry once for transient connection issues
-      if (error.message.includes('timeout') || error.message.includes('Connection failed')) {
-        console.log('Retrying query due to timeout...');
+      // Auto-retry once for transient connection or timeout issues
+      if (
+        error.message.includes('timeout') || 
+        error.message.includes('Connection failed') || 
+        error.message.includes('cancel') ||
+        error.code === '57014'
+      ) {
+        console.log('Retrying query due to timeout or transient issue...');
         const retryPool = await getPool();
         return await retryPool.query(text, params);
       }
