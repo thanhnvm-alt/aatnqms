@@ -67,24 +67,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     let active = true;
     setIsLoadingNcrs(true);
     
-    // Convert startDate/endDate to unixStart/unixEnd if needed, though getNcrs supports them natively if passed as filters?
-    // Wait, in apiService fetchNcrs just passes filters.
-    // Let's pass the same filters
-    const ncrFilters = { ...filters };
-    if (ncrFilters.startDate) {
-        ncrFilters.unixStart = Math.floor(new Date(ncrFilters.startDate).getTime() / 1000);
+    const ncrFilters: any = {};
+    if (filters?.qc && filters.qc !== 'ALL') ncrFilters.qc = filters.qc;
+    if (filters?.workshop && filters.workshop !== 'ALL') ncrFilters.workshop = filters.workshop;
+    if (filters?.project && filters.project !== 'ALL') ncrFilters.project = filters.project;
+    if (filters?.status && filters.status !== 'ALL') ncrFilters.status = filters.status;
+    if (filters?.startDate) {
+        const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
+        if (!isNaN(ts)) ncrFilters.unixStart = ts;
     }
-    if (ncrFilters.endDate) {
-        ncrFilters.unixEnd = Math.floor(new Date(ncrFilters.endDate).getTime() / 1000) + 86399;
+    if (filters?.endDate) {
+        const ts = Math.floor(new Date(filters.endDate).getTime() / 1000) + 86399;
+        if (!isNaN(ts)) ncrFilters.unixEnd = ts;
     }
     
-    fetchNcrs(ncrFilters, 1, 10000)
+    fetchNcrs(ncrFilters, 1, 1000)
       .then((res: any) => {
         if (active) {
-            setNcrList(res.items || []);
+            setNcrList(res?.items || []);
         }
       })
-      .catch((err: any) => console.error("Failed to load NCRs for dashboard", err))
+      .catch((err: any) => {
+        console.warn("Could not load NCRs for dashboard:", err?.message || err);
+        if (active) {
+            setNcrList([]);
+        }
+      })
       .finally(() => {
         if (active) setIsLoadingNcrs(false);
       });

@@ -1788,34 +1788,58 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
     let args: any[] = [];
     let where = '';
     
-    if (filters.status && filters.status !== 'ALL') { 
-        where += " AND n.status = $" + (args.length + 1); 
-        args.push(filters.status); 
+    if (filters.status && filters.status !== 'ALL' && filters.status !== '') { 
+        const statuses = String(filters.status).split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (statuses.length === 1) {
+            where += " AND n.status = $" + (args.length + 1); 
+            args.push(statuses[0]); 
+        } else if (statuses.length > 1) {
+            where += " AND n.status = ANY($" + (args.length + 1) + ")"; 
+            args.push(statuses); 
+        }
     }
     
-    if (filters.qc && filters.qc !== 'ALL') {
-        where += ` AND i."inspectorName" = $${args.length + 1}`;
-        args.push(filters.qc);
+    if (filters.qc && filters.qc !== 'ALL' && filters.qc !== '') {
+        const qcs = String(filters.qc).split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (qcs.length === 1) {
+            where += ` AND i."inspectorName" = $${args.length + 1}`;
+            args.push(qcs[0]);
+        } else if (qcs.length > 1) {
+            where += ` AND i."inspectorName" = ANY($${args.length + 1})`;
+            args.push(qcs);
+        }
     }
 
-    if (filters.workshop && filters.workshop !== 'ALL') {
-        where += ` AND i.workshop = $${args.length + 1}`;
-        args.push(filters.workshop);
+    if (filters.workshop && filters.workshop !== 'ALL' && filters.workshop !== '') {
+        const workshops = String(filters.workshop).split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (workshops.length === 1) {
+            where += ` AND i.workshop = $${args.length + 1}`;
+            args.push(workshops[0]);
+        } else if (workshops.length > 1) {
+            where += ` AND i.workshop = ANY($${args.length + 1})`;
+            args.push(workshops);
+        }
     }
     
-    if (filters.project && filters.project !== 'ALL') {
-        where += ` AND i.ma_ct = $${args.length + 1}`;
-        args.push(filters.project);
+    if (filters.project && filters.project !== 'ALL' && filters.project !== '') {
+        const projects = String(filters.project).split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (projects.length === 1) {
+            where += ` AND i.ma_ct = $${args.length + 1}`;
+            args.push(projects[0]);
+        } else if (projects.length > 1) {
+            where += ` AND i.ma_ct = ANY($${args.length + 1})`;
+            args.push(projects);
+        }
     }
     
-    if (filters.unixStart && filters.unixStart !== 'NaN' && filters.unixStart !== 'undefined') {
+    if (filters.unixStart && filters.unixStart !== 'NaN' && filters.unixStart !== 'undefined' && filters.unixStart !== '') {
         const ts = parseInt(filters.unixStart, 10);
         if (!isNaN(ts)) {
             where += " AND n.created_at >= $" + (args.length + 1);
             args.push(ts);
         }
     }
-    if (filters.unixEnd && filters.unixEnd !== 'NaN' && filters.unixEnd !== 'undefined') {
+    if (filters.unixEnd && filters.unixEnd !== 'NaN' && filters.unixEnd !== 'undefined' && filters.unixEnd !== '') {
         const ts = parseInt(filters.unixEnd, 10);
         if (!isNaN(ts)) {
             where += " AND n.created_at <= $" + (args.length + 1);
@@ -1823,8 +1847,8 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
         }
     }
     
-    if (filters.search) {
-        const p = `%${filters.search}%`;
+    if (filters.search && filters.search.trim() !== '') {
+        const p = `%${filters.search.trim()}%`;
         const searchIndex = args.length + 1;
         where += ` AND (n.description LIKE $${searchIndex} OR n.defect_code LIKE $${searchIndex} OR n.responsible_person LIKE $${searchIndex} OR i.ma_ct LIKE $${searchIndex})`;
         args.push(p);
@@ -1833,9 +1857,19 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit?: numbe
     const finalSql = sql + where + (limit ? ` ORDER BY n.created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}` : ` ORDER BY n.created_at DESC`);
     const finalArgs = limit ? [...args, limit, offset] : args;
 
+    // Fast-path: If count query doesn't filter by joined inspection columns (i.*), count directly on ncrs table
+    const hasInspectionFilter = (filters.qc && filters.qc !== 'ALL' && filters.qc !== '') ||
+                                (filters.workshop && filters.workshop !== 'ALL' && filters.workshop !== '') ||
+                                (filters.project && filters.project !== 'ALL' && filters.project !== '') ||
+                                (filters.search && filters.search.trim() !== '');
+
+    const countSql = hasInspectionFilter
+        ? `SELECT COUNT(*) as total FROM ${SCHEMA}.ncrs n LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id WHERE n.deleted_at IS NULL` + where
+        : `SELECT COUNT(*) as total FROM ${SCHEMA}.ncrs n WHERE n.deleted_at IS NULL` + where;
+
     const [res, countRes] = await Promise.all([
         query(finalSql, finalArgs),
-        query(`SELECT COUNT(*) as total FROM ${SCHEMA}.ncrs n LEFT JOIN (${inspectionUnion}) i ON n.inspection_id = i.id WHERE n.deleted_at IS NULL` + where, args)
+        query(countSql, args)
     ]);
 
     return { 

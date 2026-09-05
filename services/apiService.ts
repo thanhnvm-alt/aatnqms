@@ -11,7 +11,7 @@ const getAuthHeaders = (): Record<string, string> => {
     };
 };
 
-const apiFetch = async (url: string, options: RequestInit = {}) => {
+const apiFetch = async (url: string, options: RequestInit = {}, retries = 1): Promise<any> => {
     const headers = {
         ...getAuthHeaders(),
         ...(options.headers || {})
@@ -20,25 +20,35 @@ const apiFetch = async (url: string, options: RequestInit = {}) => {
     // Ensure URL is relative or absolute correctly
     const fetchUrl = url.startsWith('http') ? url : url;
     
-    const response = await fetch(fetchUrl, { ...options, headers: headers as HeadersInit });
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        
-        // Handle token expiration or unauthorized access
-        if (response.status === 401) {
-            console.warn('Session expired or unauthorized. Logging out.');
-            localStorage.removeItem('aatn_qms_token');
-            localStorage.removeItem('aatn_auth_storage');
-            sessionStorage.removeItem('aatn_auth_storage');
-            // Avoid infinite loops if we are already on the login page
-            if (!window.location.pathname.includes('/login') && window.location.pathname !== '/') {
-                window.location.reload();
+    try {
+        const response = await fetch(fetchUrl, { ...options, headers: headers as HeadersInit });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            
+            // Handle token expiration or unauthorized access
+            if (response.status === 401) {
+                console.warn('Session expired or unauthorized. Logging out.');
+                localStorage.removeItem('aatn_qms_token');
+                localStorage.removeItem('aatn_auth_storage');
+                sessionStorage.removeItem('aatn_auth_storage');
+                // Avoid infinite loops if we are already on the login page
+                if (!window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+                    window.location.reload();
+                }
             }
+            
+            throw new Error(errorData.error || `Request failed with status ${response.status}`);
         }
-        
-        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        return await response.json();
+    } catch (err: any) {
+        const isGet = !options.method || options.method.toUpperCase() === 'GET';
+        if (isGet && retries > 0 && (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))) {
+            console.warn(`[apiFetch] Network issue for ${url}, retrying in 1.2s...`);
+            await new Promise(r => setTimeout(r, 1200));
+            return apiFetch(url, options, retries - 1);
+        }
+        throw err;
     }
-    return await response.json();
 };
 
 export const fetchIpoData = async (page: number = 1, limit: number = 50, factoryOrder?: string, maTender?: string) => {
@@ -110,59 +120,100 @@ export const saveLayoutPin = async (pin: LayoutPin) => apiFetch('/api/layout-pin
     body: JSON.stringify(pin)
 });
 
-/**
- * ISO-Compliant File Upload
- * Uploads file to storage service and returns a permanent URL
- */
-export const uploadFileToStorage = async (
-    file: File | string, 
-    fileName: string, 
-    ma_ct?: string, 
-    onProgress?: (percent: number) => void
-): Promise<string> => {
-    let fileToUpload: File | Blob;
-    
-    if (typeof file === 'string') {
-        if (file.startsWith('http') || file.startsWith('/uploads/')) return file;
-        try {
-            const res = await fetch(file);
-            fileToUpload = await res.blob();
-        } catch (e) {
-            console.error("Failed to fetch blob from string", e);
-            throw new Error("Failed to process image data");
-        }
-    } else {
-        fileToUpload = file;
-    }
+// Lightweight concurrency queue to prevent network congestion on mobile/cellular uplinks
+class UploadQueue {
+    private running = 0;
+    private maxConcurrent = 2;
+    private queue: Array<() => Promise<void>> = [];
 
-    // Always attempt compression for images
-    if (fileToUpload.type && fileToUpload.type.startsWith('image/')) {
-        try {
-            const options = {
-                maxSizeMB: 0.45, // Target < 500KB (approx 450KB)
-                maxWidthOrHeight: 1600,
-                useWebWorker: true,
-                fileType: 'image/jpeg',
-                initialQuality: 0.8
+    async run<T>(task: () => Promise<T>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            const execute = async () => {
+                this.running++;
+                try {
+                    const result = await task();
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                } finally {
+                    this.running--;
+                    if (this.queue.length > 0) {
+                        const next = this.queue.shift();
+                        if (next) next();
+                    }
+                }
             };
-            const compressed = await imageCompression(fileToUpload as File, options);
-            fileToUpload = compressed;
-        } catch (error) {
-            console.warn("Image compression failed, using original", error);
-        }
-    }
 
-    const formData = new FormData();
-    formData.append('image', fileToUpload, fileName);
-    
-    const finalMaCt = ma_ct || (typeof window !== 'undefined' ? (window as any).current_ma_ct : undefined);
-    if (finalMaCt) {
-        formData.append('ma_ct', finalMaCt);
+            if (this.running < this.maxConcurrent) {
+                execute();
+            } else {
+                this.queue.push(execute);
+            }
+        });
     }
-    
+}
+
+const globalUploadQueue = new UploadQueue();
+
+// Client-side HTML5 canvas compression fallback (works reliably in sandboxed iframes without worker issues)
+const compressWithCanvasFallback = (blobOrFile: Blob | File, maxWidth = 1600, quality = 0.8): Promise<Blob> => {
+    return new Promise((resolve) => {
+        try {
+            const img = new Image();
+            const url = URL.createObjectURL(blobOrFile);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                try {
+                    let { width, height } = img;
+                    if (width > maxWidth || height > maxWidth) {
+                        if (width > height) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        } else {
+                            width = Math.round((width * maxWidth) / height);
+                            height = maxWidth;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        resolve(blobOrFile);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob(
+                        (b) => {
+                            resolve(b || blobOrFile);
+                        },
+                        'image/jpeg',
+                        quality
+                    );
+                } catch (e) {
+                    resolve(blobOrFile);
+                }
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                resolve(blobOrFile);
+            };
+            img.src = url;
+        } catch (e) {
+            resolve(blobOrFile);
+        }
+    });
+};
+
+const sendUploadXHR = (
+    formData: FormData, 
+    onProgress?: (percent: number) => void, 
+    retries = 2
+): Promise<string> => {
     return new Promise<string>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/upload');
+        xhr.timeout = 50000; // 50 seconds timeout
         
         const authHeaders = getAuthHeaders();
         for (const [key, value] of Object.entries(authHeaders)) {
@@ -178,13 +229,22 @@ export const uploadFileToStorage = async (
             };
         }
 
-        xhr.onload = () => {
+        xhr.onload = async () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 try {
                     const data = JSON.parse(xhr.responseText);
                     resolve(data.url || data.fileUrl || data.path);
                 } catch (e) {
                     resolve(xhr.responseText);
+                }
+            } else if (xhr.status >= 500 && retries > 0) {
+                console.warn(`[upload] Server returned status ${xhr.status}, retrying upload (${retries} retries left)...`);
+                await new Promise((r) => setTimeout(r, 1500));
+                try {
+                    const retryResult = await sendUploadXHR(formData, onProgress, retries - 1);
+                    resolve(retryResult);
+                } catch (retryErr) {
+                    reject(retryErr);
                 }
             } else {
                 let errorMsg = `Upload failed (${xhr.status})`;
@@ -200,12 +260,102 @@ export const uploadFileToStorage = async (
             }
         };
 
-        xhr.onerror = () => {
-            reject(new Error("Lỗi kết nối mạng khi tải ảnh lên."));
+        xhr.onerror = async () => {
+            if (retries > 0) {
+                console.warn(`[upload] Network error during upload, auto-retrying (${retries} retries left)...`);
+                await new Promise((r) => setTimeout(r, 1500));
+                try {
+                    const retryResult = await sendUploadXHR(formData, onProgress, retries - 1);
+                    resolve(retryResult);
+                } catch (retryErr) {
+                    reject(retryErr);
+                }
+            } else {
+                reject(new Error("Lỗi kết nối mạng khi tải ảnh lên."));
+            }
+        };
+
+        xhr.ontimeout = async () => {
+            if (retries > 0) {
+                console.warn(`[upload] Upload timed out, auto-retrying (${retries} retries left)...`);
+                await new Promise((r) => setTimeout(r, 1500));
+                try {
+                    const retryResult = await sendUploadXHR(formData, onProgress, retries - 1);
+                    resolve(retryResult);
+                } catch (retryErr) {
+                    reject(retryErr);
+                }
+            } else {
+                reject(new Error("Quá thời gian tải ảnh lên (Timeout). Vui lòng thử lại."));
+            }
         };
 
         xhr.send(formData);
     });
+};
+
+/**
+ * ISO-Compliant File Upload
+ * Uploads file to storage service and returns a permanent URL
+ */
+export const uploadFileToStorage = async (
+    file: File | string, 
+    fileName: string, 
+    ma_ct?: string, 
+    onProgress?: (percent: number) => void
+): Promise<string> => {
+    let fileToUpload: File | Blob;
+    
+    if (typeof file === 'string') {
+        if (file.startsWith('http') || file.startsWith('/uploads/') || file.startsWith('/api/media/image/') || file.startsWith('data:')) {
+            return file;
+        }
+        try {
+            const res = await fetch(file);
+            fileToUpload = await res.blob();
+        } catch (e) {
+            console.error("Failed to fetch blob from string", e);
+            throw new Error("Failed to process image data");
+        }
+    } else {
+        fileToUpload = file;
+    }
+
+    // Always attempt compression for images
+    const isImage = (fileToUpload.type && fileToUpload.type.startsWith('image/')) ||
+        /\.(jpe?g|png|webp|heic|heif|bmp)$/i.test(fileName || (fileToUpload as File).name || '');
+
+    if (isImage) {
+        try {
+            // First try browser-image-compression with useWebWorker: false to avoid sandboxed iframe Worker restrictions
+            const options = {
+                maxSizeMB: 0.45,
+                maxWidthOrHeight: 1600,
+                useWebWorker: false,
+                fileType: 'image/jpeg',
+                initialQuality: 0.8
+            };
+            const compressed = await imageCompression(fileToUpload as File, options);
+            fileToUpload = compressed;
+        } catch (compErr) {
+            console.warn("[upload] browser-image-compression fallback to Canvas:", compErr);
+            try {
+                fileToUpload = await compressWithCanvasFallback(fileToUpload, 1600, 0.8);
+            } catch (canvasErr) {
+                console.warn("[upload] Canvas compression also skipped, using original:", canvasErr);
+            }
+        }
+    }
+
+    const formData = new FormData();
+    formData.append('image', fileToUpload, fileName);
+    
+    const finalMaCt = ma_ct || (typeof window !== 'undefined' ? (window as any).current_ma_ct : undefined);
+    if (finalMaCt) {
+        formData.append('ma_ct', finalMaCt);
+    }
+    
+    return globalUploadQueue.run(() => sendUploadXHR(formData, onProgress));
 };
 
 export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20, sortBy: string = 'reports') => {
@@ -323,7 +473,18 @@ export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: 
 };
 
 export const fetchNcrs = async (filters: any = {}, page: number = 1, limit: number = 20) => {
-    const params = new URLSearchParams({ ...filters, page: page.toString(), limit: limit.toString() });
+    const cleanParams: Record<string, string> = {
+        page: page.toString(),
+        limit: limit.toString()
+    };
+    if (filters) {
+        Object.entries(filters).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== '' && v !== 'ALL' && v !== 'NaN' && v !== 'undefined') {
+                cleanParams[k] = String(v);
+            }
+        });
+    }
+    const params = new URLSearchParams(cleanParams);
     return apiFetch(`/api/ncrs?${params.toString()}`);
 };
 

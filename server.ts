@@ -191,6 +191,45 @@ async function resolveDriveUploadFolder(ma_ct?: string): Promise<string> {
   return dateFolderId;
 }
 
+async function uploadToDriveWithRetry(
+  fileMetadata: { name: string; parents: string[] },
+  tempFilePath: string,
+  mimeType: string,
+  maxRetries = 2
+): Promise<string> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const fileStream = fs.createReadStream(tempFilePath);
+      const driveRes = await drive.files.create({
+        requestBody: fileMetadata,
+        media: {
+          mimeType,
+          body: fileStream,
+        },
+        fields: 'id, webViewLink, webContentLink',
+        supportsAllDrives: true,
+      }, {
+        timeout: 15000,
+      });
+      if (driveRes.data && driveRes.data.id) {
+        return driveRes.data.id;
+      }
+      throw new Error("Google Drive API did not return a valid file ID");
+    } catch (err: any) {
+      lastError = err;
+      const status = err.status || err.code || (err.response && err.response.status);
+      console.warn(`[Google Drive] Upload attempt ${attempt}/${maxRetries} failed with status ${status}:`, err.message);
+      if (attempt < maxRetries) {
+        const delay = attempt * 1200;
+        console.log(`[Google Drive] Waiting ${delay}ms before retrying upload...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // Configure Cloudinary safely
 if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
   cloudinary.config({
@@ -282,6 +321,28 @@ const authenticate = (req: express.Request, res: express.Response, next: express
     console.error('JWT Verification Error:', err);
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
+};
+
+const optionalAuthenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  let token = '';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token as string;
+  } else if (req.cookies && req.cookies['aatn_qms_token']) {
+    token = req.cookies['aatn_qms_token'];
+  }
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      (req as any).user = decoded;
+    } catch (err) {
+      console.warn('Optional auth token invalid, proceeding as anonymous:', err);
+    }
+  }
+  next();
 };
 
 const schema = process.env.DB_SCHEMA || 'appQAQC';
@@ -432,101 +493,112 @@ const streamGoogleDriveImage = async (req: express.Request, res: express.Respons
 };
 
 // Map all secure proxy endpoints to the optimized streaming handler
-app.get("/api/media/image/:fileId", authenticate, streamGoogleDriveImage);
-app.get("/media/stream/:fileId", authenticate, streamGoogleDriveImage);
-app.get("/display-image/:fileId", authenticate, streamGoogleDriveImage);
-app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
+app.get("/api/media/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
+app.get("/media/stream/:fileId", optionalAuthenticate, streamGoogleDriveImage);
+app.get("/display-image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
+app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
 
 // API routes
-  app.post("/api/upload", authenticate, memoryUpload.single('image'), async (req, res) => {
+  app.post("/api/upload", optionalAuthenticate, memoryUpload.single('image'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      if (!drive) {
-        return res.status(503).json({ error: "Google Drive service not configured" });
-      }
-
-      const user = (req as any).user;
+      const user = (req as any).user || { username: 'SYSTEM' };
       const ma_ct = req.body.ma_ct;
-      let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-
-      try {
-        targetFolderId = await resolveDriveUploadFolder(ma_ct);
-      } catch (fErr) {
-        console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
-      }
-
-      // Upload to Google Drive via server stream
-      const fileMetadata = {
-        name: req.file.originalname || req.file.filename || `qms_image_${Date.now()}`,
-        parents: targetFolderId ? [targetFolderId] : []
-      };
-
-      let fileStream;
-      let tempFilePath = "";
-      if (req.file.path) {
-        fileStream = fs.createReadStream(req.file.path);
-      } else if (req.file.buffer) {
-        tempFilePath = path.join("/tmp", `qms_upload_${Date.now()}_${req.file.originalname || 'file'}`);
-        fs.writeFileSync(tempFilePath, req.file.buffer);
-        fileStream = fs.createReadStream(tempFilePath);
-      } else {
-        return res.status(400).json({ error: 'No file data found' });
-      }
-
-      const media = {
-        mimeType: req.file.mimetype,
-        body: fileStream
-      };
-
+      const originalName = req.file.originalname || 'image.jpg';
+      const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const uniqueName = `qms_${Date.now()}_${Math.round(Math.random() * 1e6)}_${safeName}`;
+      
+      let fileUrl = "";
       let fileId = "";
-      try {
-        const driveRes = await drive.files.create({
-          requestBody: fileMetadata,
-          media: media,
-          fields: 'id, webViewLink',
-          supportsAllDrives: true
-        });
-        fileId = driveRes.data.id || "";
-      } finally {
-        // Clean up local temp file as soon as the request ends
-        if (tempFilePath) {
-          try {
-            fs.unlinkSync(tempFilePath);
-          } catch (err) {
-            console.error("Failed to delete temp file:", err);
+
+      // Tier 1: If Google Drive is configured, attempt upload to Google Drive
+      if (drive) {
+        let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+        try {
+          targetFolderId = await resolveDriveUploadFolder(ma_ct);
+        } catch (fErr) {
+          console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
+        }
+
+        const fileMetadata = {
+          name: originalName,
+          parents: targetFolderId ? [targetFolderId] : []
+        };
+
+        const tempFilePath = path.join("/tmp", `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`);
+        try {
+          fs.writeFileSync(tempFilePath, req.file.buffer);
+          fileId = await uploadToDriveWithRetry(fileMetadata, tempFilePath, req.file.mimetype || 'image/jpeg');
+          fileUrl = `/api/media/image/${fileId}`;
+          console.log(`[Google Drive] Successfully uploaded fileId: ${fileId}`);
+        } catch (driveErr: any) {
+          console.warn("[Google Drive Upload Failed] Falling back to local storage:", driveErr?.message || driveErr);
+        } finally {
+          if (fs.existsSync(tempFilePath)) {
+            try { fs.unlinkSync(tempFilePath); } catch (e) {}
           }
         }
-        if (req.file.path) {
-          try {
-            fs.unlinkSync(req.file.path);
-          } catch (err) {
-            console.error("Failed to delete temp file:", err);
-          }
+      }
+
+      // Tier 2: Cloudinary fallback if configured and Drive was not used or failed
+      const useCloudinary = !fileUrl && !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET));
+      if (useCloudinary) {
+        try {
+          const b64 = Buffer.from(req.file.buffer).toString("base64");
+          const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+          const result = await cloudinary.uploader.upload(dataURI, { folder: "qms_uploads" });
+          fileUrl = result.secure_url;
+          fileId = result.public_id;
+        } catch (cErr: any) {
+          console.warn("[Cloudinary Upload Failed] Falling back to local storage:", cErr?.message || cErr);
         }
+      }
+
+      // Tier 3: Local storage fallback (stored in /tmp/qms_uploads and served via /uploads/)
+      if (!fileUrl) {
+        const uploadDir = '/tmp/qms_uploads';
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const localFilePath = path.join(uploadDir, uniqueName);
+        fs.writeFileSync(localFilePath, req.file.buffer);
+        fileUrl = `/uploads/${uniqueName}`;
+        fileId = uniqueName;
+        console.log(`[Local Storage Fallback] Saved file to ${fileUrl}`);
       }
 
       // Audit Trail (ISO Requirement)
-      await logAudit(
-        user.username || 'SYSTEM', 
-        'IMAGE_UPLOAD', 
-        'attachment', 
-        fileId, 
-        null, 
-        { 
-          filename: req.file.originalname, 
-          mimeType: req.file.mimetype, 
-          size: req.file.size,
-          driveId: fileId
-        }
-      );
+      try {
+        await logAudit(
+          user.username || 'SYSTEM', 
+          'IMAGE_UPLOAD', 
+          'attachment', 
+          fileId, 
+          null, 
+          { 
+            filename: originalName, 
+            mimeType: req.file.mimetype, 
+            size: req.file.size,
+            url: fileUrl,
+            storage: fileUrl.startsWith('/api/media/image') ? 'GOOGLE_DRIVE' : (fileUrl.startsWith('/uploads') ? 'LOCAL' : 'CLOUDINARY')
+          }
+        );
+      } catch (auditErr) {
+        console.warn("Failed to log audit for upload:", auditErr);
+      }
 
-      res.json({ 
+      return res.json({ 
         id: fileId, 
-        url: `/api/media/image/${fileId}`, // Internal proxy URL
-        originalName: req.file.originalname 
+        url: fileUrl, 
+        fileUrl: fileUrl, 
+        url_hd: fileUrl,
+        url_thumbnail: fileUrl,
+        originalName: originalName, 
+        size: req.file.size,
+        mime: req.file.mimetype
       });
 
     } catch (error: any) {
@@ -1250,8 +1322,9 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
       const limit = parseInt(req.query.limit as string) || 20;
       const result = await db.getNcrs(filters, page, limit);
       res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch NCRs' });
+    } catch (error: any) {
+      console.error("Error in GET /api/ncrs:", error);
+      res.status(500).json({ error: error?.message || 'Failed to fetch NCRs' });
     }
   });
 
@@ -2148,131 +2221,6 @@ app.get("/api/image/:fileId", authenticate, streamGoogleDriveImage);
         console.error('Proxy error:', error.message || error);
         res.status(500).send('Error proxying image');
       }
-    }
-  });
-
-  // Image Upload API
-  app.post("/api/upload", (req, res, next) => {
-    console.log("--- API UPLOAD REQUEST START ---");
-    console.log("Headers:", req.headers);
-    // Use memory storage if cloud storage is configured or if on Vercel
-    const useCloud = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) || drive);
-    const uploader = (process.env.VERCEL || useCloud) ? memoryUpload : upload;
-    
-    uploader.single('image')(req, res, (err) => {
-      if (err) {
-        console.error("Multer error:", err);
-        return res.status(500).json({ error: `Multer error: ${err.message}` });
-      }
-      next();
-    });
-  }, async (req, res) => {
-    console.log("Received upload request. File:", req.file?.originalname, "Size:", req.file?.size);
-    try {
-      if (!req.file) {
-        console.log("No file in request");
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-      
-      let fileUrl = "";
-      let filename = "";
-
-      const useCloudinary = !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET));
-
-      if (useCloudinary) {
-        console.log("Uploading to Cloudinary...");
-        const b64 = Buffer.from(req.file.buffer).toString("base64");
-        const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
-        const result = await cloudinary.uploader.upload(dataURI, {
-          folder: "qms_uploads",
-        });
-        fileUrl = result.secure_url;
-        filename = result.public_id;
-      } else if (drive) {
-        console.log("Uploading to Google Drive...");
-        const ma_ct = req.body.ma_ct;
-        let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-        try {
-          targetFolderId = await resolveDriveUploadFolder(ma_ct);
-        } catch (fErr) {
-          console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
-        }
-
-        let fileStream;
-        let tempFilePath = "";
-        if (req.file.path) {
-          fileStream = fs.createReadStream(req.file.path);
-        } else if (req.file.buffer) {
-          tempFilePath = path.join("/tmp", `qms_upload_${Date.now()}_${req.file.originalname || 'file'}`);
-          fs.writeFileSync(tempFilePath, req.file.buffer);
-          fileStream = fs.createReadStream(tempFilePath);
-        } else {
-          return res.status(400).json({ error: 'No file data found' });
-        }
-
-        let fileId = "";
-        try {
-          const driveResponse = await drive.files.create({
-            requestBody: {
-              name: `qms_${Date.now()}_${req.file.originalname}`,
-              parents: targetFolderId ? [targetFolderId] : [],
-            },
-            media: {
-              mimeType: req.file.mimetype,
-              body: fileStream,
-            },
-            fields: 'id, webViewLink, webContentLink',
-            supportsAllDrives: true,
-          });
-          fileId = driveResponse.data.id || "";
-        } finally {
-          if (tempFilePath) {
-            try {
-              fs.unlinkSync(tempFilePath);
-            } catch (err) {
-              console.error("Failed to delete temp file:", err);
-            }
-          }
-          if (req.file.path) {
-            try {
-              fs.unlinkSync(req.file.path);
-            } catch (err) {
-              console.error("Failed to delete temp file:", err);
-            }
-          }
-        }
-
-        console.log("File uploaded to Drive. ID:", fileId);
-        
-        // Native proxy URL from the backend
-        const driveUrl = `https://lh3.googleusercontent.com/u/0/d/${fileId}`;
-        fileUrl = `/api/proxy-image?url=${encodeURIComponent(driveUrl)}`;
-        filename = fileId;
-      } else if (process.env.VERCEL) {
-        // Fallback if on Vercel but no cloud keys: return a data URI (warning: limited size)
-        console.warn("No cloud storage configured on Vercel. Falling back to Data URI.");
-        const b64 = Buffer.from(req.file.buffer).toString("base64");
-        fileUrl = `data:${req.file.mimetype};base64,${b64}`;
-        filename = `temp-${Date.now()}`;
-      } else {
-        // Local storage (only if not on Vercel and no cloud storage)
-        console.log("File received locally:", req.file.filename);
-        fileUrl = `/uploads/${req.file.filename}`;
-        filename = req.file.filename;
-      }
-
-      console.log("Upload successful. URL:", fileUrl);
-      res.json({ 
-        url: fileUrl,
-        url_hd: fileUrl,
-        url_thumbnail: fileUrl,
-        filename: filename,
-        size: req.file.size,
-        mime: req.file.mimetype
-      });
-    } catch (error: any) {
-      console.error('Error uploading image:', error);
-      res.status(500).json({ error: `Upload failed: ${error.message || 'Unknown error'}` });
     }
   });
 
