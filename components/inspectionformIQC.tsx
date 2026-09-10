@@ -408,6 +408,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (!formData.signature) { alert("QC bắt buộc ký tên xác nhận báo cáo."); return; }
     const invalidMat = formData.materials?.find(m => m.inspectQty <= 0 || m.inspectQty > m.deliveryQty);
     if (invalidMat) { alert(`Vật tư "${invalidMat.name}" có số lượng kiểm tra không hợp lệ (phải > 0 và <= SL Giao).`); return; }
+
+    const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+    if (invalidQtySum) {
+        alert(`Vật tư "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.`);
+        return;
+    }
     
     setIsSaving(true);
     setUploadProgress(0);

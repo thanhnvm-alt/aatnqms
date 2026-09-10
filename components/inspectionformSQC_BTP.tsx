@@ -399,6 +399,13 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   const handleSubmit = async () => {
     if (!formData.po_number || !formData.supplier || !formData.supplierAddress) { alert("Vui lòng nhập đầy đủ thông tin."); return; }
     if (!formData.signature) { alert("QC bắt buộc ký tên."); return; }
+
+    const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+    if (invalidQtySum) {
+        alert(`Bán thành phẩm "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.`);
+        return;
+    }
+
     setIsSaving(true);
     setUploadProgress(0);
     try {

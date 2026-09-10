@@ -434,6 +434,12 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const handleSubmit = async () => {
     if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã PO và Nhà cung cấp."); return; }
     if (!formData.signature) { alert("QC bắt buộc phải ký tên xác nhận báo cáo."); return; }
+
+    const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+    if (invalidQtySum) {
+        alert(`Vật tư "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.`);
+        return;
+    }
     
     setIsSaving(true);
     setUploadProgress(0);

@@ -162,27 +162,27 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
   }, [inspections, searchCode]);
 
   const lookupPlanInfo = async (code: string) => {
-    if (!code) return;
+    const cleanCode = (code || '').trim();
+    if (!cleanCode) return;
     setIsLookupLoading(true);
     try {
-        if (code.length === 9 || code.length === 13) {
-            const res = await fetchIpoByFactoryOrder(code);
-            const items = res?.items || (Array.isArray(res) ? res : []);
-            if (items && items.length > 0) {
-                const match = items[0];
-                setFormData(prev => ({
-                    ...prev,
-                    ma_nha_may: match.ID_Factory_Order || code,
-                    headcode: match.ID_Factory_Order || code,
-                    ma_ct: match.Ma_Tender || match.Project_name || prev.ma_ct,
-                    ten_ct: match.Project_name || prev.ten_ct,
-                    ten_hang_muc: match.Material_description || prev.ten_hang_muc,
-                    so_luong_ipo: Number(match.Quantity_IPO || match.so_luong_ipo || 0) || prev.so_luong_ipo,
-                    dvt: match.Base_Unit || match.dvt || prev.dvt
-                }));
-                setSearchCode(match.ID_Factory_Order || code);
-                return;
-            }
+        const res = await fetchIpoByFactoryOrder(cleanCode);
+        const items = res?.items || (Array.isArray(res) ? res : []);
+        if (items && items.length > 0) {
+            const match = items[0];
+            const derivedMaCt = match.Ma_Tender || match.Project_name || prevMaCt(match.ID_Factory_Order || cleanCode);
+            setFormData(prev => ({
+                ...prev,
+                ma_nha_may: match.ID_Factory_Order || cleanCode,
+                headcode: match.ID_Factory_Order || cleanCode,
+                ma_ct: match.Ma_Tender || match.Project_name || prev.ma_ct || match.ID_Factory_Order || cleanCode,
+                ten_ct: match.Project_name || prev.ten_ct || '',
+                ten_hang_muc: match.Material_description || prev.ten_hang_muc || '',
+                so_luong_ipo: Number(match.Quantity_IPO || match.so_luong_ipo || 0) || prev.so_luong_ipo || 0,
+                dvt: match.Base_Unit || match.dvt || prev.dvt || 'PCS'
+            }));
+            setSearchCode(match.ID_Factory_Order || cleanCode);
+            return;
         }
         alert("Không tìm thấy dữ liệu IPO cho mã này.");
     } catch (e) {
@@ -191,6 +191,10 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
         setIsLookupLoading(false);
     }
   };
+
+  function prevMaCt(fallback: string) {
+    return formData.ma_ct || fallback;
+  }
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
     if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
@@ -231,11 +235,20 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleSubmit = async () => {
     const ins = Number(formData.inspectedQuantity || 0);
-    if (!formData.ma_ct || !formData.workshop || !formData.inspectionStage) { 
-        alert("Vui lòng nhập đủ thông tin xưởng và chọn công đoạn."); 
+    const foCode = formData.ma_nha_may || formData.headcode || searchCode || '';
+
+    if (!formData.workshop || !formData.inspectionStage) { 
+        alert("Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra."); 
         return; 
     }
     if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
+
+    const pas = Number(formData.passedQuantity || 0);
+    const fai = Number(formData.failedQuantity || 0);
+    if (pas + fai !== ins) {
+        alert("Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.");
+        return;
+    }
 
     setIsSaving(true);
     try {
@@ -274,13 +287,19 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
             }));
         }
 
-        const finalForm = formData;
-            const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
-            const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
-            const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
+        const effectiveMaCt = formData.ma_ct || foCode || '';
+        const finalForm = {
+            ...formData,
+            ma_ct: effectiveMaCt,
+            ma_nha_may: formData.ma_nha_may || foCode,
+            headcode: formData.headcode || foCode
+        };
+        const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
+        const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
+        const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
 
-            await onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
-            clearDraft();
+        await onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
+        clearDraft();
             
 
     } catch (e: any) { 

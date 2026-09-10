@@ -405,6 +405,12 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
     if (targetStatus === InspectionStatus.PENDING) {
       if (!formData.po_number || !formData.supplier || !formData.supplierAddress) { alert("Vui lòng nhập đầy đủ thông tin."); return; }
       if (!formData.signature) { alert("QC bắt buộc ký tên."); return; }
+
+      const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+      if (invalidQtySum) {
+          alert(`Thành phẩm "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.`);
+          return;
+      }
     } else {
       if (!formData.po_number) { alert("Vui lòng nhập mã lệnh sản xuất / PO để lưu nháp."); return; }
     }

@@ -145,7 +145,7 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
                     ...prev,
                     ma_nha_may: match.ID_Factory_Order || code,
                     headcode: match.ID_Factory_Order || code,
-                    ma_ct: match.Ma_Tender || match.Project_name || prev.ma_ct,
+                    ma_ct: match.Ma_Tender || match.Project_name || prev.ma_ct || match.ID_Factory_Order || code,
                     ten_ct: match.Project_name || prev.ten_ct,
                     ten_hang_muc: match.Material_description || prev.ten_hang_muc,
                     so_luong_ipo: Number(match.Quantity_IPO || match.so_luong_ipo || 0) || prev.so_luong_ipo,
@@ -182,11 +182,18 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleSubmit = async () => {
     const ins = Number(formData.inspectedQuantity || 0);
-    if (!formData.ma_ct || !formData.workshop || !formData.inspectionStage) { 
-        alert("Vui lòng nhập đủ thông tin xưởng và chọn công đoạn."); 
+    if (!formData.workshop || !formData.inspectionStage) { 
+        alert("Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra."); 
         return; 
     }
     if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
+
+    const pas = Number(formData.passedQuantity || 0);
+    const fai = Number(formData.failedQuantity || 0);
+    if (pas + fai !== ins) {
+        alert("Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.");
+        return;
+    }
 
     setIsSaving(true);
     try {
@@ -225,7 +232,13 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
             }));
         }
 
-        const finalForm = formData;
+        const foCode = formData.ma_nha_may || formData.headcode || searchCode || '';
+        const finalForm = {
+            ...formData,
+            ma_ct: formData.ma_ct || foCode,
+            ma_nha_may: formData.ma_nha_may || foCode,
+            headcode: formData.headcode || foCode
+        };
             const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
             const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
             const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
