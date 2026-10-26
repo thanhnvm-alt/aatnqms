@@ -3828,6 +3828,9 @@ console.log(`🔧 PORT: ${PORT}`);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
+  db.fixAllUserDefaultPasswords().catch((err: any) => {
+    console.error("Failed to run fixAllUserDefaultPasswords migration:", err);
+  });
 });
 
 export default app;

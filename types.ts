@@ -118,6 +118,7 @@ export interface SubcontractorBooking {
   notes?: string;
   items: SubcontractorBookingItem[];
   documents?: SubcontractorBookingDocuments;
+  isUrgent?: boolean;
   createdAt: number;
   updatedAt?: number;
   version?: number;

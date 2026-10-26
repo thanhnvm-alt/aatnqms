@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for interactive tutorial slides for Lịch nghiệm thu GCN module.",
-  "updatedAt":  "2026-10-26T07:06:50.318899551Z",
+  "summary":  "Kế hoạch sửa lỗi đăng nhập tài khoản mới & tự động khôi phục mật khẩu mặc định 123456 (kèm mã hóa bcrypt và bắt buộc đổi mật khẩu lần đầu).",
+  "updatedAt":  "2026-10-26T09:50:30.143093281Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

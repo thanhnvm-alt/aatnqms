@@ -2544,8 +2544,10 @@ export async function saveUser(u: any) {
     } else if (oldValue && password === oldValue.password) {
         // Frontend passed the same hashed password (unlikely but safe)
         passwordHasChanged = false;
-    } else if (!password.startsWith('$2b$') && !password.startsWith('$2a$')) {
-        // Plain text password, hash it
+    }
+
+    // Ensure password is always hashed if plain text (including default '123456')
+    if (password && !password.startsWith('$2b$') && !password.startsWith('$2a$')) {
         password = await bcrypt.hash(password, SALT_ROUNDS);
         passwordHasChanged = true;
     }
@@ -2642,6 +2644,36 @@ export async function saveUser(u: any) {
 
     if (u.id) {
         await logAudit('SYSTEM', oldValue ? 'UPDATE_USER' : 'CREATE_USER', 'user', u.id, oldValue, updatedU);
+    }
+}
+
+
+
+export async function fixAllUserDefaultPasswords() {
+    try {
+        const defaultHash = await bcrypt.hash('123456', SALT_ROUNDS);
+        const res = await query(`SELECT id, username, password, require_password_change FROM ${SCHEMA}.users WHERE deleted_at IS NULL`);
+        let fixedCount = 0;
+
+        for (const user of res.rows) {
+            const pwd = user.password;
+            const isHashed = pwd && (pwd.startsWith('$2b$') || pwd.startsWith('$2a$'));
+
+            // If password is not a valid bcrypt hash OR if user is unhashed/plain text '123456' OR null/empty
+            if (!isHashed || pwd === '123456' || !pwd) {
+                await query(`
+                    UPDATE ${SCHEMA}.users 
+                    SET password = $1, require_password_change = TRUE, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT 
+                    WHERE id = $2
+                `, [defaultHash, user.id]);
+                fixedCount++;
+            }
+        }
+        if (fixedCount > 0) {
+            console.log(`✅ [QMS Auth Migration] Fixed default passwords & hashed Bcrypt for ${fixedCount} user accounts.`);
+        }
+    } catch (err) {
+        console.error("❌ [QMS Auth Migration] Failed to fix default passwords:", err);
     }
 }
 

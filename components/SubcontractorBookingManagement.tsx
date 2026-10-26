@@ -442,18 +442,22 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
     }
 
     const policy = getBookingDatePolicy();
-    if (!newBooking.requestedDate || newBooking.requestedDate < policy.minDateStr) {
-      alert(
-        `⚠️ NGÀY NGHIỆM THU KHÔNG HỢP LỆ (QUY ĐỊNH 24 TIẾNG):\n\n` +
-        (policy.isAfter15h
-          ? `• Thời điểm đặt lịch hiện tại: ${policy.currentTimeFormatted} (đã sau mốc 15:00).\n` +
-            `• Quy định: Sau 15:00 bắt buộc phải chọn ngày nghiệm thu từ NGÀY MỐT (${policy.dayAfterDisplay}) trở đi.\n` +
-            `• Không được chọn ngày mai (${policy.tomorrowDisplay}).`
-          : `• Thời điểm đặt lịch hiện tại: ${policy.currentTimeFormatted} (trước mốc 15:00).\n` +
-            `• Quy định: Được phép chọn ngày nghiệm thu sớm nhất là NGÀY MAI (${policy.tomorrowDisplay}).`) +
-        `\n\nVui lòng điều chỉnh ngày nghiệm thu từ ${policy.minDateDisplay} trở đi!`
-      );
+    let isUrgent = false;
+    if (!newBooking.requestedDate) {
+      alert("Vui lòng chọn ngày nghiệm thu!");
       return;
+    }
+    if (newBooking.requestedDate < policy.minDateStr) {
+      const confirmUrgent = window.confirm(
+        `⚠️ CẢNH BÁO ĐẶT LỊCH GẤP (MUỘN HƠN QUY ĐỊNH 24 TIẾNG):\n\n` +
+        `• Ngày bạn chọn (${newBooking.requestedDate}) sớm hơn thời hạn tối thiểu theo quy định (${policy.minDateDisplay}).\n` +
+        `• Đặt lịch gấp cần có xác nhận và phê duyệt từ quản lý.\n\n` +
+        `Bạn có muốn xác nhận gửi đơn khẩn cấp và tự động đính kèm cờ 'KHẨN' vào phiếu không?`
+      );
+      if (!confirmUrgent) {
+        return;
+      }
+      isUrgent = true;
     }
 
     try {
@@ -482,6 +486,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
 
       await createSubcontractorBooking({
         ...newBooking,
+        isUrgent,
         requesterId: currentUser?.id,
         requesterName: currentUser?.name || 'Chuyên viên Mua hàng',
         requestedDate: new Date(newBooking.requestedDate).getTime() / 1000
@@ -861,7 +866,14 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     filteredBookings.map(b => (
                       <tr key={b.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="px-3 py-2.5 font-medium">
-                          <div className="font-mono text-blue-600 dark:text-blue-400 font-bold">{b.bookingCode}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">{b.bookingCode}</span>
+                            {b.isUrgent && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-800 animate-pulse">
+                                KHẨN
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-slate-500 font-mono">PO: {b.poNumber}</div>
                         </td>
                         <td className="px-3 py-2.5">
