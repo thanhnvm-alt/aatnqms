@@ -1,31 +1,22 @@
-# Implementation Plan - Password Management & Recovery (First Login Change & Forgot Password)
+# Implementation Plan - Tutorial Slides for "Lịch nghiệm thu GCN" Module
 
 ## User Requirements
-1. **First-time password change**: When new users log in with default credentials or when required, display a notification modal prompting them to change their password immediately.
-2. **Forgot Password recovery**: Allow users to recover/reset their password using their registered email address and set a new password.
+1. **In-app presentation slides**: Create an interactive tutorial slide viewer integrated directly inside the app for the "Lịch nghiệm thu GCN" module.
+2. **Emphasized content**:
+   - Booking process & 24-hour cutoff rule before 15:00 VN time.
+   - Step-by-step booking creation and status tracking.
+   - Role-based permissions and QC assignment workflow.
 
-## Proposed Changes
+## Proposed Components & Changes
 
-### Backend (`server.ts` & `services/dbService.ts`)
-1. **Change Password Endpoint (`POST /api/auth/change-password`)**:
-   - Authenticates current password (or allows forced change if `require_password_change` is true).
-   - Updates password (hashed with bcrypt) and sets `require_password_change = false`.
-   - Logs audit trail.
+### 1. New Component: `SubcontractorSlideGuideModal.tsx`
+- Interactive slideshow with 5 professional structured slides:
+  - **Slide 1**: Giới thiệu module "Lịch nghiệm thu GCN" & Mục đích QA/QC.
+  - **Slide 2**: Quy định cốt lõi - Đặt lịch trước 24h và Quy tắc mốc 15:00 (ICT).
+  - **Slide 3**: Hướng dẫn thao tác lập phiếu & Chọn thông tin dự án/nhà máy.
+  - **Slide 4**: Phân quyền hệ thống & Phân công QC thẩm định.
+  - **Slide 5**: Vòng đời trạng thái phiếu & Báo cáo biên bản.
+- Controls: Previous, Next, Slide Indicator Dots, Close, Print/Export option.
 
-2. **Forgot Password Request Endpoint (`POST /api/auth/forgot-password`)**:
-   - Accepts `email`.
-   - Checks if user exists. Generates a secure reset token / code (e.g. valid for 15 minutes).
-   - Simulates sending email (and returns the reset code/token in development response for testing ease).
-
-3. **Reset Password Endpoint (`POST /api/auth/reset-password`)**:
-   - Accepts `email`, `code`, and `newPassword`.
-   - Verifies code and updates password with bcrypt hash.
-
-### Frontend (`src/components/LoginPage.tsx`)
-1. **First Login Modal**:
-   - Detects `requirePasswordChange: true` upon login.
-   - Prompts user to change password immediately.
-
-2. **Forgot Password Modal**:
-   - Step 1: Input email.
-   - Step 2: Input reset code and new password.
+### 2. Integration in `SubcontractorBookingManagement.tsx`
+- Add a prominent "📖 Hướng dẫn sử dụng (Slide)" button in the module header so users can launch the tutorial slides anytime.

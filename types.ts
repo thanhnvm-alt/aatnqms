@@ -38,6 +38,7 @@ export interface SubcontractorBookingItem {
   quantity: number;
   unit: string;
   specifications?: string;
+  isInspected?: boolean;
 }
 
 export interface SubcontractorBookingDocuments {

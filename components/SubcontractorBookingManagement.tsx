@@ -19,8 +19,10 @@ import {
   fetchSuppliers,
   fetchUsers,
   uploadFileToStorage,
-  lookupPoMaterials
+  lookupPoMaterials,
+  saveSupplier
 } from '../services/apiService';
+import { SubcontractorSlideGuideModal } from './SubcontractorSlideGuideModal';
 import { 
   Calendar, 
   Clock, 
@@ -47,7 +49,8 @@ import {
   X,
   FileCheck2,
   Pencil,
-  Trash2
+  Trash2,
+  BookOpen
 } from 'lucide-react';
 
 // Format Date helpers for local calendar (avoid timezone offset bugs)
@@ -129,6 +132,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showInspectModal, setShowInspectModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showSlideGuide, setShowSlideGuide] = useState(false);
 
   // References for dropdown options
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -149,7 +153,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
     contactPhone: '',
     requestedDate: bookingPolicy.minDateStr,
     notes: '',
-    items: [{ id: '1', itemName: 'Tủ âm tường MFC Phủ Melamine', quantity: 10, unit: 'Bộ', specifications: 'Theo shopdrawing SD-01' }],
+    items: [{ id: '1', itemName: 'Tủ âm tường MFC Phủ Melamine', quantity: 10, unit: 'Bộ', specifications: 'Theo shopdrawing SD-01', isInspected: true }],
     documents: {
       materialSpecUrl: '',
       approvedSampleUrl: '',
@@ -168,7 +172,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
     requestedDate: '',
     notes: '',
     status: 'PENDING',
-    items: [{ id: '1', itemName: '', quantity: 1, unit: 'Bộ', specifications: '' }],
+    items: [{ id: '1', itemName: '', quantity: 1, unit: 'Bộ', specifications: '', isInspected: true }],
     documents: {
       materialSpecUrl: '',
       approvedSampleUrl: '',
@@ -248,9 +252,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
             itemName: it.itemName || '',
             quantity: it.quantity || 1,
             unit: it.unit || 'Bộ',
-            specifications: it.specifications || ''
+            specifications: it.specifications || '',
+            isInspected: it.isInspected !== false
           }))
-        : [{ id: '1', itemName: '', quantity: 1, unit: 'Bộ', specifications: '' }],
+        : [{ id: '1', itemName: '', quantity: 1, unit: 'Bộ', specifications: '', isInspected: true }],
       documents: {
         materialSpecUrl: b.documents?.materialSpecUrl || '',
         approvedSampleUrl: b.documents?.approvedSampleUrl || '',
@@ -346,20 +351,29 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
     const matchedPo = item.poNumber || item.itemCode || newBooking.poNumber;
     const matchedSupplier = item.supplierName || newBooking.supplierName;
     
+    // Find all items in search results matching this PO number
+    const matchingItems = poSearchResults.filter(r => (r.poNumber || r.itemCode) === matchedPo);
+    const itemsToUse = matchingItems.length > 0 ? matchingItems : [item];
+
+    // Check if supplier has saved contact info in suppliers list
+    const foundSupplier = suppliers.find(s => s.name.toLowerCase() === matchedSupplier.toLowerCase());
+
     // Auto-fill form fields
     setNewBooking(prev => ({
       ...prev,
       poNumber: matchedPo,
       supplierName: matchedSupplier,
-      items: [
-        {
-          id: '1',
-          itemName: item.itemName || 'Sản phẩm / Vật tư gia công',
-          quantity: item.quantity || 1,
-          unit: item.unit || 'Bộ',
-          specifications: item.specifications || (item.projectName ? `Dự án: ${item.projectName}` : '')
-        }
-      ]
+      locationAddress: foundSupplier?.address || prev.locationAddress || '',
+      contactPerson: foundSupplier?.contact_person || prev.contactPerson || '',
+      contactPhone: foundSupplier?.phone || prev.contactPhone || '',
+      items: itemsToUse.map((it, idx) => ({
+        id: String(idx + 1),
+        itemName: it.itemName || 'Sản phẩm / Vật tư gia công',
+        quantity: it.quantity || 1,
+        unit: it.unit || 'Bộ',
+        specifications: it.specifications || (it.projectName ? `Dự án: ${it.projectName}` : ''),
+        isInspected: true
+      }))
     }));
     setShowPoDropdown(false);
   };
@@ -444,6 +458,28 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
 
     try {
       setIsLoading(true);
+
+      // Save/update supplier contact info in suppliers table for future auto-fill
+      if (newBooking.supplierName && (newBooking.locationAddress || newBooking.contactPerson || newBooking.contactPhone)) {
+        try {
+          const existingSup = suppliers.find(s => s.name.toLowerCase() === newBooking.supplierName.toLowerCase());
+          const supPayload = {
+            id: existingSup?.id || `SUP-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+            code: existingSup?.code || `SUP-${Math.floor(Math.random()*10000)}`,
+            name: newBooking.supplierName,
+            address: newBooking.locationAddress,
+            contact_person: newBooking.contactPerson,
+            phone: newBooking.contactPhone,
+            email: existingSup?.email || '',
+            category: existingSup?.category || 'Gia công ngoài',
+            status: 'ACTIVE' as 'ACTIVE'
+          };
+          await saveSupplier(supPayload);
+        } catch (supErr) {
+          console.warn("Failed to auto-save supplier info:", supErr);
+        }
+      }
+
       await createSubcontractorBooking({
         ...newBooking,
         requesterId: currentUser?.id,
@@ -461,7 +497,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
         contactPhone: '',
         requestedDate: freshPolicy.minDateStr,
         notes: '',
-        items: [{ id: '1', itemName: '', quantity: 1, unit: 'Bộ', specifications: '' }],
+        items: [{ id: '1', itemName: '', quantity: 1, unit: 'Bộ', specifications: '', isInspected: true }],
         documents: {
           materialSpecUrl: '',
           approvedSampleUrl: '',
@@ -687,6 +723,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors"
           >
             <Plus className="w-4 h-4" /> Book Lịch QC Mới
+          </button>
+          <button
+            onClick={() => setShowSlideGuide(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
+          >
+            <BookOpen className="w-4 h-4 text-blue-600" /> Hướng Dẫn (Slide)
           </button>
         </div>
       </div>
@@ -1120,7 +1162,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     type="button"
                     onClick={() => setNewBooking(prev => ({
                       ...prev,
-                      items: [...prev.items, { id: Date.now().toString(), itemName: '', quantity: 1, unit: 'Bộ', specifications: '' }]
+                      items: [...prev.items, { id: Date.now().toString(), itemName: '', quantity: 1, unit: 'Bộ', specifications: '', isInspected: true }]
                     }))}
                     className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
                   >
@@ -1129,8 +1171,25 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                 </div>
 
                 {newBooking.items.map((item, itemIdx) => (
-                  <div key={item.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 items-center text-xs">
-                    <div className="sm:col-span-5">
+                  <div key={item.id} className={`grid grid-cols-1 sm:grid-cols-12 gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-lg border transition-all items-center text-xs ${item.isInspected === false ? 'border-dashed border-slate-300 dark:border-slate-700 opacity-60' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div className="sm:col-span-1 flex flex-col items-center justify-center pt-1">
+                      <label className="block text-[10px] text-slate-500 font-bold uppercase">Kiểm</label>
+                      <input
+                        type="checkbox"
+                        checked={item.isInspected !== false}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setNewBooking(prev => {
+                            const updated = [...prev.items];
+                            updated[itemIdx].isInspected = checked;
+                            return { ...prev, items: updated };
+                          });
+                        }}
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 rounded cursor-pointer mt-1"
+                        title="Chọn (kiểm) hoặc Bỏ chọn (không kiểm)"
+                      />
+                    </div>
+                    <div className="sm:col-span-4">
                       <label className="block text-[10px] text-slate-400 font-medium">Tên Sản Phẩm / Hạng Mục (*)</label>
                       <input
                         type="text"
@@ -1958,7 +2017,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                       type="button"
                       onClick={() => setEditBooking(prev => ({
                         ...prev,
-                        items: [...prev.items, { id: Date.now().toString(), itemName: '', quantity: 1, unit: 'Bộ', specifications: '' }]
+                        items: [...prev.items, { id: Date.now().toString(), itemName: '', quantity: 1, unit: 'Bộ', specifications: '', isInspected: true }]
                       }))}
                       className="text-xs font-semibold text-amber-600 hover:text-amber-700 inline-flex items-center gap-1"
                     >
@@ -2311,6 +2370,9 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
           </div>
         </div>
       )}
+
+      {/* Slide Guide Modal */}
+      <SubcontractorSlideGuideModal isOpen={showSlideGuide} onClose={() => setShowSlideGuide(false)} />
     </div>
   );
 };
