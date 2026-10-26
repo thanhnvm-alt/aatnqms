@@ -1,6 +1,6 @@
 {
   "schema": "appQAQC",
-  "timestamp": "2026-08-05T05:06:07.756Z",
+  "timestamp": "2026-10-26T06:10:08.717Z",
   "logs": [
     "✅ Ensured table audit_logs exists in appQAQC",
     "✅ Ensured table status_history exists in appQAQC",
@@ -38,6 +38,7 @@
     "✅ Ensured table departments exists in appQAQC",
     "✅ Ensured table divisions exists in appQAQC",
     "✅ Ensured table teams exists in appQAQC",
-    "✅ Ensured table tools exists in appQAQC"
+    "✅ Ensured table tools exists in appQAQC",
+    "✅ Ensured subcontractor booking & inspection tables exist in appQAQC"
   ]
 }

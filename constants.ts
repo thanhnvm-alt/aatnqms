@@ -272,7 +272,7 @@ export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   // --- Menu chính trên Sidebar ---
   { id: 'DASHBOARD', label: 'Menu - Báo Cáo Tổng Hợp', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'PROJECTS', label: 'Menu - Quản lý dự án', group: 'ĐIỀU HƯỚNG CHÍNH' },
-  { id: 'SUBCONTRACTOR_BOOKING', label: 'Menu - Gia công vệ tinh', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'SUBCONTRACTOR_BOOKING', label: 'Menu - Lịch nghiệm thu GCN', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'SUPPLIERS', label: 'Menu - Nhà cung cấp', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'LIST', label: 'Menu - Danh sách phiếu', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'NCR_LIST', label: 'Menu - Danh sách NCR', group: 'ĐIỀU HƯỚNG CHÍNH' },

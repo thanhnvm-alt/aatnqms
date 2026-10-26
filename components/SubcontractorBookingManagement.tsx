@@ -662,10 +662,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">
-            <Building2 className="w-4 h-4" /> Quản Lý Gia Công Ngoài & Xưởng Vệ Tinh (Subcontractor QC)
+            <Building2 className="w-4 h-4" /> Lịch Nghiệm Thu GCN (Gia Công Ngoài & Xưởng Vệ Tinh)
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white uppercase">
-            Sổ Đặt Lịch & Nghiệm Thu Hàng Gia Công
+            Lịch Nghiệm Thu Hàng Gia Công Ngoài (GCN)
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Kết nối Đơn hàng PO ERP $\rightarrow$ Book lịch QC $\rightarrow$ Nghiệm thu tại xưởng vệ tinh & Ký biên bản điện tử

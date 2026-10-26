@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
   const menuItems = [
     { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
-    { id: 'SUBCONTRACTOR_BOOKING', label: 'Gia Công Vệ Tinh', icon: Factory },
+    { id: 'SUBCONTRACTOR_BOOKING', label: 'Lịch nghiệm thu GCN', icon: Factory },
     { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', icon: Truck },
     { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
