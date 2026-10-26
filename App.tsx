@@ -34,6 +34,7 @@ import {
   checkApiConnection, 
   fetchUsers, 
   saveUser, 
+  importUsersBatch,
   deleteUser, 
   fetchWorkshops, 
   saveWorkshop, 
@@ -702,8 +703,13 @@ const App = () => {
         }} 
         onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
         onImportUsers={async (importedUsers) => {
-            for (const u of importedUsers) {
-                await saveUser(u);
+            try {
+                await importUsersBatch(importedUsers);
+            } catch (err) {
+                console.warn('Batch import failed, falling back to sequential saveUser:', err);
+                for (const u of importedUsers) {
+                    await saveUser(u);
+                }
             }
             await loadUsers();
         }}

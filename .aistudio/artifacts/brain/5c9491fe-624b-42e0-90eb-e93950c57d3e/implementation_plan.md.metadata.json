@@ -1,6 +1,6 @@
 {
-  "summary":  "Kế hoạch chi tiết phân loại 3 hình thức kiểm tra SQC (Vật tư ngoài, Bán Thành Phẩm, Thành phẩm) trong tính năng Book QC gia công và kích hoạt form kiểm tra tương ứng.",
-  "updatedAt":  "2026-10-23T12:56:25.493520364Z",
+  "summary":  "Kế hoạch cập nhật theo phản hồi người dùng: Toàn bộ nhân sự nhập từ file Excel sẽ có vai trò cơ bản với ma trận phân quyền mặc định chỉ được phép XEM (VIEW) module Danh sách phiếu ('LIST'). Không tự động suy luận vai trò từ chức vụ/phòng ban. Quản trị viên sẽ chủ động cấu hình chi tiết qua ma trận phân quyền sau khi nạp.",
+  "updatedAt":  "2026-10-26T03:22:23.543801001Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

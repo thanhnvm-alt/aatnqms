@@ -272,6 +272,7 @@ export const ALL_MODULES: { id: ModuleId; label: string; group: string }[] = [
   // --- Menu chính trên Sidebar ---
   { id: 'DASHBOARD', label: 'Menu - Báo Cáo Tổng Hợp', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'PROJECTS', label: 'Menu - Quản lý dự án', group: 'ĐIỀU HƯỚNG CHÍNH' },
+  { id: 'SUBCONTRACTOR_BOOKING', label: 'Menu - Gia công vệ tinh', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'SUPPLIERS', label: 'Menu - Nhà cung cấp', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'LIST', label: 'Menu - Danh sách phiếu', group: 'ĐIỀU HƯỚNG CHÍNH' },
   { id: 'NCR_LIST', label: 'Menu - Danh sách NCR', group: 'ĐIỀU HƯỚNG CHÍNH' },
@@ -304,7 +305,7 @@ export const MOCK_USERS: User[] = [
     name: 'Administrator',
     role: 'ADMIN',
     avatar: 'https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff',
-    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'OEM', 'SETTINGS', 'CONVERT_3D'],
+    allowedModules: ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'PROJECTS', 'SUBCONTRACTOR_BOOKING', 'OEM', 'SETTINGS', 'CONVERT_3D'],
     msnv: 'MS-001',
     // Added missing position property
     position: 'Giám đốc hệ thống',
@@ -320,7 +321,7 @@ export const MOCK_USERS: User[] = [
     name: 'Trần Văn Quản Lý',
     role: 'MANAGER',
     avatar: 'https://ui-avatars.com/api/?name=Manager&background=6366f1&color=fff',
-    allowedModules: ['IQC', 'PQC', 'SQC_BTP', 'SQC_TP', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
+    allowedModules: ['IQC', 'PQC', 'SQC_BTP', 'SQC_TP', 'SUBCONTRACTOR_BOOKING', 'FQC', 'SITE', 'PROJECTS', 'CONVERT_3D'],
     msnv: 'MS-002',
     // Added missing position property
     position: 'Quản lý QC',

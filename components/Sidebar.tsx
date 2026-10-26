@@ -48,7 +48,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
     { id: 'TRASH', label: 'Thùng Rác', icon: Trash2 },
   ].filter(item => {
-    if (item.id === 'SUBCONTRACTOR_BOOKING') return true; // Always visible for QA/QC & Mua hàng
+    if (user.role === 'ADMIN') return true;
+    if (item.id === 'SUBCONTRACTOR_BOOKING') {
+      if (user.allowedModules && user.allowedModules.length > 0) {
+        return user.allowedModules.includes('SUBCONTRACTOR_BOOKING') || hasPermission(user, rolesList, 'SUBCONTRACTOR_BOOKING', 'VIEW');
+      }
+      return true;
+    }
     return hasPermission(user, rolesList, item.id as ModuleId, 'VIEW');
   });
 

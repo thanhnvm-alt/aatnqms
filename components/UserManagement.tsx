@@ -36,7 +36,9 @@ import {
   Clock,
   Activity,
   Building,
-  Filter
+  Filter,
+  CheckCircle2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { UserActivityList } from './UserActivityList';
 import { SearchableSelect } from './SearchableSelect';
@@ -50,16 +52,16 @@ export function getLocalAdvisoryModules(phong_ban: string, bo_phan: string): str
             return ['FQC', 'SPR', 'SITE'];
         }
         if (bp.includes('qc')) {
-            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP'];
+            return ['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'SUBCONTRACTOR_BOOKING'];
         }
     } else if (pb.includes('sản xuất') || pb.includes('san xuat')) {
         return ['PQC', 'SQC_BTP', 'SQC_TP', 'STEP'];
-    } else if (pb.includes('vật tư') || pb.includes('vat tu')) {
-        return ['IQC', 'SQC_MAT'];
+    } else if (pb.includes('vật tư') || pb.includes('vat tu') || pb.includes('mua hàng') || pb.includes('procurement')) {
+        return ['IQC', 'SQC_MAT', 'SUBCONTRACTOR_BOOKING'];
     } else if (pb.includes('sd') || pb.includes('drawing') || pb.includes('thiết kế') || pb.includes('thiet ke')) {
         return ['CONVERT_3D', 'FSR', 'SPR'];
     } else if (pb.includes('kế hoạch') || pb.includes('ke hoach') || pb.includes('planning')) {
-        return ['IQC', 'PQC', 'SITE'];
+        return ['IQC', 'PQC', 'SITE', 'SUBCONTRACTOR_BOOKING'];
     }
     return [];
 }
@@ -79,6 +81,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [previewUsers, setPreviewUsers] = useState<User[]>([]);
+  const [previewFileName, setPreviewFileName] = useState('');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
@@ -290,6 +296,43 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
     XLSX.writeFile(wb, `AATN_Users_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // Helper: Format Excel date serial or string to standard format
+  const formatExcelDate = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'number') {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(date.getTime())) {
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = date.getFullYear();
+        return `${y}-${m}-${d}`;
+      }
+    }
+    const str = String(val).trim();
+    const parts = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+    if (parts) {
+      return `${parts[3]}-${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+    return str;
+  };
+
+  // Helper: Extract hierarchy from Department string
+  const extractDepartmentHierarchy = (deptRaw: string) => {
+    const raw = String(deptRaw || '').trim();
+    if (!raw) return { phong_ban: '', bo_phan: '' };
+    const segments = raw.split(/[\/\>]/).map(s => s.trim()).filter(Boolean);
+    if (segments.length === 1) {
+      return { phong_ban: segments[0], bo_phan: '' };
+    }
+    if (segments.length === 2) {
+      return { phong_ban: segments[1], bo_phan: segments[1] };
+    }
+    return {
+      phong_ban: segments[1],
+      bo_phan: segments.slice(2).join(' / ')
+    };
+  };
+
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !onImportUsers) {
@@ -315,46 +358,80 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                   return;
               }
 
-              // Mapping logic with flexible key finding
+              // Mapping logic matching company Excel format
               const importedUsers = json.map((row: any): User | null => {
                   const findVal = (possibleKeys: string[]) => {
                       const keys = Object.keys(row);
                       for (const pk of possibleKeys) {
                           const match = keys.find(k => k.trim().toLowerCase() === pk.toLowerCase());
-                          if (match) return row[match];
+                          if (match && row[match] !== undefined && row[match] !== null) return row[match];
                       }
                       return '';
                   };
 
-                  const name = String(findVal(['HỌ VÀ TÊN', 'Họ Tên', 'Name', 'FullName', 'Họ và tên'])).trim();
-                  const username = String(findVal(['Tên Đăng Nhập', 'username', 'User', 'Tên', 'Acc'])).toLowerCase().trim();
-                  
-                  if (!name || !username) return null;
+                  const name = String(findVal([
+                      'Employee', 'First and last names', 'First and last name', 
+                      'HỌ VÀ TÊN', 'Họ Tên', 'Họ và tên', 'Họ tên', 'Name', 'FullName', 'Tên nhân viên'
+                  ])).trim();
 
-                  const role = String(findVal(['Vai Trò', 'Role', 'Quyền']) || 'QC').toUpperCase();
-                  const validRoles: UserRole[] = ['ADMIN', 'MANAGER', 'QC', 'QA'];
-                  const finalRole = validRoles.includes(role as any) ? role as UserRole : 'QC';
+                  const email = String(findVal(['Email', 'EMAIL', 'Thư điện tử', 'Mail', 'Địa chỉ email'])).toLowerCase().trim();
+                  const msnv = String(findVal(['UserID', 'User ID', 'MÃ NV', 'MSNV', 'Mã NV', 'Mã nhân viên', 'StaffCode', 'Staff Code', 'id'])).trim();
+                  const rawUsername = String(findVal(['Tên Đăng Nhập', 'username', 'User', 'Tên', 'Acc'])).toLowerCase().trim();
+
+                  // Rule: Sử dụng toàn bộ địa chỉ Email. Nếu không có email, dùng mã nhân viên UserID
+                  const username = email || rawUsername || msnv;
+                  
+                  if (!name && !username) return null;
+
+                  const position = String(findVal(['Position', 'Chức Vụ', 'Chức danh', 'Job', 'Vị trí', 'Chức vụ']) || 'Nhân viên').trim();
+                  const deptRaw = String(findVal(['Department', 'Phòng ban', 'Phòng Ban', 'Bộ phận', 'Khối', 'Phòng'])).trim();
+                  const { phong_ban, bo_phan } = extractDepartmentHierarchy(deptRaw);
+
+                  const mobile = String(findVal(['Mobile', 'Work phone', 'SĐT', 'Điện thoại', 'Phone', 'Số điện thoại', 'Số ĐT'])).trim();
+                  const workLocation = String(findVal(['City', 'Thành phố', 'Địa điểm', 'Nơi làm việc', 'Location', 'Chi nhánh', 'Nhà máy'])).trim();
+                  const dateRegisteredRaw = findVal(['Date registered', 'Ngày vào làm', 'Ngày nhận việc', 'JoinDate', 'Ngày đăng ký', 'Registered']);
+                  const joinDate = formatExcelDate(dateRegisteredRaw);
+                  const photo = String(findVal(['Photo', 'Avatar', 'Ảnh', 'Hình ảnh'])).trim();
+
+                  // Rule: Theo ma trận phân quyền. Mặc định chỉ để quyền xem module danh sách phiếu ('LIST').
+                  // Không tự động phân loại dựa trên chức vụ/phòng ban.
+                  const defaultRole: UserRole = 'QC';
+                  const defaultAllowedModules: ModuleId[] = ['LIST'];
+                  const defaultPermissions = [{ moduleId: 'LIST' as ModuleId, actions: ['VIEW' as any] }];
 
                   return {
                       id: `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`,
-                      msnv: String(findVal(['MÃ NV', 'MSNV', 'Mã nhân viên', 'StaffCode']) || ''),
-                      email: String(findVal(['EMAIL', 'Thư điện tử', 'Mail']) || ''),
-                      name: name,
+                      msnv: msnv,
+                      email: email,
+                      name: name || username,
                       username: username,
-                      role: finalRole,
-                      position: String(findVal(['Chức Vụ', 'Position', 'Chức danh', 'Job']) || 'Nhân viên'),
-                      status: String(findVal(['Tình Trạng', 'Trạng Thái', 'Status']) || 'Đang làm việc'),
+                      role: defaultRole,
+                      position: position,
+                      phong_ban: phong_ban || deptRaw,
+                      phongBan: phong_ban || deptRaw,
+                      bo_phan: bo_phan,
+                      boPhan: bo_phan,
+                      notes: mobile ? `SĐT: ${mobile}` : (deptRaw ? `Phòng ban: ${deptRaw}` : ''),
+                      workLocation: workLocation,
+                      joinDate: joinDate,
+                      status: 'Đang làm việc',
                       password: '123', 
-                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`,
-                      allowedModules: ['PQC', 'IQC', 'SITE'] as ModuleId[]
+                      avatar: photo && (photo.startsWith('http://') || photo.startsWith('https://')) 
+                          ? photo 
+                          : `https://ui-avatars.com/api/?name=${encodeURIComponent(name || username)}&background=random&color=fff`,
+                      allowedModules: defaultAllowedModules,
+                      user_permissions: defaultPermissions,
+                      userPermissions: defaultPermissions,
+                      requirePasswordChange: true
                   };
               }).filter((u): u is User => u !== null);
 
               if (importedUsers.length > 0) {
-                  await onImportUsers(importedUsers);
-                  alert(`Đã nhập thành công ${importedUsers.length} nhân sự vào hệ thống.`);
+                  setPreviewUsers(importedUsers);
+                  setPreviewFileName(file.name);
+                  setIsPreviewOpen(true);
               } else {
-                  alert("Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra tiêu đề các cột: HỌ VÀ TÊN, Tên Đăng Nhập.");
+                  alert("Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra tiêu đề các cột trong file: Employee / Họ tên, Email, UserID / Mã NV, Position / Chức vụ, Department / Phòng ban.");
               }
           } catch (error) {
               console.error("Excel import error:", error);
@@ -373,8 +450,52 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
       reader.readAsArrayBuffer(file);
   };
 
+  const previewStats = useMemo(() => {
+      let toInsert = 0;
+      let toUpdate = 0;
+      previewUsers.forEach(u => {
+          const exists = users.some(existingU => 
+              (u.msnv && existingU.msnv && existingU.msnv.trim().toLowerCase() === u.msnv.trim().toLowerCase()) ||
+              (u.email && existingU.email && existingU.email.trim().toLowerCase() === u.email.trim().toLowerCase()) ||
+              (u.username && existingU.username && existingU.username.trim().toLowerCase() === u.username.trim().toLowerCase())
+          );
+          if (exists) toUpdate++;
+          else toInsert++;
+      });
+      return { toInsert, toUpdate };
+  }, [previewUsers, users]);
+
+  const handleConfirmBatchImport = async () => {
+      if (!previewUsers || previewUsers.length === 0 || !onImportUsers) return;
+      setIsImporting(true);
+      try {
+          await onImportUsers(previewUsers);
+          setImportNotice(`Đã hoàn tất nạp nhân sự: Thêm mới ${previewStats.toInsert} tài khoản, Cập nhật thông tin ${previewStats.toUpdate} tài khoản có sẵn!`);
+          setIsPreviewOpen(false);
+          setPreviewUsers([]);
+          setTimeout(() => setImportNotice(null), 6000);
+      } catch (err: any) {
+          console.error("Confirm import error:", err);
+          alert("Lỗi khi lưu dữ liệu người dùng: " + (err?.message || "Thất bại"));
+      } finally {
+          setIsImporting(false);
+      }
+  };
+
   return (
     <div className="space-y-3 animate-in fade-in duration-300 pb-2 md:pb-0">
+      {importNotice && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-3 rounded-lg flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-200 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{importNotice}</span>
+          </div>
+          <button onClick={() => setImportNotice(null)} className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* TOOLBAR */}
       <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -820,7 +941,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                   return ['VIEW', 'VIEW_ALL', 'EXPORT'];
                                               }
                                               // 2. Main workflow modules (KIỂM TRA CHẤT LƯỢNG & some main modules)
-                                              if (['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'LIST', 'NCR_LIST', 'TOOLS'].includes(mid)) {
+                                              if (['IQC', 'SQC_MAT', 'SQC_BTP', 'SQC_TP', 'PQC', 'FSR', 'STEP', 'FQC', 'SPR', 'SITE', 'LIST', 'NCR_LIST', 'TOOLS', 'SUBCONTRACTOR_BOOKING'].includes(mid)) {
                                                   return ['VIEW', 'VIEW_ALL', 'CREATE', 'EDIT_OWN', 'EDIT_ALL', 'DELETE_OWN', 'DELETE_ALL', 'IMPORT', 'EXPORT', 'SIGN1', 'SIGN2'];
                                               }
                                               // 3. Simple inventory / config / CRUD tables with import/export (PROJECTS has no import/export but has CRUD)
@@ -1031,6 +1152,161 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                   </div>
               </div>
           </div>
+      )}
+
+      {/* EXCEL IMPORT PREVIEW & CONFIRMATION MODAL */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[260] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 font-sans">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-md">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-sm sm:text-base">
+                    Xác nhận nạp danh sách nhân sự từ Excel
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <span>Tệp: <span className="font-mono text-blue-600 dark:text-blue-400 lowercase">{previewFileName}</span></span>
+                    <span>•</span>
+                    <span>Tổng: <strong className="text-slate-900 dark:text-slate-100">{previewUsers.length}</strong></span>
+                    <span>•</span>
+                    <span className="text-emerald-700 dark:text-emerald-300 font-black bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60">Thêm mới: {previewStats.toInsert}</span>
+                    <span className="text-amber-700 dark:text-amber-300 font-black bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800/60">Cập nhật: {previewStats.toUpdate}</span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setIsPreviewOpen(false); setPreviewUsers([]); }} 
+                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
+                title="Đóng"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 no-scrollbar">
+              {/* Permission & Security Policy Callout */}
+              <div className="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl p-3.5 flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider text-[11px]">
+                    Quy tắc xử lý tồn tại theo Mã nhân viên (MSNV)
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                    1. <strong className="text-amber-700 dark:text-amber-300">Nếu Mã NV đã tồn tại ({previewStats.toUpdate} nhân sự)</strong>: Hệ thống <strong>chỉ cập nhật thông tin hồ sơ</strong> (chức vụ, phòng ban, SĐT, nơi làm việc...). Không thay đổi mật khẩu và bảo lưu toàn bộ ma trận phân quyền đã cấp trước đó.
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                    2. <strong className="text-emerald-700 dark:text-emerald-300">Nếu Mã NV chưa tồn tại ({previewStats.toInsert} nhân sự)</strong>: Hệ thống <strong>thêm mới tài khoản</strong> với ma trận quyền an toàn mặc định: <em>Chỉ xem module Danh sách phiếu (LIST: VIEW)</em>, mật khẩu khởi tạo <span className="font-mono font-bold">123456</span>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Data Preview Table */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                <div className="bg-slate-100 dark:bg-slate-800/60 px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                  <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-300 tracking-wider">
+                    Xem trước bản ghi ({Math.min(previewUsers.length, 8)}/{previewUsers.length} nhân sự đầu tiên)
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-400">
+                    Trường Username: Toàn bộ Email
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                        <th className="px-3 py-2 w-10 text-center">STT</th>
+                        <th className="px-3 py-2 text-center">Hành vi</th>
+                        <th className="px-3 py-2">Mã NV</th>
+                        <th className="px-3 py-2">Họ và tên</th>
+                        <th className="px-3 py-2">Tên đăng nhập / Email</th>
+                        <th className="px-3 py-2">Chức vụ</th>
+                        <th className="px-3 py-2">Phòng ban</th>
+                        <th className="px-3 py-2">Địa điểm</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                      {previewUsers.slice(0, 8).map((u, idx) => {
+                        const exists = users.some(existingU => 
+                          (u.msnv && existingU.msnv && existingU.msnv.trim().toLowerCase() === u.msnv.trim().toLowerCase()) ||
+                          (u.email && existingU.email && existingU.email.trim().toLowerCase() === u.email.trim().toLowerCase()) ||
+                          (u.username && existingU.username && existingU.username.trim().toLowerCase() === u.username.trim().toLowerCase())
+                        );
+
+                        return (
+                          <tr key={u.id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="px-3 py-2 text-center text-[10px] text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="px-3 py-2 text-center">
+                              {exists ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 whitespace-nowrap" title="Mã NV đã tồn tại trong CSDL - Chỉ cập nhật thông tin hồ sơ">
+                                  CẬP NHẬT
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 whitespace-nowrap" title="Mã NV chưa có trong CSDL - Thêm mới tài khoản">
+                                  THÊM MỚI
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-mono font-bold text-slate-700 dark:text-slate-300 text-[11px]">{u.msnv || '---'}</td>
+                            <td className="px-3 py-2 font-bold text-slate-900 dark:text-slate-100">{u.name}</td>
+                            <td className="px-3 py-2 font-mono text-[10px] text-blue-600 dark:text-blue-400 lowercase">{u.username}</td>
+                            <td className="px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300">{u.position || 'Nhân viên'}</td>
+                            <td className="px-3 py-2 text-[11px] text-slate-600 dark:text-slate-300 max-w-[150px] truncate" title={u.phong_ban}>{u.phong_ban || '---'}</td>
+                            <td className="px-3 py-2 text-[10px] text-slate-500">{u.workLocation || '---'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {previewUsers.length > 8 && (
+                  <div className="p-2.5 text-center bg-slate-50 dark:bg-slate-800/20 border-t border-slate-200 dark:border-slate-800 text-[10px] font-bold text-slate-400">
+                    ... và còn {previewUsers.length - 8} nhân sự khác sẽ được xử lý vào hệ thống
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                Tổng cộng: <strong className="text-slate-900 dark:text-slate-100">{previewUsers.length}</strong> nhân sự (<span className="text-emerald-600 dark:text-emerald-400 font-bold">{previewStats.toInsert} thêm mới</span>, <span className="text-amber-600 dark:text-amber-400 font-bold">{previewStats.toUpdate} cập nhật</span>)
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => { setIsPreviewOpen(false); setPreviewUsers([]); }}
+                  disabled={isImporting}
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmBatchImport}
+                  disabled={isImporting}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                >
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Đang xử lý nạp...
+                    </>
+                  ) : (
+                    <>
+                      <FileUp className="w-4 h-4" />
+                      Xác nhận nạp {previewUsers.length} nhân sự
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
       
       <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if(file){ const r = new FileReader(); r.onloadend = () => setFormData(prev => ({...prev, avatar: r.result as string})); r.readAsDataURL(file); } }} />

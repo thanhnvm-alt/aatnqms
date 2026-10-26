@@ -1457,6 +1457,27 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
     }
   });
 
+  app.post("/api/users/batch-import", authenticate, async (req, res) => {
+    try {
+      const authUser = (req as any).user;
+      const isAdmin = await checkPermission(authUser.id, 'SYSTEM_ADMIN', 'EDIT_ALL');
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Unauthorized: Admin access required to batch import users' });
+      }
+
+      const users = req.body.users;
+      if (!Array.isArray(users) || users.length === 0) {
+        return res.status(400).json({ error: 'No users provided for import' });
+      }
+
+      const result = await db.batchImportUsers(users, authUser.id);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error in batch import users:', error);
+      res.status(500).json({ error: 'Failed to import users', details: error.message });
+    }
+  });
+
   app.delete("/api/users/:id", authenticate, async (req, res) => {
     try {
       const user = (req as any).user;

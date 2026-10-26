@@ -2033,10 +2033,149 @@ export async function getUserById(id: string): Promise<User | null> {
     return mapUserRow(res.rows[0]) as unknown as User;
 }
 
-export async function importUsers(users: User[]) {
-    for (const u of users) {
-        await saveUser(u);
+export async function batchImportUsers(users: any[], performedBy: string = 'SYSTEM') {
+    let inserted = 0;
+    let updated = 0;
+    const defaultHashedPassword = await bcrypt.hash('123456', SALT_ROUNDS);
+
+    for (const rawUser of users) {
+        if (!rawUser.username && !rawUser.email && !rawUser.msnv) continue;
+        
+        const username = (rawUser.username || rawUser.email || rawUser.msnv || '').toLowerCase().trim();
+        const email = (rawUser.email || '').toLowerCase().trim();
+        const msnv = (rawUser.msnv || '').trim();
+        const name = (rawUser.name || username).trim();
+
+        // 1. KIỂM TRA MÃ NHÂN VIÊN ĐÃ TỒN TẠI CHƯA:
+        let existing = null;
+        if (msnv) {
+            const msnvRes = await query(`
+                SELECT id, password, user_permissions, allowed_modules, role, avatar, require_password_change, data 
+                FROM ${SCHEMA}.users 
+                WHERE msnv = $1 AND deleted_at IS NULL 
+                LIMIT 1
+            `, [msnv]);
+            if (msnvRes.rows.length > 0) {
+                existing = msnvRes.rows[0];
+            }
+        }
+
+        // Nếu không tìm thấy theo MSNV, kiểm tra theo username hoặc email
+        if (!existing) {
+            const checkFallbackRes = await query(`
+                SELECT id, password, user_permissions, allowed_modules, role, avatar, require_password_change, data 
+                FROM ${SCHEMA}.users 
+                WHERE (
+                    LOWER(username) = LOWER($1) 
+                    OR ($2 != '' AND LOWER(email) = LOWER($2))
+                ) AND deleted_at IS NULL 
+                LIMIT 1
+            `, [username, email]);
+            if (checkFallbackRes.rows.length > 0) {
+                existing = checkFallbackRes.rows[0];
+            }
+        }
+
+        const isExisting = !!existing;
+        const userId = existing ? existing.id : (rawUser.id && rawUser.id.length > 10 ? rawUser.id : crypto.randomUUID());
+
+        // 1. NẾU TỒN TẠI: CHỈ CẬP NHẬT THÔNG TIN
+        // - Giữ nguyên mật khẩu đã mã hóa của người dùng (không bị reset)
+        // - Giữ nguyên vai trò và ma trận phân quyền đã được cấp trước đó
+        // - Giữ nguyên cờ require_password_change hiện tại
+        // 2. NẾU CHƯA TỒN TẠI: THÊM MỚI
+        // - Cấp mật khẩu mặc định: 123456 (bắt buộc đổi ở lần đăng nhập đầu)
+        // - Gán quyền an toàn mặc định: chỉ xem module Danh sách phiếu (LIST: VIEW)
+        let password = existing ? existing.password : defaultHashedPassword;
+        if (rawUser.password && !rawUser.password.startsWith('$2b$') && !rawUser.password.startsWith('$2a$') && !existing) {
+            password = await bcrypt.hash(rawUser.password, SALT_ROUNDS);
+        }
+
+        const role = existing ? (existing.role || 'QC') : (rawUser.role || 'QC');
+
+        let userPermissions = existing 
+            ? (existing.user_permissions ? safeJsonParse(existing.user_permissions, [{ moduleId: 'LIST', actions: ['VIEW'] }]) : [{ moduleId: 'LIST', actions: ['VIEW'] }])
+            : (rawUser.user_permissions || [{ moduleId: 'LIST', actions: ['VIEW'] }]);
+        const userPermissionsStr = typeof userPermissions === 'string' ? userPermissions : JSON.stringify(userPermissions);
+
+        let allowedModules = existing 
+            ? (existing.allowed_modules ? safeJsonParse(existing.allowed_modules, ['LIST']) : ['LIST'])
+            : (rawUser.allowedModules || ['LIST']);
+        const allowedModulesStr = typeof allowedModules === 'string' ? allowedModules : JSON.stringify(allowedModules);
+
+        const avatar = rawUser.avatar || existing?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+        const position = rawUser.position || 'Nhân viên';
+        const workLocation = rawUser.work_location || rawUser.workLocation || '';
+        const status = rawUser.status || 'Đang làm việc';
+        const joinDate = rawUser.join_date || rawUser.joinDate || '';
+        const notes = rawUser.notes || rawUser.phone || '';
+        const phong_ban = rawUser.phong_ban || rawUser.phongBan || '';
+        const bo_phan = rawUser.bo_phan || rawUser.boPhan || '';
+        const requirePasswordChange = existing ? (existing.require_password_change ?? false) : true;
+
+        const userObj = {
+            id: userId,
+            username,
+            name,
+            role,
+            avatar,
+            msnv,
+            email,
+            position,
+            workLocation,
+            status,
+            joinDate,
+            notes,
+            phong_ban,
+            bo_phan,
+            allowedModules,
+            userPermissions,
+            requirePasswordChange
+        };
+
+        await query(`
+            INSERT INTO ${SCHEMA}.users (
+                id, username, password, name, role, avatar, msnv, email, position, 
+                work_location, status, join_date, education, notes, phong_ban, bo_phan, 
+                allowed_modules, to_qc, la_to_truong, department_id, division_id, team_id, 
+                user_permissions, data, updated_at, require_password_change
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, 
+                $10, $11, $12, $13, $14, $15, $16, 
+                $17, $18, $19, $20, $21, $22, 
+                $23, $24, EXTRACT(EPOCH FROM NOW())::BIGINT, $25
+            ) ON CONFLICT(id) DO UPDATE SET 
+                username = EXCLUDED.username, 
+                name = EXCLUDED.name, 
+                avatar = EXCLUDED.avatar, 
+                msnv = EXCLUDED.msnv, 
+                email = EXCLUDED.email, 
+                position = EXCLUDED.position, 
+                work_location = EXCLUDED.work_location, 
+                status = EXCLUDED.status, 
+                join_date = EXCLUDED.join_date, 
+                notes = EXCLUDED.notes, 
+                phong_ban = EXCLUDED.phong_ban, 
+                bo_phan = EXCLUDED.bo_phan, 
+                data = EXCLUDED.data, 
+                updated_at = EXCLUDED.updated_at
+        `, sanitizeArgs([
+            userId, username, password, name, role, avatar, msnv, email, position,
+            workLocation, status, joinDate, rawUser.education || '', notes, phong_ban, bo_phan,
+            allowedModulesStr, rawUser.to_qc || '', !!rawUser.la_to_truong, '', '', '',
+            userPermissionsStr, userObj, requirePasswordChange
+        ]));
+
+        if (isExisting) updated++;
+        else inserted++;
     }
+
+    await logAudit(performedBy, 'IMPORT_USERS', 'users', 'batch', null, { count: users.length, inserted, updated });
+    return { success: true, count: users.length, inserted, updated };
+}
+
+export async function importUsers(users: User[], performedBy: string = 'SYSTEM') {
+    return batchImportUsers(users, performedBy);
 }
 
 // --- WORKSHOPS ---

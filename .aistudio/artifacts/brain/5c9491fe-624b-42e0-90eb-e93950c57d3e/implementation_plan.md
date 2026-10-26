@@ -1,128 +1,46 @@
-# Tích Hợp 3 Loại Kiểm Tra SQC Vào Quy Trình Book QC & Nghiệm Thu Gia Công
+# Kế hoạch triển khai (Đã cập nhật): Nạp danh sách người dùng từ file Excel/CSV vào hệ thống QMS
 
-Quy hoạch và bổ sung 3 phân loại SQC chuẩn hóa: **SQC - Vật tư ngoài (`SQC_VT`)**, **SQC - Bán Thành Phẩm (`SQC_BTP`)**, và **SQC - Thành phẩm (`SQC_TP`)** vào quy trình tạo yêu cầu Book QC, hiển thị trực quan trong sổ theo dõi và tự động điều hướng sang biểu mẫu kiểm tra chuyên sâu tương ứng khi QC thực hiện nghiệm thu.
+## 1. Mục tiêu & Yêu cầu nghiệp vụ (Đã điều chỉnh theo phản hồi)
+Hệ thống cho phép Quản trị viên tải file Excel/CSV (chứa thông tin nhân sự thực tế từ tệp bảng tính của công ty) trực tiếp từ giao diện **Cài đặt > Nhân sự hệ thống**.
 
----
-
-### User Review & Critical Decisions
-
-> [!IMPORTANT]
-> Dựa trên phản hồi làm rõ từ người dùng:
-> - **Hình thức lựa chọn**: Sử dụng nhóm nút chọn Radio nổi bật kèm nhãn và mô tả rõ ràng trực tiếp trên Modal Tạo/Sửa phiếu Book QC.
-> - **Kích hoạt biểu mẫu khi QC kiểm tra**: Khi nhân viên QC bấm thực hiện kiểm tra từ danh sách, hệ thống sẽ mở trực tiếp biểu mẫu kiểm tra SQC chuyên sâu tương ứng (`InspectionFormSQC_VT`, `InspectionFormSQC_BTP`, `InspectionFormSQC_TP`) được điền sẵn đầy đủ dữ liệu PO, xưởng vệ tinh, địa chỉ, tài liệu kỹ thuật và danh sách hạng mục.
-> - **Dữ liệu hiện có**: Các đơn đặt lịch đã có từ trước sẽ được gán mặc định là **SQC - Bán Thành Phẩm (`SQC_BTP`)**.
-
----
-
-### 1. Tổng Quan & Mục Tiêu Nghiệp Vụ
-
-- **Đối tượng sử dụng**: Chuyên viên Mua hàng/Quản lý thầu phụ (tạo yêu cầu book lịch) và Nhân viên QC phụ trách gia công ngoài (tiếp nhận lịch, tới xưởng vệ tinh nghiệm thu chất lượng).
-- **Vấn đề giải quyết**: Trước đây quy trình book QC chưa phân định rõ tính chất hàng gia công (vật tư thô, phôi mộc/bán thành phẩm hay thành phẩm hoàn thiện), dẫn đến biểu mẫu kiểm tra chưa bám sát tiêu chí checklist ISO đặc thù của từng loại sản phẩm.
-- **Giá trị mang lại**: 
-  1. Chuẩn hóa phân loại ngay từ khâu đặt lịch.
-  2. Kích hoạt đúng biểu mẫu kỹ thuật tương ứng với đầy đủ tiêu chí checklist:
-     - **SQC - Vật tư ngoài (`SQC_VT`)**: Kiểm tra quy cách vật tư, chứng chỉ xuất xưởng, độ ẩm, độ dày, bề mặt nguyên vật liệu đầu vào.
-     - **SQC - Bán Thành Phẩm (`SQC_BTP`)**: Kiểm tra mộng ghép, dán cạnh, chà nhám, kết cấu khung thô, kích thước hình học trước khi sơn/hoàn thiện.
-     - **SQC - Thành phẩm (`SQC_TP`)**: Kiểm tra màng sơn, phụ kiện lắp đặt, độ bóng, màu sắc theo mẫu duyệt, bao che đóng gói giao hàng.
-  3. Đồng bộ dữ liệu xuyên suốt từ Book QC $\rightarrow$ Phiếu Kiểm Tra $\rightarrow$ Biên bản nghiệm thu và Báo cáo kiểm định.
+### Các nguyên tắc xử lý dữ liệu:
+1. **Hình thức nhập**: Tải file Excel trực tiếp qua nút "Nhập từ Excel" trong module Quản lý người dùng.
+2. **Quy tắc Tên đăng nhập (Username)**: Sử dụng toàn bộ địa chỉ Email (ví dụ: `thanhnvm@aacorporation.com`). Trường hợp dòng không có Email, sử dụng Mã nhân viên (`UserID`, ví dụ: `AAF12122`).
+3. **Quy tắc Vai trò & Ma trận phân quyền (ĐIỀU CHỈNH CHÍNH)**:
+   - **KHÔNG** tự động phân loại vai trò dựa trên chức vụ hay phòng ban.
+   - **Quyền mặc định**: Thiết lập ma trận phân quyền tối thiểu an toàn:
+     - `role`: `'QC'` (hoặc vai trò nhân sự tiêu chuẩn)
+     - `allowedModules`: `['LIST']`
+     - `user_permissions` (Ma trận phân quyền chi tiết): `[{ moduleId: 'LIST', actions: ['VIEW'] }]` (Chỉ được phép **XEM** module Danh sách phiếu).
+   - Sau khi nạp thành công, Quản trị viên sẽ sử dụng bảng **Ma trận phân quyền hệ thống** để phân bổ quyền tác vụ chuyên sâu cho từng cá nhân hoặc bộ phận.
+4. **Ánh xạ cột theo biểu mẫu Excel công ty**:
+   - `Employee` / `First and last names` ➔ Họ và tên (`name`)
+   - `UserID` ➔ Mã nhân viên (`msnv`)
+   - `Email` ➔ Email (`email`) & Tên đăng nhập (`username`)
+   - `Position` ➔ Chức vụ lưu trữ (`position`)
+   - `Department` ➔ Chuỗi phòng ban phân cấp (`phong_ban`, tách bộ phận `bo_phan`)
+   - `Mobile` / `Work phone` ➔ Số điện thoại ghi chú (`phone` / `notes`)
+   - `Date registered` ➔ Ngày nhận việc (`joinDate`)
+   - `City` ➔ Nơi làm việc (`workLocation`)
+   - Mật khẩu khởi tạo: mặc định `123456` kèm cờ `requirePasswordChange: true`.
 
 ---
 
-### 2. Trải Nghiệm Người Dùng (UX) & Thiết Kế Giao Diện
+## 2. Các bước triển khai chi tiết
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ MODAL: TẠO YÊU CẦU BOOK QC NGHIỆM THU GIA CÔNG                         │
-├────────────────────────────────────────────────────────────────────────┤
-│ [LOẠI HÌNH NGHIỆM THU SQC (*)]                                         │
-│ ┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────┐ │
-│ │ (•) SQC - VẬT TƯ     │ │ ( ) SQC - BÁN TP     │ │ ( ) SQC - TP     │ │
-│ │     NGOÀI            │ │     Bán thành phẩm,  │ │     Thành phẩm   │ │
-│ │     Gỗ thô, ván,     │ │     khung thô, phôi  │ │     hoàn thiện,  │ │
-│ │     ngũ kim, phụ kiện│ │     kết cấu gỗ/sắt   │ │     sơn, bọc nệm │ │
-│ └──────────────────────┘ └──────────────────────┘ └──────────────────┘ │
-│                                                                        │
-│ [PO / HỢP ĐỒNG ERP]             [XƯỞNG VỆ TINH / NHÀ CUNG CẤP]         │
-│ PO-2026-0891                     Xưởng Gỗ Hoàng Gia Bình Dương         │
-│                                                                        │
-│ [HẠNG MỤC GIA CÔNG]             [NGÀY NGHIỆM THU (THEO MỐC 15:00)]     │
-│ Tủ âm tường MFC Melamine - 10 Bộ Ngày mốt (25/10/2026)                 │
-│                                                                        │
-│ [HỒ SƠ KỸ THUẬT: SPEC, MẪU DUYỆT, BẢN VẼ, MOU]                         │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Bước 1: Bổ sung API Batch Import trên Backend (`server.ts` & `services/dbService.ts`)
+- Thêm route `POST /api/users/batch-import` có kiểm tra quyền quản trị (`SYSTEM_ADMIN`).
+- Xử lý nạp hàng loạt (Batch upsert) nhanh chóng, ghi nhận Audit Log ISO cho hành động `IMPORT_USERS`.
 
-1. **Khâu Tạo / Sửa Yêu Cầu Book QC**:
-   - Thêm bộ chọn Radio 3 cột nổi bật ngay đầu form với visual token màu sắc chuyên nghiệp:
-     - `SQC_VT`: Tông màu lục bảo / Emerald (`border-emerald-500`, icon vật liệu).
-     - `SQC_BTP`: Tông màu xanh lam / Indigo (`border-blue-500`, icon khung kết cấu).
-     - `SQC_TP`: Tông màu tím violet / Purple (`border-purple-500`, icon hộp thành phẩm).
-   - Hiển thị mô tả phụ ngắn gọn bên dưới mỗi loại giúp chuyên viên Mua hàng chọn đúng ngay lập tức.
-   - Khi chỉnh sửa phiếu Book QC, cho phép điều chỉnh lại loại SQC đã chọn.
+### Bước 2: Nâng cấp bộ phân tích Excel trong `components/UserManagement.tsx`
+- Hỗ trợ đầy đủ các tiêu đề cột tiếng Anh và tiếng Việt trong file thực tế (`Employee`, `UserID`, `Department`, `Position`, `Date registered`, `Mobile`, `City`, `Email`, v.v.).
+- Thiết lập cứng ma trận quyền mặc định cho mọi tài khoản nhập mới: chỉ có quyền `VIEW` trên module `LIST`.
+- Định dạng ngày tháng, chuẩn hóa email chữ thường và lọc bỏ dòng trống.
 
-2. **Khâu Quản Lý Danh Sách & Bảng Sổ Lịch**:
-   - Thêm cột / nhãn hiển thị loại SQC rõ ràng trên từng dòng booking.
-   - Thêm bộ lọc danh sách theo Loại SQC (Tất cả / Vật tư ngoài / Bán thành phẩm / Thành phẩm).
+### Bước 3: Modal Xem trước & Xác nhận (Preview Modal)
+- Hiển thị bảng xem trước các nhân sự tìm thấy trước khi ghi vào CSDL.
+- Báo rõ trạng thái phân quyền ban đầu: *"Mặc định: Chỉ xem danh sách phiếu (LIST: VIEW)"*.
+- Hiển thị nút xác nhận nạp và thanh tiến trình trong lúc xử lý.
 
-3. **Khâu Kích Hoạt Form Kiểm Tra (QC Action)**:
-   - Nút hành động **"Nghiệm Thu Tại Xưởng"** trên dòng booking:
-     - Tự động nhận diện `sqcType` của booking.
-     - Chuyển hướng trực tiếp sang biểu mẫu:
-       - `SQC_VT` $\rightarrow$ `InspectionFormSQC_VT`
-       - `SQC_BTP` $\rightarrow$ `InspectionFormSQC_BTP`
-       - `SQC_TP` $\rightarrow$ `InspectionFormSQC_TP`
-     - Tự động điền đầy đủ dữ liệu gốc: PO, tên xưởng vệ tinh, địa chỉ, người liên hệ, SĐT, danh sách hạng mục, liên kết hồ sơ kỹ thuật (Spec, Mẫu duyệt, Bản vẽ).
-     - Nút "Hủy bỏ / Quay lại" trên form kiểm tra sẽ điều hướng mượt mà trở lại Sổ Book QC (`SUBCONTRACTOR_BOOKING`).
-     - Khi QC lưu phiếu kiểm tra thành công, cập nhật trạng thái Booking sang `COMPLETED` hoặc `IN_PROGRESS`.
-
----
-
-### 3. Kiến Trúc Kỹ Thuật & Luồng Dữ Liệu
-
-```
-┌─────────────────────────────────┐
-│     SubcontractorBooking        │
-│  - id, bookingCode              │
-│  - sqcType: 'SQC_VT' |          │
-│             'SQC_BTP' |         │
-│             'SQC_TP'            │
-│  - poNumber, supplierName       │
-│  - items, documents             │
-└───────────────┬─────────────────┘
-                │
-                │ QC clicks "Nghiệm Thu Tại Xưởng"
-                ▼
-┌─────────────────────────────────┐
-│     App.tsx Router Bridge       │
-│  - Maps booking to initialData  │
-│  - Sets active inspection type  │
-│  - Sets view = 'FORM'           │
-└───────────────┬─────────────────┘
-                │
-       ┌────────┼────────┐
-       ▼        ▼        ▼
-┌────────────┐ ┌────────────┐ ┌────────────┐
-│ FormSQC_VT │ │FormSQC_BTP │ │ FormSQC_TP │
-│ Vật tư     │ │ Bán TP     │ │ Thành phẩm │
-└────────────┘ └────────────┘ └────────────┘
-```
-
-#### Chi tiết thay đổi:
-1. **`types.ts`**:
-   - Mở rộng interface `SubcontractorBooking`: bổ sung thuộc tính `sqcType?: 'SQC_VT' | 'SQC_BTP' | 'SQC_TP'`.
-   - Bổ sung helper metadata: tên hiển thị tiếng Việt, mô tả phụ, màu sắc và icon tương ứng.
-
-2. **`components/SubcontractorBookingManagement.tsx`**:
-   - Thêm `sqcType` vào state `newBooking` và `editBooking` (mặc định `'SQC_BTP'`).
-   - Cung cấp component nhóm Radio 3 lựa chọn trực quan trong Create Modal và Edit Modal.
-   - Thêm cột và nhãn hiển thị loại SQC trên bảng Bookings.
-   - Thêm callback `onStartInspection: (booking: SubcontractorBooking) => void` vào props của `SubcontractorBookingManagement`.
-   - Kết nối nút "Nghiệm Thu Tại Xưởng" để gọi `onStartInspection(booking)`.
-
-3. **`App.tsx`**:
-   - Truyền handler `onStartInspection` vào `<SubcontractorBookingManagement currentUser={user} />`.
-   - Handler chuẩn bị `initialFormState` với dữ liệu lấy từ `booking` và thiết lập `type: booking.sqcType || 'SQC_BTP'`.
-   - Đảm bảo khi lưu hoặc hủy trên form SQC, người dùng được quay về màn hình `SUBCONTRACTOR_BOOKING` nếu phiên kiểm tra bắt nguồn từ booking.
-
-4. **Kiểm tra và biên dịch**:
-   - Chạy `compile_applet` và `lint_applet` để đảm bảo không có lỗi type hoặc runtime.
+### Bước 4: Kiểm tra & Xác nhận hoàn tất
+- Biên dịch ứng dụng (`compile_applet`), kiểm tra không có lỗi lint/types.

@@ -527,6 +527,13 @@ export const saveUser = async (user: User) => apiFetch('/api/users', {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(user)
 });
+export const importUsersBatch = async (users: User[]): Promise<{ success: boolean; count: number; inserted?: number; updated?: number }> => {
+    return apiFetch('/api/users/batch-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users })
+    });
+};
 export const deleteUser = async (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' });
 
 export const fetchProjectDocuments = async (projectId: string): Promise<ProjectDocument[]> => {
