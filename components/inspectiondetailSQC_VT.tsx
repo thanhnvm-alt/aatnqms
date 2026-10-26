@@ -262,8 +262,9 @@ export const InspectionDetailSQC_VT: React.FC<InspectionDetailProps> = ({
             
             <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase mb-8 leading-tight tracking-tight">{inspection.ten_hang_muc}</h1>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-8">
-                <InfoRow icon={Box} label="Mã dự án / PO" value={inspection.ma_ct} />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-y-6 gap-x-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-8">
+                <InfoRow icon={FileText} label="Số PO / PR" value={inspection.po_number || inspection.poNumber || inspection.pr_number || inspection.prNumber || '---'} iconColor="text-blue-500" />
+                <InfoRow icon={Box} label="Mã dự án" value={inspection.ma_ct || '---'} />
                 <InfoRow icon={Building2} label="Nhà cung cấp" value={inspection.supplier} iconColor="text-blue-500 dark:text-blue-400" />
                 <InfoRow icon={UserIcon} label="QC Inspector" value={inspection.inspectorName} />
                 <InfoRow icon={Calendar} label="Ngày kiểm" value={displayDate} />

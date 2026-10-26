@@ -1942,6 +1942,15 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
     }
   });
 
+function formatCsvRow(fields: any[]): string {
+  return fields.map(field => {
+    if (field === null || field === undefined) return '""';
+    let str = String(field);
+    str = str.replace(/"/g, '""');
+    return `"${str}"`;
+  }).join(',') + '\r\n';
+}
+
   app.get("/api/export/ncrs", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
@@ -1955,6 +1964,37 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
             WHERE n.deleted_at IS NULL
             ORDER BY n.created_at DESC
         `);
+
+        if (req.query.format === 'csv') {
+            const filename = `AATN_NCR_List_${Date.now()}.csv`;
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Type", "text/csv; charset=utf-8");
+            res.write('\uFEFF');
+
+            const headers = [
+                'Mã NCR', 'Mã hồ sơ gốc', 'Mã dự án', 'Tên dự án', 'Mã lỗi',
+                'Mức độ', 'Trạng thái', 'Mô tả lỗi', 'Người phụ trách', 'Hạn xử lý',
+                'Người tạo', 'Ngày tạo'
+            ];
+            res.write(formatCsvRow(headers));
+
+            for (const r of result.rows) {
+                let createdStr = '';
+                if (r.created_at) {
+                    const ts = Number(r.created_at);
+                    const d = new Date(ts > 100000000000 ? ts : ts * 1000);
+                    if (!isNaN(d.getTime())) createdStr = d.toISOString().slice(0, 19).replace('T', ' ');
+                }
+                res.write(formatCsvRow([
+                    r.id || '', r.inspection_id || '', r.ma_ct || '', r.ten_ct || '',
+                    r.defect_code || '', r.severity || 'MINOR', r.status || 'OPEN',
+                    r.description || '', r.responsible_person || '', r.deadline || '',
+                    r.created_by || '', createdStr
+                ]));
+            }
+            res.end();
+            return;
+        }
 
         const filename = `AATN_NCR_List_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
@@ -2288,6 +2328,28 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."defect_library" ORDER BY "defect_code" ASC`);
         
+        if (req.query.format === 'csv') {
+            const filename = `AATN_Defect_Library_${Date.now()}.csv`;
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Type", "text/csv; charset=utf-8");
+            res.write('\uFEFF');
+
+            const headers = [
+                'ID', 'Mã lỗi', 'Tên lỗi (VN)', 'Tên lỗi (EN)',
+                'Công đoạn', 'Phân loại', 'Mức độ mặc định', 'Mô tả chi tiết'
+            ];
+            res.write(formatCsvRow(headers));
+
+            for (const r of result.rows) {
+                res.write(formatCsvRow([
+                    r.id || '', r.defect_code || '', r.name || '', r.name_en || '',
+                    r.stage || '', r.category || '', r.severity || 'MINOR', r.description || ''
+                ]));
+            }
+            res.end();
+            return;
+        }
+
         const filename = `AATN_Defect_Library_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -2381,6 +2443,31 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."material" ORDER BY "material" ASC`);
         
+        if (req.query.format === 'csv') {
+            const filename = `AATN_Materials_${Date.now()}.csv`;
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Type", "text/csv; charset=utf-8");
+            res.write('\uFEFF');
+
+            const headers = [
+                'Mã vật tư', 'Tên vật tư', 'Đơn vị tính', 'Số lượng', 'Nhà cung cấp',
+                'Tên dự án', 'Chứng từ mua hàng', 'Ngày giao hàng', 'Mã Tender',
+                'Mã nhà máy (Factory Order)', 'ID'
+            ];
+            res.write(formatCsvRow(headers));
+
+            for (const r of result.rows) {
+                res.write(formatCsvRow([
+                    r.material || '', r.shortText || '', r.orderUnit || '',
+                    r.orderQuantity || 0, r.supplierName || '', r.projectName || '',
+                    r.purchaseDocument || '', r.deliveryDate || '', r.Ma_Tender || '',
+                    r.Factory_Order || '', r.id || ''
+                ]));
+            }
+            res.end();
+            return;
+        }
+
         const filename = `AATN_Materials_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -2482,6 +2569,29 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
         const schema = process.env.DB_SCHEMA || 'appQAQC';
         const result = await query(`SELECT * FROM "${schema}"."suppliers" WHERE "deleted_at" IS NULL ORDER BY "name" ASC`);
         
+        if (req.query.format === 'csv') {
+            const filename = `AATN_Suppliers_${Date.now()}.csv`;
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Type", "text/csv; charset=utf-8");
+            res.write('\uFEFF');
+
+            const headers = [
+                'ID', 'Mã NCC', 'Tên nhà cung cấp', 'Địa chỉ', 'Người liên hệ',
+                'SĐT', 'Email', 'Phân loại', 'Trạng thái'
+            ];
+            res.write(formatCsvRow(headers));
+
+            for (const r of result.rows) {
+                res.write(formatCsvRow([
+                    r.id || '', r.code || '', r.name || '', r.address || '',
+                    r.contact_person || '', r.phone || '', r.email || '',
+                    r.category || '', r.status || 'ACTIVE'
+                ]));
+            }
+            res.end();
+            return;
+        }
+
         const filename = `AATN_Suppliers_${Date.now()}.xlsx`;
         res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -2594,6 +2704,49 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
   app.get("/api/export/ipo", async (req, res) => {
     try {
         const schema = process.env.DB_SCHEMA || 'appQAQC';
+
+        if (req.query.format === 'csv') {
+            const filename = `AATN_IPO_Data_${Date.now()}.csv`;
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Type", "text/csv; charset=utf-8");
+            res.write('\uFEFF');
+
+            const headers = [
+                'ID', 'ID Factory Order', 'Mã Tender', 'Tên dự án',
+                'Mô tả vật tư', 'Số lượng IPO', 'Đơn vị tính'
+            ];
+            res.write(formatCsvRow(headers));
+
+            const CHUNK_SIZE = 5000;
+            let offset = 0;
+            let hasMore = true;
+
+            while (hasMore) {
+                const chunkRes = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "id" ASC LIMIT $1 OFFSET $2`, [CHUNK_SIZE, offset]);
+                if (chunkRes.rows.length === 0) {
+                    hasMore = false;
+                    break;
+                }
+
+                for (const r of chunkRes.rows) {
+                    res.write(formatCsvRow([
+                        r.id || '', r.ID_Factory_Order || '', r.Ma_Tender || '',
+                        r.Project_name || '', r.Material_description || '',
+                        r.Quantity_IPO || 0, r.Base_Unit || ''
+                    ]));
+                }
+
+                if (chunkRes.rows.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    offset += CHUNK_SIZE;
+                }
+            }
+
+            res.end();
+            return;
+        }
+
         const result = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "id" ASC LIMIT 50000`);
         
         const filename = `AATN_IPO_Data_${Date.now()}.xlsx`;
@@ -2711,6 +2864,95 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
             stage: (req.query.stage || req.query.inspectionStage) as string,
             inspectionStage: (req.query.inspectionStage || req.query.stage) as string
         };
+
+        if (req.query.format === 'csv') {
+            const filename = `AATN_Inspections_${Date.now()}.csv`;
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Content-Type", "text/csv; charset=utf-8");
+            res.write('\uFEFF');
+
+            const headers = [
+                'Mã hồ sơ', 'Loại phiếu', 'Mã dự án', 'Tên dự án', 'Hạng mục/Mô tả',
+                'Mã nhà máy', 'Headcode', 'QC kiểm tra', 'Xưởng', 'Công đoạn sản xuất',
+                'Ngày thực hiện', 'Trạng thái', 'SL ĐĐH', 'SLkiem', 'SLDat',
+                'TLDat', 'SLLoi', 'TLLoi', 'Kết luận/Ghi chú', 'ĐVT/Unit'
+            ];
+            res.write(formatCsvRow(headers));
+
+            const CHUNK_SIZE = 5000;
+            let page = 1;
+            let hasMore = true;
+
+            while (hasMore) {
+                const result = await db.getInspectionsList(filters, page, CHUNK_SIZE, (req as any).user);
+                if (!result.items || result.items.length === 0) {
+                    hasMore = false;
+                    break;
+                }
+
+                for (const item of result.items) {
+                    let rowDateStr = '';
+                    if (item.date) {
+                        if (/^\d{2}\/\d{2}\/\d{4}$/.test(String(item.date))) {
+                            rowDateStr = String(item.date);
+                        } else if (!isNaN(Number(item.date)) && Number(item.date) > 100000000) {
+                            const ts = Number(item.date);
+                            const d = new Date(ts > 100000000000 ? ts : ts * 1000);
+                            if (!isNaN(d.getTime())) rowDateStr = d.toISOString().slice(0, 10);
+                        } else {
+                            const d = new Date(item.date);
+                            if (!isNaN(d.getTime())) rowDateStr = d.toISOString().slice(0, 10);
+                        }
+                    }
+
+                    const so_luong_ipo = Number((item as any).so_luong_ipo || (item as any).sl_ipo || (item as any).qty_ipo || 0);
+                    const inspectedQuantity = Number((item as any).inspectedQuantity || (item as any).inspected_qty || (item as any).qty_total || 0);
+                    const passedQuantity = Number((item as any).passedQuantity || (item as any).passed_qty || (item as any).qty_pass || 0);
+                    const failedQuantity = Number((item as any).failedQuantity || (item as any).failed_qty || (item as any).qty_fail || 0);
+
+                    let passedPercentage = '';
+                    let failedPercentage = '';
+                    if (inspectedQuantity > 0) {
+                        passedPercentage = ((passedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
+                        failedPercentage = ((failedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
+                    }
+
+                    const row = [
+                        item.id || '',
+                        item.type || '',
+                        item.ma_ct || '',
+                        item.ten_ct || '',
+                        item.ten_hang_muc || '',
+                        item.ma_nha_may || '',
+                        item.headcode || '',
+                        item.inspectorName || '',
+                        item.workshop || '',
+                        item.inspectionStage || (item as any).stage || '',
+                        rowDateStr,
+                        item.status || '',
+                        so_luong_ipo,
+                        inspectedQuantity,
+                        passedQuantity,
+                        passedPercentage,
+                        failedQuantity,
+                        failedPercentage,
+                        (item as any).summary || '',
+                        (item as any).dvt || ''
+                    ];
+
+                    res.write(formatCsvRow(row));
+                }
+
+                if (result.items.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            }
+
+            res.end();
+            return;
+        }
 
         const result = await db.getInspectionsList(filters, 1, 50000);
         
@@ -3235,6 +3477,172 @@ app.get('/api/diag/db', async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
+// --- SUBCONTRACTOR QC BOOKING & INSPECTIONS API ENDPOINTS ---
+
+app.get("/api/subcontractor-bookings", async (req, res) => {
+  try {
+    const filters = {
+      status: req.query.status as string,
+      search: req.query.search as string,
+      assignedQcId: req.query.assignedQcId as string
+    };
+    const bookings = await db.getSubcontractorBookings(filters);
+    res.json({ bookings });
+  } catch (err: any) {
+    console.error("Error fetching subcontractor bookings:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/subcontractor-bookings/:id", async (req, res) => {
+  try {
+    const booking = await db.getSubcontractorBookingById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+    res.json(booking);
+  } catch (err: any) {
+    console.error("Error fetching subcontractor booking:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper: Quy định nghiệm thu trước 24 tiếng theo mốc 15:00 giờ Việt Nam (ICT, UTC+7)
+function getVietnamBookingPolicy() {
+  const now = new Date();
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const vnDate = new Date(utcMs + (7 * 3600000));
+  
+  const vnHour = vnDate.getHours();
+  const isAfter15h = vnHour >= 15;
+  const daysToAdd = isAfter15h ? 2 : 1;
+  
+  const targetDate = new Date(vnDate.getFullYear(), vnDate.getMonth(), vnDate.getDate() + daysToAdd);
+  const yyyy = targetDate.getFullYear();
+  const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(targetDate.getDate()).padStart(2, '0');
+  const minDateStr = `${yyyy}-${mm}-${dd}`;
+  
+  const tomorrow = new Date(vnDate.getFullYear(), vnDate.getMonth(), vnDate.getDate() + 1);
+  const tomorrowDisplay = `${String(tomorrow.getDate()).padStart(2, '0')}/${String(tomorrow.getMonth() + 1).padStart(2, '0')}/${tomorrow.getFullYear()}`;
+  
+  const dayAfter = new Date(vnDate.getFullYear(), vnDate.getMonth(), vnDate.getDate() + 2);
+  const dayAfterDisplay = `${String(dayAfter.getDate()).padStart(2, '0')}/${String(dayAfter.getMonth() + 1).padStart(2, '0')}/${dayAfter.getFullYear()}`;
+  
+  const timeStr = `${String(vnHour).padStart(2, '0')}:${String(vnDate.getMinutes()).padStart(2, '0')}`;
+  
+  return {
+    vnHour,
+    isAfter15h,
+    minDateStr,
+    tomorrowDisplay,
+    dayAfterDisplay,
+    timeStr
+  };
+}
+
+function parseDateToYMD(rawDate: any): string {
+  if (!rawDate) return '';
+  if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+    return rawDate.slice(0, 10);
+  }
+  const ts = typeof rawDate === 'number' ? (rawDate > 1e11 ? rawDate : rawDate * 1000) : new Date(rawDate).getTime();
+  if (isNaN(ts) || ts <= 0) return '';
+  const d = new Date(ts + 7 * 3600000);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+app.post("/api/subcontractor-bookings", async (req, res) => {
+  try {
+    const policy = getVietnamBookingPolicy();
+    const reqDateStr = parseDateToYMD(req.body.requestedDate);
+
+    if (reqDateStr && reqDateStr < policy.minDateStr) {
+      return res.status(400).json({ 
+        error: policy.isAfter15h
+          ? `Quy định đặt lịch QC nghiệm thu trước 24 tiếng: Hiện tại đã sau 15:00 (${policy.timeStr}), ngày nghiệm thu phải chọn từ ngày mốt (${policy.dayAfterDisplay}) trở đi, không được chọn ngày mai.`
+          : `Quy định đặt lịch QC nghiệm thu trước 24 tiếng: Đặt trước 15:00 (${policy.timeStr}), ngày nghiệm thu sớm nhất phải từ ngày mai (${policy.tomorrowDisplay}) trở đi.`
+      });
+    }
+
+    const booking = await db.createSubcontractorBooking(req.body);
+    res.status(201).json(booking);
+  } catch (err: any) {
+    console.error("Error creating subcontractor booking:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/subcontractor-bookings/:id", async (req, res) => {
+  try {
+    if (req.body.requestedDate) {
+      const current = await db.getSubcontractorBookingById(req.params.id);
+      if (current && current.status === 'PENDING') {
+        const policy = getVietnamBookingPolicy();
+        const reqDateStr = parseDateToYMD(req.body.requestedDate);
+        const currentDateStr = parseDateToYMD(current.requestedDate);
+        if (reqDateStr && reqDateStr !== currentDateStr && reqDateStr < policy.minDateStr) {
+          return res.status(400).json({ 
+            error: policy.isAfter15h
+              ? `Quy định đặt lịch QC trước 24 tiếng: Sau 15:00 (${policy.timeStr}), ngày nghiệm thu phải chọn từ ngày mốt (${policy.dayAfterDisplay}) trở đi.`
+              : `Quy định đặt lịch QC trước 24 tiếng: Đặt trước 15:00 (${policy.timeStr}), ngày nghiệm thu sớm nhất phải từ ngày mai (${policy.tomorrowDisplay}) trở đi.`
+          });
+        }
+      }
+    }
+
+    const booking = await db.updateSubcontractorBooking(req.params.id, req.body);
+    res.json(booking);
+  } catch (err: any) {
+    console.error("Error updating subcontractor booking:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/subcontractor-bookings/:id", async (req, res) => {
+  try {
+    const result = await db.deleteSubcontractorBooking(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    console.error("Error deleting subcontractor booking:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/subcontractor-inspections", async (req, res) => {
+  try {
+    const result = await db.createSubcontractorInspection(req.body);
+    res.status(201).json(result);
+  } catch (err: any) {
+    console.error("Error creating subcontractor inspection:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/subcontractor-reinspection-costs", async (req, res) => {
+  try {
+    const costs = await db.getSubcontractorReinspectionCosts();
+    res.json({ costs });
+  } catch (err: any) {
+    console.error("Error fetching reinspection costs:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/erp/lookup-po", async (req, res) => {
+  try {
+    const { query: q } = req.query;
+    const result = await db.lookupPoMaterials(String(q || ''));
+    res.json(result);
+  } catch (err: any) {
+    console.error("Error looking up PO materials:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 

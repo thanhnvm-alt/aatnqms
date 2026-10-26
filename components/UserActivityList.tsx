@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Clock, LogIn, Monitor, Globe, Shield, Loader2, RefreshCw } from 'lucide-react';
+import { fetchUserActivity } from '../services/apiService';
 
 interface AuditLogEntry {
     id: string;
@@ -36,19 +37,7 @@ export const UserActivityList: React.FC<UserActivityListProps> = ({ userId, onCl
         setIsLoading(true);
         setError(null);
         try {
-            const token = localStorage.getItem('aatn_qms_token');
-            const res = await fetch(`/api/users/${userId}/activity`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            if (!res.ok) {
-                if (res.status === 403) {
-                    throw new Error('Bạn không có quyền truy cập thông tin hoạt động của nhân sự này.');
-                }
-                throw new Error('Không thể tải nhật ký hoạt động.');
-            }
-            const data = await res.json();
+            const data = await fetchUserActivity(userId);
             setStats(data);
         } catch (err: any) {
             setError(err.message || 'Lỗi kết nối máy chủ');

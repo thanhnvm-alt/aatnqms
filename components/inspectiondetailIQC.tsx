@@ -191,21 +191,47 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
                 <div className="flex flex-col items-center mb-8 pt-8 md:pt-4">
                     <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{inspection.ten_ct}</p>
                     <h1 className="text-[14px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-center">BÁO CÁO KIỂM TRA VẬT TƯ ĐẦU VÀO (IQC)</h1>
-                    <div className="flex items-center gap-2 mt-3 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 w-fit">
-                        <Building2 className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
-                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">{inspection.supplier}</span>
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
+                        {(inspection.po_number || inspection.poNumber || inspection.pr_number || inspection.prNumber) && (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 shadow-sm">
+                                <FileText className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-mono font-bold uppercase tracking-wide">
+                                    Số PO / PR: {inspection.po_number || inspection.poNumber || inspection.pr_number || inspection.prNumber}
+                                </span>
+                            </div>
+                        )}
+                        {inspection.supplier && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 w-fit">
+                                <Building2 className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
+                                <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">{inspection.supplier}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center"><p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Ngày kiểm</p><p className="text-[11px] font-bold text-slate-800 dark:text-slate-200">{(() => {
-                        if (!inspection.date) return '---';
-                        if (/^\d+$/.test(inspection.date)) return new Date(Number(inspection.date) * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                        const parts = inspection.date.split('-');
-                        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-                        const d = new Date(inspection.date);
-                        return isNaN(d.getTime()) ? inspection.date : d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                    })()}</p></div>
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center"><p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">QC/QA</p><p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase">{inspection.inspectorName}</p></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Số PO / PR</p>
+                        <p className="text-[12px] font-mono font-bold text-blue-600 dark:text-blue-400 truncate">{inspection.po_number || inspection.poNumber || inspection.pr_number || inspection.prNumber || '---'}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Mã Dự Án</p>
+                        <p className="text-[12px] font-mono font-bold text-slate-800 dark:text-slate-200 truncate">{inspection.ma_ct || '---'}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Ngày kiểm</p>
+                        <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200">{(() => {
+                            if (!inspection.date) return '---';
+                            if (/^\d+$/.test(inspection.date)) return new Date(Number(inspection.date) * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            const parts = inspection.date.split('-');
+                            if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                            const d = new Date(inspection.date);
+                            return isNaN(d.getTime()) ? inspection.date : d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                        })()}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">QC/QA</p>
+                        <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase truncate">{inspection.inspectorName}</p>
+                    </div>
                 </div>
             </div>
 

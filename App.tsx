@@ -85,6 +85,7 @@ const MaterialManagement = lazy(() => import('./components/MaterialManagement').
 const ToolsManagement = lazy(() => import('./components/ToolsManagement').then(m => ({ default: m.ToolsManagement })));
 const Trash = lazy(() => import('./components/Trash').then(m => ({ default: m.Trash })));
 const QRScannerModal = lazy(() => import('./components/QRScannerModal').then(m => ({ default: m.QRScannerModal })));
+const SubcontractorBookingManagement = lazy(() => import('./components/SubcontractorBookingManagement').then(m => ({ default: m.SubcontractorBookingManagement })));
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
 
@@ -717,6 +718,39 @@ const App = () => {
                 )}
                 {view === 'TRASH' && <Trash user={user} onNavigate={setView} />}
                 {view === 'CONVERT_3D' && <ThreeDConverter />}
+                {view === 'SUBCONTRACTOR_BOOKING' && (
+                    <SubcontractorBookingManagement 
+                        currentUser={user} 
+                        onStartInspection={(booking) => {
+                            const sqcType = booking.sqcType || 'SQC_BTP';
+                            const template = templates[sqcType] || SQC_BTP_CHECKLIST_TEMPLATE;
+                            setInitialFormState({
+                                type: sqcType,
+                                ma_ct: booking.poNumber,
+                                ten_ct: booking.poNumber,
+                                ma_nha_may: booking.supplierName,
+                                workshop: booking.supplierName,
+                                dia_chi_xuong: booking.locationAddress,
+                                nguoi_lien_he: booking.contactPerson,
+                                so_dien_thoai: booking.contactPhone,
+                                booking_id: booking.id,
+                                booking_code: booking.bookingCode,
+                                items: booking.items && booking.items.length > 0
+                                    ? booking.items.map((it, idx) => ({
+                                        id: it.id || (idx + 1).toString(),
+                                        itemName: it.itemName || '',
+                                        quantity: it.quantity || 1,
+                                        unit: it.unit || 'Bộ',
+                                        specifications: it.specifications || '',
+                                        result: 'PASS'
+                                    }))
+                                    : JSON.parse(JSON.stringify(template))
+                            } as any);
+                            setActiveInspection(null);
+                            setView('FORM');
+                        }}
+                    />
+                )}
             </Suspense>
         </main>
         <Suspense fallback={null}>

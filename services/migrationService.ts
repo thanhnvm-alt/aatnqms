@@ -931,6 +931,74 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create tools tables: ${toolErr.message}`);
     }
 
+    // --- SUBCONTRACTOR QC BOOKING & INSPECTION TABLES ---
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."subcontractor_bookings" (
+            "id" TEXT PRIMARY KEY,
+            "booking_code" TEXT UNIQUE NOT NULL,
+            "po_id" TEXT,
+            "po_number" TEXT NOT NULL,
+            "supplier_id" TEXT,
+            "supplier_name" TEXT NOT NULL,
+            "requester_id" TEXT,
+            "requester_name" TEXT NOT NULL,
+            "location_address" TEXT NOT NULL,
+            "contact_person" TEXT NOT NULL,
+            "contact_phone" TEXT NOT NULL,
+            "requested_date" BIGINT NOT NULL,
+            "assigned_qc_id" TEXT,
+            "assigned_qc_name" TEXT,
+            "status" TEXT NOT NULL DEFAULT 'PENDING',
+            "notes" TEXT,
+            "items_json" TEXT DEFAULT '[]',
+            "documents_json" TEXT DEFAULT '{}',
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "version" INT DEFAULT 1
+        );
+      `);
+      await addColumn('subcontractor_bookings', 'documents_json', "TEXT DEFAULT '{}'");
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."subcontractor_inspections" (
+            "id" TEXT PRIMARY KEY,
+            "booking_id" TEXT NOT NULL,
+            "booking_code" TEXT NOT NULL,
+            "qc_user_id" TEXT NOT NULL,
+            "qc_user_name" TEXT NOT NULL,
+            "inspection_result" TEXT NOT NULL,
+            "vendor_representative_name" TEXT NOT NULL,
+            "vendor_signature_url" TEXT,
+            "qc_signature_url" TEXT,
+            "inspection_items_json" TEXT DEFAULT '[]',
+            "defect_summary" TEXT,
+            "images_json" TEXT DEFAULT '[]',
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+            "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."subcontractor_reinspection_costs" (
+            "id" TEXT PRIMARY KEY,
+            "ncr_id" TEXT,
+            "booking_id" TEXT NOT NULL,
+            "booking_code" TEXT,
+            "subcontractor_name" TEXT NOT NULL,
+            "reinspection_count" INT DEFAULT 1,
+            "travel_cost" NUMERIC DEFAULT 0,
+            "qc_labor_hours" NUMERIC DEFAULT 0,
+            "qc_labor_rate" NUMERIC DEFAULT 250000,
+            "total_penalty_cost" NUMERIC DEFAULT 0,
+            "status" TEXT DEFAULT 'PENDING_DEDUCTION',
+            "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured subcontractor booking & inspection tables exist in ${schema}`);
+    } catch (subErr: any) {
+      console.warn(`⚠️ Could not create subcontractor booking tables:`, subErr.message);
+      migrationLogs.push(`⚠️ Could not create subcontractor booking tables: ${subErr.message}`);
+    }
+
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
     try {
       fs.writeFileSync(path.join(process.cwd(), 'diag_migration.json'), JSON.stringify({

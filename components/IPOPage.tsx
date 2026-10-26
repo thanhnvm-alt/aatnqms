@@ -3,7 +3,7 @@ import { Loader2, Building2, ChevronDown, Download, Upload, Search } from 'lucid
 import { IPODetail } from './IPODetail';
 const _dummy = 0;
 import { IPOItem, User, hasPermission } from '../types';
-import { exportIpoData, importIpoFile } from '../services/apiService';
+import { exportIpoData, importIpoFile, fetchIpoData } from '../services/apiService';
 
 export default function IPOPage({ user }: { user: User }) {
   const [data, setData] = useState<any[]>([]);
@@ -28,16 +28,16 @@ export default function IPOPage({ user }: { user: User }) {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'csv' | 'xlsx' = 'csv') => {
     setIsExporting(true);
     try {
       await exportIpoData({
         factoryOrder: filterFactoryOrder,
         maTender: filterMaTender
-      });
+      }, format);
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Lỗi khi xuất file Excel');
+      alert('Lỗi khi xuất file báo cáo');
     } finally {
       setIsExporting(false);
     }
@@ -65,20 +65,9 @@ export default function IPOPage({ user }: { user: User }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const params = new URLSearchParams();
-        params.append('page', page.toString());
-        params.append('limit', limit.toString());
-        if (filterFactoryOrder) params.append('factoryOrder', filterFactoryOrder);
-        if (filterMaTender) params.append('maTender', filterMaTender);
-        if (searchTerm) params.append('material', searchTerm);
-        
-        const response = await fetch(`/api/ipo?${params.toString()}`);
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to fetch IPO data: ${response.status} ${errorText}`);
-        }
-        const result = await response.json();
+        const result = await fetchIpoData(page, limit, filterFactoryOrder, filterMaTender);
         setData(result.items || []);
         setTotal(result.total || 0);
       } catch (err) {
@@ -165,16 +154,27 @@ export default function IPOPage({ user }: { user: User }) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     </div>
 
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         {hasPermission(user, [], 'IPO', 'EXPORT') && (
-                            <button 
-                                onClick={handleExport}
-                                disabled={isExporting}
-                                className="p-3 bg-green-600 text-white rounded-full shadow-lg shadow-green-500/30 active:scale-95 transition-all disabled:opacity-50"
-                                title="Xuất Excel"
-                            >
-                                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                            </button>
+                            <>
+                                <button 
+                                    onClick={() => handleExport('csv')}
+                                    disabled={isExporting}
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-full text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all disabled:opacity-50"
+                                    title="Xuất CSV Stream (Tốc độ cao)"
+                                >
+                                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                    <span>Xuất CSV</span>
+                                </button>
+                                <button 
+                                    onClick={() => handleExport('xlsx')}
+                                    disabled={isExporting}
+                                    className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-50"
+                                    title="Xuất Excel (.xlsx)"
+                                >
+                                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                </button>
+                            </>
                         )}
                         {hasPermission(user, [], 'IPO', 'IMPORT') && (
                             <>

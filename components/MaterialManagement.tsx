@@ -58,13 +58,13 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'csv' | 'xlsx' = 'csv') => {
     setIsExporting(true);
     try {
-      await exportMaterials();
+      await exportMaterials(format);
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Lỗi khi xuất file Excel');
+      alert('Lỗi khi xuất file báo cáo');
     } finally {
       setIsExporting(false);
     }
@@ -194,14 +194,25 @@ export const MaterialManagement: React.FC<{ user: User }> = ({ user }) => {
             </button>
           )}
           {hasPermission(user, roles, 'MATERIALS', 'EXPORT') && (
-            <button 
-              onClick={handleExport}
-              disabled={isExporting}
-              title="Xuất Excel"
-              className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
-            >
-              {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            </button>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => handleExport('csv')}
+                disabled={isExporting}
+                title="Xuất CSV Stream (Tốc độ cao)"
+                className="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              >
+                {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                <span>CSV</span>
+              </button>
+              <button 
+                onClick={() => handleExport('xlsx')}
+                disabled={isExporting}
+                title="Xuất Excel (.xlsx)"
+                className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center"
+              >
+                {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              </button>
+            </div>
           )}
           {(user.role === 'ADMIN' || hasPermission(user, roles, 'MATERIALS', 'CREATE')) && (
             <button 

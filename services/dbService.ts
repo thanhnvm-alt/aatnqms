@@ -70,16 +70,18 @@ async function syncToInspectionsTable(inspection: Inspection) {
         const createdAt = parseTS(inspection.createdAt || inspection.date || Date.now());
         const inspection_date = parseTS(inspection.date);
         
+        const poNumber = inspection.po_number || inspection.poNumber || (Array.isArray(inspection.materials) && (inspection.materials[0] as any)?.purchaseDocument) || null;
+
         await query(`
             INSERT INTO ${SCHEMA}."inspections" (
                 id, type, ma_ct, ten_ct, ma_nha_may, ten_hang_muc, 
                 workshop, status, score, created_at, updated_at, created_by, headcode,
-                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority, date
+                stage, inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority, date, po_number
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, 
                 $9::double precision, $10::bigint, $11::bigint, $12, $13,
-                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19, $20::bigint
+                $14, $15::numeric, $16::numeric, $17::numeric, $18::numeric, $19, $20::bigint, $21
             )
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
@@ -98,6 +100,7 @@ async function syncToInspectionsTable(inspection: Inspection) {
                 failed_qty = EXCLUDED.failed_qty,
                 so_luong_ipo = EXCLUDED.so_luong_ipo,
                 priority = EXCLUDED.priority,
+                po_number = COALESCE(EXCLUDED.po_number, ${SCHEMA}."inspections".po_number),
                 created_by = COALESCE(${SCHEMA}."inspections".created_by, EXCLUDED.created_by)
         `, sanitizeArgs([
             inspection.id, 
@@ -119,7 +122,8 @@ async function syncToInspectionsTable(inspection: Inspection) {
             inspection.failedQuantity || 0,
             inspection.so_luong_ipo || 0,
             inspection.priority || null,
-            inspection_date
+            inspection_date,
+            poNumber
         ]));
     } catch (e) {
         console.error(`❌ ISO-DB: Sync to inspections table failed for ${inspection.id}:`, e);
@@ -735,7 +739,7 @@ function buildBaseWhere(filters: any, user?: User) {
     if (filters.search) {
         const searchPattern = `%${filters.search}%`;
         const searchIdx = subArgs.length + 1;
-        whereClause += ` AND (ma_ct ILIKE $${searchIdx} OR ten_ct ILIKE $${searchIdx} OR ten_hang_muc ILIKE $${searchIdx} OR created_by ILIKE $${searchIdx} OR id ILIKE $${searchIdx} OR ma_nha_may ILIKE $${searchIdx} OR headcode ILIKE $${searchIdx})`;
+        whereClause += ` AND (ma_ct ILIKE $${searchIdx} OR ten_ct ILIKE $${searchIdx} OR ten_hang_muc ILIKE $${searchIdx} OR created_by ILIKE $${searchIdx} OR id ILIKE $${searchIdx} OR ma_nha_may ILIKE $${searchIdx} OR headcode ILIKE $${searchIdx} OR po_number ILIKE $${searchIdx})`;
         subArgs.push(searchPattern);
     }
 
@@ -887,7 +891,7 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
             workshop, status, score, created_at, updated_at, created_by as "inspectorName",
             stage as "inspectionStage", inspected_qty as "inspectedQuantity",
             passed_qty as "passedQuantity", failed_qty as "failedQuantity",
-            so_luong_ipo, headcode, stage, sub_stage as "subStage", date
+            so_luong_ipo, headcode, stage, sub_stage as "subStage", date, po_number
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
@@ -905,6 +909,8 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
 
         const items = res.rows.map((row: any) => ({
             ...row,
+            po_number: row.po_number,
+            poNumber: row.po_number,
             inspectorName: row.inspectorName || row.created_by,
             created_by: row.created_by || row.inspectorName,
             date: (row.date && Number(row.date) > 1000000000) ? row.date :
@@ -945,7 +951,7 @@ export async function getDashboardInspectionsList(filters: any = {}, user?: User
             workshop, status, score, created_at, updated_at, created_by as "inspectorName",
             stage as "inspectionStage", inspected_qty as "inspectedQuantity",
             passed_qty as "passedQuantity", failed_qty as "failedQuantity",
-            so_luong_ipo, date
+            so_luong_ipo, date, po_number
         FROM ${SCHEMA}."inspections"
         ${whereClause}
         ORDER BY updated_at DESC
@@ -961,6 +967,8 @@ export async function getDashboardInspectionsList(filters: any = {}, user?: User
 
         const items = res.rows.map((row: any) => ({
             ...row,
+            po_number: row.po_number,
+            poNumber: row.po_number,
             inspectorName: row.inspectorName || row.created_by,
             created_by: row.created_by || row.inspectorName,
             date: (row.date && Number(row.date) > 1000000000) ? row.date :
@@ -2885,4 +2893,338 @@ export async function saveTeam(team: { id: string; name: string; divisionId: str
 export async function deleteTeam(id: string) {
     await query(`DELETE FROM ${SCHEMA}.teams WHERE id = $1`, [id]);
 }
+
+// --- SUBCONTRACTOR QC BOOKING & INSPECTIONS DB METHODS ---
+
+export async function getSubcontractorBookings(filters: any = {}) {
+    let sql = `SELECT * FROM ${SCHEMA}.subcontractor_bookings WHERE 1=1`;
+    const params: any[] = [];
+    let idx = 1;
+
+    if (filters.status) {
+        sql += ` AND status = $${idx++}`;
+        params.push(filters.status);
+    }
+    if (filters.search) {
+        sql += ` AND (booking_code ILIKE $${idx} OR po_number ILIKE $${idx} OR supplier_name ILIKE $${idx} OR contact_person ILIKE $${idx})`;
+        params.push(`%${filters.search}%`);
+        idx++;
+    }
+    if (filters.assignedQcId) {
+        sql += ` AND assigned_qc_id = $${idx++}`;
+        params.push(filters.assignedQcId);
+    }
+
+    sql += ` ORDER BY created_at DESC`;
+
+    const res = await query(sql, params);
+    return res.rows.map((row: any) => ({
+        id: row.id,
+        bookingCode: row.booking_code,
+        poId: row.po_id,
+        poNumber: row.po_number,
+        supplierId: row.supplier_id,
+        supplierName: row.supplier_name,
+        requesterId: row.requester_id,
+        requesterName: row.requester_name,
+        locationAddress: row.location_address,
+        contactPerson: row.contact_person,
+        contactPhone: row.contact_phone,
+        requestedDate: parseInt(row.requested_date || '0'),
+        assignedQcId: row.assigned_qc_id,
+        assignedQcName: row.assigned_qc_name,
+        status: row.status,
+        notes: row.notes,
+        items: safeJsonParse(row.items_json, []),
+        documents: safeJsonParse(row.documents_json, {
+            materialSpecUrl: '',
+            approvedSampleUrl: '',
+            shopdrawingUrl: '',
+            qualityAgreementUrl: ''
+        }),
+        createdAt: parseInt(row.created_at || '0'),
+        updatedAt: parseInt(row.updated_at || '0'),
+        version: row.version || 1
+    }));
+}
+
+export async function getSubcontractorBookingById(id: string) {
+    const res = await query(`SELECT * FROM ${SCHEMA}.subcontractor_bookings WHERE id = $1 OR booking_code = $1`, [id]);
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+        id: row.id,
+        bookingCode: row.booking_code,
+        poId: row.po_id,
+        poNumber: row.po_number,
+        supplierId: row.supplier_id,
+        supplierName: row.supplier_name,
+        requesterId: row.requester_id,
+        requesterName: row.requester_name,
+        locationAddress: row.location_address,
+        contactPerson: row.contact_person,
+        contactPhone: row.contact_phone,
+        requestedDate: parseInt(row.requested_date || '0'),
+        assignedQcId: row.assigned_qc_id,
+        assignedQcName: row.assigned_qc_name,
+        status: row.status,
+        notes: row.notes,
+        items: safeJsonParse(row.items_json, []),
+        documents: safeJsonParse(row.documents_json, {
+            materialSpecUrl: '',
+            approvedSampleUrl: '',
+            shopdrawingUrl: '',
+            qualityAgreementUrl: ''
+        }),
+        createdAt: parseInt(row.created_at || '0'),
+        updatedAt: parseInt(row.updated_at || '0'),
+        version: row.version || 1
+    };
+}
+
+export async function createSubcontractorBooking(data: any) {
+    const id = data.id || crypto.randomUUID();
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randCode = Math.floor(100 + Math.random() * 900);
+    const bookingCode = data.bookingCode || `BK-${dateStr}-${randCode}`;
+    const itemsJson = JSON.stringify(data.items || []);
+    const docsJson = JSON.stringify(data.documents || {
+        materialSpecUrl: data.materialSpecUrl || '',
+        approvedSampleUrl: data.approvedSampleUrl || '',
+        shopdrawingUrl: data.shopdrawingUrl || '',
+        qualityAgreementUrl: data.qualityAgreementUrl || ''
+    });
+    const requestedDate = parseTS(data.requestedDate);
+
+    await query(`
+        INSERT INTO ${SCHEMA}.subcontractor_bookings (
+            id, booking_code, po_id, po_number, supplier_id, supplier_name,
+            requester_id, requester_name, location_address, contact_person,
+            contact_phone, requested_date, assigned_qc_id, assigned_qc_name,
+            status, notes, items_json, documents_json, created_at, updated_at
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            EXTRACT(EPOCH FROM NOW())::BIGINT, EXTRACT(EPOCH FROM NOW())::BIGINT
+        )
+    `, [
+        id, bookingCode, data.poId || null, data.poNumber, data.supplierId || null,
+        data.supplierName, data.requesterId || null, data.requesterName || 'Chuyên viên Mua hàng',
+        data.locationAddress, data.contactPerson, data.contactPhone, requestedDate,
+        data.assignedQcId || null, data.assignedQcName || null, data.status || 'PENDING',
+        data.notes || '', itemsJson, docsJson
+    ]);
+
+    return getSubcontractorBookingById(id);
+}
+
+export async function updateSubcontractorBooking(id: string, data: any) {
+    const current = await getSubcontractorBookingById(id);
+    if (!current) throw new Error('Booking not found');
+
+    const poNumber = data.poNumber !== undefined ? data.poNumber : current.poNumber;
+    const supplierName = data.supplierName !== undefined ? data.supplierName : current.supplierName;
+    const locationAddress = data.locationAddress !== undefined ? data.locationAddress : current.locationAddress;
+    const contactPerson = data.contactPerson !== undefined ? data.contactPerson : current.contactPerson;
+    const contactPhone = data.contactPhone !== undefined ? data.contactPhone : current.contactPhone;
+    const requestedDate = data.requestedDate !== undefined ? parseTS(data.requestedDate) : current.requestedDate;
+    const status = data.status || current.status;
+    const assignedQcId = data.assignedQcId !== undefined ? data.assignedQcId : current.assignedQcId;
+    const assignedQcName = data.assignedQcName !== undefined ? data.assignedQcName : current.assignedQcName;
+    const notes = data.notes !== undefined ? data.notes : current.notes;
+    const itemsJson = data.items !== undefined ? JSON.stringify(data.items) : JSON.stringify(current.items);
+    const docsJson = data.documents !== undefined ? JSON.stringify(data.documents) : JSON.stringify(current.documents);
+
+    await query(`
+        UPDATE ${SCHEMA}.subcontractor_bookings
+        SET po_number = $1, supplier_name = $2, location_address = $3, contact_person = $4,
+            contact_phone = $5, requested_date = $6, status = $7, assigned_qc_id = $8,
+            assigned_qc_name = $9, notes = $10, items_json = $11, documents_json = $12,
+            updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT, version = version + 1
+        WHERE id = $13 OR booking_code = $13
+    `, [
+        poNumber, supplierName, locationAddress, contactPerson, contactPhone,
+        requestedDate, status, assignedQcId, assignedQcName, notes,
+        itemsJson, docsJson, current.id
+    ]);
+
+    return getSubcontractorBookingById(current.id);
+}
+
+export async function deleteSubcontractorBooking(id: string) {
+    const current = await getSubcontractorBookingById(id);
+    if (!current) throw new Error('Booking not found');
+
+    await query(`DELETE FROM ${SCHEMA}.subcontractor_bookings WHERE id = $1 OR booking_code = $1`, [id]);
+    return { success: true, id: current.id };
+}
+
+export async function createSubcontractorInspection(data: any) {
+    const id = data.id || crypto.randomUUID();
+    const itemsJson = JSON.stringify(data.inspectionItems || []);
+    const imagesJson = JSON.stringify(data.images || []);
+
+    await query(`
+        INSERT INTO ${SCHEMA}.subcontractor_inspections (
+            id, booking_id, booking_code, qc_user_id, qc_user_name,
+            inspection_result, vendor_representative_name, vendor_signature_url,
+            qc_signature_url, inspection_items_json, defect_summary, images_json,
+            created_at, updated_at
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+            EXTRACT(EPOCH FROM NOW())::BIGINT, EXTRACT(EPOCH FROM NOW())::BIGINT
+        )
+    `, [
+        id, data.bookingId, data.bookingCode, data.qcUserId, data.qcUserName,
+        data.inspectionResult, data.vendorRepresentativeName, data.vendorSignatureUrl || '',
+        data.qcSignatureUrl || '', itemsJson, data.defectSummary || '', imagesJson
+    ]);
+
+    // Update booking status to COMPLETED or IN_PROGRESS
+    const bookingStatus = data.inspectionResult === 'PASS' ? 'COMPLETED' : 'IN_PROGRESS';
+    await query(`
+        UPDATE ${SCHEMA}.subcontractor_bookings
+        SET status = $1, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+        WHERE id = $2
+    `, [bookingStatus, data.bookingId]);
+
+    // If result is REJECT or CONDITIONAL_PASS, automatically create Subcontractor NCR and Reinspection Cost
+    if (data.inspectionResult === 'REJECT' || data.inspectionResult === 'CONDITIONAL_PASS') {
+        const booking = await getSubcontractorBookingById(data.bookingId);
+        if (booking) {
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const randNcr = Math.floor(100 + Math.random() * 900);
+            const ncrId = `QMS-NCR-SUB-${dateStr}-${randNcr}`;
+
+            // Create NCR record
+            await query(`
+                INSERT INTO ${SCHEMA}.ncrs (
+                    id, inspection_id, severity, status, description, root_cause,
+                    corrective_action, created_by, created_at, updated_at, data
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8,
+                    EXTRACT(EPOCH FROM NOW())::BIGINT, EXTRACT(EPOCH FROM NOW())::BIGINT, $9
+                )
+            `, [
+                ncrId, booking.id, 'CRITICAL', 'OPEN',
+                `Lỗi nghiệm thu gia công xưởng ${booking.supplierName}: ${data.defectSummary || 'Hàng không đạt tiêu chuẩn kỹ thuật'}`,
+                'Hàng gia công bị lỗi tại xưởng vệ tinh',
+                'Xưởng vệ tinh sửa lại hàng, chịu phí nghiệm thu lại (Re-inspection Fee)',
+                data.qcUserName,
+                JSON.stringify({ supplierName: booking.supplierName, poNumber: booking.poNumber, bookingCode: booking.bookingCode })
+            ]);
+
+            // Calculate Re-inspection Fee
+            const laborHours = data.qcLaborHours || 4;
+            const laborRate = 250000; // 250k VND/hour
+            const travelCost = data.travelCost || 500000; // 500k travel expense
+            const totalPenalty = travelCost + (laborHours * laborRate);
+
+            await query(`
+                INSERT INTO ${SCHEMA}.subcontractor_reinspection_costs (
+                    id, ncr_id, booking_id, booking_code, subcontractor_name,
+                    reinspection_count, travel_cost, qc_labor_hours, qc_labor_rate,
+                    total_penalty_cost, status, created_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'PENDING_DEDUCTION',
+                    EXTRACT(EPOCH FROM NOW())::BIGINT
+                )
+            `, [
+                crypto.randomUUID(), ncrId, booking.id, booking.bookingCode,
+                booking.supplierName, 1, travelCost, laborHours, laborRate, totalPenalty
+            ]);
+        }
+    }
+
+    return { id, bookingId: data.bookingId, status: 'SUCCESS' };
+}
+
+export async function getSubcontractorReinspectionCosts() {
+    const res = await query(`SELECT * FROM ${SCHEMA}.subcontractor_reinspection_costs ORDER BY created_at DESC`);
+    return res.rows.map((row: any) => ({
+        id: row.id,
+        ncrId: row.ncr_id,
+        bookingId: row.booking_id,
+        bookingCode: row.booking_code,
+        subcontractorName: row.subcontractor_name,
+        reinspectionCount: row.reinspection_count,
+        travelCost: parseFloat(row.travel_cost || '0'),
+        qcLaborHours: parseFloat(row.qc_labor_hours || '0'),
+        qcLaborRate: parseFloat(row.qc_labor_rate || '0'),
+        totalPenaltyCost: parseFloat(row.total_penalty_cost || '0'),
+        status: row.status,
+        createdAt: parseInt(row.created_at || '0')
+    }));
+}
+
+/**
+ * Auto-lookup PO/PR and Material details from read-only material and ipo tables
+ */
+export async function lookupPoMaterials(queryStr: string) {
+    if (!queryStr || queryStr.trim().length === 0) {
+        return { items: [] };
+    }
+    const searchPattern = `%${queryStr.trim()}%`;
+    const schema = (typeof process !== 'undefined' && process.env.DB_SCHEMA) || 'appQAQC';
+
+    let matItems: any[] = [];
+    try {
+        const matRes = await query(`
+            SELECT "purchaseDocument", "supplierName", "material", "shortText", "orderQuantity", "orderUnit", "projectName", "Factory_Order", "Ma_Tender"
+            FROM "${schema}".material
+            WHERE "purchaseDocument" ILIKE $1 
+               OR "material" ILIKE $1 
+               OR "shortText" ILIKE $1 
+               OR "supplierName" ILIKE $1
+               OR "projectName" ILIKE $1
+               OR "Factory_Order" ILIKE $1
+               OR "Ma_Tender" ILIKE $1
+            ORDER BY "createdAt" DESC
+            LIMIT 25
+        `, [searchPattern]);
+
+        matItems = matRes.rows.map((r: any) => ({
+            poNumber: r.purchaseDocument || r.Factory_Order || r.Ma_Tender || '',
+            supplierName: r.supplierName || '',
+            projectName: r.projectName || '',
+            itemCode: r.material || '',
+            itemName: r.shortText || r.material || '',
+            quantity: r.orderQuantity ? parseFloat(r.orderQuantity) : 1,
+            unit: r.orderUnit || 'Bộ',
+            specifications: r.shortText || '',
+            source: 'material'
+        }));
+    } catch (e) {
+        console.warn("lookupPoMaterials material query warning:", e);
+    }
+
+    let ipoItems: any[] = [];
+    try {
+        const ipoRes = await query(`
+            SELECT "ID_Factory_Order", "Ma_Tender", "Project_name", "Material_description", "Quantity_IPO", "Base_Unit"
+            FROM "${schema}".ipo
+            WHERE "ID_Factory_Order" ILIKE $1 
+               OR "Ma_Tender" ILIKE $1 
+               OR "Project_name" ILIKE $1
+               OR "Material_description" ILIKE $1
+            LIMIT 25
+        `, [searchPattern]);
+
+        ipoItems = ipoRes.rows.map((r: any) => ({
+            poNumber: r.ID_Factory_Order || r.Ma_Tender || '',
+            supplierName: '',
+            projectName: r.Project_name || '',
+            itemCode: r.Ma_Tender || '',
+            itemName: r.Material_description || '',
+            quantity: r.Quantity_IPO ? parseFloat(r.Quantity_IPO) : 1,
+            unit: r.Base_Unit || 'Bộ',
+            specifications: r.Material_description || '',
+            source: 'ipo'
+        }));
+    } catch (e) {
+        console.warn("lookupPoMaterials ipo query warning:", e);
+    }
+
+    return { items: [...matItems, ...ipoItems] };
+}
+
 

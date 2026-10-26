@@ -22,23 +22,48 @@ const apiFetch = async (url: string, options: RequestInit = {}, retries = 1): Pr
     
     try {
         const response = await fetch(fetchUrl, { ...options, headers: headers as HeadersInit });
+        const contentType = response.headers.get('content-type') || '';
+        
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            
+            let errorMsg = `Request failed with status ${response.status}`;
+            if (contentType.includes('application/json')) {
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                errorMsg = errorData.error || errorData.message || errorMsg;
+            } else {
+                const text = await response.text().catch(() => '');
+                if (text.includes('<!doctype') || text.includes('<html')) {
+                    errorMsg = `Server error (${response.status}): Endpoint returned HTML page instead of JSON`;
+                } else if (text) {
+                    errorMsg = `Server error (${response.status}): ${text.substring(0, 100)}`;
+                }
+            }
+
             // Handle token expiration or unauthorized access
             if (response.status === 401) {
                 console.warn('Session expired or unauthorized. Logging out.');
                 localStorage.removeItem('aatn_qms_token');
                 localStorage.removeItem('aatn_auth_storage');
                 sessionStorage.removeItem('aatn_auth_storage');
-                // Avoid infinite loops if we are already on the login page
-                if (!window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+                if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
                     window.location.reload();
                 }
             }
             
-            throw new Error(errorData.error || `Request failed with status ${response.status}`);
+            throw new Error(errorMsg);
         }
+
+        if (!contentType.includes('application/json')) {
+            const text = await response.text();
+            if (text.includes('<!doctype') || text.includes('<html')) {
+                throw new Error(`API returned HTML document instead of JSON (URL: ${url}). Check server route or login state.`);
+            }
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error(`Invalid JSON response from ${url}: ${text.substring(0, 100)}`);
+            }
+        }
+
         return await response.json();
     } catch (err: any) {
         const isGet = !options.method || options.method.toUpperCase() === 'GET';
@@ -58,16 +83,11 @@ export const fetchIpoData = async (page: number = 1, limit: number = 50, factory
     if (factoryOrder) params.append('factoryOrder', factoryOrder);
     if (maTender) params.append('maTender', maTender);
     
-    const response = await fetch(`/api/ipo?${params.toString()}`);
-    if (!response.ok) throw new Error('Failed to fetch IPO data');
-    return await response.json();
+    return apiFetch(`/api/ipo?${params.toString()}`);
 };
 
 export const fetchIpoByFactoryOrder = async (factoryOrder: string) => {
-    const response = await fetch(`/api/ipo?factoryOrder=${encodeURIComponent(factoryOrder)}`);
-    if (!response.ok) throw new Error('Failed to fetch IPO by factory order');
-    const data = await response.json();
-    return data;
+    return apiFetch(`/api/ipo?factoryOrder=${encodeURIComponent(factoryOrder)}`);
 };
 
 export const fetchIpoDetailExtended = async (idFactoryOrder: string) => apiFetch(`/api/ipo/detail/${idFactoryOrder}`);
@@ -584,8 +604,10 @@ export const saveDefectLibraryItem = async (item: DefectLibraryItem) => apiFetch
 });
 export const deleteDefectLibraryItem = async (id: string) => apiFetch(`/api/defect-library/${id}`, { method: 'DELETE' });
 
-export const exportDefectLibrary = async () => {
-    const response = await fetch('/api/export/defects', {
+export const exportDefectLibrary = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    const params = new URLSearchParams();
+    if (format === 'csv') params.append('format', 'csv');
+    const response = await fetch(`/api/export/defects?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -593,7 +615,7 @@ export const exportDefectLibrary = async () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AATN_Defect_Library_${Date.now()}.xlsx`;
+    a.download = `AATN_Defect_Library_${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -638,29 +660,25 @@ export const fetchMaterials = async (search: string = '', page: number = 1, limi
     params.append('limit', limit.toString());
     if (search) params.append('search', search);
     
-    const response = await fetch(`/api/materials?${params.toString()}`);
-    if (!response.ok) throw new Error('Failed to fetch materials');
-    return await response.json();
+    return apiFetch(`/api/materials?${params.toString()}`);
 };
 
 export const saveMaterial = async (material: any) => {
-    const response = await fetch(material.id ? `/api/materials/${material.id}` : '/api/materials', {
+    return apiFetch(material.id ? `/api/materials/${material.id}` : '/api/materials', {
         method: material.id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(material)
     });
-    if (!response.ok) throw new Error('Failed to save material');
-    return await response.json();
 };
 
 export const deleteMaterial = async (id: string) => {
-    const response = await fetch(`/api/materials/${id}`, { method: 'DELETE' });
-    if (!response.ok) throw new Error('Failed to delete material');
-    return await response.json();
+    return apiFetch(`/api/materials/${id}`, { method: 'DELETE' });
 };
 
-export const exportNcrs = async () => {
-    const response = await fetch('/api/export/ncrs', {
+export const exportNcrs = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    const params = new URLSearchParams();
+    if (format === 'csv') params.append('format', 'csv');
+    const response = await fetch(`/api/export/ncrs?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -668,7 +686,7 @@ export const exportNcrs = async () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AATN_NCR_List_${Date.now()}.xlsx`;
+    a.download = `AATN_NCR_List_${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -676,8 +694,10 @@ export const exportNcrs = async () => {
 
 export const importNcrsFile = async (file: File) => importFile('/api/import/ncrs', file);
 
-export const exportMaterials = async () => {
-    const response = await fetch('/api/export/materials', {
+export const exportMaterials = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    const params = new URLSearchParams();
+    if (format === 'csv') params.append('format', 'csv');
+    const response = await fetch(`/api/export/materials?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -685,7 +705,7 @@ export const exportMaterials = async () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AATN_Materials_${Date.now()}.xlsx`;
+    a.download = `AATN_Materials_${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -693,8 +713,10 @@ export const exportMaterials = async () => {
 
 export const importMaterialsFile = async (file: File) => importFile('/api/import/materials', file);
 
-export const exportSuppliers = async () => {
-    const response = await fetch('/api/export/suppliers', {
+export const exportSuppliers = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    const params = new URLSearchParams();
+    if (format === 'csv') params.append('format', 'csv');
+    const response = await fetch(`/api/export/suppliers?${params.toString()}`, {
         headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Export failed');
@@ -702,7 +724,7 @@ export const exportSuppliers = async () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AATN_Suppliers_${Date.now()}.xlsx`;
+    a.download = `AATN_Suppliers_${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -710,14 +732,15 @@ export const exportSuppliers = async () => {
 
 export const importSuppliersFile = async (file: File) => importFile('/api/import/suppliers', file);
 
-export const exportInspections = async (filters: any = {}) => {
-    const cleanFilters: any = {};
-    for (const key in filters) {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            cleanFilters[key] = filters[key];
+export const exportInspections = async (filters: any = {}, format: 'xlsx' | 'csv' = 'csv') => {
+    const cleanFilters: any = { ...filters };
+    if (format) cleanFilters.format = format;
+    const params = new URLSearchParams();
+    for (const key in cleanFilters) {
+        if (cleanFilters[key] !== undefined && cleanFilters[key] !== null && cleanFilters[key] !== '') {
+            params.append(key, String(cleanFilters[key]));
         }
     }
-    const params = new URLSearchParams(cleanFilters);
     const response = await fetch(`/api/export/inspections?${params.toString()}`, {
         headers: getAuthHeaders()
     });
@@ -726,7 +749,7 @@ export const exportInspections = async (filters: any = {}) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AATN_Inspections_${Date.now()}.xlsx`;
+    a.download = `AATN_Inspections_${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -734,14 +757,15 @@ export const exportInspections = async (filters: any = {}) => {
 
 export const importInspectionsFile = async (file: File) => importFile('/api/import/inspections', file);
 
-export const exportIpoData = async (filters: any = {}) => {
-    const cleanFilters: any = {};
-    for (const key in filters) {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            cleanFilters[key] = filters[key];
+export const exportIpoData = async (filters: any = {}, format: 'xlsx' | 'csv' = 'csv') => {
+    const cleanFilters: any = { ...filters };
+    if (format) cleanFilters.format = format;
+    const params = new URLSearchParams();
+    for (const key in cleanFilters) {
+        if (cleanFilters[key] !== undefined && cleanFilters[key] !== null && cleanFilters[key] !== '') {
+            params.append(key, String(cleanFilters[key]));
         }
     }
-    const params = new URLSearchParams(cleanFilters);
     const response = await fetch(`/api/export/ipo?${params.toString()}`, {
         headers: getAuthHeaders()
     });
@@ -750,7 +774,7 @@ export const exportIpoData = async (filters: any = {}) => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `AATN_IPO_Data_${Date.now()}.xlsx`;
+    a.download = `AATN_IPO_Data_${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -818,3 +842,50 @@ export const saveToolCalibration = async (calib: any) => apiFetch('/api/tool-cal
 });
 
 export const fetchInspectionAuditLogs = async (id: string) => apiFetch(`/api/inspections/${id}/audit-logs`);
+
+export const fetchDepartments = async () => apiFetch('/api/departments');
+export const fetchDivisions = async () => apiFetch('/api/divisions');
+export const fetchTeams = async () => apiFetch('/api/teams');
+export const fetchUserActivity = async (userId: string) => apiFetch(`/api/users/${userId}/activity`);
+
+// --- SUBCONTRACTOR QC BOOKING & INSPECTION SERVICES ---
+export const fetchSubcontractorBookings = async (filters: any = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.assignedQcId) params.append('assignedQcId', filters.assignedQcId);
+    return apiFetch(`/api/subcontractor-bookings?${params.toString()}`);
+};
+
+export const fetchSubcontractorBookingById = async (id: string) => apiFetch(`/api/subcontractor-bookings/${id}`);
+
+export const createSubcontractorBooking = async (data: any) => apiFetch('/api/subcontractor-bookings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+});
+
+export const updateSubcontractorBooking = async (id: string, data: any) => apiFetch(`/api/subcontractor-bookings/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+});
+
+export const deleteSubcontractorBooking = async (id: string) => apiFetch(`/api/subcontractor-bookings/${id}`, {
+    method: 'DELETE'
+});
+
+export const submitSubcontractorInspection = async (data: any) => apiFetch('/api/subcontractor-inspections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+});
+
+export const fetchSubcontractorReinspectionCosts = async () => apiFetch('/api/subcontractor-reinspection-costs');
+
+export const lookupPoMaterials = async (queryStr: string) => {
+    return apiFetch(`/api/erp/lookup-po?query=${encodeURIComponent(queryStr)}`);
+};
+
+
+

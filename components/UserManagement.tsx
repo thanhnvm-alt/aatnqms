@@ -6,7 +6,7 @@ import { User, UserRole, ModuleId, Role, hasPermission } from '../types';
 import { ALL_MODULES } from '../constants';
 import { Button } from './Button';
 import { SignaturePad } from './SignaturePad';
-import { saveRole } from '../services/apiService';
+import { saveRole, fetchDepartments, fetchDivisions, fetchTeams } from '../services/apiService';
 import { 
   Edit2, 
   Trash2, 
@@ -89,37 +89,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   const [isActivityOpen, setIsActivityOpen] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('aatn_qms_token');
-    fetch('/api/departments', {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    })
-      .then(res => {
-        if (res.ok) return res.json();
-        return [];
-      })
-      .then(data => {
-        setDepartments(data);
-      })
+    fetchDepartments()
+      .then(data => setDepartments(data || []))
       .catch(err => console.error('Error fetching departments in UserManagement:', err));
 
-    fetch('/api/divisions', {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    })
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setDivisionsState(data))
+    fetchDivisions()
+      .then(data => setDivisionsState(data || []))
       .catch(err => console.error('Error fetching divisions in UserManagement:', err));
 
-    fetch('/api/teams', {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
-    })
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setTeamsState(data))
+    fetchTeams()
+      .then(data => setTeamsState(data || []))
       .catch(err => console.error('Error fetching teams in UserManagement:', err));
   }, []);
 

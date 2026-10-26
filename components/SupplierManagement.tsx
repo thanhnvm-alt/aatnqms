@@ -65,13 +65,13 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'csv' | 'xlsx' = 'csv') => {
     setIsExporting(true);
     try {
-      await exportSuppliers();
+      await exportSuppliers(format);
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Lỗi khi xuất file Excel');
+      alert('Lỗi khi xuất file báo cáo');
     } finally {
       setIsExporting(false);
     }
@@ -102,7 +102,17 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   const handleOpenModal = (s?: Supplier) => {
     if (s) {
       setEditingSupplier(s);
-      setFormData({ ...s });
+      setFormData({
+        ...s,
+        code: s.code ?? '',
+        name: s.name ?? '',
+        address: s.address ?? '',
+        contact_person: s.contact_person ?? '',
+        phone: s.phone ?? '',
+        email: s.email ?? '',
+        category: s.category ?? 'Raw Materials',
+        status: s.status ?? 'ACTIVE'
+      });
     } else {
       setEditingSupplier(null);
       setFormData({
@@ -175,14 +185,25 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
             </button>
           )}
           {hasPermission(user, [], 'SUPPLIERS', 'EXPORT') && (
-            <button 
-              onClick={handleExport}
-              disabled={isExporting}
-              title="Xuất Excel"
-              className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50"
-            >
-              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            </button>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => handleExport('csv')}
+                disabled={isExporting}
+                title="Xuất CSV Stream"
+                className="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              >
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                <span>CSV</span>
+              </button>
+              <button 
+                onClick={() => handleExport('xlsx')}
+                disabled={isExporting}
+                title="Xuất Excel (.xlsx)"
+                className="p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center"
+              >
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              </button>
+            </div>
           )}
           {hasPermission(user, [], 'SUPPLIERS', 'CREATE') && (
             <button onClick={() => handleOpenModal()} className="p-2 bg-slate-900 text-white rounded-xl shadow-lg active:scale-95 transition-all"><Plus className="w-4 h-4" /></button>
@@ -290,17 +311,17 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
             </div>
             <div className="p-8 space-y-6 bg-slate-50 dark:bg-slate-800/30 overflow-y-auto max-h-[70vh] no-scrollbar">
               <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Mã NCC *</label><input value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-black focus:ring-4 ring-blue-100 outline-none uppercase" placeholder="NCC-XXXX" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Trạng thái</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold bg-white dark:bg-slate-900 outline-none"><option value="ACTIVE">ACTIVE (Đang hợp tác)</option><option value="INACTIVE">INACTIVE (Dừng hợp tác)</option></select></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Mã NCC *</label><input value={formData.code ?? ''} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-black focus:ring-4 ring-blue-100 outline-none uppercase" placeholder="NCC-XXXX" /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Trạng thái</label><select value={formData.status ?? 'ACTIVE'} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold bg-white dark:bg-slate-900 outline-none"><option value="ACTIVE">ACTIVE (Đang hợp tác)</option><option value="INACTIVE">INACTIVE (Dừng hợp tác)</option></select></div>
               </div>
-              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Tên Nhà Cung Cấp *</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-black focus:ring-4 ring-blue-100 outline-none uppercase" placeholder="TÊN CÔNG TY / ĐƠN VỊ..." /></div>
-              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Địa chỉ</label><input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="Địa chỉ trụ sở/nhà máy..." /></div>
+              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Tên Nhà Cung Cấp *</label><input value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-black focus:ring-4 ring-blue-100 outline-none uppercase" placeholder="TÊN CÔNG TY / ĐƠN VỊ..." /></div>
+              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Địa chỉ</label><input value={formData.address ?? ''} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="Địa chỉ trụ sở/nhà máy..." /></div>
               <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Người liên hệ</label><input value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="Họ và tên..." /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Số điện thoại</label><input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="SĐT liên lạc..." /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Người liên hệ</label><input value={formData.contact_person ?? ''} onChange={e => setFormData({...formData, contact_person: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="Họ và tên..." /></div>
+                <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Số điện thoại</label><input value={formData.phone ?? ''} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="SĐT liên lạc..." /></div>
               </div>
-              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Email liên hệ</label><input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="email@domain.com" /></div>
-              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Ngành hàng / Phân loại</label><select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold bg-white dark:bg-slate-900 outline-none"><option value="Raw Materials">Raw Materials (Nguyên vật liệu thô)</option><option value="Hardware">Hardware (Ngũ kim)</option><option value="Finishing">Finishing (Vật liệu hoàn thiện)</option><option value="Subcontractor">Subcontractor (Gia công ngoài)</option></select></div>
+              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Email liên hệ</label><input value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold outline-none" placeholder="email@domain.com" /></div>
+              <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Ngành hàng / Phân loại</label><select value={formData.category ?? 'Raw Materials'} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-5 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold bg-white dark:bg-slate-900 outline-none"><option value="Raw Materials">Raw Materials (Nguyên vật liệu thô)</option><option value="Hardware">Hardware (Ngũ kim)</option><option value="Finishing">Finishing (Vật liệu hoàn thiện)</option><option value="Subcontractor">Subcontractor (Gia công ngoài)</option></select></div>
             </div>
             <div className="p-8 border-t border-slate-100 dark:border-slate-800 flex gap-3">
               <button onClick={() => setIsModalOpen(false)} className="flex-1 py-4 text-slate-400 dark:text-slate-500 font-black uppercase text-xs tracking-widest hover:text-red-500 dark:text-red-400 transition-colors">Hủy bỏ</button>

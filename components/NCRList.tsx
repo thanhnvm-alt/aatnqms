@@ -542,7 +542,15 @@ export const NCRList: React.FC<NCRListProps> = ({ currentUser, onSelectNcr }) =>
               {(hasPermission(currentUser, [], 'NCR_LIST', 'IMPORT') || hasPermission(currentUser, [], 'NCR_LIST', 'EXPORT')) && (
                 <div className="flex items-center gap-1.5">
                   {hasPermission(currentUser, [], 'NCR_LIST', 'EXPORT') && (
-                    <button onClick={exportNcrs} title="Xuất Excel" className="p-2.5 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all active:scale-95"><Download className="w-5 h-5" /></button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => exportNcrs('csv')} title="Xuất CSV Stream" className="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1 transition-all shadow-sm active:scale-95">
+                        <Download className="w-4 h-4" />
+                        <span>CSV</span>
+                      </button>
+                      <button onClick={() => exportNcrs('xlsx')} title="Xuất Excel (.xlsx)" className="p-2 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center">
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                   {hasPermission(currentUser, [], 'NCR_LIST', 'IMPORT') && (
                     <>

@@ -24,12 +24,135 @@ export enum Priority {
   HIGH = 'HIGH'
 }
 
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH' | 'TOOLS';
+export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH' | 'TOOLS' | 'SUBCONTRACTOR_BOOKING';
 
 export type ModuleId = 
   | 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'SQC_TP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'TOOLS'
-  | 'DASHBOARD' | 'LIST' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'MATERIALS' | 'IPO' | 'TRASH'
+  | 'DASHBOARD' | 'LIST' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'MATERIALS' | 'IPO' | 'TRASH' | 'SUBCONTRACTOR_BOOKING'
   | 'SETTINGS_TEMPLATE' | 'SETTINGS_USERS' | 'SETTINGS_ROLES' | 'SETTINGS_WORKSHOPS' | 'SETTINGS_PROFILE' | 'SETTINGS_DEPARTMENTS' | 'SYSTEM_ADMIN';
+
+export interface SubcontractorBookingItem {
+  id: string;
+  itemName: string;
+  itemCode?: string;
+  quantity: number;
+  unit: string;
+  specifications?: string;
+}
+
+export interface SubcontractorBookingDocuments {
+  materialSpecUrl?: string;     // Spec vật tư
+  approvedSampleUrl?: string;   // Mẫu duyệt
+  shopdrawingUrl?: string;      // Bản vẽ
+  qualityAgreementUrl?: string; // Biên bản thống nhất chất lượng
+}
+
+export type SQCType = 'SQC_VT' | 'SQC_BTP' | 'SQC_TP';
+
+export interface SQCTypeOption {
+  id: SQCType;
+  code: string;
+  title: string;
+  shortDesc: string;
+  fullDesc: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  accentColor: string;
+}
+
+export const SQC_TYPES_CONFIG: SQCTypeOption[] = [
+  {
+    id: 'SQC_VT',
+    code: 'SQC-VT',
+    title: 'SQC - Vật tư ngoài',
+    shortDesc: 'Vật tư / phụ kiện gia công ngoài',
+    fullDesc: 'Kiểm tra quy cách vật tư, chứng chỉ xuất xưởng, độ ẩm, độ dày, bề mặt nguyên vật liệu đầu vào.',
+    badgeBg: 'bg-emerald-50 dark:bg-emerald-950/40',
+    badgeText: 'text-emerald-700 dark:text-emerald-300',
+    badgeBorder: 'border-emerald-200 dark:border-emerald-800',
+    accentColor: 'emerald'
+  },
+  {
+    id: 'SQC_BTP',
+    code: 'SQC-BTP',
+    title: 'SQC - Bán Thành Phẩm',
+    shortDesc: 'Khung thô, phôi mộc, chi tiết gia công',
+    fullDesc: 'Kiểm tra mộng ghép, dán cạnh, chà nhám, kết cấu khung thô, kích thước hình học trước khi sơn/hoàn thiện.',
+    badgeBg: 'bg-blue-50 dark:bg-blue-950/40',
+    badgeText: 'text-blue-700 dark:text-blue-300',
+    badgeBorder: 'border-blue-200 dark:border-blue-800',
+    accentColor: 'blue'
+  },
+  {
+    id: 'SQC_TP',
+    code: 'SQC-TP',
+    title: 'SQC - Thành phẩm',
+    shortDesc: 'Sản phẩm hoàn thiện, đóng gói chuẩn bị giao',
+    fullDesc: 'Kiểm tra màng sơn, phụ kiện lắp đặt, độ bóng, màu sắc theo mẫu duyệt, bao che đóng gói giao hàng.',
+    badgeBg: 'bg-purple-50 dark:bg-purple-950/40',
+    badgeText: 'text-purple-700 dark:text-purple-300',
+    badgeBorder: 'border-purple-200 dark:border-purple-800',
+    accentColor: 'purple'
+  }
+];
+
+export interface SubcontractorBooking {
+  id: string;
+  bookingCode: string;
+  sqcType?: SQCType;
+  poId?: string;
+  poNumber: string;
+  supplierId?: string;
+  supplierName: string;
+  requesterId?: string;
+  requesterName: string;
+  locationAddress: string;
+  contactPerson: string;
+  contactPhone: string;
+  requestedDate: number;
+  assignedQcId?: string;
+  assignedQcName?: string;
+  status: 'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  notes?: string;
+  items: SubcontractorBookingItem[];
+  documents?: SubcontractorBookingDocuments;
+  createdAt: number;
+  updatedAt?: number;
+  version?: number;
+}
+
+export interface SubcontractorInspection {
+  id: string;
+  bookingId: string;
+  bookingCode: string;
+  qcUserId: string;
+  qcUserName: string;
+  inspectionResult: 'PASS' | 'REJECT' | 'CONDITIONAL_PASS';
+  vendorRepresentativeName: string;
+  vendorSignatureUrl?: string;
+  qcSignatureUrl?: string;
+  inspectionItems: any[];
+  defectSummary?: string;
+  images?: string[];
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface SubcontractorReinspectionCost {
+  id: string;
+  ncrId?: string;
+  bookingId: string;
+  bookingCode?: string;
+  subcontractorName: string;
+  reinspectionCount: number;
+  travelCost: number;
+  qcLaborHours: number;
+  qcLaborRate: number;
+  totalPenaltyCost: number;
+  status: 'PENDING_DEDUCTION' | 'DEDUCTED_IN_ERP';
+  createdAt: number;
+}
 
 export interface IPOItem {
   id: string;
@@ -275,6 +398,9 @@ export interface Inspection {
   type?: ModuleId;
   ma_ct: string;
   po_number?: string;
+  pr_number?: string;
+  poNumber?: string;
+  prNumber?: string;
   ten_ct: string;
   ma_nha_may?: string;
   ten_hang_muc?: string;
@@ -338,6 +464,8 @@ export interface Inspection {
   productionComment?: string;
   materials_json?: string;
   items_json?: string;
+  booking_id?: string;
+  booking_code?: string;
 }
 
 export interface SmartGoal {

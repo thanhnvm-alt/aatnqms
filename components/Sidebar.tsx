@@ -37,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
   const menuItems = [
     { id: 'DASHBOARD', label: 'Báo Cáo Tổng Hợp', icon: LayoutDashboard },
     { id: 'PROJECTS', label: 'Quản Lý Dự Án', icon: Briefcase },
+    { id: 'SUBCONTRACTOR_BOOKING', label: 'Gia Công Vệ Tinh', icon: Factory },
     { id: 'SUPPLIERS', label: 'Nhà Cung Cấp', icon: Truck },
     { id: 'LIST', label: 'Danh Sách Phiếu', icon: List },
     { id: 'NCR_LIST', label: 'Danh Sách NCR', icon: AlertTriangle },
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
     { id: 'TRASH', label: 'Thùng Rác', icon: Trash2 },
   ].filter(item => {
+    if (item.id === 'SUBCONTRACTOR_BOOKING') return true; // Always visible for QA/QC & Mua hàng
     return hasPermission(user, rolesList, item.id as ModuleId, 'VIEW');
   });
 
