@@ -114,11 +114,15 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
         error.message.includes('terminated') || 
         error.message.includes('timeout') || 
         error.message.includes('Connection') || 
+        error.message.includes('ECONNRESET') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ETIMEDOUT') ||
         error.message.includes('cancel') || 
         error.code === '57014' || // PostgreSQL statement timeout error code
+        error.code === 'ECONNRESET' ||
         error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT'
       ) {
-        console.log('Resetting pool due to connection, timeout or SSL error');
+        console.log('Resetting pool due to connection, timeout, ECONNRESET or SSL error');
         pool = null;
         poolPromise = null;
       }
@@ -127,10 +131,14 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
       if (
         error.message.includes('timeout') || 
         error.message.includes('Connection failed') || 
+        error.message.includes('ECONNRESET') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ETIMEDOUT') ||
         error.message.includes('cancel') ||
-        error.code === '57014'
+        error.code === '57014' ||
+        error.code === 'ECONNRESET'
       ) {
-        console.log('Retrying query due to timeout or transient issue...');
+        console.log('Retrying query due to timeout, ECONNRESET or transient issue...');
         const retryPool = await getPool();
         return await retryPool.query(text, params);
       }

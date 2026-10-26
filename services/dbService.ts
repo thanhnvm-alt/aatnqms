@@ -2027,6 +2027,12 @@ export async function getUserByUsername(username: string): Promise<User | null> 
     return mapUserRow(res.rows[0]) as unknown as User;
 }
 
+export async function getUserByEmail(email: string): Promise<User | null> {
+    const res = await query(`SELECT * FROM ${SCHEMA}.users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL`, [email]);
+    if (res.rows.length === 0) return null;
+    return mapUserRow(res.rows[0]) as unknown as User;
+}
+
 export async function getUserById(id: string): Promise<User | null> {
     const res = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1 AND deleted_at IS NULL`, [id]);
     if (res.rows.length === 0) return null;

@@ -562,6 +562,30 @@ export const verifyUserCredentials = async (username: string, password: string):
     });
 };
 
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<any> => {
+    return apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+    });
+};
+
+export const forgotPassword = async (email: string): Promise<any> => {
+    return apiFetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+    });
+};
+
+export const resetPassword = async (email: string, code: string, newPassword: string): Promise<any> => {
+    return apiFetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code, newPassword })
+    });
+};
+
 export const fetchWorkshops = async () => apiFetch('/api/workshops');
 export const saveWorkshop = async (ws: Workshop) => apiFetch('/api/workshops', {
     method: 'POST',
@@ -806,15 +830,7 @@ export const createNotification = async (params: { userId: string, type: Notific
     });
 };
 
-export const changePassword = async (currentPassword: string, newPassword: string) => {
-    return apiFetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ currentPassword, newPassword })
-    });
-};
+
 
 // --- TOOLS EQUIPMENT ---
 export const fetchToolCatalogs = async () => apiFetch('/api/tool-catalogs');

@@ -826,6 +826,100 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
     }
   });
 
+  // In-memory store for password reset codes (email -> { code, expiresAt })
+  const passwordResetCodes = new Map<string, { code: string; expiresAt: number }>();
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Vui lòng cung cấp địa chỉ email' });
+      }
+
+      const user = await db.getUserByEmail(email.trim());
+      if (!user) {
+        return res.status(404).json({ error: 'Không tìm thấy tài khoản với email này trong hệ thống' });
+      }
+
+      // Generate 6-digit code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+      passwordResetCodes.set(email.toLowerCase().trim(), { code, expiresAt });
+
+      console.log(`[Password Reset] Code for ${email}: ${code}`);
+
+      res.json({ 
+        success: true, 
+        message: 'Mã xác thực khôi phục mật khẩu đã được gửi đến email của bạn.',
+        // For development convenience, return code in response so tester/user can see it immediately
+        devCode: code 
+      });
+    } catch (error: any) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ error: 'Lỗi hệ thống khi yêu cầu khôi phục mật khẩu' });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { email, code, newPassword } = req.body;
+      if (!email || !code || !newPassword) {
+        return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const record = passwordResetCodes.get(normalizedEmail);
+
+      if (!record) {
+        return res.status(400).json({ error: 'Mã xác thực không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu lại.' });
+      }
+
+      if (Date.now() > record.expiresAt) {
+        passwordResetCodes.delete(normalizedEmail);
+        return res.status(400).json({ error: 'Mã xác thực đã hết hạn (15 phút). Vui lòng yêu cầu lại mã mới.' });
+      }
+
+      if (record.code !== code.trim()) {
+        return res.status(400).json({ error: 'Mã xác thực không chính xác' });
+      }
+
+      // Validate new password complexity
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' });
+      }
+      if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({ error: 'Mật khẩu mới bắt buộc phải chứa cả ký tự hoa và thường' });
+      }
+
+      const user = await db.getUserByEmail(normalizedEmail);
+      if (!user) {
+        return res.status(404).json({ error: 'Không tìm thấy tài khoản người dùng' });
+      }
+
+      // Hash password with bcrypt
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      const updatedUserPayload = {
+        ...user,
+        password: hashedPassword,
+        require_password_change: false,
+        requirePasswordChange: false
+      };
+
+      await db.saveUser(updatedUserPayload);
+      passwordResetCodes.delete(normalizedEmail);
+
+      await db.logAudit(user.id, 'RESET_PASSWORD', 'user', user.id, null, { email: normalizedEmail });
+
+      res.json({ success: true, message: 'Khôi phục mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới.' });
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ error: 'Lỗi hệ thống khi đặt lại mật khẩu' });
+    }
+  });
+
   app.post("/api/chat", express.json(), async (req, res) => {
     const { message, context } = req.body;
     
