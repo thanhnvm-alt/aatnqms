@@ -61,10 +61,18 @@ import { removeVietnameseTones } from '../lib/utils';
 export const getGoogleDriveFileId = (rawUrl: string): string | null => {
   if (!rawUrl) return null;
   const str = rawUrl.trim();
+  // 1. Raw fileId string (no slash or colon, length 25-50)
   if (str.length >= 25 && str.length <= 50 && !str.includes('/') && !str.includes(':')) {
     return str;
   }
-  const match = str.match(/\/d\/([a-zA-Z0-9_-]+)/) || str.match(/id=([a-zA-Z0-9_-]+)/);
+  // 2. Local proxy endpoints: /api/media/image/:id or /api/media/file/:id or /api/image/:id
+  const apiMatch = str.match(/\/api\/(?:media\/)?(?:image|file|document)\/([a-zA-Z0-9_-]+)/) ||
+                   str.match(/\/(?:display-image|media\/stream|api\/image)\/([a-zA-Z0-9_-]+)/);
+  if (apiMatch && apiMatch[1]) {
+    return apiMatch[1];
+  }
+  // 3. Google Drive URLs: /file/d/:id/ or id=:id
+  const match = str.match(/\/d\/([a-zA-Z0-9_-]+)/) || str.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (match && match[1]) {
     return match[1];
   }
@@ -169,6 +177,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
   const [showInspectModal, setShowInspectModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSlideGuide, setShowSlideGuide] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; rawUrl: string; fileId: string | null } | null>(null);
 
   // References for dropdown options
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -2066,10 +2075,25 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     <span className="font-medium text-slate-700 dark:text-slate-300">1. Spec Vật Tư:</span>
                     {selectedBooking.documents?.materialSpecUrl ? (
                       <div className="flex items-center gap-2">
-                        <a href={getFileViewUrl(selectedBooking.documents.materialSpecUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDoc({
+                            title: `Spec Vật Tư - PO: ${selectedBooking.poNumber}`,
+                            rawUrl: selectedBooking.documents?.materialSpecUrl || '',
+                            fileId: getGoogleDriveFileId(selectedBooking.documents?.materialSpecUrl || '')
+                          })}
+                          className="text-blue-600 hover:text-blue-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer text-xs"
+                        >
                           <FileText className="w-3.5 h-3.5" /> Xem File
-                        </a>
-                        <a href={getFileDownloadUrl(selectedBooking.documents.materialSpecUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                        </button>
+                        <a 
+                          href={getFileDownloadUrl(selectedBooking.documents.materialSpecUrl || '')} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          download 
+                          className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" 
+                          title="Tải file về máy"
+                        >
                           <Download className="w-3 h-3" /> Tải về
                         </a>
                       </div>
@@ -2080,10 +2104,25 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     <span className="font-medium text-slate-700 dark:text-slate-300">2. Mẫu Duyệt:</span>
                     {selectedBooking.documents?.approvedSampleUrl ? (
                       <div className="flex items-center gap-2">
-                        <a href={getFileViewUrl(selectedBooking.documents.approvedSampleUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDoc({
+                            title: `Mẫu Duyệt - PO: ${selectedBooking.poNumber}`,
+                            rawUrl: selectedBooking.documents?.approvedSampleUrl || '',
+                            fileId: getGoogleDriveFileId(selectedBooking.documents?.approvedSampleUrl || '')
+                          })}
+                          className="text-blue-600 hover:text-blue-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer text-xs"
+                        >
                           <FileText className="w-3.5 h-3.5" /> Xem File
-                        </a>
-                        <a href={getFileDownloadUrl(selectedBooking.documents.approvedSampleUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                        </button>
+                        <a 
+                          href={getFileDownloadUrl(selectedBooking.documents.approvedSampleUrl || '')} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          download 
+                          className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" 
+                          title="Tải file về máy"
+                        >
                           <Download className="w-3 h-3" /> Tải về
                         </a>
                       </div>
@@ -2094,10 +2133,25 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     <span className="font-medium text-slate-700 dark:text-slate-300">3. Bản Vẽ Thi Công:</span>
                     {selectedBooking.documents?.shopdrawingUrl ? (
                       <div className="flex items-center gap-2">
-                        <a href={getFileViewUrl(selectedBooking.documents.shopdrawingUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDoc({
+                            title: `Bản Vẽ Thi Công - PO: ${selectedBooking.poNumber}`,
+                            rawUrl: selectedBooking.documents?.shopdrawingUrl || '',
+                            fileId: getGoogleDriveFileId(selectedBooking.documents?.shopdrawingUrl || '')
+                          })}
+                          className="text-blue-600 hover:text-blue-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer text-xs"
+                        >
                           <FileText className="w-3.5 h-3.5" /> Xem File
-                        </a>
-                        <a href={getFileDownloadUrl(selectedBooking.documents.shopdrawingUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                        </button>
+                        <a 
+                          href={getFileDownloadUrl(selectedBooking.documents.shopdrawingUrl || '')} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          download 
+                          className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" 
+                          title="Tải file về máy"
+                        >
                           <Download className="w-3 h-3" /> Tải về
                         </a>
                       </div>
@@ -2108,10 +2162,25 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     <span className="font-medium text-slate-700 dark:text-slate-300">4. Biên Bản Thống Nhất:</span>
                     {selectedBooking.documents?.qualityAgreementUrl ? (
                       <div className="flex items-center gap-2">
-                        <a href={getFileViewUrl(selectedBooking.documents.qualityAgreementUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDoc({
+                            title: `Biên Bản Thống Nhất Chất Lượng - PO: ${selectedBooking.poNumber}`,
+                            rawUrl: selectedBooking.documents?.qualityAgreementUrl || '',
+                            fileId: getGoogleDriveFileId(selectedBooking.documents?.qualityAgreementUrl || '')
+                          })}
+                          className="text-blue-600 hover:text-blue-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer text-xs"
+                        >
                           <FileText className="w-3.5 h-3.5" /> Xem File
-                        </a>
-                        <a href={getFileDownloadUrl(selectedBooking.documents.qualityAgreementUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                        </button>
+                        <a 
+                          href={getFileDownloadUrl(selectedBooking.documents.qualityAgreementUrl || '')} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          download 
+                          className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" 
+                          title="Tải file về máy"
+                        >
                           <Download className="w-3 h-3" /> Tải về
                         </a>
                       </div>
@@ -2586,6 +2655,68 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-app Document & PDF Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/40 text-blue-600 rounded-lg shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="truncate">
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                    {previewDoc.title}
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-mono truncate">
+                    {previewDoc.fileId ? `File ID: ${previewDoc.fileId}` : previewDoc.rawUrl}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={getFileViewUrl(previewDoc.rawUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                  title="Mở tài liệu toàn màn hình trong tab mới"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Mở Tab Mới (Google Drive)
+                </a>
+                <a
+                  href={getFileDownloadUrl(previewDoc.rawUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 dark:border-slate-700"
+                  title="Tải file PDF gốc về máy"
+                >
+                  <Download className="w-3.5 h-3.5" /> Tải Về
+                </a>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors ml-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Embedded PDF/Document Frame */}
+            <div className="flex-1 bg-slate-100 dark:bg-slate-950 relative overflow-hidden flex flex-col">
+              <iframe
+                src={getFileViewUrl(previewDoc.rawUrl)}
+                className="w-full flex-1 border-0"
+                title={previewDoc.title}
+                allow="autoplay"
+              />
+            </div>
           </div>
         </div>
       )}

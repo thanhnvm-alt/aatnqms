@@ -380,18 +380,18 @@ app.post("/api/procedures/upload", memoryUpload.single('image'), async (req, res
 // --- Robust Public Google Drive File Downloader (with Large File Bypass) ---
 async function fetchGoogleDrivePublicFile(fileId: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   const fallbacks = [
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
-    `https://lh3.googleusercontent.com/d/${fileId}=w1600`,
-    `https://lh3.googleusercontent.com/d/${fileId}`,
     `https://docs.google.com/uc?export=download&id=${fileId}`,
     `https://drive.google.com/uc?export=download&id=${fileId}`,
     `https://drive.google.com/uc?export=view&id=${fileId}`,
-    `https://lh3.googleusercontent.com/u/0/d/${fileId}`
+    `https://lh3.googleusercontent.com/u/0/d/${fileId}`,
+    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+    `https://lh3.googleusercontent.com/d/${fileId}=w1600`,
+    `https://lh3.googleusercontent.com/d/${fileId}`
   ];
 
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    'Accept': 'text/html,application/xhtml+xml,application/xml,application/pdf,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
     'Cache-Control': 'no-cache'
   };
@@ -401,7 +401,7 @@ async function fetchGoogleDrivePublicFile(fileId: string): Promise<{ buffer: Buf
       const response = await fetch(publicUrl, { headers });
       
       if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
         
         // If Google Drive returns HTML, it could be a warning/confirmation page for virus scan
         if (contentType.includes('text/html')) {
@@ -418,7 +418,7 @@ async function fetchGoogleDrivePublicFile(fileId: string): Promise<{ buffer: Buf
                 const arrayBuffer = await confirmedRes.arrayBuffer();
                 return {
                   buffer: Buffer.from(arrayBuffer),
-                  contentType: resContentType || 'image/jpeg'
+                  contentType: resContentType || 'application/pdf'
                 };
               }
             }
@@ -439,27 +439,54 @@ async function fetchGoogleDrivePublicFile(fileId: string): Promise<{ buffer: Buf
   return null;
 }
 
-// --- Optimized Google Drive Image Streaming Handler ---
+// --- Optimized Google Drive Image & Document Streaming Handler ---
 const streamGoogleDriveImage = async (req: express.Request, res: express.Response) => {
   const { fileId } = req.params as { fileId: string };
+  const isDownload = req.query.download === '1' || req.query.download === 'true';
   
   if (drive) {
     try {
+      let mimeType = '';
+      let fileName = 'file';
+
+      try {
+        const meta = await drive.files.get({
+          fileId,
+          fields: 'id, name, mimeType',
+          supportsAllDrives: true
+        });
+        if (meta.data) {
+          if (meta.data.mimeType) mimeType = meta.data.mimeType;
+          if (meta.data.name) fileName = meta.data.name;
+        }
+      } catch (metaErr: any) {
+        console.warn(`[Drive Stream Proxy] Metadata notice for ${fileId}:`, metaErr?.message || metaErr);
+      }
+
       // Single API call: Fetch the file content as a stream directly
       const response = await drive.files.get(
         { fileId, alt: 'media', supportsAllDrives: true },
         { responseType: 'stream' }
       );
 
-      // Forward the Content-Type precisely natively from Google API
+      // Determine Content-Type accurately
       const rawContentType = response.headers['content-type'];
-      const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || 'image/jpeg';
+      let contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || mimeType;
+
+      if (fileName.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf' || (contentType && contentType.includes('pdf'))) {
+        contentType = 'application/pdf';
+      } else if (!contentType || contentType === 'application/octet-stream') {
+        contentType = mimeType || 'image/jpeg';
+      }
       
       // Set headers (NO redirects, NO google locations)
       res.setHeader('Content-Type', contentType);
       res.setHeader('Access-Control-Allow-Origin', '*'); 
       res.setHeader('Cache-Control', 'private, max-age=604800'); // 7 Days Cache 
       res.setHeader('X-Content-Type-Options', 'nosniff');
+
+      const disposition = isDownload ? 'attachment' : 'inline';
+      res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(fileName)}"`);
       
       // Efficiently pipe using native Node.js stream pipeline (prevents memory leaks on interrupt)
       await pipelineAsync(response.data, res);
@@ -479,6 +506,11 @@ const streamGoogleDriveImage = async (req: express.Request, res: express.Respons
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'private, max-age=604800');
       res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (isDownload) {
+        res.setHeader('Content-Disposition', `attachment; filename="download_${fileId}"`);
+      } else {
+        res.setHeader('Content-Disposition', 'inline');
+      }
       res.send(fallbackData.buffer);
       return;
     }
@@ -488,12 +520,14 @@ const streamGoogleDriveImage = async (req: express.Request, res: express.Respons
 
   // Final failure response
   if (!res.headersSent) {
-    res.status(500).json({ error: 'Error streaming image from upstream' });
+    res.status(500).json({ error: 'Error streaming file from upstream' });
   }
 };
 
 // Map all secure proxy endpoints to the optimized streaming handler
 app.get("/api/media/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
+app.get("/api/media/file/:fileId", optionalAuthenticate, streamGoogleDriveImage);
+app.get("/api/media/document/:fileId", optionalAuthenticate, streamGoogleDriveImage);
 app.get("/media/stream/:fileId", optionalAuthenticate, streamGoogleDriveImage);
 app.get("/display-image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
 app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
