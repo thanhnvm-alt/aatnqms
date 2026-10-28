@@ -1012,7 +1012,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     onMouseDown={startDrag(0)}
                 />
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">1. Ngày Tháng - {totalInspectionsCount}</h3>
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-sm uppercase">1. Ngày Tháng - {totalInspectionsCount}</h3>
                     {isDatesLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
@@ -1026,7 +1026,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         if (next.has(year)) next.delete(year); else next.add(year);
                                         return next;
                                     })}
-                                    className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 transition-colors"
+                                    className="w-full flex items-center justify-between text-left px-3 py-2 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 transition-colors"
                                 >
                                     <span>Năm {year}</span>
                                     <div className="flex items-center gap-2">
@@ -1053,7 +1053,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     setSelectedProjectDesktop('ALL');
                                                     setSelectedItemDesktop(null);
                                                 }}
-                                                className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 mt-1 rounded-lg text-[12px] font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
+                                                className={`w-full flex items-center justify-between text-left px-3 py-1.5 ml-2 mt-1 rounded-lg text-xs font-semibold transition-colors ${isMonthSelected ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800' : 'text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                             >
                                                 <span>Tháng {month}</span>
                                                 <div className="flex items-center gap-2">
@@ -1073,7 +1073,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                             setSelectedProjectDesktop('ALL');
                                                             setSelectedItemDesktop(null);
                                                         }}
-                                                        className={`w-full flex items-center justify-between text-left px-3 py-1 ml-6 mt-1 rounded-lg text-[11px] font-medium transition-colors ${isDateSelected ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 font-bold' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
+                                                        className={`w-full flex items-center justify-between text-left px-3 py-1 ml-6 mt-1 rounded-lg text-[10px] font-medium transition-colors ${isDateSelected ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 font-bold' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'}`}
                                                         style={{ width: 'calc(100% - 1.5rem)' }}
                                                     >
                                                         <span>{dateKey.substring(0, 5)}</span>
@@ -1097,7 +1097,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     onMouseDown={startDrag(1)}
                 />
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">2. Công Trình / Dự Án - {desktopProjectsList.length}</h3>
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-sm uppercase">2. Công Trình / Dự Án - {desktopProjectsList.length}</h3>
                     {isProjectsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
@@ -1122,10 +1122,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                         >
                                             <div className="flex items-center justify-between w-full">
                                                 <div className="flex flex-col min-w-0 pr-2">
-                                                    <span className={`text-[13px] font-bold ${selectedProjectDesktop === 'ALL' ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>TẤT CẢ DỰ ÁN</span>
+                                                    <span className={`text-xs font-bold ${selectedProjectDesktop === 'ALL' ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>TẤT CẢ DỰ ÁN</span>
                                                     <span className="text-[10px] text-slate-500 dark:text-slate-400">Xem toàn bộ hạng mục</span>
                                                 </div>
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${selectedProjectDesktop === 'ALL' ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${selectedProjectDesktop === 'ALL' ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                                                     {desktopProjectsList.reduce((acc, p) => acc + (p.count || 0), 0)}
                                                 </span>
                                             </div>
@@ -1142,10 +1142,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                 >
                                                     <div className="flex items-center justify-between w-full">
                                                         <div className="flex flex-col min-w-0 pr-2">
-                                                            <span className={`text-[13px] font-bold line-clamp-2 ${isSelected ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
-                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
+                                                            <span className={`text-xs font-bold line-clamp-2 ${isSelected ? 'text-blue-900' : 'text-slate-700 dark:text-slate-300'}`}>{p.ten_ct || 'CHƯA RÕ TÊN DỰ ÁN'}</span>
+                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{p.ma_ct || 'CHƯA GÁN MÃ DỰ ÁN'}</span>
                                                         </div>
-                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${isSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{p.count}</span>
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-bold ${isSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{p.count}</span>
                                                     </div>
                                                 </button>
                                             );
@@ -1165,7 +1165,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                     onMouseDown={startDrag(2)}
                 />
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-xs uppercase">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-300 tracking-tight text-sm uppercase">
                         {searchTerm ? 'Kết quả tìm kiếm' : '3. Hạng Mục'} - {desktopItems.length} Phiếu
                     </h3>
                     {isItemsLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />}
@@ -1191,7 +1191,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                     <div 
                                         key={item.id}
                                         onClick={() => handleSelectItemDesktop(item)}
-                                        className={`p-4 hover:bg-blue-50/80 dark:hover:bg-slate-800/80 cursor-pointer transition-all relative ${
+                                        className={`p-3.5 hover:bg-blue-50/80 dark:hover:bg-slate-800/80 cursor-pointer transition-all relative ${
                                             isSelected 
                                                 ? 'bg-blue-50/90 dark:bg-blue-950/40 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1.5 before:bg-blue-600' 
                                                 : warn 
@@ -1199,14 +1199,14 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     : 'bg-white dark:bg-slate-900'
                                         }`}
                                     >
-                                        <div className="flex justify-between items-start gap-2 mb-2">
-                                            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-[13px] leading-snug line-clamp-2 pr-6">
+                                        <div className="flex justify-between items-start gap-2 mb-1.5">
+                                            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs leading-snug line-clamp-2 pr-6">
                                                 {(item.type === 'IQC' || item.type === 'SQC_VT') 
                                                     ? (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')
                                                     : (item.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
                                             </h4>
                                         </div>
-                                        <div className="flex flex-col gap-1 mt-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                        <div className="flex flex-col gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 {(item.po_number || item.poNumber || item.pr_number || item.prNumber) && (
                                                     <span className="font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold">
@@ -1218,11 +1218,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                     (item.ma_ct || item.ma_nha_may || item.headcode || '---')
                                                 }</span>
                                             </div>
-                                            <div className="flex items-center gap-1">
+                                            <div className="flex items-center gap-1 text-[9px]">
                                                 <span className="text-blue-600 dark:text-blue-400 font-bold">{item.inspectorName || item.created_by || '---'}</span>
                                             </div>
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
                                                     item.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
                                                     item.status === InspectionStatus.FLAGGED ? 'bg-red-100 text-red-700' :
                                                     'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -1238,8 +1238,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                             </div>
                                         </div>
                                         <div className="mt-2 flex gap-2 items-center justify-between">
-                                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
-                                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{formatDisplayDate(getImplementationDate(item))}</span>
+                                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border shadow-sm ${MODULE_CONFIG[item.type || 'PQC']?.bg} ${MODULE_CONFIG[item.type || 'PQC']?.color}`}>{item.type || 'PQC'}</span>
+                                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium font-mono">{formatDisplayDate(getImplementationDate(item))}</span>
                                         </div>
                                     </div>
                                 );

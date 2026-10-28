@@ -43,9 +43,11 @@ import {
   saveTemplate, 
   fetchProjects, 
   createNotification,
-  fetchRoles
+  fetchRoles,
+  fetchSubcontractorBookingById
 } from './services/apiService';
 import { Loader2, X, FileText, ChevronRight, Bell } from 'lucide-react';
+import { QCAssignmentReminderModal } from './components/QCAssignmentReminderModal';
 
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const InspectionList = lazy(() => import('./components/InspectionList').then(m => ({ default: m.InspectionList })));
@@ -448,6 +450,104 @@ const App = () => {
       }
   };
 
+  const startSubcontractorInspection = (booking: any) => {
+    const sqcType = (booking.sqcType as ModuleId) || 'SQC_BTP';
+    const template = templates[sqcType] || SQC_BTP_CHECKLIST_TEMPLATE;
+
+    const mappedItems = booking.items && booking.items.length > 0
+      ? booking.items.map((it: any, idx: number) => ({
+          id: it.id || (idx + 1).toString(),
+          name: it.itemName || 'Hạng mục gia công',
+          itemName: it.itemName || '',
+          category: 'Hạng mục kiểm tra',
+          specifications: it.specifications || '',
+          orderQty: it.quantity || 1,
+          quantity: it.quantity || 1,
+          unit: it.unit || 'Bộ',
+          status: 'PASS',
+          result: 'PASS',
+          isInspected: true
+        }))
+      : JSON.parse(JSON.stringify(template));
+
+    const mappedMaterials = booking.items && booking.items.length > 0
+      ? booking.items.map((it: any, idx: number) => ({
+          id: it.id || (idx + 1).toString(),
+          name: it.itemName || 'Hạng mục gia công',
+          category: 'Gia công ngoài',
+          inspectType: '100%',
+          scope: 'COMMON',
+          projectCode: booking.poNumber,
+          projectName: `PO ${booking.poNumber}`,
+          orderQty: it.quantity || 1,
+          deliveryQty: it.quantity || 1,
+          unit: it.unit || 'Bộ',
+          criteria: [],
+          items: [],
+          inspectQty: it.quantity || 1,
+          passQty: it.quantity || 1,
+          failQty: 0,
+          images: [],
+          type: 'Material',
+          specifications: it.specifications || ''
+        }))
+      : [];
+
+    const docList: any[] = [];
+    if (booking.documents) {
+      if (booking.documents.materialSpecUrl) {
+        docList.push({ id: 'doc_spec', name: 'Spec / Thông số kỹ thuật (PDF Booking)', verified: true, url: booking.documents.materialSpecUrl });
+      }
+      if (booking.documents.approvedSampleUrl) {
+        docList.push({ id: 'doc_sample', name: 'Mẫu duyệt / Mẫu đối chứng (PDF Booking)', verified: true, url: booking.documents.approvedSampleUrl });
+      }
+      if (booking.documents.shopdrawingUrl) {
+        docList.push({ id: 'doc_drawing', name: 'Shopdrawing / Bản vẽ (PDF Booking)', verified: true, url: booking.documents.shopdrawingUrl });
+      }
+      if (booking.documents.qualityAgreementUrl) {
+        docList.push({ id: 'doc_qa', name: 'Cam kết chất lượng (PDF Booking)', verified: true, url: booking.documents.qualityAgreementUrl });
+      }
+    }
+
+    setInitialFormState({
+      type: sqcType,
+      po_number: booking.poNumber,
+      ma_ct: booking.poNumber,
+      ten_ct: booking.poNumber,
+      supplier: booking.supplierName,
+      supplierName: booking.supplierName,
+      ma_nha_may: booking.supplierName,
+      workshop: booking.supplierName,
+      supplierAddress: booking.locationAddress,
+      location: booking.locationAddress,
+      dia_chi_xuong: booking.locationAddress,
+      nguoi_lien_he: booking.contactPerson,
+      so_dien_thoai: booking.contactPhone,
+      date: booking.requestedDate ? new Date(booking.requestedDate * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      booking_id: booking.id,
+      booking_code: booking.bookingCode,
+      items: mappedItems,
+      materials: mappedMaterials,
+      supportingDocs: docList.length > 0 ? docList : undefined,
+      referenceDocs: docList.map(d => ({ title: d.name, url: d.url || '#' }))
+    } as any);
+
+    setActiveInspection(null);
+    setView('FORM');
+  };
+
+  const handleStartInspectionByBookingId = async (bookingId: string) => {
+    try {
+      const bRes = await fetchSubcontractorBookingById(bookingId);
+      if (bRes && bRes.booking) {
+        startSubcontractorInspection(bRes.booking);
+      }
+    } catch (e) {
+      console.error("Lỗi khi tải thông tin booking:", e);
+      setView('SUBCONTRACTOR_BOOKING');
+    }
+  };
+
   if (!user) return <LoginPage onLoginSuccess={handleLogin} users={users} dbReady={isDbReady} />;
 
   if (user.requirePasswordChange || user.require_password_change) {
@@ -727,34 +827,7 @@ const App = () => {
                 {view === 'SUBCONTRACTOR_BOOKING' && (
                     <SubcontractorBookingManagement 
                         currentUser={user} 
-                        onStartInspection={(booking) => {
-                            const sqcType = booking.sqcType || 'SQC_BTP';
-                            const template = templates[sqcType] || SQC_BTP_CHECKLIST_TEMPLATE;
-                            setInitialFormState({
-                                type: sqcType,
-                                ma_ct: booking.poNumber,
-                                ten_ct: booking.poNumber,
-                                ma_nha_may: booking.supplierName,
-                                workshop: booking.supplierName,
-                                dia_chi_xuong: booking.locationAddress,
-                                nguoi_lien_he: booking.contactPerson,
-                                so_dien_thoai: booking.contactPhone,
-                                booking_id: booking.id,
-                                booking_code: booking.bookingCode,
-                                items: booking.items && booking.items.length > 0
-                                    ? booking.items.map((it, idx) => ({
-                                        id: it.id || (idx + 1).toString(),
-                                        itemName: it.itemName || '',
-                                        quantity: it.quantity || 1,
-                                        unit: it.unit || 'Bộ',
-                                        specifications: it.specifications || '',
-                                        result: 'PASS'
-                                    }))
-                                    : JSON.parse(JSON.stringify(template))
-                            } as any);
-                            setActiveInspection(null);
-                            setView('FORM');
-                        }}
+                        onStartInspection={startSubcontractorInspection}
                     />
                 )}
             </Suspense>
@@ -763,6 +836,12 @@ const App = () => {
             {!isPublicView && <MobileBottomBar view={view} onNavigate={setView} user={user} rolesList={roles} />}
             <ChatAI user={user} />
             {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
+            <QCAssignmentReminderModal
+                currentUser={user}
+                onStartInspectionForBooking={handleStartInspectionByBookingId}
+                onNavigateToBookingList={() => setView('SUBCONTRACTOR_BOOKING')}
+                onClose={() => {}}
+            />
         </Suspense>
         </div>
         

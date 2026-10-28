@@ -2711,6 +2711,216 @@ export async function deleteDepartment(id: string) {
     await query(`DELETE FROM ${SCHEMA}.departments WHERE id = $1`, [id]);
 }
 
+export async function syncUserDepartmentsAndTeams() {
+    try {
+        const [deptsRes, divsRes, teamsRes, usersRes] = await Promise.all([
+            query(`SELECT * FROM ${SCHEMA}.departments`),
+            query(`SELECT * FROM ${SCHEMA}.divisions`),
+            query(`SELECT * FROM ${SCHEMA}.teams`),
+            query(`SELECT * FROM ${SCHEMA}.users WHERE deleted_at IS NULL`)
+        ]);
+
+        let depts = deptsRes.rows;
+        let divs = divsRes.rows;
+        let teams = teamsRes.rows;
+        const users = usersRes.rows;
+
+        let createdDepts = 0;
+        let createdDivs = 0;
+        let createdTeams = 0;
+        let updatedCount = 0;
+
+        // Stage 1: Auto-create missing Departments based on user phong_ban
+        for (const u of users) {
+            const rawDeptName = (u.phong_ban || u.phongBan || '').trim();
+            if (!rawDeptName) continue;
+
+            const exists = depts.some((dp: any) => 
+                dp.name.trim().toLowerCase() === rawDeptName.toLowerCase() ||
+                (u.department_id && dp.id === u.department_id)
+            );
+
+            if (!exists) {
+                const newDeptId = 'dept-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                await query(`
+                    INSERT INTO ${SCHEMA}.departments (id, name, divisions, updated_at)
+                    VALUES ($1, $2, '[]'::jsonb, EXTRACT(EPOCH FROM NOW())::BIGINT)
+                    ON CONFLICT(id) DO NOTHING
+                `, [newDeptId, rawDeptName]);
+                
+                depts.push({ id: newDeptId, name: rawDeptName, divisions: [] });
+                createdDepts++;
+                console.log(`✨ [Auto Dept Creation] Created new Department "${rawDeptName}" (${newDeptId})`);
+            }
+        }
+
+        // Stage 2: Auto-create missing Divisions based on user bo_phan & department
+        for (const u of users) {
+            const rawDivName = (u.bo_phan || u.boPhan || '').trim();
+            if (!rawDivName) continue;
+
+            const rawDeptName = (u.phong_ban || u.phongBan || '').trim();
+            let parentDept = depts.find((dp: any) => 
+                (u.department_id && dp.id === u.department_id) ||
+                (rawDeptName && dp.name.trim().toLowerCase() === rawDeptName.toLowerCase())
+            );
+
+            const deptIdForDiv = parentDept ? parentDept.id : (u.department_id || '');
+
+            const exists = divs.some((dv: any) => 
+                (dv.name.trim().toLowerCase() === rawDivName.toLowerCase() && (deptIdForDiv ? dv.department_id === deptIdForDiv : true)) ||
+                (u.division_id && dv.id === u.division_id)
+            );
+
+            if (!exists) {
+                const newDivId = 'div-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                await query(`
+                    INSERT INTO ${SCHEMA}.divisions (id, name, department_id, updated_at)
+                    VALUES ($1, $2, $3, EXTRACT(EPOCH FROM NOW())::BIGINT)
+                    ON CONFLICT(id) DO NOTHING
+                `, [newDivId, rawDivName, deptIdForDiv || null]);
+
+                divs.push({ id: newDivId, name: rawDivName, department_id: deptIdForDiv });
+                createdDivs++;
+                console.log(`✨ [Auto Div Creation] Created new Division "${rawDivName}" (${newDivId}) in Dept ${deptIdForDiv}`);
+            }
+        }
+
+        // Stage 3: Auto-create missing Teams based on user to_qc & division
+        for (const u of users) {
+            const rawTeamName = (u.to_qc || u.toQC || '').trim();
+            if (!rawTeamName) continue;
+
+            const rawDivName = (u.bo_phan || u.boPhan || '').trim();
+            let parentDiv = divs.find((dv: any) => 
+                (u.division_id && dv.id === u.division_id) ||
+                (rawDivName && dv.name.trim().toLowerCase() === rawDivName.toLowerCase())
+            );
+
+            const divIdForTeam = parentDiv ? parentDiv.id : (u.division_id || '');
+
+            const exists = teams.some((tm: any) => 
+                (tm.name.trim().toLowerCase() === rawTeamName.toLowerCase() && (divIdForTeam ? tm.division_id === divIdForTeam : true)) ||
+                (u.team_id && tm.id === u.team_id)
+            );
+
+            if (!exists) {
+                const newTeamId = 'team-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                await query(`
+                    INSERT INTO ${SCHEMA}.teams (id, name, division_id, updated_at)
+                    VALUES ($1, $2, $3, EXTRACT(EPOCH FROM NOW())::BIGINT)
+                    ON CONFLICT(id) DO NOTHING
+                `, [newTeamId, rawTeamName, divIdForTeam || null]);
+
+                teams.push({ id: newTeamId, name: rawTeamName, division_id: divIdForTeam });
+                createdTeams++;
+                console.log(`✨ [Auto Team Creation] Created new Team "${rawTeamName}" (${newTeamId}) in Div ${divIdForTeam}`);
+            }
+        }
+
+        // Stage 4: Bidirectional resolution and updates across all users
+        for (const u of users) {
+            let deptId = u.department_id || '';
+            let deptName = u.phong_ban || u.phongBan || '';
+            let divId = u.division_id || '';
+            let divName = u.bo_phan || u.boPhan || '';
+            let teamId = u.team_id || '';
+            let teamName = u.to_qc || u.toQC || '';
+
+            // 1. Resolve Team
+            if (teamId) {
+                const foundTeam = teams.find((t: any) => t.id === teamId);
+                if (foundTeam) {
+                    teamName = foundTeam.name;
+                    if (!divId) divId = foundTeam.division_id || foundTeam.divisionId || '';
+                }
+            } else if (teamName) {
+                const foundTeam = teams.find((t: any) => 
+                    t.name.trim().toLowerCase() === teamName.trim().toLowerCase()
+                );
+                if (foundTeam) {
+                    teamId = foundTeam.id;
+                    teamName = foundTeam.name;
+                    if (!divId) divId = foundTeam.division_id || foundTeam.divisionId || '';
+                }
+            }
+
+            // 2. Resolve Div
+            if (divId) {
+                const foundDiv = divs.find((d: any) => d.id === divId);
+                if (foundDiv) {
+                    divName = foundDiv.name;
+                    if (!deptId) deptId = foundDiv.department_id || foundDiv.departmentId || '';
+                }
+            } else if (divName) {
+                const foundDiv = divs.find((d: any) => 
+                    d.name.trim().toLowerCase() === divName.trim().toLowerCase()
+                );
+                if (foundDiv) {
+                    divId = foundDiv.id;
+                    divName = foundDiv.name;
+                    if (!deptId) deptId = foundDiv.department_id || foundDiv.departmentId || '';
+                }
+            }
+
+            // 3. Resolve Dept
+            if (deptId) {
+                const foundDept = depts.find((dp: any) => dp.id === deptId);
+                if (foundDept) {
+                    deptName = foundDept.name;
+                }
+            } else if (deptName) {
+                const foundDept = depts.find((dp: any) => 
+                    dp.name.trim().toLowerCase() === deptName.trim().toLowerCase()
+                );
+                if (foundDept) {
+                    deptId = foundDept.id;
+                    deptName = foundDept.name;
+                }
+            }
+
+            // Check if anything changed
+            const changed = 
+                deptId !== (u.department_id || '') ||
+                deptName !== (u.phong_ban || '') ||
+                divId !== (u.division_id || '') ||
+                divName !== (u.bo_phan || '') ||
+                teamId !== (u.team_id || '') ||
+                teamName !== (u.to_qc || '');
+
+            if (changed) {
+                await query(`
+                    UPDATE ${SCHEMA}.users
+                    SET department_id = $1, phong_ban = $2,
+                        division_id = $3, bo_phan = $4,
+                        team_id = $5, to_qc = $6,
+                        updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+                    WHERE id = $7
+                `, [
+                    deptId || null, deptName || null,
+                    divId || null, divName || null,
+                    teamId || null, teamName || null,
+                    u.id
+                ]);
+                updatedCount++;
+            }
+        }
+
+        console.log(`✅ [Department Sync] Successfully synchronized. Created ${createdDepts} depts, ${createdDivs} divs, ${createdTeams} teams. Updated ${updatedCount} users.`);
+        return { 
+            totalChecked: users.length, 
+            createdDepts, 
+            createdDivs, 
+            createdTeams, 
+            updatedCount, 
+            success: true 
+        };
+    } catch (err: any) {
+        console.error("❌ [Department Sync] Error synchronizing departments:", err);
+        return { success: false, error: err.message };
+    }
+}
+
 // --- USER OPERATIONS ACTIVITY ---
 
 export async function getUserActivityStats(userId: string) {
@@ -3095,40 +3305,45 @@ export async function getSubcontractorBookings(filters: any = {}) {
     sql += ` ORDER BY created_at DESC`;
 
     const res = await query(sql, params);
-    return res.rows.map((row: any) => ({
-        id: row.id,
-        bookingCode: row.booking_code,
-        poId: row.po_id,
-        poNumber: row.po_number,
-        supplierId: row.supplier_id,
-        supplierName: row.supplier_name,
-        requesterId: row.requester_id,
-        requesterName: row.requester_name,
-        locationAddress: row.location_address,
-        contactPerson: row.contact_person,
-        contactPhone: row.contact_phone,
-        requestedDate: parseInt(row.requested_date || '0'),
-        assignedQcId: row.assigned_qc_id,
-        assignedQcName: row.assigned_qc_name,
-        status: row.status,
-        notes: row.notes,
-        items: safeJsonParse(row.items_json, []),
-        documents: safeJsonParse(row.documents_json, {
-            materialSpecUrl: '',
-            approvedSampleUrl: '',
-            shopdrawingUrl: '',
-            qualityAgreementUrl: ''
-        }),
-        createdAt: parseInt(row.created_at || '0'),
-        updatedAt: parseInt(row.updated_at || '0'),
-        version: row.version || 1
-    }));
+    return res.rows.map((row: any) => {
+        const extraData = safeJsonParse(row.data, {}) as any;
+        return {
+            id: row.id,
+            bookingCode: row.booking_code,
+            poId: row.po_id,
+            poNumber: row.po_number,
+            supplierId: row.supplier_id,
+            supplierName: row.supplier_name,
+            requesterId: row.requester_id,
+            requesterName: row.requester_name || extraData.requesterName || 'Chuyên viên Mua hàng',
+            locationAddress: row.location_address,
+            contactPerson: row.contact_person,
+            contactPhone: row.contact_phone,
+            requestedDate: parseInt(row.requested_date || '0'),
+            assignedQcId: row.assigned_qc_id,
+            assignedQcName: row.assigned_qc_name,
+            status: row.status,
+            notes: row.notes,
+            sqcType: row.sqc_type || extraData.sqcType || 'SQC_BTP',
+            items: safeJsonParse(row.items_json, []),
+            documents: safeJsonParse(row.documents_json, {
+                materialSpecUrl: '',
+                approvedSampleUrl: '',
+                shopdrawingUrl: '',
+                qualityAgreementUrl: ''
+            }),
+            createdAt: parseInt(row.created_at || '0'),
+            updatedAt: parseInt(row.updated_at || '0'),
+            version: row.version || 1
+        };
+    });
 }
 
 export async function getSubcontractorBookingById(id: string) {
     const res = await query(`SELECT * FROM ${SCHEMA}.subcontractor_bookings WHERE id = $1 OR booking_code = $1`, [id]);
     if (res.rows.length === 0) return null;
     const row = res.rows[0];
+    const extraData = safeJsonParse(row.data, {}) as any;
     return {
         id: row.id,
         bookingCode: row.booking_code,
@@ -3137,7 +3352,7 @@ export async function getSubcontractorBookingById(id: string) {
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,
         requesterId: row.requester_id,
-        requesterName: row.requester_name,
+        requesterName: row.requester_name || extraData.requesterName || 'Chuyên viên Mua hàng',
         locationAddress: row.location_address,
         contactPerson: row.contact_person,
         contactPhone: row.contact_phone,
@@ -3146,6 +3361,7 @@ export async function getSubcontractorBookingById(id: string) {
         assignedQcName: row.assigned_qc_name,
         status: row.status,
         notes: row.notes,
+        sqcType: row.sqc_type || extraData.sqcType || 'SQC_BTP',
         items: safeJsonParse(row.items_json, []),
         documents: safeJsonParse(row.documents_json, {
             materialSpecUrl: '',
@@ -3172,15 +3388,21 @@ export async function createSubcontractorBooking(data: any) {
         qualityAgreementUrl: data.qualityAgreementUrl || ''
     });
     const requestedDate = parseTS(data.requestedDate);
+    const sqcType = data.sqcType || 'SQC_BTP';
+
+    await ensureTableColumns(`${SCHEMA}.subcontractor_bookings`, {
+        'sqc_type': 'TEXT',
+        'data': 'JSONB'
+    });
 
     await query(`
         INSERT INTO ${SCHEMA}.subcontractor_bookings (
             id, booking_code, po_id, po_number, supplier_id, supplier_name,
             requester_id, requester_name, location_address, contact_person,
             contact_phone, requested_date, assigned_qc_id, assigned_qc_name,
-            status, notes, items_json, documents_json, created_at, updated_at
+            status, notes, items_json, documents_json, sqc_type, data, created_at, updated_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
             EXTRACT(EPOCH FROM NOW())::BIGINT, EXTRACT(EPOCH FROM NOW())::BIGINT
         )
     `, [
@@ -3188,7 +3410,7 @@ export async function createSubcontractorBooking(data: any) {
         data.supplierName, data.requesterId || null, data.requesterName || 'Chuyên viên Mua hàng',
         data.locationAddress, data.contactPerson, data.contactPhone, requestedDate,
         data.assignedQcId || null, data.assignedQcName || null, data.status || 'PENDING',
-        data.notes || '', itemsJson, docsJson
+        data.notes || '', itemsJson, docsJson, sqcType, JSON.stringify(data)
     ]);
 
     return getSubcontractorBookingById(id);
@@ -3208,20 +3430,36 @@ export async function updateSubcontractorBooking(id: string, data: any) {
     const assignedQcId = data.assignedQcId !== undefined ? data.assignedQcId : current.assignedQcId;
     const assignedQcName = data.assignedQcName !== undefined ? data.assignedQcName : current.assignedQcName;
     const notes = data.notes !== undefined ? data.notes : current.notes;
+    const sqcType = data.sqcType !== undefined ? data.sqcType : (current.sqcType || 'SQC_BTP');
     const itemsJson = data.items !== undefined ? JSON.stringify(data.items) : JSON.stringify(current.items);
     const docsJson = data.documents !== undefined ? JSON.stringify(data.documents) : JSON.stringify(current.documents);
+    const requesterName = data.requesterName !== undefined ? data.requesterName : current.requesterName;
+
+    await ensureTableColumns(`${SCHEMA}.subcontractor_bookings`, {
+        'sqc_type': 'TEXT',
+        'data': 'JSONB'
+    });
+
+    const mergedData = JSON.stringify({
+        ...(current as any),
+        ...data,
+        sqcType,
+        items: data.items !== undefined ? data.items : current.items,
+        documents: data.documents !== undefined ? data.documents : current.documents
+    });
 
     await query(`
         UPDATE ${SCHEMA}.subcontractor_bookings
         SET po_number = $1, supplier_name = $2, location_address = $3, contact_person = $4,
             contact_phone = $5, requested_date = $6, status = $7, assigned_qc_id = $8,
             assigned_qc_name = $9, notes = $10, items_json = $11, documents_json = $12,
+            sqc_type = $13, requester_name = COALESCE($14, requester_name), data = $15,
             updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT, version = version + 1
-        WHERE id = $13 OR booking_code = $13
+        WHERE id = $16 OR booking_code = $16
     `, [
         poNumber, supplierName, locationAddress, contactPerson, contactPhone,
         requestedDate, status, assignedQcId, assignedQcName, notes,
-        itemsJson, docsJson, current.id
+        itemsJson, docsJson, sqcType, requesterName, mergedData, current.id
     ]);
 
     return getSubcontractorBookingById(current.id);

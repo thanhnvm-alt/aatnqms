@@ -1621,6 +1621,15 @@ app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
     }
   });
 
+  app.post("/api/admin/sync-departments", authenticate, async (req, res) => {
+    try {
+      const result = await db.syncUserDepartmentsAndTeams();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to synchronize department data', details: error.message });
+    }
+  });
+
   // --- DIVISIONS ---
   app.get("/api/divisions", async (req, res) => {
     try {
@@ -3830,6 +3839,9 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   db.fixAllUserDefaultPasswords().catch((err: any) => {
     console.error("Failed to run fixAllUserDefaultPasswords migration:", err);
+  });
+  db.syncUserDepartmentsAndTeams().catch((err: any) => {
+    console.error("Failed to run syncUserDepartmentsAndTeams migration:", err);
   });
 });
 

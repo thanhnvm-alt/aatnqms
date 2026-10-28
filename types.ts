@@ -538,7 +538,7 @@ export interface Defect {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE' | 'INFO' | 'SUCCESS' | 'MESSAGE';
+  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE' | 'INFO' | 'SUCCESS' | 'MESSAGE' | 'ASSIGNMENT';
   title: string;
   message: string;
   isRead: boolean;

@@ -20,7 +20,8 @@ import {
   fetchUsers,
   uploadFileToStorage,
   lookupPoMaterials,
-  saveSupplier
+  saveSupplier,
+  createNotification
 } from '../services/apiService';
 import { SubcontractorSlideGuideModal } from './SubcontractorSlideGuideModal';
 import { 
@@ -50,8 +51,43 @@ import {
   FileCheck2,
   Pencil,
   Trash2,
-  BookOpen
+  BookOpen,
+  Download,
+  ExternalLink
 } from 'lucide-react';
+import { removeVietnameseTones } from '../lib/utils';
+
+// Google Drive URL helpers
+export const getGoogleDriveFileId = (rawUrl: string): string | null => {
+  if (!rawUrl) return null;
+  const str = rawUrl.trim();
+  if (str.length >= 25 && str.length <= 50 && !str.includes('/') && !str.includes(':')) {
+    return str;
+  }
+  const match = str.match(/\/d\/([a-zA-Z0-9_-]+)/) || str.match(/id=([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return null;
+};
+
+export const getFileViewUrl = (rawUrl: string): string => {
+  if (!rawUrl) return '#';
+  const fileId = getGoogleDriveFileId(rawUrl);
+  if (fileId) {
+    return `https://drive.google.com/file/d/${fileId}/preview`;
+  }
+  return rawUrl;
+};
+
+export const getFileDownloadUrl = (rawUrl: string): string => {
+  if (!rawUrl) return '#';
+  const fileId = getGoogleDriveFileId(rawUrl);
+  if (fileId) {
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  }
+  return rawUrl;
+};
 
 // Format Date helpers for local calendar (avoid timezone offset bugs)
 export const formatLocalDateToYMD = (date: Date): string => {
@@ -187,6 +223,13 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
   const handleDocFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, docKey: 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl') => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert("⚠️ CHỈ CHẤP NHẬN FILE PDF:\nHệ thống quy định hồ sơ & tài liệu kỹ thuật nghiệm thu bắt buộc phải ở định dạng PDF (.pdf). Vui lòng chọn lại file.");
+      e.target.value = '';
+      return;
+    }
+
     setUploadingDocType(docKey);
     try {
       const fileUrl = await uploadFileToStorage(file, file.name);
@@ -210,6 +253,13 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
   const handleEditDocFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, docKey: 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl') => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert("⚠️ CHỈ CHẤP NHẬN FILE PDF:\nHệ thống quy định hồ sơ & tài liệu kỹ thuật nghiệm thu bắt buộc phải ở định dạng PDF (.pdf). Vui lòng chọn lại file.");
+      e.target.value = '';
+      return;
+    }
+
     setUploadingEditDocType(docKey);
     try {
       const fileUrl = await uploadFileToStorage(file, file.name);
@@ -379,6 +429,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
   };
 
   const [assignQcId, setAssignQcId] = useState('');
+  const [qcSearchQuery, setQcSearchQuery] = useState('');
 
   // Inspection form states
   const [vendorRepName, setVendorRepName] = useState('');
@@ -427,7 +478,29 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
       ]);
       setSuppliers(supRes.suppliers || []);
       const usersList = Array.isArray(usersRes) ? usersRes : (usersRes.users || []);
-      setQcUsers(usersList.filter((u: User) => u.role === 'QC' || u.role === 'QA' || u.role === 'MANAGER' || u.role === 'ADMIN'));
+      setQcUsers(usersList.filter((u: User) => {
+        const pBan = (u.phong_ban || (u as any).phongBan || '').toUpperCase();
+        const bPhan = (u.bo_phan || (u as any).boPhan || '').toUpperCase();
+        const deptId = (u.department_id || '').toLowerCase();
+        const role = (u.role || '').toUpperCase();
+
+        return (
+          role === 'QC' ||
+          role === 'QA' ||
+          deptId === 'dept_qaqc' ||
+          pBan.includes('QA') ||
+          pBan.includes('QC') ||
+          pBan.includes('CHẤT LƯỢNG') ||
+          bPhan.includes('QA') ||
+          bPhan.includes('QC') ||
+          bPhan.includes('PQC') ||
+          bPhan.includes('IQC') ||
+          bPhan.includes('FQC') ||
+          bPhan.includes('SQC') ||
+          role === 'ADMIN' ||
+          role === 'MANAGER'
+        );
+      }));
       setIpoList(ipoRes.data || []);
     } catch (err) {
       console.error("Failed to load reference data:", err);
@@ -528,6 +601,48 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
         assignedQcId: assignQcId,
         assignedQcName: selectedQc?.name || 'QC AA Corp'
       });
+
+      // 1. Send system notification to assigned QC
+      try {
+        const reqDateFormatted = selectedBooking.requestedDate 
+          ? new Date(selectedBooking.requestedDate * 1000).toLocaleDateString('vi-VN') 
+          : 'N/A';
+        await createNotification({
+          userId: assignQcId,
+          type: 'ASSIGNMENT',
+          title: `📌 PHÂN CÔNG NGHIỆM THU MỚI: ${selectedBooking.bookingCode}`,
+          message: `Xưởng: ${selectedBooking.supplierName} | PO: ${selectedBooking.poNumber} | Ngày nghiệm thu: ${reqDateFormatted}`,
+          link: {
+            view: 'SUBCONTRACTOR_BOOKING',
+            id: selectedBooking.id
+          }
+        });
+      } catch (notifErr) {
+        console.warn("Lỗi tạo thông báo phân công QC:", notifErr);
+      }
+
+      // 2. Store assignment reminder in local storage for login popup check
+      try {
+        const existing = JSON.parse(localStorage.getItem('aatn_qc_pending_assignments') || '[]');
+        const updatedPending = [
+          ...existing,
+          {
+            id: `assign_${selectedBooking.id}_${Date.now()}`,
+            qcId: assignQcId,
+            bookingId: selectedBooking.id,
+            bookingCode: selectedBooking.bookingCode,
+            poNumber: selectedBooking.poNumber,
+            supplierName: selectedBooking.supplierName,
+            locationAddress: selectedBooking.locationAddress,
+            requestedDate: selectedBooking.requestedDate,
+            itemsCount: selectedBooking.items?.length || 0,
+            assignedAt: Math.floor(Date.now() / 1000)
+          }
+        ];
+        localStorage.setItem('aatn_qc_pending_assignments', JSON.stringify(updatedPending));
+      } catch (e) {}
+
+      alert(`Đã phân công thành công cho QC ${selectedQc?.name || 'phụ trách'}! Hệ thống đã gửi thông báo và lịch nhắc cho QC.`);
       setShowAssignModal(false);
       setSelectedBooking(null);
       await loadData();
@@ -844,83 +959,97 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[10px] uppercase tracking-wider">
                   <tr>
-                    <th className="px-3 py-2.5">Mã Booking / PO</th>
-                    <th className="px-3 py-2.5">Loại SQC</th>
-                    <th className="px-3 py-2.5">Xưởng Vệ Tinh / Địa Chỉ</th>
-                    <th className="px-3 py-2.5">Ngày Đặt Lịch</th>
-                    <th className="px-3 py-2.5">QC Phụ Trách</th>
-                    <th className="px-3 py-2.5">Trạng Thái</th>
-                    <th className="px-3 py-2.5 text-right">Thao Tác</th>
+                    <th className="px-2.5 py-2.5">Mã Booking / PO</th>
+                    <th className="px-2.5 py-2.5">Loại SQC</th>
+                    <th className="px-2.5 py-2.5">Xưởng Vệ Tinh / Địa Chỉ</th>
+                    <th className="px-2.5 py-2.5">Ngày Đặt Lịch</th>
+                    <th className="px-2.5 py-2.5">Ngày Nghiệm Thu</th>
+                    <th className="px-2.5 py-2.5">Người Book</th>
+                    <th className="px-2.5 py-2.5">QC Phụ Trách</th>
+                    <th className="px-2.5 py-2.5">Trạng Thái</th>
+                    <th className="px-2.5 py-2.5 text-right">Thao Tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-[8px]">
                   {filteredBookings.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-500 dark:text-slate-400">
+                      <td colSpan={9} className="text-center py-8 text-[8px] text-slate-500 dark:text-slate-400">
                         Chưa có lịch đặt QC nghiệm thu nào.
                       </td>
                     </tr>
                   ) : (
                     filteredBookings.map(b => (
-                      <tr key={b.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="px-3 py-2.5 font-medium">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">{b.bookingCode}</span>
+                      <tr 
+                        key={b.id} 
+                        onClick={() => { setSelectedBooking(b); setShowReportModal(true); }}
+                        className="hover:bg-blue-50/70 dark:hover:bg-slate-800/80 cursor-pointer transition-colors"
+                        title="Bấm vào dòng để xem chi tiết booking"
+                      >
+                        <td className="px-2.5 py-2 font-medium">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="font-mono text-blue-600 dark:text-blue-400 font-bold text-[8px]">{b.bookingCode}</span>
                             {b.isUrgent && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-800 animate-pulse">
+                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[7px] font-black bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-800 animate-pulse">
                                 KHẨN
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 font-mono">PO: {b.poNumber}</div>
+                          <div className="text-[8px] text-slate-500 font-mono mt-0.5">PO: {b.poNumber}</div>
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-2.5 py-2">
                           {(() => {
                             const conf = SQC_TYPES_CONFIG.find(s => s.id === (b.sqcType || 'SQC_BTP')) || SQC_TYPES_CONFIG[1];
                             return (
-                              <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase border ${conf.badgeBg} ${conf.badgeText} ${conf.badgeBorder}`}>
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase border ${conf.badgeBg} ${conf.badgeText} ${conf.badgeBorder}`}>
                                 {conf.code}
                               </span>
                             );
                           })()}
                         </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-semibold text-slate-900 dark:text-white">{b.supplierName}</div>
-                          <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <td className="px-2.5 py-2">
+                          <div className="font-bold text-[8px] text-slate-900 dark:text-white">{b.supplierName}</div>
+                          <div className="text-[8px] text-slate-500 flex items-center gap-0.5 mt-0.5">
+                            <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                             <span className="truncate max-w-xs">{b.locationAddress}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300">
+                        <td className="px-2.5 py-2 text-[8px] font-semibold text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
+                          {b.createdAt ? new Date(b.createdAt * 1000).toLocaleDateString('vi-VN') : '—'}
+                        </td>
+                        <td className="px-2.5 py-2 text-[8px] font-bold text-blue-700 dark:text-blue-300 font-mono whitespace-nowrap">
                           {b.requestedDate ? new Date(b.requestedDate * 1000).toLocaleDateString('vi-VN') : '—'}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-2.5 py-2 text-[8px] font-semibold text-slate-800 dark:text-slate-200">
+                          {b.requesterName || 'Chuyên viên Mua hàng'}
+                        </td>
+                        <td className="px-2.5 py-2">
                           {b.assignedQcName ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                              <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="inline-flex items-center gap-0.5 text-[8px] font-semibold text-slate-800 dark:text-slate-200">
+                              <UserCheck className="w-3 h-3 text-blue-500 shrink-0" />
                               {b.assignedQcName}
                             </span>
                           ) : (
-                            <span className="text-xs text-amber-600 dark:text-amber-400 italic">Chưa phân công</span>
+                            <span className="text-[8px] text-amber-600 dark:text-amber-400 font-semibold italic">Chưa phân công</span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-2.5 py-2 whitespace-nowrap">
                           {getStatusBadge(b.status)}
                         </td>
-                        <td className="px-3 py-2.5 text-right space-x-1.5 whitespace-nowrap">
+                        <td className="px-2.5 py-2 text-right space-x-1 whitespace-nowrap">
                           {b.status === 'PENDING' && (
                             <button
-                              onClick={() => { setSelectedBooking(b); setShowAssignModal(true); }}
-                              className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded hover:bg-blue-100 transition-colors inline-flex items-center gap-1"
+                              onClick={(e) => { e.stopPropagation(); setSelectedBooking(b); setShowAssignModal(true); }}
+                              className="px-2 py-1 text-[8px] font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded hover:bg-blue-100 transition-colors inline-flex items-center gap-0.5"
                             >
-                              <UserCheck className="w-3.5 h-3.5" /> Phân Công QC
+                              <UserCheck className="w-3 h-3" /> Phân Công QC
                             </button>
                           )}
                           {(b.status === 'ASSIGNED' || b.status === 'IN_PROGRESS') && (
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 if (onStartInspection) {
                                   onStartInspection(b);
                                 } else {
@@ -928,32 +1057,32 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                                   setShowInspectModal(true);
                                 }
                               }}
-                              className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 shadow-sm transition-colors inline-flex items-center gap-1"
+                              className="px-2 py-1 text-[8px] font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 shadow-sm transition-colors inline-flex items-center gap-0.5"
                               title="Thực hiện kiểm tra / Nghiệm thu tại xưởng vệ tinh"
                             >
-                              <PenTool className="w-3.5 h-3.5" /> Nghiệm Thu Tại Xưởng
+                              <PenTool className="w-3 h-3" /> Nghiệm Thu
                             </button>
                           )}
                           <button
-                            onClick={() => handleOpenEditModal(b)}
-                            className="p-1.5 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors inline-flex items-center gap-1"
+                            onClick={(e) => { e.stopPropagation(); handleOpenEditModal(b); }}
+                            className="p-1 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors inline-flex items-center"
                             title="Sửa phiếu book sai thông tin"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Pencil className="w-3 h-3" />
                           </button>
                           <button
-                            onClick={() => handleDeleteBooking(b)}
-                            className="p-1.5 text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors inline-flex items-center gap-1"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteBooking(b); }}
+                            className="p-1 text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors inline-flex items-center"
                             title="Xóa phiếu book sai thông tin"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                           <button
-                            onClick={() => { setSelectedBooking(b); setShowReportModal(true); }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedBooking(b); setShowReportModal(true); }}
                             className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white"
                             title="Xem chi tiết"
                           >
-                            <ChevronRight className="w-4 h-4" />
+                            <ChevronRight className="w-3 h-3" />
                           </button>
                         </td>
                       </tr>
@@ -1370,21 +1499,21 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
               <div className="bg-blue-50/50 dark:bg-blue-950/30 p-3.5 rounded-lg border border-blue-200 dark:border-blue-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-900 dark:text-blue-200 uppercase flex items-center gap-1.5">
-                    <FileCheck2 className="w-4 h-4 text-blue-600" /> Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu
+                    <FileCheck2 className="w-4 h-4 text-blue-600" /> Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu (Định dạng PDF)
                   </span>
-                  <span className="text-[10px] text-slate-500">Tải file PDF, Ảnh, CAD hoặc Dán Link</span>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Bắt buộc file PDF (.pdf)</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   {/* 1. Spec Vat Tu */}
                   <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                     <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      1. Spec Vật Tư / Quy Cách
+                      1. Spec Vật Tư / Quy Cách (.pdf)
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
-                        placeholder="Dán link hoặc tải file..."
+                        placeholder="Dán link Drive hoặc tải file PDF..."
                         value={newBooking.documents.materialSpecUrl}
                         onChange={e => setNewBooking(prev => ({
                           ...prev,
@@ -1393,10 +1522,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                         className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                       />
                       <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải file
+                        <Upload className="w-3 h-3" /> Tải PDF
                         <input
                           type="file"
-                          accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                          accept=".pdf,application/pdf"
                           onChange={e => handleDocFileUpload(e, 'materialSpecUrl')}
                           className="hidden"
                         />
@@ -1410,12 +1539,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   {/* 2. Mau Duyet */}
                   <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                     <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      2. Mẫu Duyệt (Approved Sample)
+                      2. Mẫu Duyệt (Approved Sample - .pdf)
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
-                        placeholder="Dán link hoặc tải file..."
+                        placeholder="Dán link Drive hoặc tải file PDF..."
                         value={newBooking.documents.approvedSampleUrl}
                         onChange={e => setNewBooking(prev => ({
                           ...prev,
@@ -1424,10 +1553,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                         className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                       />
                       <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải file
+                        <Upload className="w-3 h-3" /> Tải PDF
                         <input
                           type="file"
-                          accept=".pdf,.png,.jpg,.jpeg"
+                          accept=".pdf,application/pdf"
                           onChange={e => handleDocFileUpload(e, 'approvedSampleUrl')}
                           className="hidden"
                         />
@@ -1441,12 +1570,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   {/* 3. Ban Ve */}
                   <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                     <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      3. Bản Vẽ Thi Công (Shopdrawing)
+                      3. Bản Vẽ Thi Công (Shopdrawing - .pdf)
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
-                        placeholder="Dán link hoặc tải file..."
+                        placeholder="Dán link Drive hoặc tải file PDF..."
                         value={newBooking.documents.shopdrawingUrl}
                         onChange={e => setNewBooking(prev => ({
                           ...prev,
@@ -1455,10 +1584,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                         className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                       />
                       <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải file
+                        <Upload className="w-3 h-3" /> Tải PDF
                         <input
                           type="file"
-                          accept=".pdf,.png,.jpg,.dwg"
+                          accept=".pdf,application/pdf"
                           onChange={e => handleDocFileUpload(e, 'shopdrawingUrl')}
                           className="hidden"
                         />
@@ -1472,12 +1601,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   {/* 4. Bien Ban Thong Nhat Chat Luong */}
                   <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                     <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      4. Biên Bản Thống Nhất CL (MoU)
+                      4. Biên Bản Thống Nhất CL (MoU - .pdf)
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
                         type="text"
-                        placeholder="Dán link hoặc tải file..."
+                        placeholder="Dán link Drive hoặc tải file PDF..."
                         value={newBooking.documents.qualityAgreementUrl}
                         onChange={e => setNewBooking(prev => ({
                           ...prev,
@@ -1486,10 +1615,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                         className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                       />
                       <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải file
+                        <Upload className="w-3 h-3" /> Tải PDF
                         <input
                           type="file"
-                          accept=".pdf,.png,.jpg,.doc,.docx"
+                          accept=".pdf,application/pdf"
                           onChange={e => handleDocFileUpload(e, 'qualityAgreementUrl')}
                           className="hidden"
                         />
@@ -1501,6 +1630,7 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   </div>
                 </div>
               </div>
+
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
@@ -1559,19 +1689,76 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                Chọn Chuyên Viên QC Phụ Trách (*)
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-2">
+                Chọn Chuyên Viên QA/QC Phụ Trách (*)
               </label>
-              <select
-                value={assignQcId}
-                onChange={e => setAssignQcId(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Chọn Nhân Viên QC --</option>
-                {qcUsers.map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.msnv || u.role})</option>
-                ))}
-              </select>
+
+              {/* Search Bar */}
+              <div className="relative mb-2">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm nhanh tên Chuyên viên hoặc Mã NV/Username..."
+                  value={qcSearchQuery}
+                  onChange={e => setQcSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans"
+                />
+                {qcSearchQuery && (
+                  <button onClick={() => setQcSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* QC Staff Cards List */}
+              <div className="max-h-56 overflow-y-auto space-y-1.5 p-1 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/50 no-scrollbar">
+                {(() => {
+                  const filtered = qcUsers.filter(u => {
+                    const q = removeVietnameseTones(qcSearchQuery.toLowerCase().trim());
+                    if (!q) return true;
+                    const nameMatch = removeVietnameseTones((u.name || '').toLowerCase()).includes(q);
+                    const usernameMatch = removeVietnameseTones((u.username || '').toLowerCase()).includes(q);
+                    const msnvMatch = removeVietnameseTones((u.msnv || '').toLowerCase()).includes(q);
+                    return nameMatch || usernameMatch || msnvMatch;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-6 text-center text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Không tìm thấy chuyên viên QA/QC
+                      </div>
+                    );
+                  }
+
+                  return filtered.map(u => {
+                    const isSelected = assignQcId === u.id;
+                    return (
+                      <div
+                        key={u.id}
+                        onClick={() => setAssignQcId(u.id)}
+                        className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                        }`}
+                      >
+                        <div>
+                          <div className={`text-xs font-black uppercase flex items-center gap-1.5 ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                            {u.name}
+                            <span className={`text-[10px] font-mono ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                              ({u.msnv || u.username})
+                            </span>
+                          </div>
+                          <div className={`text-[10px] font-medium mt-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {u.phong_ban || (u as any).phongBan || 'Phòng QAQC'} • {u.position || u.role}
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-white shrink-0" />}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
@@ -1878,36 +2065,56 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
                     <span className="font-medium text-slate-700 dark:text-slate-300">1. Spec Vật Tư:</span>
                     {selectedBooking.documents?.materialSpecUrl ? (
-                      <a href={selectedBooking.documents.materialSpecUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" /> Xem File
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a href={getFileViewUrl(selectedBooking.documents.materialSpecUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5" /> Xem File
+                        </a>
+                        <a href={getFileDownloadUrl(selectedBooking.documents.materialSpecUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                          <Download className="w-3 h-3" /> Tải về
+                        </a>
+                      </div>
                     ) : <span className="text-slate-400 italic">Chưa đính kèm</span>}
                   </div>
 
                   <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
                     <span className="font-medium text-slate-700 dark:text-slate-300">2. Mẫu Duyệt:</span>
                     {selectedBooking.documents?.approvedSampleUrl ? (
-                      <a href={selectedBooking.documents.approvedSampleUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" /> Xem File
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a href={getFileViewUrl(selectedBooking.documents.approvedSampleUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5" /> Xem File
+                        </a>
+                        <a href={getFileDownloadUrl(selectedBooking.documents.approvedSampleUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                          <Download className="w-3 h-3" /> Tải về
+                        </a>
+                      </div>
                     ) : <span className="text-slate-400 italic">Chưa đính kèm</span>}
                   </div>
 
                   <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
                     <span className="font-medium text-slate-700 dark:text-slate-300">3. Bản Vẽ Thi Công:</span>
                     {selectedBooking.documents?.shopdrawingUrl ? (
-                      <a href={selectedBooking.documents.shopdrawingUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" /> Xem File
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a href={getFileViewUrl(selectedBooking.documents.shopdrawingUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5" /> Xem File
+                        </a>
+                        <a href={getFileDownloadUrl(selectedBooking.documents.shopdrawingUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                          <Download className="w-3 h-3" /> Tải về
+                        </a>
+                      </div>
                     ) : <span className="text-slate-400 italic">Chưa đính kèm</span>}
                   </div>
 
                   <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
                     <span className="font-medium text-slate-700 dark:text-slate-300">4. Biên Bản Thống Nhất:</span>
                     {selectedBooking.documents?.qualityAgreementUrl ? (
-                      <a href={selectedBooking.documents.qualityAgreementUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" /> Xem File
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a href={getFileViewUrl(selectedBooking.documents.qualityAgreementUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5" /> Xem File
+                        </a>
+                        <a href={getFileDownloadUrl(selectedBooking.documents.qualityAgreementUrl)} target="_blank" rel="noopener noreferrer" download className="text-slate-500 hover:text-blue-600 flex items-center gap-0.5 text-[11px]" title="Tải file về máy">
+                          <Download className="w-3 h-3" /> Tải về
+                        </a>
+                      </div>
                     ) : <span className="text-slate-400 italic">Chưa đính kèm</span>}
                   </div>
                 </div>
@@ -2216,21 +2423,21 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                 <div className="bg-amber-50/50 dark:bg-amber-950/30 p-3.5 rounded-lg border border-amber-200 dark:border-amber-800 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase flex items-center gap-1.5">
-                      <FileCheck2 className="w-4 h-4 text-amber-600" /> Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu
+                      <FileCheck2 className="w-4 h-4 text-amber-600" /> Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu (Định dạng PDF)
                     </span>
-                    <span className="text-[10px] text-slate-500">Cập nhật file PDF, Ảnh hoặc Link</span>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">Bắt buộc file PDF (.pdf)</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     {/* 1. Spec Vat Tu */}
                     <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                       <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        1. Spec Vật Tư / Quy Cách
+                        1. Spec Vật Tư / Quy Cách (.pdf)
                       </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="text"
-                          placeholder="Dán link hoặc tải file..."
+                          placeholder="Dán link Drive hoặc tải file PDF..."
                           value={editBooking.documents.materialSpecUrl}
                           onChange={e => setEditBooking(prev => ({
                             ...prev,
@@ -2239,10 +2446,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                           className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                         />
                         <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải file
+                          <Upload className="w-3 h-3" /> Tải PDF
                           <input
                             type="file"
-                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                            accept=".pdf,application/pdf"
                             onChange={e => handleEditDocFileUpload(e, 'materialSpecUrl')}
                             className="hidden"
                           />
@@ -2256,12 +2463,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     {/* 2. Mau Duyet */}
                     <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                       <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        2. Mẫu Duyệt (Approved Sample)
+                        2. Mẫu Duyệt (Approved Sample - .pdf)
                       </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="text"
-                          placeholder="Dán link hoặc tải file..."
+                          placeholder="Dán link Drive hoặc tải file PDF..."
                           value={editBooking.documents.approvedSampleUrl}
                           onChange={e => setEditBooking(prev => ({
                             ...prev,
@@ -2270,10 +2477,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                           className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                         />
                         <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải file
+                          <Upload className="w-3 h-3" /> Tải PDF
                           <input
                             type="file"
-                            accept=".pdf,.png,.jpg,.jpeg"
+                            accept=".pdf,application/pdf"
                             onChange={e => handleEditDocFileUpload(e, 'approvedSampleUrl')}
                             className="hidden"
                           />
@@ -2287,12 +2494,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     {/* 3. Ban Ve */}
                     <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                       <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        3. Bản Vẽ Thi Công (Shopdrawing)
+                        3. Bản Vẽ Thi Công (Shopdrawing - .pdf)
                       </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="text"
-                          placeholder="Dán link hoặc tải file..."
+                          placeholder="Dán link Drive hoặc tải file PDF..."
                           value={editBooking.documents.shopdrawingUrl}
                           onChange={e => setEditBooking(prev => ({
                             ...prev,
@@ -2301,10 +2508,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                           className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                         />
                         <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải file
+                          <Upload className="w-3 h-3" /> Tải PDF
                           <input
                             type="file"
-                            accept=".pdf,.png,.jpg,.dwg"
+                            accept=".pdf,application/pdf"
                             onChange={e => handleEditDocFileUpload(e, 'shopdrawingUrl')}
                             className="hidden"
                           />
@@ -2318,12 +2525,12 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                     {/* 4. Bien Ban Thong Nhat Chat Luong */}
                     <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
                       <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        4. Biên Bản Thống Nhất CL (MoU)
+                        4. Biên Bản Thống Nhất CL (MoU - .pdf)
                       </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="text"
-                          placeholder="Dán link hoặc tải file..."
+                          placeholder="Dán link Drive hoặc tải file PDF..."
                           value={editBooking.documents.qualityAgreementUrl}
                           onChange={e => setEditBooking(prev => ({
                             ...prev,
@@ -2332,10 +2539,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                           className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
                         />
                         <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải file
+                          <Upload className="w-3 h-3" /> Tải PDF
                           <input
                             type="file"
-                            accept=".pdf,.png,.jpg,.doc,.docx"
+                            accept=".pdf,application/pdf"
                             onChange={e => handleEditDocFileUpload(e, 'qualityAgreementUrl')}
                             className="hidden"
                           />

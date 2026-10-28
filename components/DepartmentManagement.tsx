@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { Building, Plus, Trash2, Edit2, X, Loader2, Users, FolderTree, ShieldCheck, ChevronDown, Search, ChevronLeft } from 'lucide-react';
+import { Building, Plus, Trash2, Edit2, X, Loader2, Users, FolderTree, ShieldCheck, ChevronDown, Search, ChevronLeft, RefreshCw } from 'lucide-react';
 import { Button } from './Button';
 import { removeVietnameseTones } from '../lib/utils';
 
@@ -30,6 +30,7 @@ export const DepartmentManagement: React.FC = () => {
     const [activeTab, setActiveTab] = useState<TabType>('departments');
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // Cascading selection state
     const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
@@ -391,16 +392,42 @@ export const DepartmentManagement: React.FC = () => {
 
     const filteredDivisions = selectedDeptId ? divisions.filter(d => d.departmentId === selectedDeptId) : [];
     const filteredTeams = selectedDivId ? teams.filter(t => t.divisionId === selectedDivId) : [];
+    const selectedDept = departments.find(d => d.id === selectedDeptId);
+    const selectedDiv = divisions.find(d => d.id === selectedDivId);
+    const selectedTeam = teams.find(t => t.id === selectedTeamId);
+    const filteredUsers = selectedTeamId
+        ? users.filter(u => u.team_id === selectedTeamId || (selectedTeam?.name && u.to_qc === selectedTeam.name))
+        : selectedDivId
+        ? users.filter(u => u.division_id === selectedDivId || (selectedDiv?.name && u.bo_phan === selectedDiv.name))
+        : selectedDeptId
+        ? users.filter(u => u.department_id === selectedDeptId || (selectedDept?.name && u.phong_ban === selectedDept.name))
+        : users;
     
-    const filteredUsers = React.useMemo(() => {
-        if (!selectedDeptId) return users;
-        return users.filter(u => {
-            if (selectedTeamId) return u.team_id === selectedTeamId;
-            if (selectedDivId) return u.division_id === selectedDivId;
-            if (selectedDeptId) return u.department_id === selectedDeptId;
-            return true;
-        });
-    }, [users, selectedDeptId, selectedDivId, selectedTeamId]);
+    const handleSyncDepartmentsData = async () => {
+        setIsSyncing(true);
+        try {
+            const res = await fetch('/api/admin/sync-departments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const msg = `Đồng bộ dữ liệu thành công!\n• Đã kiểm tra: ${data.totalChecked || 0} hồ sơ nhân sự\n• Tự động bổ sung: ${data.createdDepts || 0} Phòng ban, ${data.createdDivs || 0} Bộ phận, ${data.createdTeams || 0} Tổ\n• Cập nhật đồng bộ 2 chiều: ${data.updatedCount || 0} tài khoản`;
+                alert(msg);
+                await fetchData();
+            } else {
+                alert('Không thể đồng bộ dữ liệu phòng ban.');
+            }
+        } catch (err) {
+            console.error('Lỗi khi đồng bộ dữ liệu phòng ban:', err);
+            alert('Lỗi kết nối khi đồng bộ dữ liệu.');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     return (
         <div className="space-y-2 lg:space-y-4 animate-in fade-in duration-300 flex flex-col h-[calc(100vh-130px)] lg:h-[calc(100vh-100px)]">
@@ -414,6 +441,17 @@ export const DepartmentManagement: React.FC = () => {
                         <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">Sơ đồ Tổ chức phòng ban</h3>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Quản lý cấu trúc Phòng ban &rarr; Bộ phận &rarr; Tổ (Team) & Tổ trưởng</p>
                     </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleSyncDepartmentsData}
+                        disabled={isSyncing}
+                        className="px-3.5 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-2xl hover:bg-blue-100 transition-all font-bold text-xs flex items-center gap-2 shadow-sm"
+                        title="Đồng bộ lại tên hiển thị (phong_ban, bo_phan, to_qc) và ID cấu trúc cho toàn bộ nhân sự"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                        <span>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ Dữ liệu Nhân sự'}</span>
+                    </button>
                 </div>
             </div>
 
