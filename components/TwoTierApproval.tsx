@@ -238,29 +238,80 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   const isAuthorizedTeam = useMemo(() => {
     if (user.role === 'ADMIN') return true;
     if (!user.la_to_truong) return true;
-    
-    const creatorUser = users.find(u => u.name === inspection.inspectorName);
-    if (!creatorUser) {
-      if (users.length === 0) return true; // wait for data to load
-      return false;
+
+    // Resolve creator user with flexible multi-field matching
+    const searchTargets = [
+      inspection.inspectorName,
+      (inspection as any).inspector_name,
+      (inspection as any).inspector,
+      (inspection as any).created_by,
+      (inspection as any).createdBy
+    ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0);
+
+    let creatorUser: User | undefined;
+    for (const target of searchTargets) {
+      const clean = target.trim().toLowerCase();
+      creatorUser = users.find(u => 
+        (u.id && u.id.trim().toLowerCase() === clean) ||
+        (u.username && u.username.trim().toLowerCase() === clean) ||
+        (u.msnv && u.msnv.trim().toLowerCase() === clean) ||
+        (u.name && u.name.trim().toLowerCase() === clean) ||
+        (u.name && (clean.includes(u.name.trim().toLowerCase()) || u.name.trim().toLowerCase().includes(clean)))
+      );
+      if (creatorUser) break;
     }
-    
-    // Check by physical UUID-based team_id first
-    if (user.team_id && creatorUser.team_id && user.team_id === creatorUser.team_id) {
+
+    // 1. If Team Lead themselves created the report
+    if (creatorUser && (creatorUser.id === user.id || creatorUser.username === user.username || creatorUser.name === user.name)) {
       return true;
     }
 
-    // Fallback/compat by string matching
-    const userTeam = (user.to_qc || '').trim().toLowerCase();
-    const creatorTeam = (creatorUser.to_qc || '').trim().toLowerCase();
-    
-    if (userTeam && userTeam === creatorTeam) return true;
-    
+    // 2. Check by physical UUID-based team_id first
+    if (user.team_id && creatorUser?.team_id && user.team_id === creatorUser.team_id) {
+      return true;
+    }
+
+    // Normalize string: removes Vietnamese accents, punctuation and spaces
+    const normalizeTeamStr = (s?: string) => {
+      if (!s) return '';
+      return s
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+    };
+
+    const userTeamNorm = normalizeTeamStr(user.to_qc);
+    const creatorTeamNorm = normalizeTeamStr(creatorUser?.to_qc);
+
+    // 3. Fallback/compat by normalized string matching
+    if (userTeamNorm && creatorTeamNorm && (userTeamNorm === creatorTeamNorm || userTeamNorm.includes(creatorTeamNorm) || creatorTeamNorm.includes(userTeamNorm))) {
+      return true;
+    }
+
+    // 4. Check against inspection workshop or to_qc field
+    const inspTeamNorm = normalizeTeamStr((inspection as any).to_qc || inspection.workshop);
+    if (userTeamNorm && inspTeamNorm && (userTeamNorm === inspTeamNorm || userTeamNorm.includes(inspTeamNorm) || inspTeamNorm.includes(userTeamNorm))) {
+      return true;
+    }
+
+    // 5. If creatorUser is not found in user list (or data is still loading)
+    if (!creatorUser) {
+      if (users.length === 0) return true; // wait for data to load
+      if (!inspection.inspectorName && !(inspection as any).created_by) return true;
+      if (userTeamNorm && inspTeamNorm && userTeamNorm.includes(inspTeamNorm)) return true;
+    }
+
     return false;
-  }, [user, inspection.inspectorName, users]);
+  }, [user, inspection, users]);
 
   const hasSignPermission = (action: 'SIGN1' | 'SIGN2'): boolean => {
     const moduleId = (inspection.type || 'PQC') as ModuleId;
+
+    if (user.role === 'ADMIN') return true;
+
+    // Team Lead (la_to_truong) automatically gets level 1 signature right
+    if (user.la_to_truong && action === 'SIGN1') return true;
 
     // Use our refined case-insensitive union permissions checker
     if (hasPermission(user, roles, moduleId, action)) return true;

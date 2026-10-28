@@ -795,7 +795,10 @@ export const hasPermission = (
     if (action === 'VIEW' || action === 'CREATE' || action === 'EDIT') {
       return true;
     }
-    if (user.role === 'MANAGER' && (action === 'SIGN1' || action === 'SIGN2')) {
+    if ((user.la_to_truong || user.role === 'MANAGER') && action === 'SIGN1') {
+      return true;
+    }
+    if (user.role === 'MANAGER' && action === 'SIGN2') {
       return true;
     }
   }

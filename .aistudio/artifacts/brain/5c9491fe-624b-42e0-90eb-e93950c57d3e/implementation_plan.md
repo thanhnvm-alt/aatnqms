@@ -1,58 +1,57 @@
-# Sửa Lỗi Đăng Nhập Tài Khoản Mới & Khôi Phục Mật Khẩu Mặc Định 123456
+# Kế Hoạch Sửa Lỗi Phân Quyền Tổ Trưởng Khống Duyệt Được Báo Cáo Của Nhóm
 
-Tự động gán và mã hóa Bcrypt cho mật khẩu mặc định `123456` đối với tất cả người dùng mới được tạo hoặc import, đồng thời khôi phục mật khẩu mặc định cho các tài khoản đã tạo trước đây chưa đăng nhập được.
+Khắc phục triệt để sự cố Tổ trưởng (`la_to_truong = true`) bị chặn không duyệt được báo cáo của các nhân viên thuộc nhóm mình do lỗi khớp chuỗi dữ liệu Tổ/Nhóm (`team_id` / `to_qc`) và tìm kiếm tài khoản người lập phiếu (`inspectorName` / `created_by`).
 
 ### User Review & Critical Decisions
 
-> [!IMPORTANT] Các quyết định đã được xác nhận thông qua câu hỏi làm rõ (Phase 1):
+> [!IMPORTANT] Xác nhận từ câu hỏi làm rõ (Phase 1):
 
-- **Tạo người dùng mới**: Hệ thống tự động gán mật khẩu mặc định `123456`, mã hóa Bcrypt và bật cờ `require_password_change = true` ép người dùng đổi mật khẩu lần đầu.
-- **Tài khoản đã tạo từ trước**: Tự động quy chuẩn và khôi phục mật khẩu `123456` (đã mã hóa Bcrypt) cho toàn bộ tài khoản chưa đăng nhập/chưa đổi mật khẩu trong Database.
+- **Phạm vi duyệt**: Tổ trưởng chỉ có quyền ký duyệt Level 1 (`SIGN1`) đối với các phiếu do nhân viên thuộc cùng Tổ/Nhóm (`team_id` hoặc `to_qc`) tạo ra.
+- **Cơ chế cấp quyền**: Quản trị viên (Admin) sẽ chủ động phân quyền hành động `SIGN1` cho Tổ trưởng trong ma trận phân quyền người dùng (User Permissions Matrix).
 
 ---
 
 ### 1. Overview & Core Concept
 
-- **Mục tiêu**: Đảm bảo 100% người dùng mới (được thêm từ giao diện Quản lý người dùng hoặc Import Excel) có thể đăng nhập ngay lần đầu bằng mật khẩu mặc định `123456`, sau đó được chuyển tiếp mượt mà sang Modal đổi mật khẩu khẩn cấp trước khi vào hệ thống.
+- **Mục tiêu**: Giúp các Tổ trưởng sau khi được cấp cờ `la_to_truong = true` và quyền `SIGN1` có thể thấy nút ký duyệt Level 1 và ký duyệt thành công tất cả phiếu báo cáo do thành viên trong cùng Tổ/Nhóm lập.
 - **Nguyên nhân cốt lõi**:
-  1. Trong hàm `saveUser`, khi tạo user mà không truyền chuỗi password, mật khẩu `123456` bị gán ở dạng chuỗi thuần (Plain Text) mà bỏ qua bước mã hóa `bcrypt.hash()`, khiến quá trình so sánh hash Bcrypt lúc đăng nhập thất bại.
-  2. Một số tài khoản import từ file Excel chưa có hash Bcrypt chuẩn hoặc cờ `require_password_change` bị thiếu.
+  1. Trong component `TwoTierApproval.tsx`, logic khớp người tạo phiếu `users.find(u => u.name === inspection.inspectorName)` chỉ so sánh khớp tuyệt đối theo `u.name`. Khi phiếu lưu `username`, `msnv` hoặc mã định danh khác, hệ thống không tìm thấy `creatorUser` và lập tức trả về `isAuthorizedTeam = false`.
+  2. Việc so sánh `team_id` và tên Tổ `to_qc` chưa xử lý làm sạch chuỗi (trims, lowercase, bỏ dấu Tiếng Việt), làm mất hiệu lực xác thực nếu người lập phiếu và Tổ trưởng ghi tên Tổ lệch nhau (ví dụ: "Tổ PQC 1" vs "Tổ 1 PQC").
+  3. Cần bổ sung tra cứu người tạo phiếu mở rộng theo `inspection.created_by`, `inspection.inspectorName`, `inspection.inspector` qua `id`, `username`, `msnv`, hoặc `name`.
 
 ---
 
 ### 2. User Experience & Visual Design
 
-- **Luồng Đăng Nhập Lần Đầu (First-Time Login Flow)**:
-  1. Người dùng nhập Mã nhân viên / Username và mật khẩu mặc định `123456`.
-  2. Hệ thống xác thực hash Bcrypt thành công và kiểm tra thấy cờ `requirePasswordChange = true`.
-  3. Màn hình tự động bật **Modal Ép Đổi Mật Khẩu Lần Đầu** (có kiểm tra độ phức tạp: tối thiểu 6 ký tự, gồm cả chữ hoa và chữ thường).
-  4. Sau khi đổi mật khẩu thành công, cờ `requirePasswordChange` tự động chuyển thành `false` và đăng nhập trực tiếp vào hệ thống QMS.
+- **Giao diện Tổ Trưởng khi xem báo cáo của Nhóm**:
+  - Khi Tổ trưởng vào chi tiết phiếu của nhân viên cùng Tổ, nút **"Ký duyệt (Cấp 1 - Tổ trưởng)"** hiển thị rõ ràng, không bị mờ hay ẩn.
+  - Trường hợp không đúng Tổ/Nhóm, hiển thị cảnh báo giải thích rõ lý do: *"Chỉ Tổ trưởng của [Tên Tổ QC] mới có quyền ký duyệt phiếu này"*.
 
 ---
 
 ### 3. Key Product Decisions & Trade-Offs
 
-- **Quyết định 1: Chuẩn hóa logic băm mật khẩu trong `saveUser`**:
-  - *Phương án chọn*: Dù người dùng mới được khởi tạo từ form lẻ hay import hàng loạt, nếu mật khẩu chưa ở dạng băm Bcrypt (`$2b$` hoặc `$2a$`), backend tự động băm `bcrypt.hash(password, 10)` trước khi lưu vào database PostgreSQL.
-  - *Lý do*: Đảm bảo an toàn bảo mật ISO QMS và đồng bộ tuyệt đối với logic xác thực của `/api/auth/login`.
+- **Quyết định 1: Chuẩn hóa hàm kiểm tra thẩm quyền Tổ/Nhóm (`isAuthorizedTeam`)**:
+  - *Phương án chọn*: Tra cứu linh hoạt người tạo phiếu theo `id`, `username`, `msnv`, `name` đối chiếu với `inspection.inspectorName`, `inspection.created_by`, `inspection.inspector`. So sánh `team_id` và tên `to_qc` có chuẩn hóa bỏ dấu & viết thường.
+  - *Lý do*: Tránh lỗi sai lệch do định dạng dữ liệu tạo phiếu khác nhau giữa các module QC.
 
-- **Quyết định 2: Script tự động Migration / Tái tạo Hash cho User cũ**:
-  - *Phương án chọn*: Khi Server khởi động, kiểm tra và cập nhật lại hash Bcrypt của `123456` cho tất cả tài khoản chưa có hash hợp lệ hoặc chưa đăng nhập.
-  - *Lý do*: Giúp tất cả người dùng hiện tại bị lỗi có thể ngay lập tức dùng `123456` đăng nhập mà không cần xóa database hay tạo lại từ đầu.
+- **Quyết định 2: Hỗ trợ Admin dễ dàng gán quyền `SIGN1` trong Ma trận Phân Quyền**:
+  - *Phương án chọn*: Trong giao diện `UserManagement.tsx`, đảm bảo khi chỉnh sửa quyền người dùng, các nút checkbox hành động `SIGN1` (Duyệt L1) cho từng module QC hiển thị trực quan, dễ thao tác.
 
 ---
 
 ### 4. Technical Architecture & Data Strategy
 
 ```
-┌─────────────────────────┐          ┌───────────────────────────┐          ┌───────────────────────────┐
-│   LoginPage Component   │ ────────>│   /api/auth/login (JWT)   │ ────────>│    dbService / PostgreSQL │
-│                         │          │                           │          │                           │
-│ - Input: User & 123456  │          │ - bcrypt.compare()        │          │ - Check username & hash   │
-│ - Force Change Modal    │          │ - Verify requireChange    │          │ - Update password on reset│
-└─────────────────────────┘          └───────────────────────────┘          └───────────────────────────┘
+┌───────────────────────────────────┐
+│     TwoTierApproval Component     │
+│                                   │
+│  - resolveCreatorUser()           │ (Khớp id/username/msnv/name)
+│  - normalizeTeamString()          │ (Chuẩn hóa "Tổ PQC 1" -> "to pqc 1")
+│  - isAuthorizedTeam (Boolean)     │ (Đúng Tổ -> Mở nút Ký duyệt L1)
+└───────────────────────────────────┘
 ```
 
 - **Sửa đổi chính trên Codebase**:
-  1. `services/dbService.ts` (`saveUser` & `batchImportUsers`): Đảm bảo mã hóa Bcrypt 100% trường hợp mật khẩu mặc định `123456`.
-  2. `server.ts`: Thêm tự động script sửa lỗi mật khẩu người dùng chưa đăng nhập khi server startup.
+  1. `/components/TwoTierApproval.tsx`: Tối ưu logic `isAuthorizedTeam` và `hasSignPermission('SIGN1')`.
+  2. `/components/UserManagement.tsx`: Đảm bảo gán quyền `SIGN1` lưu chuẩn vào `user_permissions` JSON trong DB PostgreSQL.
