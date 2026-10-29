@@ -1,6 +1,6 @@
 {
-  "summary":  "Kế hoạch phát triển: Gửi thông báo & hiển thị Popup nhắc nhở phân công cho QC khi đăng nhập, cùng tính năng Tự động điền PO/PR, Nhà thầu, Địa chỉ và Danh sách hạng mục từ Booking vào Form kiểm tra SQC.",
-  "updatedAt":  "2026-10-28T08:55:29.576827345Z",
+  "summary":  "Implementation plan for enhancing CSV Stream Export with missing columns (Summary, Site Images before Unit/ĐVT, Unit/ĐVT data).",
+  "updatedAt":  "2026-10-29T01:29:52.116885392Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

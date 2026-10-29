@@ -3033,9 +3033,23 @@ function formatCsvRow(fields: any[]): string {
                 'Mã hồ sơ', 'Loại phiếu', 'Mã dự án', 'Tên dự án', 'Hạng mục/Mô tả',
                 'Mã nhà máy', 'Headcode', 'QC kiểm tra', 'Xưởng', 'Công đoạn sản xuất',
                 'Ngày thực hiện', 'Trạng thái', 'SL ĐĐH', 'SLkiem', 'SLDat',
-                'TLDat', 'SLLoi', 'TLLoi', 'Kết luận/Ghi chú', 'ĐVT/Unit'
+                'TLDat', 'SLLoi', 'TLLoi', 'Kết luận/Ghi chú', 'Hình ảnh hiện trường', 'ĐVT/Unit'
             ];
             res.write(formatCsvRow(headers));
+
+            const formatImageLinks = (imgs: any) => {
+                if (!imgs) return [];
+                let arr: string[] = [];
+                if (typeof imgs === 'string') {
+                    try { arr = JSON.parse(imgs); } catch(e) { arr = [imgs]; }
+                } else if (Array.isArray(imgs)) {
+                    arr = imgs;
+                }
+                return arr.filter(Boolean).map(id => {
+                    const str = typeof id === 'string' ? id : String(id);
+                    return str.startsWith('http') ? str : `https://drive.google.com/open?id=${str}`;
+                });
+            };
 
             const CHUNK_SIZE = 5000;
             let page = 1;
@@ -3047,6 +3061,36 @@ function formatCsvRow(fields: any[]): string {
                     hasMore = false;
                     break;
                 }
+
+                // --- FETCH DETAILS BATCHING FOR CSV CHUNK ---
+                const itemsByType = new Map<string, any[]>();
+                for (const item of result.items) {
+                   const typeStr = item.type ? item.type.toLowerCase() : 'pqc';
+                   if (!itemsByType.has(typeStr)) itemsByType.set(typeStr, []);
+                   itemsByType.get(typeStr)!.push(item);
+                }
+
+                for (const [typeStr, items] of itemsByType.entries()) {
+                   const fullTableName = (db as any).getTableName(typeStr);
+                   const ids = items.map(it => it.id);
+                   try {
+                      const detailRes = await query(`SELECT * FROM ${fullTableName} WHERE id = ANY($1::text[])`, [ids]);
+                      const detailMap = new Map(detailRes.rows.map((r: any) => [r.id, r]));
+                      for (const item of items) {
+                          const d = detailMap.get(item.id) as any;
+                          if (d) {
+                             for (const key of Object.keys(d)) {
+                                if (key !== 'id' && key !== 'type' && d[key] !== null && d[key] !== undefined) {
+                                    (item as any)[key] = d[key];
+                                }
+                             }
+                          }
+                      }
+                   } catch (e: any) {
+                      console.warn(`Failed to fetch details for table ${fullTableName} in CSV export:`, e.message);
+                   }
+                }
+                // --- END FETCH DETAILS BATCHING ---
 
                 for (const item of result.items) {
                     let rowDateStr = '';
@@ -3075,6 +3119,38 @@ function formatCsvRow(fields: any[]): string {
                         failedPercentage = ((failedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
                     }
 
+                    let allImages: string[] = [];
+                    allImages.push(...formatImageLinks((item as any).images || (item as any).images_json));
+                    allImages.push(...formatImageLinks((item as any).reportImages || (item as any).report_images_json));
+                    allImages.push(...formatImageLinks((item as any).deliveryNoteImages || (item as any).delivery_images_json));
+
+                    if ((item as any).items_json) {
+                        try {
+                            const itemsArr = typeof (item as any).items_json === 'string' ? JSON.parse((item as any).items_json) : (item as any).items_json;
+                            if (Array.isArray(itemsArr)) {
+                                itemsArr.forEach((i: any) => {
+                                    if (i.images) allImages.push(...formatImageLinks(i.images));
+                                });
+                            }
+                        } catch(e) {}
+                    }
+                    if ((item as any).materials_json) {
+                        try {
+                            const matArr = typeof (item as any).materials_json === 'string' ? JSON.parse((item as any).materials_json) : (item as any).materials_json;
+                            if (Array.isArray(matArr)) {
+                                matArr.forEach((m: any) => {
+                                    if (m.items && Array.isArray(m.items)) {
+                                        m.items.forEach((i: any) => {
+                                            if (i.images) allImages.push(...formatImageLinks(i.images));
+                                        });
+                                    }
+                                });
+                            }
+                        } catch(e) {}
+                    }
+
+                    const siteImages = Array.from(new Set(allImages)).join(' ');
+
                     const row = [
                         item.id || '',
                         item.type || '',
@@ -3095,6 +3171,7 @@ function formatCsvRow(fields: any[]): string {
                         failedQuantity,
                         failedPercentage,
                         (item as any).summary || '',
+                        siteImages,
                         (item as any).dvt || ''
                     ];
 
