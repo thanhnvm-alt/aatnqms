@@ -1,82 +1,101 @@
-# Bổ Sung Cột & Dữ Liệu Cho Chức Năng "Xuất CSV Stream"
+# Sequential Multi-File PDF Upload with Progress Tracking
 
-Bổ sung đầy đủ các cột và dữ liệu còn thiếu trong luồng xuất file "Xuất CSV Stream" (`/api/export/inspections?format=csv`), bao gồm: cột **Hình ảnh hiện trường** chèn ngay trước cột **ĐVT/Unit**, đồng thời truy xuất dữ liệu thực tế cho cột **Kết luận/Ghi chú**, **Hình ảnh hiện trường**, và **ĐVT/Unit**.
+Enhance the PDF document upload component in `SubcontractorBookingManagement` to support multi-file selection, sequential queue processing (1 by 1), itemized & overall percentage progress bars, and individual file error recovery.
 
 ## User Review & Critical Decisions
 
-> [!NOTE] 
-> Yêu cầu xuất dữ liệu đã được xác định rõ ràng từ hình ảnh minh họa và mô tả người dùng gửi.
+> [!IMPORTANT]
+> The following design choices were confirmed in Phase 1:
 
-- **Vị trí cột**: Cột "Hình ảnh hiện trường" nằm giữa cột "Kết luận/Ghi chú" (Cột S) và cột "ĐVT/Unit" (Cột U), khớp hoàn toàn với cấu trúc hiển thị file Excel.
-- **Xử lý liên kết ảnh**: Các mã ảnh trong cơ sở dữ liệu sẽ được chuyển đổi thành đường dẫn xem công khai Google Drive (`https://drive.google.com/open?id=...` hoặc proxy URL), nối với nhau bằng dấu cách/dấu phẩy để tương thích định dạng CSV.
-- **Tối ưu hiệu năng Streaming**: Tiếp tục sử dụng cơ chế streaming theo từng chunk (chunked HTTP response) kết hợp truy vấn gộp chi tiết (batch detail fetch) để đảm bảo không bị nghẽn bộ nhớ khi xuất hàng ngàn hồ sơ.
+- **Upload Flow**: The "Tải PDF" button or drag-and-drop input allows selecting multiple `.pdf` files. Selected files are placed in an active queue and uploaded sequentially from file #1 to the end.
+- **Progress UI**: Displays an overall progress bar (e.g. `Đang tải 2/4 file · 50%`) at the top of the PDF section, along with individual percentage indicators and progress bars on each document card (`1. Spec Vật Tư`, `2. Mẫu Duyệt`, `3. Bản Vẽ Thi Công`, `4. Biên Bản MoU`).
+- **Error Handling**: If a file upload fails, it is marked with an error state, a "Tải lại" (Retry) button appears for that item, and the queue automatically proceeds to upload the next files in line.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **Mục tiêu**: Đảm bảo file CSV được xuất từ nút **"Xuất CSV Stream"** có đầy đủ 21 cột dữ liệu tiêu chuẩn theo ISO QAQC, không bị bỏ sót thông tin ghi chú, hình ảnh hiện trường hay đơn vị tính.
-- **Đối tượng sử dụng**: Bộ phận QA/QC, SCM, Ban Giám đốc và cán bộ quản lý dữ liệu xuất báo cáo tổng hợp.
+Currently, users upload PDF technical documents one by one via single-file inputs (`materialSpecUrl`, `approvedSampleUrl`, `shopdrawingUrl`, `qualityAgreementUrl`). 
+
+This update introduces:
+1. **Multi-File Queue Engine**: Accepts multiple PDF files selected at once or mapped across the 4 standard document categories (`materialSpecUrl`, `approvedSampleUrl`, `shopdrawingUrl`, `qualityAgreementUrl`).
+2. **Sequential Upload Loop**: Processes files asynchronously in strict order (File 1 → File 2 → File 3 → File 4), calculating real-time progress for each active item and overall completion percentage.
+3. **Resilient UI State**: Shows visual upload states (`PENDING`, `UPLOADING`, `COMPLETED`, `ERROR`) on each document slot with animated percentage progress bars and inline Retry controls.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-- **Trải nghiệm người dùng**:
-  1. Người dùng truy cập trang danh sách/báo cáo hồ sơ kiểm tra.
-  2. Bấm nút **"Xuất CSV Stream"** (nút màu xanh lá).
-  3. Trình duyệt tải xuống file `.csv` mã hóa UTF-8 (BOM `\uFEFF` chống lỗi font tiếng Việt trong Excel).
-  4. Mở file CSV trong Excel / WPS Office, các cột xuất hiện đầy đủ:
-     - Cột `Kết luận/Ghi chú` hiển thị nội dung tóm tắt kết quả kiểm tra.
-     - Cột `Hình ảnh hiện trường` hiển thị danh sách các link ảnh Google Drive.
-     - Cột `ĐVT/Unit` hiển thị đơn vị tính (SET, PCS, M,...).
+### Key User Flow
+
+1. **File Selection**: User clicks "Tải PDF" on any slot or uses a "Tải Hàng Loạt / Chọn Nhiều File PDF" button. A file picker opens allowing selection of multiple `.pdf` files simultaneously.
+2. **Sequential Processing**: 
+   - Overall progress header appears above the 4 document slots: `Đang tải hồ sơ kỹ thuật (2/4) - 50% [==========>          ]`.
+   - Slot 1 shows `Đã hoàn tất (100%)` with green checkmark.
+   - Slot 2 shows active progress bar `75%` with blue spinning indicator.
+   - Slot 3 and 4 show `Đang chờ...`.
+3. **Error Recovery**: If Slot 3 fails due to network drop:
+   - Slot 3 displays `⚠️ Lỗi tải file` and a red `[Tải lại]` button.
+   - Queue continues to upload Slot 4 without freezing the entire process.
+4. **Completion State**: When all files complete, the overall progress bar transforms into a success banner: `✓ Đã tải hoàn tất 4/4 hồ sơ PDF`.
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+## 3. Technical Architecture & Data Strategy
 
-- **Truy vấn bổ sung trường chi tiết (`summary`, `dvt`, `images`)**:
-  - *Phương án chọn*: Cập nhật hàm `getInspectionsList` trong `dbService.ts` để SELECT trực tiếp các trường `summary`, `dvt` và chi tiết hình ảnh, đồng thời thực hiện batch lookup chi tiết từ các bảng `forms_*` trong endpoint `/api/export/inspections`.
-  - *Lý do*: Tránh tình trạng cột bị bỏ trống (undefined) khi xuất file CSV, đồng bộ dữ liệu giữa xuất file Excel `.xlsx` và xuất file CSV `.csv`.
+### Upload Queue State Structure
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Upload Queue Manager                            │
+│                                                                        │
+│  Selected Files Queue: [ File 1, File 2, File 3, File 4 ]              │
+│  State per Key: {                                                      │
+│    status: 'IDLE' | 'QUEUED' | 'UPLOADING' | 'SUCCESS' | 'ERROR',      │
+│    progress: 0..100,                                                   │
+│    fileUrl?: string,                                                   │
+│    errorMsg?: string                                                   │
+│  }                                                                     │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                     Sequential Loop (async/await)                      │
+│                                                                        │
+│  for (const item of queue) {                                           │
+│    updateState(item, 'UPLOADING', progress);                           │
+│    try {                                                               │
+│      const url = await uploadFileToStorage(file, name, onProgress);    │
+│      updateState(item, 'SUCCESS', 100, url);                           │
+│    } catch (err) {                                                     │
+│      updateState(item, 'ERROR', 0, null, err);                         │
+│    }                                                                   │
+│  }                                                                     │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Component State Additions in `SubcontractorBookingManagement.tsx`
+
+1. **Queue Tracking State**:
+   ```typescript
+   interface DocUploadItemState {
+     docKey: 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl';
+     label: string;
+     file: File;
+     status: 'QUEUED' | 'UPLOADING' | 'SUCCESS' | 'ERROR';
+     progress: number; // 0 to 100
+     errorMsg?: string;
+   }
+   ```
+2. **Overall Progress Indicator Component**:
+   - Renders top banner with overall percentage: `Math.round((completedCount / totalCount) * 100)`.
+   - Individual progress bars per document card with color-coded status badges (Green = Success, Blue = Uploading %, Red = Error with Retry button, Slate = Pending/Idle).
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+## 4. Execution Plan
 
-### System Flow Diagram
-
-```
-┌─────────────────────────┐       GET /api/export/inspections?format=csv
-│   Front-end App / UI    │ ───────────────────────────────────────────────► ┌───────────────────────────┐
-└─────────────────────────┘                                                  │   Express Server Route    │
-                                                                             └─────────────┬─────────────┘
-                                                                                           │
-                                                                                           ▼
-┌─────────────────────────┐                                                  ┌───────────────────────────┐
-│   CSV Stream Output     │ ◄─────────────────────────────────────────────── │   db.getInspectionsList   │
-│   (UTF-8 + BOM Header)  │    Write formatted CSV rows in chunks (5000)     │   + Batch Detail Fetch    │
-└─────────────────────────┘                                                  └───────────────────────────┘
-```
-
-### Cấu trúc cột File CSV Stream mới:
-1. Mã hồ sơ
-2. Loại phiếu
-3. Mã dự án
-4. Tên dự án
-5. Hạng mục/Mô tả
-6. Mã nhà máy
-7. Headcode
-8. QC kiểm tra
-9. Xưởng
-10. Công đoạn sản xuất
-11. Ngày thực hiện
-12. Trạng thái
-13. SL ĐĐH
-14. SLkiem
-15. SLDat
-16. TLDat
-17. SLLoi
-18. TLLoi
-19. **Kết luận/Ghi chú** (`summary`)
-20. **Hình ảnh hiện trường** (`siteImages` - Link Drive)
-21. **ĐVT/Unit** (`dvt`)
+1. **Refactor Storage Upload Handler**: Enhance `uploadFileToStorage` or create progress-aware upload helper in `apiService.ts` / local component to report chunk/XHR progress callback if supported, or simulated smooth progress curve during fetch.
+2. **Implement Sequential Queue Runner**: Create a robust `processBatchPdfUpload` function in `SubcontractorBookingManagement.tsx` that iterates through queued items sequentially, updating document URLs in state upon success and logging errors per item without throwing unhandled exceptions.
+3. **Upgrade PDF UI Cards**: Update the 4 PDF upload slots in both Create and Edit modals with multi-file input triggers, progress bars, percentage readouts, and individual retry buttons.
+4. **Build & Verify**: Compile applet and test with multi-file uploads.

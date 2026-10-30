@@ -229,17 +229,61 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     fetch('/api/users')
       .then(res => res.ok ? res.json() : [])
       .then(data => {
-        if (active) setUsers(data);
+        if (active && Array.isArray(data)) {
+          setUsers(data);
+          // Sync current logged-in user properties if available in fetched users
+          const selfInDb = data.find(u => u.id === user.id || u.username === user.username);
+          if (selfInDb) {
+            if (selfInDb.to_qc && !user.to_qc) user.to_qc = selfInDb.to_qc;
+            if (selfInDb.team_id && !user.team_id) user.team_id = selfInDb.team_id;
+            if (selfInDb.la_to_truong !== undefined) user.la_to_truong = !!selfInDb.la_to_truong;
+          }
+        }
       })
       .catch(err => console.error('Failed to load users in TwoTierApproval:', err));
     return () => { active = false; };
-  }, []);
+  }, [user]);
 
   const isAuthorizedTeam = useMemo(() => {
-    if (user.role === 'ADMIN') return true;
-    if (!user.la_to_truong) return true;
+    console.log(`[TEAM_LEAD_AUTH] START verification check | inspId=${inspection.id} | inspectorName="${inspection.inspectorName}" | created_by="${(inspection as any).created_by}"`);
+    console.log(`[TEAM_LEAD_AUTH] Current User profile:`, {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      position: user.position,
+      la_to_truong: user.la_to_truong,
+      to_qc: user.to_qc,
+      team_id: user.team_id,
+      phong_ban: user.phong_ban || (user as any).phongBan || user.bo_phan
+    });
 
-    // Resolve creator user with flexible multi-field matching
+    // 1. Management Roles & High Level Positions always authorized
+    const rUpper = String(user.role || '').toUpperCase();
+    const posUpper = String(user.position || '').toUpperCase();
+    if (
+      rUpper === 'ADMIN' || 
+      rUpper === 'MANAGER' || 
+      rUpper === 'QUẢN LÝ' ||
+      posUpper.includes('TRƯỞNG PHÒNG') ||
+      posUpper.includes('TRUONG PHONG') ||
+      posUpper.includes('GIÁM ĐỐC') ||
+      posUpper.includes('GIAM DOC')
+    ) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Management role or upper position "${user.role}" / "${user.position}")`);
+      return true;
+    }
+
+    // 2. If user is NOT marked as team lead (la_to_truong), no team-lead restriction applies
+    if (!user.la_to_truong) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: User is not marked as team lead (la_to_truong=false))`);
+      return true;
+    }
+
+    // Helper for Unicode NFC normalization
+    const normClean = (s?: string) => s ? String(s).normalize('NFC').trim().toLowerCase() : '';
+
+    // 3. Resolve creatorUser with Unicode-normalized multi-field matching
     const searchTargets = [
       inspection.inspectorName,
       (inspection as any).inspector_name,
@@ -248,73 +292,128 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       (inspection as any).createdBy
     ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0);
 
+    console.log(`[TEAM_LEAD_AUTH] Searching creatorUser from targets:`, searchTargets, `among ${users.length} total users in state`);
+
     let creatorUser: User | undefined;
     for (const target of searchTargets) {
-      const clean = target.trim().toLowerCase();
-      creatorUser = users.find(u => 
-        (u.id && u.id.trim().toLowerCase() === clean) ||
-        (u.username && u.username.trim().toLowerCase() === clean) ||
-        (u.msnv && u.msnv.trim().toLowerCase() === clean) ||
-        (u.name && u.name.trim().toLowerCase() === clean) ||
-        (u.name && (clean.includes(u.name.trim().toLowerCase()) || u.name.trim().toLowerCase().includes(clean)))
-      );
-      if (creatorUser) break;
+      const clean = normClean(target);
+      if (!clean) continue;
+      creatorUser = users.find(u => {
+        const uid = normClean(u.id);
+        const uname = normClean(u.username);
+        const umsnv = normClean(u.msnv);
+        const ufullname = normClean(u.name);
+        return (
+          uid === clean ||
+          uname === clean ||
+          umsnv === clean ||
+          ufullname === clean ||
+          (ufullname.length > 2 && (clean.includes(ufullname) || ufullname.includes(clean)))
+        );
+      });
+      if (creatorUser) {
+        console.log(`[TEAM_LEAD_AUTH] Found matched creatorUser:`, {
+          id: creatorUser.id,
+          username: creatorUser.username,
+          name: creatorUser.name,
+          to_qc: creatorUser.to_qc,
+          team_id: creatorUser.team_id,
+          phong_ban: creatorUser.phong_ban
+        }, `matched from target "${target}"`);
+        break;
+      }
     }
 
-    // 1. If Team Lead themselves created the report
-    if (creatorUser && (creatorUser.id === user.id || creatorUser.username === user.username || creatorUser.name === user.name)) {
+    if (!creatorUser) {
+      console.warn(`[TEAM_LEAD_AUTH] Could NOT find creatorUser in users list for targets:`, searchTargets);
+    }
+
+    // Self-created inspection report
+    if (creatorUser && (creatorUser.id === user.id || creatorUser.username === user.username || normClean(creatorUser.name) === normClean(user.name))) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Self-created inspection)`);
       return true;
     }
 
-    // 2. Check by physical UUID-based team_id first
-    if (user.team_id && creatorUser?.team_id && user.team_id === creatorUser.team_id) {
+    // Physical team_id match
+    if (user.team_id && creatorUser?.team_id && String(user.team_id).trim() === String(creatorUser.team_id).trim()) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Physical team_id match "${user.team_id}")`);
       return true;
     }
 
-    // Normalize string: removes Vietnamese accents, punctuation and spaces
-    const normalizeTeamStr = (s?: string) => {
+    // Normalized team string matching (strip accents, punctuation, spaces)
+    const normTeam = (s?: string) => {
       if (!s) return '';
-      return s
+      return String(s)
+        .normalize('NFC')
+        .trim()
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]/g, '');
     };
 
-    const userTeamNorm = normalizeTeamStr(user.to_qc);
-    const creatorTeamNorm = normalizeTeamStr(creatorUser?.to_qc);
+    const userTeamNorm = normTeam(user.to_qc);
+    const creatorTeamNorm = normTeam(creatorUser?.to_qc);
 
-    // 3. Fallback/compat by normalized string matching
-    if (userTeamNorm && creatorTeamNorm && (userTeamNorm === creatorTeamNorm || userTeamNorm.includes(creatorTeamNorm) || creatorTeamNorm.includes(userTeamNorm))) {
+    console.log(`[TEAM_LEAD_AUTH] Comparing normalized to_qc: userTeamNorm="${userTeamNorm}" (raw: "${user.to_qc}") vs creatorTeamNorm="${creatorTeamNorm}" (raw: "${creatorUser?.to_qc}")`);
+
+    if (userTeamNorm && creatorTeamNorm) {
+      if (
+        userTeamNorm === creatorTeamNorm || 
+        userTeamNorm.includes(creatorTeamNorm) || 
+        creatorTeamNorm.includes(userTeamNorm)
+      ) {
+        console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Normalized to_qc match "${userTeamNorm}" <=> "${creatorTeamNorm}")`);
+        return true;
+      }
+    }
+
+    // Match by department / division if both belong to same QAQC department/division
+    const userDeptNorm = normTeam(user.phong_ban || (user as any).phongBan || user.bo_phan);
+    const creatorDeptNorm = normTeam(creatorUser?.phong_ban || (creatorUser as any)?.phongBan || creatorUser?.bo_phan);
+    console.log(`[TEAM_LEAD_AUTH] Comparing department/division: userDeptNorm="${userDeptNorm}" vs creatorDeptNorm="${creatorDeptNorm}"`);
+    if (userDeptNorm && creatorDeptNorm && (userDeptNorm === creatorDeptNorm || userDeptNorm.includes(creatorDeptNorm))) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Department/division match "${userDeptNorm}" <=> "${creatorDeptNorm}")`);
       return true;
     }
 
-    // 4. Check against inspection workshop or to_qc field
-    const inspTeamNorm = normalizeTeamStr((inspection as any).to_qc || inspection.workshop);
+    // Match against inspection's to_qc or workshop
+    const inspTeamNorm = normTeam((inspection as any).to_qc || inspection.workshop);
+    console.log(`[TEAM_LEAD_AUTH] Comparing inspection workshop/to_qc: inspTeamNorm="${inspTeamNorm}" against userTeamNorm="${userTeamNorm}"`);
     if (userTeamNorm && inspTeamNorm && (userTeamNorm === inspTeamNorm || userTeamNorm.includes(inspTeamNorm) || inspTeamNorm.includes(userTeamNorm))) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Inspection workshop/to_qc match "${inspTeamNorm}" <=> "${userTeamNorm}")`);
       return true;
     }
 
-    // 5. If creatorUser is not found in user list (or data is still loading)
-    if (!creatorUser) {
-      if (users.length === 0) return true; // wait for data to load
-      if (!inspection.inspectorName && !(inspection as any).created_by) return true;
-      if (userTeamNorm && inspTeamNorm && userTeamNorm.includes(inspTeamNorm)) return true;
+    // Fallback when creatorUser is not found or user.to_qc / creatorUser.to_qc is empty
+    if (!creatorUser || !creatorUser.to_qc || !user.to_qc) {
+      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Fallback due to missing creatorUser or empty to_qc field. creatorUser=${!!creatorUser}, user.to_qc="${user.to_qc}", creator.to_qc="${creatorUser?.to_qc}")`);
+      return true;
     }
 
+    console.log(`[TEAM_LEAD_AUTH] RESULT: FALSE (Reason: User is Team Lead (la_to_truong=true) but to_qc/team_id/department mismatch between user "${user.name}" [to_qc: "${user.to_qc}"] and creator "${creatorUser.name}" [to_qc: "${creatorUser.to_qc}"])`);
     return false;
   }, [user, inspection, users]);
 
   const hasSignPermission = (action: 'SIGN1' | 'SIGN2'): boolean => {
     const moduleId = (inspection.type || 'PQC') as ModuleId;
 
-    if (user.role === 'ADMIN') return true;
+    if (user.role === 'ADMIN') {
+      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Admin override`);
+      return true;
+    }
 
     // Team Lead (la_to_truong) automatically gets level 1 signature right
-    if (user.la_to_truong && action === 'SIGN1') return true;
+    if (user.la_to_truong && action === 'SIGN1') {
+      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | User is Team Lead (la_to_truong=true)`);
+      return true;
+    }
 
     // Use our refined case-insensitive union permissions checker
-    if (hasPermission(user, roles, moduleId, action)) return true;
+    if (hasPermission(user, roles, moduleId, action)) {
+      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Matched hasPermission`);
+      return true;
+    }
 
     // 1. Check user role with direct case-insensitive logic as robust backup
     const rConfig = roles.find(
@@ -335,11 +434,18 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       p => String(p.moduleId).toLowerCase() === String(moduleId).toLowerCase()
     )?.actions?.includes(action);
 
-    if (rHas || pHas) return true;
+    if (rHas || pHas) {
+      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Role or Position backup permission matched (rHas=${rHas}, pHas=${pHas})`);
+      return true;
+    }
 
     // Fallback for MANAGER / Quản lý to have Level 2 signature
-    if ((String(user.role).toUpperCase() === 'MANAGER' || String(user.role).toUpperCase() === 'QUẢN LÝ') && action === 'SIGN2') return true;
+    if ((String(user.role).toUpperCase() === 'MANAGER' || String(user.role).toUpperCase() === 'QUẢN LÝ') && action === 'SIGN2') {
+      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Manager SIGN2 fallback`);
+      return true;
+    }
 
+    console.log(`[SIGN_PERM] hasSignPermission FALSE | action=${action} | User ${user.username || user.name} lacks permission`);
     return false;
   };
 

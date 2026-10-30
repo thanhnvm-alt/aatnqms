@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for enhancing CSV Stream Export with missing columns (Summary, Site Images before Unit/ĐVT, Unit/ĐVT data).",
-  "updatedAt":  "2026-10-29T01:29:52.116885392Z",
+  "summary":  "Implementation plan for sequential multi-file PDF upload with progress tracking and retry capability in SubcontractorBookingManagement.",
+  "updatedAt":  "2026-10-30T13:22:16.981208777Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

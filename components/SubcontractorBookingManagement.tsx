@@ -226,67 +226,396 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
     }
   });
 
-  const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
-  const [uploadingEditDocType, setUploadingEditDocType] = useState<string | null>(null);
+  // State for sequential multi-file PDF upload tracking
+  type DocKey = 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl';
 
-  const handleDocFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, docKey: 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  interface DocUploadProgress {
+    docKey: DocKey;
+    label: string;
+    file?: File;
+    status: 'IDLE' | 'QUEUED' | 'UPLOADING' | 'SUCCESS' | 'ERROR';
+    progress: number;
+    errorMsg?: string;
+    fileUrl?: string;
+  }
 
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+  const [createUploadState, setCreateUploadState] = useState<Record<DocKey, DocUploadProgress>>({
+    materialSpecUrl: { docKey: 'materialSpecUrl', label: '1. Spec Vật Tư / Quy Cách', status: 'IDLE', progress: 0 },
+    approvedSampleUrl: { docKey: 'approvedSampleUrl', label: '2. Mẫu Duyệt (Approved Sample)', status: 'IDLE', progress: 0 },
+    shopdrawingUrl: { docKey: 'shopdrawingUrl', label: '3. Bản Vẽ Thi Công (Shopdrawing)', status: 'IDLE', progress: 0 },
+    qualityAgreementUrl: { docKey: 'qualityAgreementUrl', label: '4. Biên Bản Thống Nhất CL (MoU)', status: 'IDLE', progress: 0 },
+  });
+
+  const [editUploadState, setEditUploadState] = useState<Record<DocKey, DocUploadProgress>>({
+    materialSpecUrl: { docKey: 'materialSpecUrl', label: '1. Spec Vật Tư / Quy Cách', status: 'IDLE', progress: 0 },
+    approvedSampleUrl: { docKey: 'approvedSampleUrl', label: '2. Mẫu Duyệt (Approved Sample)', status: 'IDLE', progress: 0 },
+    shopdrawingUrl: { docKey: 'shopdrawingUrl', label: '3. Bản Vẽ Thi Công (Shopdrawing)', status: 'IDLE', progress: 0 },
+    qualityAgreementUrl: { docKey: 'qualityAgreementUrl', label: '4. Biên Bản Thống Nhất CL (MoU)', status: 'IDLE', progress: 0 },
+  });
+
+  const handleDocFileUploadBatch = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    startDocKey: DocKey,
+    targetModal: 'create' | 'edit' = 'create'
+  ) => {
+    const inputFiles = e.target.files;
+    if (!inputFiles || inputFiles.length === 0) return;
+
+    const fileArray = Array.from(inputFiles).filter(
+      f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+    );
+
+    if (fileArray.length === 0) {
       alert("⚠️ CHỈ CHẤP NHẬN FILE PDF:\nHệ thống quy định hồ sơ & tài liệu kỹ thuật nghiệm thu bắt buộc phải ở định dạng PDF (.pdf). Vui lòng chọn lại file.");
       e.target.value = '';
       return;
     }
 
-    setUploadingDocType(docKey);
-    try {
-      const fileUrl = await uploadFileToStorage(file, file.name);
-      if (fileUrl) {
-        setNewBooking(prev => ({
+    const DOC_ORDER: { key: DocKey; label: string }[] = [
+      { key: 'materialSpecUrl', label: '1. Spec Vật Tư / Quy Cách (.pdf)' },
+      { key: 'approvedSampleUrl', label: '2. Mẫu Duyệt (Approved Sample - .pdf)' },
+      { key: 'shopdrawingUrl', label: '3. Bản Vẽ Thi Công (Shopdrawing - .pdf)' },
+      { key: 'qualityAgreementUrl', label: '4. Biên Bản Thống Nhất CL (MoU - .pdf)' },
+    ];
+
+    const queueItems: { key: DocKey; file: File; label: string }[] = [];
+    let startIdx = DOC_ORDER.findIndex(d => d.key === startDocKey);
+    if (startIdx < 0) startIdx = 0;
+
+    fileArray.forEach((file, idx) => {
+      const keyObj = DOC_ORDER[(startIdx + idx) % DOC_ORDER.length];
+      queueItems.push({ key: keyObj.key, file, label: keyObj.label });
+    });
+
+    const setUploadState = targetModal === 'create' ? setCreateUploadState : setEditUploadState;
+
+    // Initialize queue states
+    setUploadState(prev => {
+      const next = { ...prev };
+      queueItems.forEach(item => {
+        next[item.key] = {
+          docKey: item.key,
+          label: item.label,
+          file: item.file,
+          status: 'QUEUED',
+          progress: 0,
+          errorMsg: undefined
+        };
+      });
+      return next;
+    });
+
+    // Process sequentially in order
+    for (const item of queueItems) {
+      setUploadState(prev => ({
+        ...prev,
+        [item.key]: {
+          ...prev[item.key],
+          status: 'UPLOADING',
+          progress: 10
+        }
+      }));
+
+      try {
+        const fileUrl = await uploadFileToStorage(
+          item.file,
+          item.file.name,
+          undefined,
+          (percent) => {
+            setUploadState(prev => ({
+              ...prev,
+              [item.key]: {
+                ...prev[item.key],
+                progress: Math.min(99, Math.max(10, percent))
+              }
+            }));
+          }
+        );
+
+        if (fileUrl) {
+          setUploadState(prev => ({
+            ...prev,
+            [item.key]: {
+              ...prev[item.key],
+              status: 'SUCCESS',
+              progress: 100,
+              fileUrl
+            }
+          }));
+
+          if (targetModal === 'create') {
+            setNewBooking(prev => ({
+              ...prev,
+              documents: { ...prev.documents, [item.key]: fileUrl }
+            }));
+          } else {
+            setEditBooking(prev => ({
+              ...prev,
+              documents: { ...prev.documents, [item.key]: fileUrl }
+            }));
+          }
+        } else {
+          throw new Error("Không nhận được URL tài liệu sau khi tải lên");
+        }
+      } catch (err: any) {
+        console.error(`Lỗi tải file ${item.label}:`, err);
+        const errorMsg = err?.message || 'Không thể tải lên file tài liệu';
+        setUploadState(prev => ({
           ...prev,
-          documents: {
-            ...prev.documents,
-            [docKey]: fileUrl
+          [item.key]: {
+            ...prev[item.key],
+            status: 'ERROR',
+            progress: 0,
+            errorMsg
           }
         }));
       }
-    } catch (err) {
-      console.error("Lỗi upload tài liệu:", err);
-      alert("Không thể tải lên file tài liệu");
-    } finally {
-      setUploadingDocType(null);
+    }
+
+    e.target.value = '';
+  };
+
+  const handleRetryDocUpload = async (docKey: DocKey, targetModal: 'create' | 'edit') => {
+    const setUploadState = targetModal === 'create' ? setCreateUploadState : setEditUploadState;
+    const currentState = (targetModal === 'create' ? createUploadState : editUploadState)[docKey];
+
+    if (!currentState.file) return;
+
+    setUploadState(prev => ({
+      ...prev,
+      [docKey]: { ...prev[docKey], status: 'UPLOADING', progress: 10, errorMsg: undefined }
+    }));
+
+    try {
+      const fileUrl = await uploadFileToStorage(
+        currentState.file,
+        currentState.file.name,
+        undefined,
+        (percent) => {
+          setUploadState(prev => ({
+            ...prev,
+            [docKey]: { ...prev[docKey], progress: Math.min(99, Math.max(10, percent)) }
+          }));
+        }
+      );
+
+      if (fileUrl) {
+        setUploadState(prev => ({
+          ...prev,
+          [docKey]: { ...prev[docKey], status: 'SUCCESS', progress: 100, fileUrl }
+        }));
+
+        if (targetModal === 'create') {
+          setNewBooking(prev => ({
+            ...prev,
+            documents: { ...prev.documents, [docKey]: fileUrl }
+          }));
+        } else {
+          setEditBooking(prev => ({
+            ...prev,
+            documents: { ...prev.documents, [docKey]: fileUrl }
+          }));
+        }
+      } else {
+        throw new Error("Không nhận được URL tài liệu sau khi tải lên");
+      }
+    } catch (err: any) {
+      console.error(`Lỗi tải lại file ${currentState.label}:`, err);
+      setUploadState(prev => ({
+        ...prev,
+        [docKey]: { ...prev[docKey], status: 'ERROR', progress: 0, errorMsg: err?.message || 'Thử lại thất bại' }
+      }));
     }
   };
 
-  const handleEditDocFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, docKey: 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      alert("⚠️ CHỈ CHẤP NHẬN FILE PDF:\nHệ thống quy định hồ sơ & tài liệu kỹ thuật nghiệm thu bắt buộc phải ở định dạng PDF (.pdf). Vui lòng chọn lại file.");
-      e.target.value = '';
-      return;
-    }
-
-    setUploadingEditDocType(docKey);
-    try {
-      const fileUrl = await uploadFileToStorage(file, file.name);
-      if (fileUrl) {
-        setEditBooking(prev => ({
-          ...prev,
-          documents: {
-            ...prev.documents,
-            [docKey]: fileUrl
-          }
-        }));
+  const renderDocSection = (targetModal: 'create' | 'edit') => {
+    const isCreate = targetModal === 'create';
+    const docs = isCreate ? newBooking.documents : editBooking.documents;
+    const setDocs = (docKey: DocKey, url: string) => {
+      if (isCreate) {
+        setNewBooking(prev => ({ ...prev, documents: { ...prev.documents, [docKey]: url } }));
+      } else {
+        setEditBooking(prev => ({ ...prev, documents: { ...prev.documents, [docKey]: url } }));
       }
-    } catch (err) {
-      console.error("Lỗi upload tài liệu:", err);
-      alert("Không thể tải lên file tài liệu");
-    } finally {
-      setUploadingEditDocType(null);
-    }
+    };
+
+    const uploadState = isCreate ? createUploadState : editUploadState;
+
+    const activeItems = Object.values(uploadState).filter(s => s.status !== 'IDLE');
+    const totalActive = activeItems.length;
+    const successCount = activeItems.filter(s => s.status === 'SUCCESS').length;
+    const errorCount = activeItems.filter(s => s.status === 'ERROR').length;
+    const uploadingCount = activeItems.filter(s => s.status === 'UPLOADING').length;
+    const queuedCount = activeItems.filter(s => s.status === 'QUEUED').length;
+
+    const totalProgressSum = activeItems.reduce((acc, s) => acc + s.progress, 0);
+    const overallPercent = totalActive > 0 ? Math.round(totalProgressSum / totalActive) : 0;
+    const isAllFinished = totalActive > 0 && (successCount + errorCount) === totalActive;
+
+    const themeBorder = isCreate ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30' : 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30';
+    const themeText = isCreate ? 'text-blue-900 dark:text-blue-200' : 'text-amber-900 dark:text-amber-200';
+    const themeSubtext = isCreate ? 'text-blue-600 dark:text-blue-400' : 'text-amber-700 dark:text-amber-400';
+    const themeBtnBg = isCreate ? 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300' : 'bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300';
+    const themeProgressFill = isCreate ? 'bg-blue-600' : 'bg-amber-600';
+
+    const docSlots: { key: DocKey; label: string }[] = [
+      { key: 'materialSpecUrl', label: '1. Spec Vật Tư / Quy Cách (.pdf)' },
+      { key: 'approvedSampleUrl', label: '2. Mẫu Duyệt (Approved Sample - .pdf)' },
+      { key: 'shopdrawingUrl', label: '3. Bản Vẽ Thi Công (Shopdrawing - .pdf)' },
+      { key: 'qualityAgreementUrl', label: '4. Biên Bản Thống Nhất CL (MoU - .pdf)' },
+    ];
+
+    return (
+      <div className={`${themeBorder} p-3.5 rounded-lg border space-y-3`}>
+        {/* Header Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <FileCheck2 className={`w-4 h-4 ${isCreate ? 'text-blue-600' : 'text-amber-600'}`} />
+            <span className={`text-xs font-bold uppercase ${themeText}`}>
+              Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu (Định dạng PDF)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className={`cursor-pointer px-2.5 py-1 ${themeBtnBg} rounded text-[11px] font-bold shrink-0 flex items-center gap-1.5 shadow-sm transition-all`}>
+              <Upload className="w-3.5 h-3.5" /> Tải Hàng Loạt Nhiều File PDF
+              <input
+                type="file"
+                multiple
+                accept=".pdf,application/pdf"
+                onChange={e => handleDocFileUploadBatch(e, 'materialSpecUrl', targetModal)}
+                className="hidden"
+              />
+            </label>
+            <span className={`text-[10px] font-semibold ${themeSubtext}`}>Bắt buộc file PDF (.pdf)</span>
+          </div>
+        </div>
+
+        {/* Overall Progress Banner */}
+        {totalActive > 0 && (
+          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5 shadow-sm">
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <div className="flex items-center gap-1.5">
+                {uploadingCount > 0 && <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
+                {isAllFinished && errorCount === 0 && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                {errorCount > 0 && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                <span className="text-slate-800 dark:text-slate-200">
+                  {isAllFinished 
+                    ? (errorCount === 0 
+                        ? `✓ Đã hoàn tất tải lên tất cả ${successCount}/${totalActive} file PDF!` 
+                        : `Hoàn tất ${successCount}/${totalActive} file (Có ${errorCount} file bị lỗi)`)
+                    : `Đang tải file tuần tự: ${successCount}/${totalActive} hoàn tất ${queuedCount > 0 ? `(${queuedCount} file trong hàng chờ)` : ''}`
+                  }
+                </span>
+              </div>
+              <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                {overallPercent}%
+              </span>
+            </div>
+
+            <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div 
+                className={`h-full transition-all duration-300 ${isAllFinished && errorCount === 0 ? 'bg-emerald-500' : themeProgressFill}`} 
+                style={{ width: `${overallPercent}%` }} 
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 4 Document Slot Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          {docSlots.map(slot => {
+            const itemState = uploadState[slot.key];
+            const currentUrl = docs[slot.key] || '';
+
+            return (
+              <div 
+                key={slot.key} 
+                className={`bg-white dark:bg-slate-900 p-2.5 rounded-lg border transition-all space-y-1.5 ${
+                  itemState.status === 'UPLOADING' 
+                    ? 'border-blue-500 ring-1 ring-blue-500 dark:border-blue-400' 
+                    : itemState.status === 'ERROR'
+                    ? 'border-red-400 dark:border-red-800 bg-red-50/20'
+                    : itemState.status === 'SUCCESS'
+                    ? 'border-emerald-300 dark:border-emerald-800'
+                    : 'border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
+                    {slot.label}
+                  </label>
+                  {itemState.status === 'SUCCESS' && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
+                      <CheckCircle2 className="w-3 h-3" /> Đã tải xong
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Dán link Drive hoặc tải file PDF..."
+                    value={currentUrl}
+                    onChange={e => setDocs(slot.key, e.target.value)}
+                    className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
+                  />
+                  <label className={`cursor-pointer px-2 py-1 ${themeBtnBg} rounded text-[11px] font-semibold shrink-0 flex items-center gap-1`}>
+                    <Upload className="w-3 h-3" /> Tải PDF
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,application/pdf"
+                      onChange={e => handleDocFileUploadBatch(e, slot.key, targetModal)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {itemState.status === 'QUEUED' && (
+                  <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium italic pt-0.5">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    <span>Trong hàng chờ tải tuần tự...</span>
+                  </div>
+                )}
+
+                {itemState.status === 'UPLOADING' && (
+                  <div className="space-y-1 pt-0.5">
+                    <div className="flex items-center justify-between text-[10px] text-blue-600 dark:text-blue-400 font-bold">
+                      <span className="flex items-center gap-1 truncate max-w-[70%]">
+                        <RefreshCw className="w-3 h-3 animate-spin shrink-0" /> Đang tải ({itemState.file?.name || 'PDF'})...
+                      </span>
+                      <span>{itemState.progress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-200" 
+                        style={{ width: `${itemState.progress}%` }} 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {itemState.status === 'ERROR' && (
+                  <div className="flex items-center justify-between text-[10px] text-red-600 dark:text-red-400 pt-0.5">
+                    <span className="flex items-center gap-1 font-medium truncate max-w-[70%]">
+                      <AlertTriangle className="w-3 h-3 shrink-0" /> {itemState.errorMsg || 'Lỗi tải file'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRetryDocUpload(slot.key, targetModal)}
+                      className="px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/50 dark:text-red-300 font-bold rounded flex items-center gap-1 shrink-0"
+                    >
+                      <RefreshCw className="w-2.5 h-2.5" /> Tải Lại
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const handleOpenEditModal = (b: SubcontractorBooking) => {
@@ -1504,141 +1833,8 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                 </div>
               </div>
 
-              {/* Hồ Sơ / Tài Liệu Kỹ Thuật Nghiệm Thu */}
-              <div className="bg-blue-50/50 dark:bg-blue-950/30 p-3.5 rounded-lg border border-blue-200 dark:border-blue-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-900 dark:text-blue-200 uppercase flex items-center gap-1.5">
-                    <FileCheck2 className="w-4 h-4 text-blue-600" /> Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu (Định dạng PDF)
-                  </span>
-                  <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Bắt buộc file PDF (.pdf)</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  {/* 1. Spec Vat Tu */}
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      1. Spec Vật Tư / Quy Cách (.pdf)
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="Dán link Drive hoặc tải file PDF..."
-                        value={newBooking.documents.materialSpecUrl}
-                        onChange={e => setNewBooking(prev => ({
-                          ...prev,
-                          documents: { ...prev.documents, materialSpecUrl: e.target.value }
-                        }))}
-                        className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                      />
-                      <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải PDF
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          onChange={e => handleDocFileUpload(e, 'materialSpecUrl')}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                    {uploadingDocType === 'materialSpecUrl' && (
-                      <span className="text-[10px] text-blue-500 animate-pulse">Đang tải tài liệu...</span>
-                    )}
-                  </div>
-
-                  {/* 2. Mau Duyet */}
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      2. Mẫu Duyệt (Approved Sample - .pdf)
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="Dán link Drive hoặc tải file PDF..."
-                        value={newBooking.documents.approvedSampleUrl}
-                        onChange={e => setNewBooking(prev => ({
-                          ...prev,
-                          documents: { ...prev.documents, approvedSampleUrl: e.target.value }
-                        }))}
-                        className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                      />
-                      <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải PDF
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          onChange={e => handleDocFileUpload(e, 'approvedSampleUrl')}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                    {uploadingDocType === 'approvedSampleUrl' && (
-                      <span className="text-[10px] text-blue-500 animate-pulse">Đang tải tài liệu...</span>
-                    )}
-                  </div>
-
-                  {/* 3. Ban Ve */}
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      3. Bản Vẽ Thi Công (Shopdrawing - .pdf)
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="Dán link Drive hoặc tải file PDF..."
-                        value={newBooking.documents.shopdrawingUrl}
-                        onChange={e => setNewBooking(prev => ({
-                          ...prev,
-                          documents: { ...prev.documents, shopdrawingUrl: e.target.value }
-                        }))}
-                        className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                      />
-                      <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải PDF
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          onChange={e => handleDocFileUpload(e, 'shopdrawingUrl')}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                    {uploadingDocType === 'shopdrawingUrl' && (
-                      <span className="text-[10px] text-blue-500 animate-pulse">Đang tải tài liệu...</span>
-                    )}
-                  </div>
-
-                  {/* 4. Bien Ban Thong Nhat Chat Luong */}
-                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      4. Biên Bản Thống Nhất CL (MoU - .pdf)
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="Dán link Drive hoặc tải file PDF..."
-                        value={newBooking.documents.qualityAgreementUrl}
-                        onChange={e => setNewBooking(prev => ({
-                          ...prev,
-                          documents: { ...prev.documents, qualityAgreementUrl: e.target.value }
-                        }))}
-                        className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                      />
-                      <label className="cursor-pointer px-2 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Tải PDF
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          onChange={e => handleDocFileUpload(e, 'qualityAgreementUrl')}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                    {uploadingDocType === 'qualityAgreementUrl' && (
-                      <span className="text-[10px] text-blue-500 animate-pulse">Đang tải tài liệu...</span>
-                    )}
-                  </div>
-                </div>
-              </div>
+              {/* Hồ Sơ / Tài Liệu Kỹ Thuật Nghiệm Thu (Sequential Multi-File PDF Upload) */}
+              {renderDocSection('create')}
 
 
               <div>
@@ -2488,141 +2684,8 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   </select>
                 </div>
 
-                {/* Hồ Sơ / Tài Liệu Kỹ Thuật Nghiệm Thu */}
-                <div className="bg-amber-50/50 dark:bg-amber-950/30 p-3.5 rounded-lg border border-amber-200 dark:border-amber-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase flex items-center gap-1.5">
-                      <FileCheck2 className="w-4 h-4 text-amber-600" /> Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu (Định dạng PDF)
-                    </span>
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold">Bắt buộc file PDF (.pdf)</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    {/* 1. Spec Vat Tu */}
-                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        1. Spec Vật Tư / Quy Cách (.pdf)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="Dán link Drive hoặc tải file PDF..."
-                          value={editBooking.documents.materialSpecUrl}
-                          onChange={e => setEditBooking(prev => ({
-                            ...prev,
-                            documents: { ...prev.documents, materialSpecUrl: e.target.value }
-                          }))}
-                          className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                        />
-                        <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải PDF
-                          <input
-                            type="file"
-                            accept=".pdf,application/pdf"
-                            onChange={e => handleEditDocFileUpload(e, 'materialSpecUrl')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                      {uploadingEditDocType === 'materialSpecUrl' && (
-                        <span className="text-[10px] text-amber-500 animate-pulse">Đang tải tài liệu...</span>
-                      )}
-                    </div>
-
-                    {/* 2. Mau Duyet */}
-                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        2. Mẫu Duyệt (Approved Sample - .pdf)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="Dán link Drive hoặc tải file PDF..."
-                          value={editBooking.documents.approvedSampleUrl}
-                          onChange={e => setEditBooking(prev => ({
-                            ...prev,
-                            documents: { ...prev.documents, approvedSampleUrl: e.target.value }
-                          }))}
-                          className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                        />
-                        <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải PDF
-                          <input
-                            type="file"
-                            accept=".pdf,application/pdf"
-                            onChange={e => handleEditDocFileUpload(e, 'approvedSampleUrl')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                      {uploadingEditDocType === 'approvedSampleUrl' && (
-                        <span className="text-[10px] text-amber-500 animate-pulse">Đang tải tài liệu...</span>
-                      )}
-                    </div>
-
-                    {/* 3. Ban Ve */}
-                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        3. Bản Vẽ Thi Công (Shopdrawing - .pdf)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="Dán link Drive hoặc tải file PDF..."
-                          value={editBooking.documents.shopdrawingUrl}
-                          onChange={e => setEditBooking(prev => ({
-                            ...prev,
-                            documents: { ...prev.documents, shopdrawingUrl: e.target.value }
-                          }))}
-                          className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                        />
-                        <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải PDF
-                          <input
-                            type="file"
-                            accept=".pdf,application/pdf"
-                            onChange={e => handleEditDocFileUpload(e, 'shopdrawingUrl')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                      {uploadingEditDocType === 'shopdrawingUrl' && (
-                        <span className="text-[10px] text-amber-500 animate-pulse">Đang tải tài liệu...</span>
-                      )}
-                    </div>
-
-                    {/* 4. Bien Ban Thong Nhat Chat Luong */}
-                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                        4. Biên Bản Thống Nhất CL (MoU - .pdf)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="Dán link Drive hoặc tải file PDF..."
-                          value={editBooking.documents.qualityAgreementUrl}
-                          onChange={e => setEditBooking(prev => ({
-                            ...prev,
-                            documents: { ...prev.documents, qualityAgreementUrl: e.target.value }
-                          }))}
-                          className="flex-1 px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
-                        />
-                        <label className="cursor-pointer px-2 py-1 bg-amber-100 dark:bg-amber-900/50 hover:bg-amber-200 text-amber-800 dark:text-amber-300 rounded text-[11px] font-semibold shrink-0 flex items-center gap-1">
-                          <Upload className="w-3 h-3" /> Tải PDF
-                          <input
-                            type="file"
-                            accept=".pdf,application/pdf"
-                            onChange={e => handleEditDocFileUpload(e, 'qualityAgreementUrl')}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                      {uploadingEditDocType === 'qualityAgreementUrl' && (
-                        <span className="text-[10px] text-amber-500 animate-pulse">Đang tải tài liệu...</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                {/* Hồ Sơ / Tài Liệu Kỹ Thuật Nghiệm Thu (Sequential Multi-File PDF Upload) */}
+                {renderDocSection('edit')}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">

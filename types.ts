@@ -634,8 +634,14 @@ export interface ToolCalibration {
 }
 
 export const canUserModifyInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
-  if (!user) return false;
+  if (!user) {
+    console.log('[PERM_CHECK] canUserModifyInspection -> FALSE (No user provided)');
+    return false;
+  }
   
+  const inspId = inspection?.id || inspection?._id || 'unknown';
+  console.log(`[PERM_CHECK] canUserModifyInspection START | inspId=${inspId} | user=${user.username || user.name} | role=${user.role} | la_to_truong=${user.la_to_truong} | to_qc="${user.to_qc}" | phong_ban="${user.phong_ban}"`);
+
   // Immutable Locked State:
   // If the coupon has been closed (APPROVED) or verified (team lead signed L1), it is locked immutable.
   const isLockedStatus = 
@@ -645,48 +651,101 @@ export const canUserModifyInspection = (inspection: any, user: any, usersList?: 
     !!inspection.teamLeadSignature || 
     !!inspection.managerSignature;
     
-  if (isLockedStatus) return false;
+  if (isLockedStatus) {
+    console.log(`[PERM_CHECK] canUserModifyInspection FALSE | Locked status: status=${inspection.status}, teamLeadSignature=${!!inspection.teamLeadSignature}, managerSignature=${!!inspection.managerSignature}`);
+    return false;
+  }
+
+  // Helper for Unicode NFC & department tag normalization
+  const normalize = (str: any) => {
+    if (!str) return '';
+    return String(str)
+      .normalize('NFC')
+      .replace(/\s*\([^)]*\)\s*/g, ' ') // Strip parenthetical department tags e.g. ( SCM )
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  };
+
+  const userIdentifiers = [user.name, user.username, user.id, user.msnv].filter(Boolean);
+  const inspectionCreators = [
+    inspection.inspectorName,
+    inspection.inspector_name,
+    inspection.created_by,
+    inspection.createdBy
+  ].filter(Boolean);
+
+  let isCreator = false;
+  for (const uId of userIdentifiers) {
+    for (const cField of inspectionCreators) {
+      if (String(uId).trim() === String(cField).trim()) {
+        isCreator = true;
+        break;
+      }
+    }
+    if (isCreator) break;
+  }
+
+  const normCreators = inspectionCreators.map(field => normalize(field)).filter(Boolean);
+
+  if (!isCreator) {
+    const normUserIds = userIdentifiers.map(id => normalize(id)).filter(Boolean);
+    for (const uId of normUserIds) {
+      for (const cField of normCreators) {
+        if (uId === cField || (uId.length > 2 && cField.length > 2 && (uId.includes(cField) || cField.includes(uId)))) {
+          isCreator = true;
+          break;
+        }
+      }
+      if (isCreator) break;
+    }
+  }
+
+  console.log(`[PERM_CHECK] canUserModifyInspection | isCreator=${isCreator} | userIdentifiers=[${userIdentifiers.join(', ')}] | inspectionCreators=[${inspectionCreators.join(', ')}]`);
+
+  // Creator Rule: The creator is always allowed to modify their own unapproved inspection report before L1/L2 signatures
+  if (isCreator) {
+    console.log(`[PERM_CHECK] canUserModifyInspection TRUE | Creator editing unapproved report: user=${user.username || user.name}`);
+    return true;
+  }
   
-  // Department-Lock: Rule 1.2
+  // Non-creator path: Department-Lock Check (Rule 1.2)
   // "chỉ hạn chế quyền Sửa/Ký đối với người phòng ban khác"
   const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
   if (cache && Array.isArray(cache)) {
-    const creatorUser = cache.find(u => u.name === inspection.inspectorName || u.name === inspection.created_by);
+    const creatorUser = cache.find(u => {
+      const uIdentifiers = [u.name, u.username, u.id, u.msnv].filter(Boolean);
+      return uIdentifiers.some(id => inspectionCreators.includes(id)) ||
+             normCreators.some(cField => uIdentifiers.map(id => normalize(id)).includes(cField));
+    });
     if (creatorUser) {
       const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
       const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
       if (creatorDept && userDept && creatorDept !== userDept) {
+        console.log(`[PERM_CHECK] canUserModifyInspection FALSE | Department mismatch: creatorDept="${creatorDept}" vs userDept="${userDept}"`);
         return false; // restricted for other department
       }
     }
   }
   
-  // 3. Creator-Only or authorized teammate in same department with EDIT permission
-  const isCreator = inspection.inspectorName === user.name || inspection.created_by === user.username || inspection.createdBy === user.name;
+  // Non-creator path: Matrix / Module Permission Check
   const moduleId = (inspection.type || 'PQC') as ModuleId;
   const globalRoles = typeof window !== 'undefined' ? (window as any).__rolesCache : [];
 
-  // If user has direct module access without custom matrix permissions setup, fallback to old behavior
   const userPerms = user.userPermissions || user.user_permissions;
   const hasCustomMatrix = userPerms && Array.isArray(userPerms) && userPerms.length > 0;
 
   if (!hasCustomMatrix && user.allowedModules?.includes(moduleId)) {
+    console.log(`[PERM_CHECK] canUserModifyInspection TRUE | Fallback allowedModules includes "${moduleId}"`);
     return true;
   }
 
-  if (isCreator) {
-    if (hasPermission(user, globalRoles, moduleId, 'EDIT_OWN') || 
-        hasPermission(user, globalRoles, moduleId, 'EDIT_ALL') || 
-        hasPermission(user, globalRoles, moduleId, 'EDIT')) {
-      return true;
-    }
-  } else {
-    if (hasPermission(user, globalRoles, moduleId, 'EDIT_ALL') || 
-        hasPermission(user, globalRoles, moduleId, 'EDIT')) {
-      return true;
-    }
-  }
+  const canEditAll = hasPermission(user, globalRoles, moduleId, 'EDIT_ALL') || 
+                     hasPermission(user, globalRoles, moduleId, 'EDIT');
+  console.log(`[PERM_CHECK] canUserModifyInspection Non-Creator -> canEditAll=${canEditAll}`);
+  if (canEditAll) return true;
   
+  console.log(`[PERM_CHECK] canUserModifyInspection FALSE | No matching permission rule for user=${user.username || user.name}`);
   return false;
 };
 
@@ -702,21 +761,70 @@ export const canUserDeleteInspection = (inspection: any, user: any, usersList?: 
     !!inspection.managerSignature;
     
   if (isLockedStatus) return false;
-  
+
+  const normalize = (str: any) => {
+    if (!str) return '';
+    return String(str)
+      .normalize('NFC')
+      .replace(/\s*\([^)]*\)\s*/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  };
+
+  const userIdentifiers = [user.name, user.username, user.id, user.msnv].filter(Boolean);
+  const inspectionCreators = [
+    inspection.inspectorName,
+    inspection.inspector_name,
+    inspection.created_by,
+    inspection.createdBy
+  ].filter(Boolean);
+
+  let isCreator = false;
+  for (const uId of userIdentifiers) {
+    for (const cField of inspectionCreators) {
+      if (String(uId).trim() === String(cField).trim()) {
+        isCreator = true;
+        break;
+      }
+    }
+    if (isCreator) break;
+  }
+
+  const normCreators = inspectionCreators.map(field => normalize(field)).filter(Boolean);
+
+  if (!isCreator) {
+    const normUserIds = userIdentifiers.map(id => normalize(id)).filter(Boolean);
+    for (const uId of normUserIds) {
+      for (const cField of normCreators) {
+        if (uId === cField || (uId.length > 2 && cField.length > 2 && (uId.includes(cField) || cField.includes(uId)))) {
+          isCreator = true;
+          break;
+        }
+      }
+      if (isCreator) break;
+    }
+  }
+
   // Department check - only members of the same department (or ADMIN) can delete
-  const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
-  if (cache && Array.isArray(cache)) {
-    const creatorUser = cache.find(u => u.name === inspection.inspectorName || u.name === inspection.created_by);
-    if (creatorUser) {
-      const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
-      const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
-      if (creatorDept && userDept && creatorDept !== userDept) {
-        return false;
+  if (!isCreator) {
+    const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
+    if (cache && Array.isArray(cache)) {
+      const creatorUser = cache.find(u => {
+        const uIdentifiers = [u.name, u.username, u.id, u.msnv].filter(Boolean);
+        return uIdentifiers.some(id => inspectionCreators.includes(id)) ||
+               normCreators.some(cField => uIdentifiers.map(id => normalize(id)).includes(cField));
+      });
+      if (creatorUser) {
+        const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
+        const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
+        if (creatorDept && userDept && creatorDept !== userDept) {
+          return false;
+        }
       }
     }
   }
   
-  const isCreator = inspection.inspectorName === user.name || inspection.created_by === user.username || inspection.createdBy === user.name;
   const moduleId = (inspection.type || 'PQC') as ModuleId;
   const globalRoles = typeof window !== 'undefined' ? (window as any).__rolesCache : [];
 
@@ -775,6 +883,7 @@ export const hasPermission = (
   // This fulfills "Option B": SYSTEM_ADMIN acts as a master permission matrix.
   const systemAdminMatrix = matchedPermissions.find(p => p.moduleId === 'SYSTEM_ADMIN');
   if (systemAdminMatrix && systemAdminMatrix.actions && systemAdminMatrix.actions.includes(action)) {
+      console.log(`[PERM_CHECK] hasPermission TRUE | SYSTEM_ADMIN action matched: "${action}"`);
       return true;
   }
 
@@ -786,6 +895,7 @@ export const hasPermission = (
   if (moduleMatrix.length > 0) {
     // If matrix entry exists for this module, it is the SOURCE OF TRUTH for actions
     const hasAction = moduleMatrix.some(p => p.actions && p.actions.includes(action));
+    console.log(`[PERM_CHECK] hasPermission moduleMatrix check | module="${moduleId}" action="${action}" -> ${hasAction}`);
     return hasAction;
   }
 
@@ -793,16 +903,20 @@ export const hasPermission = (
   const list = user.allowedModules || [];
   if (list.includes(moduleId)) {
     if (action === 'VIEW' || action === 'CREATE' || action === 'EDIT') {
+      console.log(`[PERM_CHECK] hasPermission allowedModules fallback TRUE | module="${moduleId}" action="${action}"`);
       return true;
     }
     if ((user.la_to_truong || user.role === 'MANAGER') && action === 'SIGN1') {
+      console.log(`[PERM_CHECK] hasPermission allowedModules SIGN1 fallback TRUE | user.la_to_truong=${user.la_to_truong} user.role=${user.role}`);
       return true;
     }
     if (user.role === 'MANAGER' && action === 'SIGN2') {
+      console.log(`[PERM_CHECK] hasPermission allowedModules SIGN2 fallback TRUE | user.role=${user.role}`);
       return true;
     }
   }
   
+  console.log(`[PERM_CHECK] hasPermission FALSE | module="${moduleId}" action="${action}" for user="${user.username || user.name}"`);
   return false;
 };
 
