@@ -6,7 +6,8 @@ import {
   User, 
   Supplier,
   SQCType,
-  SQC_TYPES_CONFIG
+  SQC_TYPES_CONFIG,
+  Inspection
 } from '../types';
 import { 
   fetchSubcontractorBookings, 
@@ -21,7 +22,8 @@ import {
   uploadFileToStorage,
   lookupPoMaterials,
   saveSupplier,
-  createNotification
+  createNotification,
+  fetchInspections
 } from '../services/apiService';
 import { SubcontractorSlideGuideModal } from './SubcontractorSlideGuideModal';
 import { 
@@ -160,14 +162,163 @@ interface SubcontractorBookingManagementProps {
 }
 
 export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManagementProps> = ({ currentUser, onStartInspection }) => {
-  const [activeTab, setActiveTab] = useState<'BOOKINGS' | 'REINSPECTION_COSTS'>('BOOKINGS');
+  const [activeTab, setActiveTab] = useState<'BOOKINGS' | 'REINSPECTION_COSTS' | 'SUPPLIER_MAP'>('BOOKINGS');
   const [bookings, setBookings] = useState<SubcontractorBooking[]>([]);
+  const [sqcInspections, setSqcInspections] = useState<Inspection[]>([]);
   const [reinspectionCosts, setReinspectionCosts] = useState<SubcontractorReinspectionCost[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [sqcTypeFilter, setSqcTypeFilter] = useState<string>('ALL');
-  
+
+  // Supplier Map state
+  const [mapLayerFilter, setMapLayerFilter] = useState<'ALL' | 'BOOKED' | 'INSPECTED'>('ALL');
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [selectedMapSupplierKey, setSelectedMapSupplierKey] = useState<string | null>(null);
+  const [selectedSqcReport, setSelectedSqcReport] = useState<Inspection | null>(null);
+
+  // Compute merged supplier locations map & markers (Bookings + Historical SQC Inspection Reports)
+  const supplierLocations = React.useMemo(() => {
+    const locMap = new Map<string, {
+      key: string;
+      supplierName: string;
+      locationAddress: string;
+      contactPerson: string;
+      contactPhone: string;
+      bookings: SubcontractorBooking[];
+      sqcReports: {
+        id: string;
+        code: string;
+        poNumber: string;
+        sqcType: SQCType;
+        result: 'PASS' | 'REJECT' | 'CONDITIONAL_PASS';
+        date: string;
+        inspector: string;
+        summary: string;
+        rawInspection: Inspection;
+      }[];
+      isBooked: boolean;
+      isInspected: boolean;
+      locationType: 'BOOKED' | 'INSPECTED' | 'BOTH';
+      encodedAddress: string;
+    }>();
+
+    // 1. Process Bookings
+    bookings.forEach(b => {
+      const sName = (b.supplierName || 'Chưa rõ nhà cung cấp').trim();
+      const sAddr = (b.locationAddress || 'Chưa cập nhật địa chỉ').trim();
+      const key = `${sName}___${sAddr}`;
+
+      const isB = b.status === 'PENDING' || b.status === 'ASSIGNED';
+      const isI = b.status === 'IN_PROGRESS' || b.status === 'COMPLETED';
+
+      const existing = locMap.get(key);
+      if (existing) {
+        existing.bookings.push(b);
+        if (isB) existing.isBooked = true;
+        if (isI) existing.isInspected = true;
+        if (b.contactPerson && (!existing.contactPerson || existing.contactPerson === 'N/A')) {
+          existing.contactPerson = b.contactPerson;
+        }
+        if (b.contactPhone && !existing.contactPhone) {
+          existing.contactPhone = b.contactPhone;
+        }
+        existing.locationType = (existing.isBooked && existing.isInspected) ? 'BOTH' : (existing.isInspected ? 'INSPECTED' : 'BOOKED');
+      } else {
+        locMap.set(key, {
+          key,
+          supplierName: sName,
+          locationAddress: sAddr,
+          contactPerson: b.contactPerson || 'N/A',
+          contactPhone: b.contactPhone || '',
+          bookings: [b],
+          sqcReports: [],
+          isBooked: isB,
+          isInspected: isI,
+          locationType: isI && isB ? 'BOTH' : (isI ? 'INSPECTED' : 'BOOKED'),
+          encodedAddress: encodeURIComponent(sAddr)
+        });
+      }
+    });
+
+    // 2. Process Historical SQC Reports
+    sqcInspections.forEach(insp => {
+      const sName = (insp.supplier || insp.workshop || insp.ten_ct || 'Nhà cung cấp SQC').trim();
+      const sAddr = (insp.location || insp.workshop || 'Chưa cập nhật địa chỉ').trim();
+      const key = `${sName}___${sAddr}`;
+
+      const poNum = insp.po_number || insp.poNumber || insp.pr_number || insp.ma_ct || 'N/A';
+      let resultStatus: 'PASS' | 'REJECT' | 'CONDITIONAL_PASS' = 'PASS';
+      if (insp.status === 'rejected' || (insp.score !== undefined && insp.score < 60)) {
+        resultStatus = 'REJECT';
+      } else if (insp.status === 'flagged' || (insp.score !== undefined && insp.score < 85)) {
+        resultStatus = 'CONDITIONAL_PASS';
+      }
+
+      const sqcReportItem = {
+        id: insp.id,
+        code: insp.id,
+        poNumber: poNum,
+        sqcType: (insp.type as SQCType) || 'SQC_BTP',
+        result: resultStatus,
+        date: insp.date || (insp.createdAt ? new Date(insp.createdAt).toLocaleDateString('vi-VN') : 'N/A'),
+        inspector: insp.inspectorName || 'QC Inspector',
+        summary: insp.summary || '',
+        rawInspection: insp
+      };
+
+      const existing = locMap.get(key);
+      if (existing) {
+        existing.sqcReports.push(sqcReportItem);
+        existing.isInspected = true;
+        existing.locationType = (existing.isBooked && existing.isInspected) ? 'BOTH' : 'INSPECTED';
+      } else {
+        locMap.set(key, {
+          key,
+          supplierName: sName,
+          locationAddress: sAddr,
+          contactPerson: 'N/A',
+          contactPhone: '',
+          bookings: [],
+          sqcReports: [sqcReportItem],
+          isBooked: false,
+          isInspected: true,
+          locationType: 'INSPECTED',
+          encodedAddress: encodeURIComponent(sAddr)
+        });
+      }
+    });
+
+    return Array.from(locMap.values());
+  }, [bookings, sqcInspections]);
+
+  const filteredSupplierLocations = React.useMemo(() => {
+    return supplierLocations.filter(loc => {
+      // Layer filter
+      if (mapLayerFilter === 'BOOKED' && !loc.isBooked) return false;
+      if (mapLayerFilter === 'INSPECTED' && !loc.isInspected) return false;
+
+      // Text search
+      if (mapSearchQuery.trim()) {
+        const q = removeVietnameseTones(mapSearchQuery.toLowerCase());
+        const nameMatch = removeVietnameseTones(loc.supplierName.toLowerCase()).includes(q);
+        const addrMatch = removeVietnameseTones(loc.locationAddress.toLowerCase()).includes(q);
+        const poMatch = loc.bookings.some(b => removeVietnameseTones((b.poNumber || '').toLowerCase()).includes(q) || removeVietnameseTones((b.bookingCode || '').toLowerCase()).includes(q)) ||
+                        loc.sqcReports.some(r => removeVietnameseTones((r.poNumber || '').toLowerCase()).includes(q) || removeVietnameseTones((r.code || '').toLowerCase()).includes(q));
+        if (!nameMatch && !addrMatch && !poMatch) return false;
+      }
+
+      return true;
+    });
+  }, [supplierLocations, mapLayerFilter, mapSearchQuery]);
+
+  const activeSelectedMapSupplier = React.useMemo(() => {
+    if (selectedMapSupplierKey) {
+      return supplierLocations.find(l => l.key === selectedMapSupplierKey) || supplierLocations[0] || null;
+    }
+    return supplierLocations[0] || null;
+  }, [supplierLocations, selectedMapSupplierKey]);
+
   // Modals & Drawers state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -225,6 +376,16 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
       qualityAgreementUrl: ''
     }
   });
+
+  // Copy to clipboard state
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, type: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedText(type);
+    setTimeout(() => setCopiedText(null), 2000);
+  };
 
   // State for sequential multi-file PDF upload tracking
   type DocKey = 'materialSpecUrl' | 'approvedSampleUrl' | 'shopdrawingUrl' | 'qualityAgreementUrl';
@@ -794,14 +955,22 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [bkRes, costRes] = await Promise.all([
-        fetchSubcontractorBookings(),
-        fetchSubcontractorReinspectionCosts()
+      const [bkRes, costRes, inspRes] = await Promise.all([
+        fetchSubcontractorBookings().catch(() => ({ bookings: [] })),
+        fetchSubcontractorReinspectionCosts().catch(() => ({ costs: [] })),
+        fetchInspections({}, 1, 200).catch(() => ({ data: [] }))
       ]);
       setBookings(bkRes.bookings || []);
       setReinspectionCosts(costRes.costs || []);
+
+      const allInspections: Inspection[] = Array.isArray(inspRes) ? inspRes : (inspRes?.data || inspRes?.inspections || []);
+      const sqcList = allInspections.filter(i => {
+        const t = String(i.type || '').toUpperCase();
+        return t === 'SQC_BTP' || t === 'SQC_TP' || t === 'SQC_VT' || t.startsWith('SQC');
+      });
+      setSqcInspections(sqcList);
     } catch (err) {
-      console.error("Failed to load subcontractor bookings:", err);
+      console.error("Failed to load subcontractor bookings and inspections:", err);
     } finally {
       setIsLoading(false);
     }
@@ -1192,10 +1361,10 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
       </div>
 
       {/* Tabs Selection */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
         <button
           onClick={() => setActiveTab('BOOKINGS')}
-          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'BOOKINGS'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
@@ -1204,8 +1373,18 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
           <Calendar className="w-4 h-4" /> Danh Sách Đặt Lịch ({bookings.length})
         </button>
         <button
+          onClick={() => setActiveTab('SUPPLIER_MAP')}
+          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'SUPPLIER_MAP'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+          }`}
+        >
+          <MapPin className="w-4 h-4 text-emerald-500" /> Bản Đồ Nhà Cung Cấp ({supplierLocations.length})
+        </button>
+        <button
           onClick={() => setActiveTab('REINSPECTION_COSTS')}
-          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
+          className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'REINSPECTION_COSTS'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
@@ -1347,10 +1526,36 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                           })()}
                         </td>
                         <td className="px-2.5 py-2">
-                          <div className="font-bold text-[8px] text-slate-900 dark:text-white">{b.supplierName}</div>
-                          <div className="text-[8px] text-slate-500 flex items-center gap-0.5 mt-0.5">
-                            <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                            <span className="truncate max-w-xs">{b.locationAddress}</span>
+                          <div className="font-bold text-[8px] text-slate-900 dark:text-white flex items-center justify-between gap-1">
+                            <span>{b.supplierName}</span>
+                            {b.contactPhone && (
+                              <a 
+                                href={`tel:${b.contactPhone.replace(/[^0-9+]/g, '')}`} 
+                                onClick={e => e.stopPropagation()} 
+                                className="text-blue-600 dark:text-blue-400 hover:underline font-bold text-[7px] shrink-0 inline-flex items-center gap-0.5" 
+                                title={`Gọi ${b.contactPhone}`}
+                              >
+                                <Phone className="w-2 h-2" /> {b.contactPhone}
+                              </a>
+                            )}
+                          </div>
+                          <div className="text-[8px] text-slate-500 flex items-center justify-between gap-1 mt-0.5">
+                            <span className="flex items-center gap-0.5 truncate max-w-xs">
+                              <MapPin className="w-2.5 h-2.5 text-red-500 shrink-0" />
+                              <span className="truncate">{b.locationAddress}</span>
+                            </span>
+                            {b.locationAddress && (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.locationAddress)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="text-[7px] text-emerald-600 dark:text-emerald-400 hover:underline shrink-0 font-bold inline-flex items-center gap-0.5"
+                                title="Mở Google Maps chỉ đường"
+                              >
+                                <ExternalLink className="w-2 h-2" /> Maps
+                              </a>
+                            )}
                           </div>
                         </td>
                         <td className="px-2.5 py-2 text-[8px] font-semibold text-slate-600 dark:text-slate-400 font-mono whitespace-nowrap">
@@ -1497,6 +1702,398 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: SUPPLIER LOCATION MAP */}
+      {activeTab === 'SUPPLIER_MAP' && (
+        <div className="space-y-4">
+          {/* Executive Stats Bar for Maps */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-xs text-slate-500 font-medium">Tổng Xưởng Vệ Tinh</span>
+              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+                {supplierLocations.length}
+              </div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-xs text-blue-600 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Vị Trí Đặt Lịch
+              </span>
+              <div className="text-2xl font-bold font-mono text-blue-600 mt-1">
+                {supplierLocations.filter(l => l.isBooked).length}
+              </div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Vị Trí Báo Cáo QC
+              </span>
+              <div className="text-2xl font-bold font-mono text-emerald-600 mt-1">
+                {supplierLocations.filter(l => l.isInspected).length}
+              </div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-xs text-purple-600 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" /> Cả 2 Lượt Book & QC
+              </span>
+              <div className="text-2xl font-bold font-mono text-purple-600 mt-1">
+                {supplierLocations.filter(l => l.locationType === 'BOTH').length}
+              </div>
+            </div>
+          </div>
+
+          {/* Layer Controls & Filter Bar */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            {/* Search Input */}
+            <div className="relative w-full md:w-80">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Tìm xưởng, địa chỉ, mã PO..."
+                value={mapSearchQuery}
+                onChange={e => setMapSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Layer Toggle Filters */}
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-full md:w-auto overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setMapLayerFilter('ALL')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  mapLayerFilter === 'ALL'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5 text-slate-500" /> Tất Cả Vị Trí ({supplierLocations.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMapLayerFilter('BOOKED')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  mapLayerFilter === 'BOOKED'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-blue-300" /> Vị Trí Đặt Lịch
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMapLayerFilter('INSPECTED')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  mapLayerFilter === 'INSPECTED'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-300" /> Vị Trí Báo Cáo QC
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Split View: Supplier Cards List & Embedded Google Map Frame */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Left Column: Supplier Cards List */}
+            <div className="lg:col-span-5 space-y-3 max-h-[750px] overflow-y-auto pr-1">
+              {filteredSupplierLocations.length === 0 ? (
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 text-center text-slate-500 text-xs">
+                  Không tìm thấy địa điểm nhà cung cấp phù hợp bộ lọc.
+                </div>
+              ) : (
+                filteredSupplierLocations.map((loc) => {
+                  const isSelected = activeSelectedMapSupplier?.key === loc.key;
+                  return (
+                    <div
+                      key={loc.key}
+                      onClick={() => setSelectedMapSupplierKey(loc.key)}
+                      className={`bg-white dark:bg-slate-900 p-4 rounded-xl border transition-all cursor-pointer shadow-sm space-y-2.5 ${
+                        isSelected
+                          ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20 dark:bg-blue-950/20'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Top Header & Layer Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <Building2 className="w-4 h-4 text-blue-600 shrink-0" /> {loc.supplierName}
+                          </h4>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            Người liên hệ: <strong>{loc.contactPerson}</strong>
+                          </span>
+                        </div>
+
+                        {/* Location Type Badge */}
+                        {loc.locationType === 'BOTH' ? (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border border-purple-200 shrink-0 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse" /> Đặt Lịch & QC
+                          </span>
+                        ) : loc.locationType === 'INSPECTED' ? (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-200 shrink-0 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Báo Cáo QC
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 shrink-0 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" /> Đặt Lịch Book
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Address & Google Maps Navigation */}
+                      <div className="text-xs text-slate-600 dark:text-slate-300 flex items-start gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{loc.locationAddress}</span>
+                      </div>
+
+                      {/* Contact Phone & Actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          {loc.contactPhone && (
+                            <a
+                              href={`tel:${loc.contactPhone.replace(/[^0-9+]/g, '')}`}
+                              onClick={e => e.stopPropagation()}
+                              className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 text-blue-600 dark:text-blue-400 rounded text-[11px] font-bold inline-flex items-center gap-1"
+                              title="Bấm vào để gọi điện trực tiếp"
+                            >
+                              <Phone className="w-3 h-3" /> {loc.contactPhone}
+                            </a>
+                          )}
+                          {loc.contactPhone && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleCopyText(loc.contactPhone, `map_phone_${loc.key}`); }}
+                              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded text-[10px] font-medium"
+                            >
+                              {copiedText === `map_phone_${loc.key}` ? '✓ Đã sao chép' : 'Sao chép SĐT'}
+                            </button>
+                          )}
+                        </div>
+
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${loc.encodedAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold inline-flex items-center gap-1 shadow-sm"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Chỉ Đường Google Maps
+                        </a>
+                      </div>
+
+                      {/* Associated PO list badges (Bookings & Historical SQC Reports) */}
+                      <div className="space-y-1.5 pt-1">
+                        {loc.bookings.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Lịch Book ({loc.bookings.length}):</span>
+                            {loc.bookings.map(b => (
+                              <span
+                                key={b.id}
+                                onClick={(e) => { e.stopPropagation(); setSelectedBooking(b); setShowReportModal(true); }}
+                                className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 text-blue-700 dark:text-blue-300 rounded font-mono text-[10px] font-bold cursor-pointer transition-colors border border-blue-200 dark:border-blue-800"
+                                title="Xem chi tiết phiếu book này"
+                              >
+                                {b.poNumber}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {loc.sqcReports.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Báo Cáo QC ({loc.sqcReports.length}):</span>
+                            {loc.sqcReports.map(r => {
+                              const badgeStyle = r.result === 'PASS'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                : r.result === 'REJECT'
+                                ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300'
+                                : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300';
+                              const resLabel = r.result === 'PASS' ? 'ĐẠT' : r.result === 'REJECT' ? 'KHÔNG ĐẠT' : 'ĐẠT CÓ ĐIỀU KIỆN';
+
+                              return (
+                                <span
+                                  key={r.id}
+                                  onClick={(e) => { e.stopPropagation(); setSelectedSqcReport(r.rawInspection); }}
+                                  className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-extrabold cursor-pointer transition-colors border flex items-center gap-1 ${badgeStyle}`}
+                                  title={`Báo cáo SQC PO: ${r.poNumber} — Kết quả: ${resLabel} (${r.date})`}
+                                >
+                                  <span>{r.poNumber}</span>
+                                  <span className="text-[8px] opacity-90">({resLabel})</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Right Column: Google Maps View & Selected Supplier Details Popup Card */}
+            <div className="lg:col-span-7 space-y-4 sticky top-4">
+              {/* Google Maps Embed Frame */}
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-2 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100 dark:border-slate-800 mb-2">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-red-500" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">
+                      Bản Đồ Google Maps — {activeSelectedMapSupplier ? activeSelectedMapSupplier.supplierName : 'Xưởng Vệ Tinh'}
+                    </span>
+                  </div>
+
+                  {activeSelectedMapSupplier && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${activeSelectedMapSupplier.encodedAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Mở Trên App Google Maps
+                    </a>
+                  )}
+                </div>
+
+                <div className="w-full h-[380px] rounded-lg overflow-hidden relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  {activeSelectedMapSupplier ? (
+                    <iframe
+                      title={`Google Map - ${activeSelectedMapSupplier.supplierName}`}
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      allowFullScreen
+                      src={`https://maps.google.com/maps?q=${activeSelectedMapSupplier.encodedAddress}&t=&z=14&ie=UTF8&iwloc=&output=embed`}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 text-xs">
+                      Vui lòng chọn xưởng để hiển thị bản đồ định vị
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Selected Supplier PO & QC Reports Details Popup Card */}
+              {activeSelectedMapSupplier && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-blue-200 dark:border-blue-900/50 p-4 shadow-md space-y-4">
+                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <div>
+                      <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                        Thông Tin Chi Tiết Đặt Lịch & Báo Cáo QC Tại Xưởng
+                      </div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
+                        {activeSelectedMapSupplier.supplierName}
+                      </h3>
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-red-500 shrink-0" /> {activeSelectedMapSupplier.locationAddress}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {activeSelectedMapSupplier.contactPhone && (
+                        <a
+                          href={`tel:${activeSelectedMapSupplier.contactPhone.replace(/[^0-9+]/g, '')}`}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg inline-flex items-center gap-1 shadow-sm transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5" /> Gọi {activeSelectedMapSupplier.contactPhone}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 1. List of Bookings at this Workshop */}
+                  {activeSelectedMapSupplier.bookings.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center justify-between">
+                        <span>Lịch Book QC Đã Tạo ({activeSelectedMapSupplier.bookings.length})</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Bấm vào đơn để xem chi tiết</span>
+                      </span>
+
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+                        {activeSelectedMapSupplier.bookings.map(b => (
+                          <div
+                            key={b.id}
+                            onClick={() => { setSelectedBooking(b); setShowReportModal(true); }}
+                            className="p-2.5 hover:bg-blue-50/60 dark:hover:bg-slate-800/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{b.bookingCode}</span>
+                                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">PO: {b.poNumber}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                Ngày nghiệm thu: <strong>{b.requestedDate ? new Date(b.requestedDate * 1000).toLocaleDateString('vi-VN') : '—'}</strong> | QC: {b.assignedQcName || 'Chưa phân công'}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(b.status)}
+                              <ChevronRight className="w-4 h-4 text-slate-400" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. List of Historical SQC Inspection Reports at this Workshop */}
+                  {activeSelectedMapSupplier.sqcReports.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Báo Cáo SQC Đã Nghiệm Thu ({activeSelectedMapSupplier.sqcReports.length})
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">Bấm vào để xem Báo cáo gốc</span>
+                      </span>
+
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+                        {activeSelectedMapSupplier.sqcReports.map(r => {
+                          const badgeStyle = r.result === 'PASS'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            : r.result === 'REJECT'
+                            ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300'
+                            : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300';
+                          const resText = r.result === 'PASS' ? '✓ ĐẠT' : r.result === 'REJECT' ? '✕ KHÔNG ĐẠT' : '⚠ CÓ ĐIỀU KIỆN';
+
+                          return (
+                            <div
+                              key={r.id}
+                              onClick={() => setSelectedSqcReport(r.rawInspection)}
+                              className="p-2.5 hover:bg-emerald-50/60 dark:hover:bg-slate-800/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">PO: {r.poNumber}</span>
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold uppercase">
+                                    {r.sqcType}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                  Ngày kiểm: <strong>{r.date}</strong> | QC: <strong>{r.inspector}</strong>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${badgeStyle}`}>
+                                  {resText}
+                                </span>
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2246,13 +2843,98 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
 
             {/* Scrollable Body */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800 p-3 rounded-lg text-xs">
-                <div><strong>Đơn hàng PO:</strong> {selectedBooking.poNumber}</div>
-                <div><strong>Xưởng Vệ Tinh:</strong> {selectedBooking.supplierName}</div>
-                <div><strong>Địa chỉ:</strong> {selectedBooking.locationAddress}</div>
-                <div><strong>Liên hệ:</strong> {selectedBooking.contactPerson} ({selectedBooking.contactPhone})</div>
-                <div><strong>QC Phụ trách:</strong> {selectedBooking.assignedQcName || 'Chưa phân công'}</div>
-                <div><strong>Trạng thái:</strong> {selectedBooking.status}</div>
+              <div className="space-y-3 bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                {/* Row 1: Basic Info */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div><strong>Đơn hàng PO:</strong> <span className="font-mono text-blue-600 font-bold">{selectedBooking.poNumber}</span></div>
+                  <div><strong>Xưởng Vệ Tinh:</strong> <span className="font-bold">{selectedBooking.supplierName}</span></div>
+                  <div><strong>QC Phụ trách:</strong> {selectedBooking.assignedQcName || 'Chưa phân công'}</div>
+                  <div className="flex items-center gap-1.5"><strong>Trạng thái:</strong> {getStatusBadge(selectedBooking.status)}</div>
+                </div>
+
+                {/* Row 2: Interactive Contact (Phone + Copy + Tel Link) */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <strong className="shrink-0">Người liên hệ xưởng:</strong>
+                    <span className="font-semibold text-slate-900 dark:text-white">{selectedBooking.contactPerson || 'Đại diện xưởng'}</span>
+                    {selectedBooking.contactPhone && (
+                      <a 
+                        href={`tel:${selectedBooking.contactPhone.replace(/[^0-9+]/g, '')}`}
+                        className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 text-blue-700 dark:text-blue-300 rounded text-[11px] font-bold inline-flex items-center gap-1 transition-colors shadow-sm"
+                        title="Bấm vào để gọi điện trực tiếp"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> {selectedBooking.contactPhone}
+                      </a>
+                    )}
+                  </div>
+
+                  {selectedBooking.contactPhone && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyText(selectedBooking.contactPhone, 'phone')}
+                      className="px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded text-[11px] font-semibold inline-flex items-center gap-1 transition-colors shrink-0"
+                    >
+                      {copiedText === 'phone' ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓ Đã sao chép SĐT</span>
+                      ) : (
+                        <>
+                          <Download className="w-3 h-3 rotate-180" /> Sao chép SĐT
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {/* Row 3: Interactive Location Address & Google Maps Navigation */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-start gap-1.5 text-slate-800 dark:text-slate-200 flex-1 min-w-[200px]">
+                      <MapPin className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block text-[11px]">Địa chỉ xưởng khảo sát:</strong>
+                        <span className="font-semibold text-slate-900 dark:text-white leading-relaxed">{selectedBooking.locationAddress}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(selectedBooking.locationAddress, 'address')}
+                        className="px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded text-[11px] font-semibold inline-flex items-center gap-1 transition-colors"
+                      >
+                        {copiedText === 'address' ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓ Đã sao chép</span>
+                        ) : (
+                          'Sao chép địa chỉ'
+                        )}
+                      </button>
+
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedBooking.locationAddress)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold inline-flex items-center gap-1 shadow-sm transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Mở Google Maps chỉ đường
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Embedded Google Maps Mini Preview Frame */}
+                  {selectedBooking.locationAddress && (
+                    <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner relative bg-slate-100 dark:bg-slate-800">
+                      <iframe
+                        title={`Google Maps Preview - ${selectedBooking.supplierName}`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        allowFullScreen
+                        src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedBooking.locationAddress)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {selectedBooking.notes && (
@@ -2779,6 +3461,150 @@ export const SubcontractorBookingManagement: React.FC<SubcontractorBookingManage
                 title={previewDoc.title}
                 allow="autoplay"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SQC Report Detail Modal */}
+      {selectedSqcReport && (
+        <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 rounded-lg shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="truncate">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-extrabold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 uppercase">
+                      {selectedSqcReport.type || 'SQC'}
+                    </span>
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                      BÁO CÁO NGHIỆM THU SQC — PO: {selectedSqcReport.po_number || selectedSqcReport.poNumber || selectedSqcReport.ma_ct || 'N/A'}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
+                    Mã phiếu: {selectedSqcReport.id}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedSqcReport(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors ml-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Report Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Summary Card */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Nhà Cung Cấp / Xưởng Vệ Tinh:</span>
+                  <p className="font-bold text-slate-900 dark:text-white text-sm mt-0.5">
+                    {selectedSqcReport.supplier || selectedSqcReport.workshop || selectedSqcReport.ten_ct || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Địa Chỉ Xưởng:</span>
+                  <p className="font-medium text-slate-800 dark:text-slate-200 mt-0.5 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" /> {selectedSqcReport.location || selectedSqcReport.workshop || 'Chưa cập nhật địa chỉ'}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Chuyên Viên QC Nghiệm Thu:</span>
+                  <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5 flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" /> {selectedSqcReport.inspectorName || 'QC AA Corp'}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Ngày Nghiệm Thu:</span>
+                  <p className="font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 shrink-0" /> {selectedSqcReport.date || 'N/A'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Inspection Items Check List */}
+              {selectedSqcReport.items && selectedSqcReport.items.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-emerald-600" /> Danh Sách Hạng Mục Đã Kiểm Định ({selectedSqcReport.items.length})
+                  </h4>
+
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                    {selectedSqcReport.items.map((item, idx) => (
+                      <div key={item.id || idx} className="p-3 bg-white dark:bg-slate-900 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white">{item.label || item.category}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">{item.standard || item.notes || 'Đạt tiêu chuẩn chất lượng'}</div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          {item.status || 'ĐẠT'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Photos & Images Section */}
+              {((selectedSqcReport.images && selectedSqcReport.images.length > 0) || (selectedSqcReport.image_refs && selectedSqcReport.image_refs.length > 0)) && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-blue-600" /> Hình Ảnh Thực Tế Tại Xưởng
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {(selectedSqcReport.images || selectedSqcReport.image_refs || []).map((imgUrl, imgIdx) => (
+                      <a
+                        key={imgIdx}
+                        href={imgUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shadow-sm"
+                      >
+                        <img src={imgUrl} alt={`Evidence ${imgIdx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center">
+                          <ExternalLink className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Remarks / Summary */}
+              {selectedSqcReport.summary && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-200 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                  <strong>Ghi chú / Nhận xét của QC:</strong>
+                  <p>{selectedSqcReport.summary}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-lg inline-flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-slate-700"
+              >
+                <Printer className="w-3.5 h-3.5" /> In Báo Cáo
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedSqcReport(null)}
+                className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>

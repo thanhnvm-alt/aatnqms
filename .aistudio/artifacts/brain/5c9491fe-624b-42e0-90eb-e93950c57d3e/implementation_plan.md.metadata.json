@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for sequential multi-file PDF upload with progress tracking and retry capability in SubcontractorBookingManagement.",
-  "updatedAt":  "2026-10-30T13:22:16.981208777Z",
+  "summary":  "Implementation plan for scanning and mapping historical SQC inspection reports (SQC_BTP, SQC_TP, SQC_VT) on the Supplier Map in Subcontractor Booking Management. Includes PO color-coded results badges, historical inspection markers, and report detail popups.",
+  "updatedAt":  "2026-10-30T14:24:40.730526722Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
