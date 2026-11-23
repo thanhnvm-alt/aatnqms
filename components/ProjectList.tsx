@@ -9,6 +9,7 @@ import {
   User, UserCheck, Users, RotateCcw, List
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { Combobox } from '../src/components/qms';
 
 interface ProjectListProps {
   projects: Project[];
@@ -165,7 +166,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 dark:bg-[#0b1120] no-scroll-x transition-colors duration-200" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-[#0b1120] font-sans no-scroll-x transition-colors duration-200">
       <div className="bg-white dark:bg-[#0f172a] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 shadow-sm transition-colors">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 
@@ -180,97 +181,101 @@ export const ProjectList: React.FC<ProjectListProps> = ({
                   defaultValue={committedSearch}
                   onBlur={handleCommitSearch}
                   onKeyDown={handleKeyDown}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:bg-white dark:bg-slate-900 dark:focus:bg-slate-900 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/40 transition-all shadow-inner"
+                  className="w-full min-h-[44px] lg:min-h-[40px] pl-9 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:bg-white dark:bg-slate-900 dark:focus:bg-slate-900 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/40 transition-all shadow-inner"
                 />
               </div>
               <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors">
-                  <div className="flex bg-white dark:bg-slate-900/50 dark:bg-slate-900/50 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 mr-2">
+                  <div className="flex bg-white dark:bg-slate-900/50 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 gap-1">
                     <button 
+                      type="button"
                       onClick={() => setViewMode('GRID')}
-                      className={`p-1.5 rounded-md transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-200'}`}
+                      className={`min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-md transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200'}`}
                       title="Chế độ lưới"
+                      aria-label="Chế độ lưới"
                     >
-                      <LayoutGrid className="w-3.5 h-3.5" />
+                      <LayoutGrid className="w-4 h-4" />
                     </button>
                     <button 
+                      type="button"
                       onClick={() => setViewMode('LIST')}
-                      className={`p-1.5 rounded-md transition-all ${viewMode === 'LIST' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-200'}`}
+                      className={`min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-md transition-all ${viewMode === 'LIST' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200'}`}
                       title="Chế độ danh sách"
+                      aria-label="Chế độ danh sách"
                     >
-                      <List className="w-3.5 h-3.5" />
+                      <List className="w-4 h-4" />
                     </button>
                   </div>
                   <button 
+                    type="button"
                     onClick={() => setShowFilterModal(!showFilterModal)}
-                    className={`p-2.5 rounded-xl shadow-sm font-black text-[10px] uppercase tracking-widest transition-all relative ${isFilterActive ? 'bg-blue-600 dark:bg-blue-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 dark:hover:bg-blue-900/30'} border border-slate-200 dark:border-slate-700`}
+                    className={`min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center rounded-xl shadow-sm font-black text-[10px] uppercase tracking-widest transition-all relative ${isFilterActive ? 'bg-blue-600 dark:bg-blue-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 dark:hover:bg-blue-900/30'} border border-slate-200 dark:border-slate-700`}
                     title="Bộ lọc"
+                    aria-label="Bộ lọc"
                   >
                     <Filter className="w-4 h-4" />
                     {isFilterActive && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-[#0f172a] rounded-full animate-pulse"></div>}
                   </button>
                   {showFilterModal && (
-                      <div className="absolute top-16 right-4 w-[320px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2">
-                        <div className="flex justify-between items-center mb-4">
+                      <div className="absolute top-16 right-3 sm:right-4 w-[calc(100vw-1.5rem)] max-w-[340px] sm:w-[320px] max-h-[75dvh] overflow-y-auto bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xl z-[120] animate-in fade-in slide-in-from-top-2">
+                        <div className="flex justify-between items-center mb-3">
                             <span className="font-bold text-slate-800 dark:text-slate-200">Bộ lọc hồ sơ dự án</span>
-                            <button onClick={() => setShowFilterModal(false)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-4 h-4" /></button>
+                            <button type="button" onClick={() => setShowFilterModal(false)} aria-label="Đóng bộ lọc" className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="w-5 h-5" /></button>
                         </div>
                         <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                     <Clock className="w-3 h-3 text-blue-500 dark:text-blue-400" /> Trạng thái vận hành
                                 </label>
-                                <select 
-                                    value={filterStatus}
-                                    onChange={e => setFilterStatus(e.target.value)}
-                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 transition-all appearance-none cursor-pointer text-slate-800 dark:text-slate-200"
-                                >
-                                    <option value="ALL">TẤT CẢ TRẠNG THÁI</option>
-                                    <option value="Planning">Planning (Chuẩn bị)</option>
-                                    <option value="In Progress">In Progress (Đang thực hiện)</option>
-                                    <option value="On Hold">On Hold (Tạm dừng)</option>
-                                    <option value="Completed">Completed (Hoàn tất)</option>
-                                </select>
+                                <Combobox
+                                    value={filterStatus === 'ALL' ? null : filterStatus}
+                                    onChange={(val) => setFilterStatus(val || 'ALL')}
+                                    options={[
+                                        { value: 'Planning', label: 'Planning (Chuẩn bị)' },
+                                        { value: 'In Progress', label: 'In Progress (Đang thực hiện)' },
+                                        { value: 'On Hold', label: 'On Hold (Tạm dừng)' },
+                                        { value: 'Completed', label: 'Completed (Hoàn tất)' },
+                                    ]}
+                                    placeholder="TẤT CẢ TRẠNG THÁI"
+                                    allowClear={true}
+                                />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                     <UserCheck className="w-3 h-3 text-indigo-500 dark:text-indigo-400" /> Project Manager (PM)
                                 </label>
-                                <select 
-                                    value={filterPM}
-                                    onChange={e => setFilterPM(e.target.value)}
-                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 transition-all appearance-none cursor-pointer text-slate-800 dark:text-slate-200"
-                                >
-                                    <option value="ALL">TẤT CẢ PM</option>
-                                    {uniqueStaff.pms.map(name => <option key={name} value={name}>{name}</option>)}
-                                </select>
+                                <Combobox
+                                    value={filterPM === 'ALL' ? null : filterPM}
+                                    onChange={(val) => setFilterPM(val || 'ALL')}
+                                    options={uniqueStaff.pms.map(name => ({ value: name, label: name }))}
+                                    placeholder="TẤT CẢ PM"
+                                    allowClear={true}
+                                />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                     <Users className="w-3 h-3 text-teal-500 dark:text-teal-400" /> Coordinator (PC)
                                 </label>
-                                <select 
-                                    value={filterPC}
-                                    onChange={e => setFilterPC(e.target.value)}
-                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 transition-all appearance-none cursor-pointer text-slate-800 dark:text-slate-200"
-                                >
-                                    <option value="ALL">TẤT CẢ PC</option>
-                                    {uniqueStaff.pcs.map(name => <option key={name} value={name}>{name}</option>)}
-                                </select>
+                                <Combobox
+                                    value={filterPC === 'ALL' ? null : filterPC}
+                                    onChange={(val) => setFilterPC(val || 'ALL')}
+                                    options={uniqueStaff.pcs.map(name => ({ value: name, label: name }))}
+                                    placeholder="TẤT CẢ PC"
+                                    allowClear={true}
+                                />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                     <User className="w-3 h-3 text-purple-500 dark:text-purple-400" /> QA/QC Lead
                                 </label>
-                                <select 
-                                    value={filterQA}
-                                    onChange={e => setFilterQA(e.target.value)}
-                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 transition-all appearance-none cursor-pointer text-slate-800 dark:text-slate-200"
-                                >
-                                    <option value="ALL">TẤT CẢ QA/QC</option>
-                                    {uniqueStaff.qas.map(name => <option key={name} value={name}>{name}</option>)}
-                                </select>
+                                <Combobox
+                                    value={filterQA === 'ALL' ? null : filterQA}
+                                    onChange={(val) => setFilterQA(val || 'ALL')}
+                                    options={uniqueStaff.qas.map(name => ({ value: name, label: name }))}
+                                    placeholder="TẤT CẢ QA/QC"
+                                    allowClear={true}
+                                />
                             </div>
-                            <button onClick={() => { resetFilters(); setShowFilterModal(false); }} className="w-full p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold uppercase hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 transition-colors border border-blue-200 dark:border-blue-800">XÓA BỘ LỌC</button>
+                            <button type="button" onClick={() => { resetFilters(); setShowFilterModal(false); }} className="w-full min-h-[44px] lg:min-h-[40px] p-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-semibold uppercase hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors border border-blue-200 dark:border-blue-800">XÓA BỘ LỌC</button>
                         </div>
                       </div>
                   )}

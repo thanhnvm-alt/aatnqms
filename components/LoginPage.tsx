@@ -36,7 +36,6 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
   const [forgotError, setForgotError] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [devCodeDisplay, setDevCodeDisplay] = useState('');
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
@@ -131,9 +130,6 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
     try {
         const res = await forgotPassword(forgotEmail);
         setForgotMessage(res.message || 'Mã xác thực đã được gửi.');
-        if (res.devCode) {
-            setDevCodeDisplay(res.devCode);
-        }
         setForgotStep('code');
     } catch (err: any) {
         setForgotError(err.message || 'Không tìm thấy tài khoản với email này');
@@ -172,7 +168,6 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
         setResetCode('');
         setForgotNewPassword('');
         setForgotConfirmPassword('');
-        setDevCodeDisplay('');
     } catch (err: any) {
         setForgotError(err.message || 'Đặt lại mật khẩu thất bại');
     } finally {
@@ -236,7 +231,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={!dbReady || isLoading}
-                  className="pl-10 block w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
+                  className="pl-10 pr-3 block w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="Nhập tên đăng nhập..."
                   required
                 />
@@ -244,12 +239,12 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1.5 ml-1">
+              <div className="flex justify-between items-center mb-1 ml-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase">Mật khẩu</label>
                 <button
                   type="button"
                   onClick={() => setShowForgotPasswordModal(true)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                  className="min-h-[44px] lg:min-h-[32px] px-2 -mr-2 inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline rounded-lg"
                 >
                   Quên mật khẩu?
                 </button>
@@ -265,14 +260,15 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={!dbReady || isLoading}
-                  className="pl-10 pr-10 block w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
+                  className="pl-10 pr-12 block w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
                   placeholder="••••••"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-blue-600 focus:outline-none transition-colors"
+                  aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-blue-600 focus:outline-none transition-colors rounded-r-lg"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -281,10 +277,10 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
             
             {/* Remember Me Checkbox */}
             <div 
-                className={`flex items-start cursor-pointer group ${(!dbReady || isLoading) ? 'pointer-events-none opacity-50' : ''}`} 
+                className={`flex items-center min-h-[44px] py-1 cursor-pointer group ${(!dbReady || isLoading) ? 'pointer-events-none opacity-50' : ''}`} 
                 onClick={() => dbReady && !isLoading && setRememberMe(!rememberMe)}
             >
-                <div className={`mt-0.5 mr-3 w-5 h-5 rounded border flex items-center justify-center transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-blue-400'}`}>
+                <div className={`mr-3 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${rememberMe ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 group-hover:border-blue-400'}`}>
                     {rememberMe && <CheckSquare className="w-4 h-4 text-white" />}
                 </div>
                 <div className="flex flex-col select-none">
@@ -307,7 +303,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
             <button
               type="submit"
               disabled={isLoading || !dbReady}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-blue-700/30 text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-slate-400 disabled:shadow-none disabled:cursor-not-allowed transition-all transform active:scale-[0.98]"
+              className="w-full min-h-[44px] flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-lg shadow-blue-700/30 text-sm font-bold text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-slate-400 disabled:shadow-none disabled:cursor-not-allowed transition-all transform active:scale-[0.98]"
             >
               {isLoading ? (
                   <>
@@ -332,9 +328,9 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
 
       {/* First-time Force Change Password Modal */}
       {showForceChangeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 dark:border-slate-800 overflow-hidden">
-            <div className="bg-blue-600 p-6 text-white text-center">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/70 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden">
+            <div className="bg-blue-600 p-4 sm:p-6 text-white text-center shrink-0">
               <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
                 <ShieldCheck className="w-7 h-7 text-white" />
               </div>
@@ -342,7 +338,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
               <p className="text-xs text-blue-100 mt-1">Tài khoản của bạn đang dùng mật khẩu mặc định hoặc cần cập nhật mật khẩu mới theo chính sách bảo mật hệ thống.</p>
             </div>
 
-            <form onSubmit={handleForceChangePassword} className="p-6 space-y-4">
+            <form onSubmit={handleForceChangePassword} className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
               {changeError && (
                 <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center">
                   <Info className="w-4 h-4 mr-2 flex-shrink-0" />
@@ -357,7 +353,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Tối thiểu 6 ký tự (có chữ hoa & thường)"
-                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   required
                 />
               </div>
@@ -369,7 +365,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   value={confirmNewPassword}
                   onChange={(e) => setConfirmNewPassword(e.target.value)}
                   placeholder="Nhập lại mật khẩu mới"
-                  className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   required
                 />
               </div>
@@ -378,7 +374,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                 <button
                   type="submit"
                   disabled={changeLoading}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center disabled:opacity-50"
+                  className="w-full min-h-[44px] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center disabled:opacity-50"
                 >
                   {changeLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : 'XÁC NHẬN & VÀO HỆ THỐNG'}
                 </button>
@@ -390,9 +386,9 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
 
       {/* Forgot Password Modal */}
       {showForgotPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full border border-slate-100 dark:border-slate-800 overflow-hidden">
-            <div className="bg-slate-800 p-6 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/70 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden">
+            <div className="bg-slate-800 p-4 sm:p-6 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-blue-600/30 rounded-full flex items-center justify-center">
                   <KeyRound className="w-5 h-5 text-blue-400" />
@@ -409,14 +405,15 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   setForgotError('');
                   setForgotMessage('');
                 }}
-                className="text-slate-400 hover:text-white"
+                aria-label="Đóng"
+                className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
               >
                 ✕
               </button>
             </div>
 
             {forgotStep === 'email' ? (
-              <form onSubmit={handleRequestResetCode} className="p-6 space-y-4">
+              <form onSubmit={handleRequestResetCode} className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
                 {forgotError && (
                   <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center">
                     <Info className="w-4 h-4 mr-2 flex-shrink-0" />
@@ -430,13 +427,13 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email nhân viên</label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <input
                       type="email"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
                       placeholder="vd: ten.nv@aacorporation.com"
-                      className="pl-10 w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="pl-10 w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       required
                     />
                   </div>
@@ -446,21 +443,21 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   <button
                     type="button"
                     onClick={() => setShowForgotPasswordModal(false)}
-                    className="flex-1 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="flex-1 min-h-[44px] py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
                     disabled={forgotLoading}
-                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
+                    className="flex-1 min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
                   >
                     {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Gửi mã xác thực'}
                   </button>
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleConfirmResetPassword} className="p-6 space-y-4">
+              <form onSubmit={handleConfirmResetPassword} className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
                 {forgotError && (
                   <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center">
                     <Info className="w-4 h-4 mr-2 flex-shrink-0" />
@@ -474,12 +471,6 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   </div>
                 )}
 
-                {devCodeDisplay && (
-                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-800">
-                    <span className="font-bold">Mã xác thực (Dev mode):</span> <span className="font-mono font-bold text-base">{devCodeDisplay}</span>
-                  </div>
-                )}
-
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mã xác thực (6 số)</label>
                   <input
@@ -488,7 +479,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                     value={resetCode}
                     onChange={(e) => setResetCode(e.target.value)}
                     placeholder="Nhập 6 số..."
-                    className="w-full text-center tracking-widest font-mono text-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full min-h-[44px] text-center tracking-widest font-mono text-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     required
                   />
                 </div>
@@ -500,7 +491,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                     value={forgotNewPassword}
                     onChange={(e) => setForgotNewPassword(e.target.value)}
                     placeholder="Tối thiểu 6 ký tự (có chữ hoa & thường)"
-                    className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     required
                   />
                 </div>
@@ -512,7 +503,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                     value={forgotConfirmPassword}
                     onChange={(e) => setForgotConfirmPassword(e.target.value)}
                     placeholder="Nhập lại mật khẩu mới"
-                    className="w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     required
                   />
                 </div>
@@ -521,14 +512,14 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   <button
                     type="button"
                     onClick={() => setForgotStep('email')}
-                    className="py-2.5 px-4 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center"
+                    className="min-h-[44px] py-2.5 px-4 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center"
                   >
                     <ArrowLeft className="w-4 h-4 mr-1" /> Quay lại
                   </button>
                   <button
                     type="submit"
                     disabled={forgotLoading}
-                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
+                    className="flex-1 min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
                   >
                     {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Đặt lại mật khẩu'}
                   </button>

@@ -4,6 +4,8 @@ import { fetchToolCatalogs, saveToolCatalog, deleteToolCatalog, fetchToolAssetsB
 import { Plus, Search, Wrench, Edit, Trash2, ArrowRightLeft, FileText, FileBadge, CheckCircle, ExternalLink, Image as ImageIcon, Loader2, BookOpen, Hash, ChevronDown, Upload, Download, Filter, X } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { SignaturePad } from './SignaturePad';
+import { getProxyImageUrl } from '../src/utils';
+import { Combobox, ConfirmDialog } from '../src/components/qms';
 
 interface QCSelectionComboboxProps {
   label: string;
@@ -66,7 +68,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</label>
       <div 
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center cursor-pointer transition h-11 ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-100'}`}
+        className={`w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center cursor-pointer transition min-h-[44px] lg:min-h-[40px] ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-100'}`}
       >
         <span className="font-bold text-sm text-slate-800 truncate">
           {selectedUser ? getQCUserLabel(selectedUser) : '--- CHỌN NHÂN VIÊN ---'}
@@ -83,7 +85,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Tìm theo tên, MSNV, vị trí..."
-              className="w-full px-3 py-2 text-xs bg-white rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 font-medium"
+              className="w-full min-h-[44px] lg:min-h-[36px] px-3 py-2 text-xs bg-white rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 font-medium"
             />
           </div>
           <div className="overflow-y-auto divide-y divide-slate-100 no-scrollbar">
@@ -93,7 +95,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
                 setIsOpen(false);
                 setSearch('');
               }}
-              className="px-4 py-2.5 text-xs font-black cursor-pointer bg-slate-50 text-indigo-600 transition-colors hover:bg-slate-100"
+              className="min-h-[44px] lg:min-h-[36px] flex items-center px-4 py-2 text-xs font-black cursor-pointer bg-slate-50 text-indigo-600 transition-colors hover:bg-slate-100"
             >
               - THU HỒI / TRẢ VỀ KHO TỔNG -
             </div>
@@ -106,7 +108,7 @@ const QCSelectionCombobox: React.FC<QCSelectionComboboxProps> = ({ label, value,
                     setIsOpen(false);
                     setSearch('');
                   }}
-                  className={`px-4 py-2.5 text-xs font-bold cursor-pointer transition-colors hover:bg-slate-50 ${u.id === value ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-700'}`}
+                  className={`min-h-[44px] lg:min-h-[36px] flex items-center px-4 py-2 text-xs font-bold cursor-pointer transition-colors hover:bg-slate-50 ${u.id === value ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-700'}`}
                 >
                   {getQCUserLabel(u)}
                 </div>
@@ -142,6 +144,13 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
   
   const [viewState, setViewState] = useState<'LIST' | 'CATALOG_DETAIL' | 'CATALOG_FORM' | 'ASSET_DETAIL' | 'ASSET_FORM' | 'TRANSFER_FORM' | 'CALIB_FORM'>('LIST');
   const [formData, setFormData] = useState<any>({});
+  const [confirmDialog, setConfirmDialog] = useState<{
+    variant: 'info' | 'warning' | 'danger';
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
   
   const [roles, setRoles] = useState<Role[]>([]);
 
@@ -350,79 +359,93 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
             const isAsset = headerRow.includes('Mã Tài Sản') && headerRow.includes('Tên Thiết Bị');
 
             if (isCatalog) {
-                if (!window.confirm(`Tìm thấy ${jsonData.length} danh mục. Tiến hành nhập dữ liệu?`)) return;
-                let successCount = 0;
-                for (const row of jsonData as any[]) {
-                    if (!row['Mã Loại'] || !row['Tên Danh Mục']) continue;
-                    let existing = catalogs.find(c => c.code === row['Mã Loại']);
-                    const catalogId = existing ? existing.id : `CAT_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                    
-                    await saveToolCatalog({
-                        id: catalogId,
-                        code: String(row['Mã Loại']),
-                        name: String(row['Tên Danh Mục']),
-                        type: String(row['Loại / Kiểu'] || 'Chung'),
-                        specifications: String(row['Mô Tả'] || ''),
-                        created_by: existing ? existing.created_by : user.id,
-                        created_at: existing ? existing.created_at : Math.floor(Date.now() / 1000),
-                        updated_at: Math.floor(Date.now() / 1000)
-                    });
-                    successCount++;
-                }
-                alert(`Đã nhập thành công ${successCount} danh mục.`);
-                loadCatalogs();
-            } else if (isAsset) {
-                if (!window.confirm(`Tìm thấy ${jsonData.length} tài sản/công cụ. Tiến hành nhập dữ liệu?`)) return;
-                let successCount = 0;
-                
-                const { fetchToolAssets } = await import('../services/apiService');
-                const allAssets = await fetchToolAssets();
-
-                for (const row of jsonData as any[]) {
-                    if (!row['Mã Tài Sản']) continue;
-                    let existingAsset = allAssets.find((a: ToolAsset) => a.asset_code === row['Mã Tài Sản']);
-                    let catalog_id = existingAsset?.catalog_id;
-                    
-                    if (!catalog_id && row['Mã Loại']) {
-                        let cat = catalogs.find(c => c.code === row['Mã Loại']);
-                        if (cat) catalog_id = cat.id;
-                    }
-                    
-                    if (!catalog_id && !existingAsset) {
-                        let catByName = catalogs.find(c => c.name === row['Tên Thiết Bị']);
-                        if (catByName) catalog_id = catByName.id;
-                        else continue; 
-                    }
-                    
-                    const assetId = existingAsset ? existingAsset.id : `AST_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                    
-                    let nextCalibDate = existingAsset?.next_calibration_date || null;
-                    if (row['Hạn Hiệu Chuẩn']) {
-                        const val = row['Hạn Hiệu Chuẩn'];
-                        if (typeof val === 'number') {
-                            nextCalibDate = Math.floor((val - 25569) * 86400); 
-                        } else if (typeof val === 'string') {
-                            const parts = val.split(/[-/]/);
-                            if (parts.length === 3) {
-                                const d = new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0]));
-                                if (!isNaN(d.getTime())) nextCalibDate = Math.floor(d.getTime()/1000);
-                            }
+                setConfirmDialog({
+                    variant: 'info',
+                    title: 'Xác nhận nhập danh mục',
+                    message: `Tìm thấy ${jsonData.length} danh mục. Tiến hành nhập dữ liệu?`,
+                    confirmLabel: 'Nhập dữ liệu',
+                    onConfirm: async () => {
+                        let successCount = 0;
+                        for (const row of jsonData as any[]) {
+                            if (!row['Mã Loại'] || !row['Tên Danh Mục']) continue;
+                            let existing = catalogs.find(c => c.code === row['Mã Loại']);
+                            const catalogId = existing ? existing.id : `CAT_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                            
+                            await saveToolCatalog({
+                                id: catalogId,
+                                code: String(row['Mã Loại']),
+                                name: String(row['Tên Danh Mục']),
+                                type: String(row['Loại / Kiểu'] || 'Chung'),
+                                specifications: String(row['Mô Tả'] || ''),
+                                created_by: existing ? existing.created_by : user.id,
+                                created_at: existing ? existing.created_at : Math.floor(Date.now() / 1000),
+                                updated_at: Math.floor(Date.now() / 1000)
+                            });
+                            successCount++;
                         }
+                        alert(`Đã nhập thành công ${successCount} danh mục.`);
+                        loadCatalogs();
                     }
+                });
+            } else if (isAsset) {
+                setConfirmDialog({
+                    variant: 'info',
+                    title: 'Xác nhận nhập tài sản',
+                    message: `Tìm thấy ${jsonData.length} tài sản/công cụ. Tiến hành nhập dữ liệu?`,
+                    confirmLabel: 'Nhập dữ liệu',
+                    onConfirm: async () => {
+                        let successCount = 0;
+                        
+                        const { fetchToolAssets } = await import('../services/apiService');
+                        const allAssets = await fetchToolAssets();
 
-                    await saveToolAsset({
-                        id: assetId,
-                        catalog_id: (catalog_id as string),
-                        asset_code: String(row['Mã Tài Sản']),
-                        serial_number: String(row['Số Serial'] || ''),
-                        status: existingAsset ? existingAsset.status : (row['Trạng Thái'] || 'AVAILABLE'),
-                        current_user_id: existingAsset?.current_user_id || undefined,
-                        next_calibration_date: nextCalibDate
-                    });
-                    successCount++;
-                }
-                alert(`Đã nhập thành công ${successCount} tài sản/công cụ.`);
-                loadMyAssets();
+                        for (const row of jsonData as any[]) {
+                            if (!row['Mã Tài Sản']) continue;
+                            let existingAsset = allAssets.find((a: ToolAsset) => a.asset_code === row['Mã Tài Sản']);
+                            let catalog_id = existingAsset?.catalog_id;
+                            
+                            if (!catalog_id && row['Mã Loại']) {
+                                let cat = catalogs.find(c => c.code === row['Mã Loại']);
+                                if (cat) catalog_id = cat.id;
+                            }
+                            
+                            if (!catalog_id && !existingAsset) {
+                                let catByName = catalogs.find(c => c.name === row['Tên Thiết Bị']);
+                                if (catByName) catalog_id = catByName.id;
+                                else continue; 
+                            }
+                            
+                            const assetId = existingAsset ? existingAsset.id : `AST_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                            
+                            let nextCalibDate = existingAsset?.next_calibration_date || null;
+                            if (row['Hạn Hiệu Chuẩn']) {
+                                const val = row['Hạn Hiệu Chuẩn'];
+                                if (typeof val === 'number') {
+                                    nextCalibDate = Math.floor((val - 25569) * 86400); 
+                                } else if (typeof val === 'string') {
+                                    const parts = val.split(/[-/]/);
+                                    if (parts.length === 3) {
+                                        const d = new Date(Number(parts[2]), Number(parts[1])-1, Number(parts[0]));
+                                        if (!isNaN(d.getTime())) nextCalibDate = Math.floor(d.getTime()/1000);
+                                    }
+                                }
+                            }
+
+                            await saveToolAsset({
+                                id: assetId,
+                                catalog_id: (catalog_id as string),
+                                asset_code: String(row['Mã Tài Sản']),
+                                serial_number: String(row['Số Serial'] || ''),
+                                status: existingAsset ? existingAsset.status : (row['Trạng Thái'] || 'AVAILABLE'),
+                                current_user_id: existingAsset?.current_user_id || undefined,
+                                next_calibration_date: nextCalibDate
+                            });
+                            successCount++;
+                        }
+                        alert(`Đã nhập thành công ${successCount} tài sản/công cụ.`);
+                        loadMyAssets();
+                    }
+                });
             } else {
                 alert('Tệp Excel không đúng định dạng. Cần chứa cột [Mã Loại, Tên Danh Mục] đối với Danh mục Kho, hoặc [Mã Tài Sản, Tên Thiết Bị] đối với Công cụ con.');
             }
@@ -441,40 +464,40 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {viewState === 'LIST' ? (
             <div className="flex flex-col h-full">
                 <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10 font-inter">
-                    <div className="px-4 py-3 md:px-8">
-                        <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                            <div className="flex gap-6 border-b-2 border-transparent">
+                    <div className="px-3 sm:px-4 py-3 md:px-8">
+                        <div className="flex flex-col md:flex-row gap-3 md:gap-4 justify-between items-start md:items-center">
+                            <div className="flex gap-4 sm:gap-6 border-b-2 border-transparent w-full md:w-auto overflow-x-auto no-scrollbar">
                                 <button 
                                     onClick={() => setActiveTab('MY_TOOLS')} 
-                                    className={`pb-3 px-1 border-b-2 -mb-[2px] font-black text-[13px] uppercase transition-all ${activeTab === 'MY_TOOLS' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+                                    className={`min-h-[44px] flex items-center pb-2.5 pt-1 px-1 border-b-2 -mb-[2px] font-black text-[13px] uppercase transition-all whitespace-nowrap shrink-0 ${activeTab === 'MY_TOOLS' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
                                 >
                                     Công Cụ Của Tôi
                                 </button>
                                 <button 
                                     onClick={() => setActiveTab('KHO')} 
-                                    className={`pb-3 px-1 border-b-2 -mb-[2px] font-black text-[13px] uppercase transition-all ${activeTab === 'KHO' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+                                    className={`min-h-[44px] flex items-center pb-2.5 pt-1 px-1 border-b-2 -mb-[2px] font-black text-[13px] uppercase transition-all whitespace-nowrap shrink-0 ${activeTab === 'KHO' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
                                 >
                                     Quản Lý Kho Tổng
                                 </button>
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                                <div className="relative flex-1 md:w-72">
+                                <div className="relative flex-1 min-w-[180px] md:w-72">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <input 
-                                        className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                                        className="w-full min-h-[44px] lg:min-h-[38px] pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
                                         placeholder={activeTab === 'KHO' ? "Tìm mã, tên danh mục..." : "Tìm mã, tên thiết bị..."}
                                         value={searchTerm}
                                         onChange={e => setSearchTerm(e.target.value)}
                                     />
                                 </div>
 
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                     {hasPermission(user, roles, 'TOOLS', 'IMPORT') && (
                                         <button 
                                             onClick={handleImportButtonClick}
                                             title="Nhập Excel"
-                                            className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                            className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                         >
                                             <Upload className="w-4 h-4" />
                                         </button>
@@ -483,7 +506,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                         <button 
                                             onClick={handleExportExcel}
                                             title="Xuất Excel"
-                                            className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                            className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                                         >
                                             <Download className="w-4 h-4" />
                                         </button>
@@ -492,64 +515,64 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                     <div className="relative">
                                         <button 
                                             onClick={() => setShowFilters(!showFilters)}
-                                            className={`p-2.5 rounded-xl transition-all ${showFilters || filterType || filterAction ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                                            className={`min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 rounded-xl transition-all ${showFilters || filterType || filterAction ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                                         >
                                             <Filter className="w-4 h-4" />
                                         </button>
                                         
                                         {showFilters && (
-                                            <div className="absolute right-0 mt-3 w-72 bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700 rounded-2xl p-5 z-[60] animate-in fade-in zoom-in-95 duration-200">
-                                                <div className="space-y-5">
+                                            <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-[calc(100vw-1.5rem)] sm:w-72 max-h-[75dvh] overflow-y-auto bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700 rounded-2xl p-4 sm:p-5 z-[120] animate-in fade-in zoom-in-95 duration-200">
+                                                <div className="space-y-4">
                                                     <div className="flex justify-between items-center">
-                                                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-900">Bộ lọc thông minh</span>
-                                                        <button onClick={() => setShowFilters(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
+                                                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-900 dark:text-white">Bộ lọc thông minh</span>
+                                                        <button onClick={() => setShowFilters(false)} aria-label="Đóng bộ lọc" className="min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-4 h-4"/></button>
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Loại công cụ</label>
-                                                        <select 
-                                                            value={filterType}
-                                                            onChange={(e) => setFilterType(e.target.value)}
-                                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-black outline-none focus:ring-2 focus:ring-indigo-500"
-                                                        >
-                                                            <option value="">Tất cả các loại</option>
-                                                            {Array.from(new Set(catalogs.map(c => c.type).filter(Boolean))).map(t => (
-                                                                <option key={t} value={t}>{t}</option>
-                                                            ))}
-                                                        </select>
+                                                        <Combobox
+                                                            value={filterType || null}
+                                                            onChange={(v) => setFilterType(v || '')}
+                                                            options={Array.from(new Set(catalogs.map(c => c.type).filter(Boolean))).map(t => ({ value: t as string, label: t as string }))}
+                                                            placeholder="Tất cả các loại"
+                                                            allowClear={true}
+                                                            ariaLabel="Lọc theo loại công cụ"
+                                                        />
                                                     </div>
                                                     
                                                     {activeTab === 'MY_TOOLS' && (
                                                         <div>
                                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Trạng thái thiết bị</label>
-                                                            <select 
-                                                                value={filterAction}
-                                                                onChange={(e) => setFilterAction(e.target.value)}
-                                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-black outline-none focus:ring-2 focus:ring-indigo-500"
-                                                            >
-                                                                <option value="">Tất cả trạng thái</option>
-                                                                <option value="AVAILABLE">Sẵn sàng</option>
-                                                                <option value="IN_USE">Đang sử dụng</option>
-                                                                <option value="MAINTENANCE">Bảo trì</option>
-                                                                <option value="BROKEN">Hỏng</option>
-                                                                <option value="LOST">Thất lạc</option>
-                                                            </select>
+                                                            <Combobox
+                                                                value={filterAction || null}
+                                                                onChange={(v) => setFilterAction(v || '')}
+                                                                options={[
+                                                                    { value: 'AVAILABLE', label: 'Sẵn sàng' },
+                                                                    { value: 'IN_USE', label: 'Đang sử dụng' },
+                                                                    { value: 'MAINTENANCE', label: 'Bảo trì' },
+                                                                    { value: 'BROKEN', label: 'Hỏng' },
+                                                                    { value: 'LOST', label: 'Thất lạc' },
+                                                                ]}
+                                                                placeholder="Tất cả trạng thái"
+                                                                allowClear={true}
+                                                                ariaLabel="Lọc theo trạng thái thiết bị"
+                                                            />
                                                         </div>
                                                     )}
 
-                                                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center gap-2">
                                                         <button 
                                                             onClick={() => {
                                                                 setFilterType('');
                                                                 setFilterAction('');
                                                                 setSearchTerm('');
                                                             }}
-                                                            className="text-[10px] font-black text-slate-400 uppercase hover:text-red-500 transition-colors"
+                                                            className="min-h-[44px] lg:min-h-[36px] px-3 text-[10px] font-black text-slate-400 uppercase hover:text-red-500 transition-colors rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20"
                                                         >
                                                             Đặt lại
                                                         </button>
                                                         <button 
                                                             onClick={() => setShowFilters(false)}
-                                                            className="px-4 py-1.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-lg shadow-md hover:bg-indigo-700"
+                                                            className="min-h-[44px] lg:min-h-[36px] px-5 py-2 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl shadow-md hover:bg-indigo-700"
                                                         >
                                                             Áp dụng
                                                         </button>
@@ -560,9 +583,9 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                     </div>
 
                                     {activeTab === 'KHO' && isManagerOrAdmin && (
-                                        <button onClick={() => { setFormData({}); setViewState('CATALOG_FORM'); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95">
+                                        <button onClick={() => { setFormData({}); setViewState('CATALOG_FORM'); }} className="min-h-[44px] lg:min-h-[38px] flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95">
                                             <Plus className="w-4 h-4" />
-                                            <span className="font-bold text-xs md:text-sm">Thêm Dự án</span>
+                                            <span className="font-bold text-xs md:text-sm whitespace-nowrap">Thêm Danh Mục</span>
                                         </button>
                                     )}
                                 </div>
@@ -571,7 +594,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2 md:p-6">
+                <div className="flex-1 overflow-y-auto p-2 md:p-6 pb-24 lg:pb-6">
                     {activeTab === 'KHO' ? (
                         isLoading ? (
                             <div className="flex items-center justify-center h-40"><Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /></div>
@@ -582,8 +605,8 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                             </div>
                         ) : (
                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                                <div className="hidden md:block">
-                                    <table className="w-full text-left border-collapse">
+                                <div className="hidden md:block overflow-x-auto">
+                                    <table className="w-full text-left border-collapse min-w-[600px]">
                                         <thead>
                                             <tr className="bg-slate-50/80 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
                                                 <th className="px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Mã Loại</th>
@@ -607,7 +630,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                                         <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{cat.type || 'Chung'}</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="flex justify-end lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                                             <ExternalLink className="w-4 h-4 text-slate-400" />
                                                         </div>
                                                     </td>
@@ -639,8 +662,8 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                 </div>
                             ) : (
                                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                                    <div className="hidden md:block">
-                                        <table className="w-full text-left border-collapse">
+                                    <div className="hidden md:block overflow-x-auto">
+                                        <table className="w-full text-left border-collapse min-w-[640px]">
                                             <thead>
                                                 <tr className="bg-slate-50/80 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
                                                     <th className="px-6 py-4 w-12 text-center">
@@ -716,7 +739,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                             const isSelected = selectedAssetIds.includes(asset.id);
                                             return (
                                                 <div key={asset.id} className={`p-4 active:bg-slate-50 transition-colors flex items-center gap-4 ${isSelected ? 'bg-indigo-50/30' : ''}`} onClick={() => loadAssetDetails(asset)}>
-                                                    <div className="shrink-0" onClick={e => e.stopPropagation()}>
+                                                    <div className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2" onClick={e => e.stopPropagation()}>
                                                         <input 
                                                             type="checkbox" 
                                                             checked={isSelected}
@@ -751,7 +774,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                     )}
 
                     {selectedAssetIds.length > 0 && activeTab === 'MY_TOOLS' && (
-                    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-2xl border border-indigo-100 dark:border-slate-700 px-6 py-4 rounded-3xl flex items-center gap-8 animate-in slide-in-from-bottom-10 z-50 ring-1 ring-slate-900/5">
+                    <div className="fixed bottom-20 lg:bottom-10 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] sm:w-auto max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-2xl border border-indigo-100 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4 rounded-3xl flex items-center justify-between gap-4 sm:gap-8 animate-in slide-in-from-bottom-10 z-50 ring-1 ring-slate-900/5">
                         <div className="flex flex-col">
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang thao tác</span>
                             <span className="font-black text-sm text-slate-900 dark:text-slate-100 tracking-tight">{selectedAssetIds.length} thiết bị đã chọn</span>
@@ -761,7 +784,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                 setFormData({ tool_asset_ids: selectedAssetIds, to_user_id: '', from_user_id: user.id });
                                 setViewState('TRANSFER_FORM');
                             }} 
-                            className="px-8 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transform transition-all active:scale-95 flex items-center gap-3"
+                            className="min-h-[44px] px-6 sm:px-8 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transform transition-all active:scale-95 flex items-center gap-2.5 shrink-0"
                         >
                             <ArrowRightLeft className="w-5 h-5"/> Bàn Giao
                         </button>
@@ -773,10 +796,10 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {/* --- CATALOG FORM --- */}
         {viewState === 'CATALOG_FORM' &&
             <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-               <div className="px-4 py-4 md:px-8 border-b flex justify-between items-center">
-                    <h2 className="text-xl font-black uppercase text-slate-900 shrink-0 truncate">{formData.id ? 'Sửa Danh Mục' : 'Thêm Mới Danh Mục'}</h2>
-                    <div className="flex gap-2">
-                        <button onClick={() => setViewState(formData.id ? 'CATALOG_DETAIL' : 'LIST')} className="px-5 py-2 text-slate-500 font-bold uppercase text-xs hover:bg-slate-100 rounded-xl">Hủy</button>
+               <div className="px-4 py-3 sm:py-4 md:px-8 border-b flex justify-between items-center gap-3">
+                    <h2 className="text-lg sm:text-xl font-black uppercase text-slate-900 shrink-0 truncate">{formData.id ? 'Sửa Danh Mục' : 'Thêm Mới Danh Mục'}</h2>
+                    <div className="flex gap-2 shrink-0">
+                        <button onClick={() => setViewState(formData.id ? 'CATALOG_DETAIL' : 'LIST')} className="min-h-[44px] lg:min-h-[38px] px-5 py-2 text-slate-500 font-bold uppercase text-xs hover:bg-slate-100 rounded-xl">Hủy</button>
                         <button onClick={async () => {
                             try {
                                 await saveToolCatalog({
@@ -788,10 +811,10 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                 if (selectedCatalog && formData.id) loadCatalogDetails(formData);
                                 else setViewState('LIST');
                             } catch(e) { alert('Lỗi lưu danh mục'); }
-                        }} disabled={!formData.code || !formData.name} className="px-5 py-2 bg-indigo-600 text-white font-bold uppercase text-xs rounded-xl disabled:opacity-50">Lưu</button>
+                        }} disabled={!formData.code || !formData.name} className="min-h-[44px] lg:min-h-[38px] px-5 py-2 bg-indigo-600 text-white font-bold uppercase text-xs rounded-xl disabled:opacity-50">Lưu</button>
                     </div>
                 </div> 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-3xl mx-auto w-full space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 max-w-3xl mx-auto w-full space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1 block"><label className="text-xs font-bold uppercase">Mã Loại *</label><input value={formData.code || ''} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none h-12" placeholder="VD: TC-35M" /></div>
                         <div className="space-y-1 block"><label className="text-xs font-bold uppercase">Tên Loại *</label><input value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none h-12" placeholder="Tên Loại CCDC" /></div>
@@ -847,22 +870,33 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {/* --- CATALOG DETAIL (Show list of Assets) --- */}
         {viewState === 'CATALOG_DETAIL' && selectedCatalog &&
             <div className="flex flex-col h-full">
-                <div className="px-4 py-3 md:px-8 bg-white border-b flex justify-between items-center shrink-0">
-                    <button onClick={() => setViewState('LIST')} className="p-2 border rounded-full hover:bg-slate-100 flex items-center justify-center w-8 h-8 shrink-0">{'<'}</button>
-                    <div className="flex-1 mx-4 truncate"><h2 className="text-xl font-black uppercase text-slate-900 truncate">{selectedCatalog.code} - {selectedCatalog.name}</h2></div>
+                <div className="px-3 sm:px-4 py-3 md:px-8 bg-white border-b flex justify-between items-center gap-2 shrink-0">
+                    <button onClick={() => setViewState('LIST')} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 border rounded-full hover:bg-slate-100 flex items-center justify-center shrink-0 font-bold">{'<'}</button>
+                    <div className="flex-1 mx-2 sm:mx-4 truncate"><h2 className="text-base sm:text-xl font-black uppercase text-slate-900 truncate">{selectedCatalog.code} - {selectedCatalog.name}</h2></div>
                     <div className="flex gap-2 shrink-0">
                         {isManagerOrAdmin && (
                             <>
-                                <button onClick={() => { setFormData(selectedCatalog); setViewState('CATALOG_FORM'); }} className="p-2 border rounded-full hover:bg-slate-100"><Edit className="w-4 h-4"/></button>
-                                <button onClick={async () => {
-                                    if (assets.length > 0) return alert('Không thể xóa danh mục đã có tài sản vất lý.');
-                                    if (window.confirm('Xóa danh mục này?')) { await deleteToolCatalog(selectedCatalog.id); setViewState('LIST'); loadCatalogs(); }
-                                }} className="p-2 border border-red-200 text-red-500 rounded-full hover:bg-red-50"><Trash2 className="w-4 h-4"/></button>
+                                <button onClick={() => { setFormData(selectedCatalog); setViewState('CATALOG_FORM'); }} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2 border rounded-full hover:bg-slate-100"><Edit className="w-4 h-4"/></button>
+                                <button onClick={() => {
+                                    if (assets.length > 0) return alert('Không thể xóa danh mục đã có tài sản vật lý.');
+                                    const targetCatalogId = selectedCatalog.id;
+                                    setConfirmDialog({
+                                        variant: 'danger',
+                                        title: 'Xóa danh mục thiết bị',
+                                        message: `Bạn có chắc chắn muốn xóa danh mục "${selectedCatalog.name}"?`,
+                                        confirmLabel: 'Xóa danh mục',
+                                        onConfirm: async () => {
+                                            await deleteToolCatalog(targetCatalogId);
+                                            setViewState('LIST');
+                                            loadCatalogs();
+                                        }
+                                    });
+                                }} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2 border border-red-200 text-red-500 rounded-full hover:bg-red-50"><Trash2 className="w-4 h-4"/></button>
                             </>
                         )}
                     </div>
                 </div> 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 block">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 block">
                     <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
                          
                          {/* LEFT COL: Catalog info & Manual */}
@@ -879,7 +913,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                 <div className="p-6 bg-white rounded-3xl border shadow-sm">
                                     <h3 className="font-black text-md uppercase tracking-tight flex items-center gap-2 mb-4"><FileText className="w-4 h-4"/> Hướng Dẫn</h3>
                                     {selectedCatalog.manual_pdf_url && (
-                                        <a href={selectedCatalog.manual_pdf_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl text-xs font-bold w-full mb-4 justify-center"><ExternalLink className="w-4 h-4"/> Mở PDF đính kèm (Drive)</a>
+                                        <a href={selectedCatalog.manual_pdf_url} target="_blank" rel="noreferrer" className="min-h-[44px] lg:min-h-[38px] flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl text-xs font-bold w-full mb-4 justify-center"><ExternalLink className="w-4 h-4"/> Mở PDF đính kèm (Drive)</a>
                                     )}
                                     {selectedCatalog.manual_markdown && (
                                         <div className="prose prose-sm prose-slate max-w-none text-xs"><Markdown>{selectedCatalog.manual_markdown}</Markdown></div>
@@ -891,10 +925,10 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                          {/* RIGHT COL: Physical Assets */}
                          <div className="md:col-span-2">
                              <div className="p-6 bg-white rounded-3xl border shadow-sm h-full">
-                                <div className="flex justify-between items-center mb-6">
+                                <div className="flex justify-between items-center gap-2 mb-6 flex-wrap">
                                     <h3 className="font-black text-lg uppercase tracking-tight flex items-center gap-2"><Hash className="w-5 h-5"/> Danh Sách Tài Sản Vật Lý</h3>
                                     {isManagerOrAdmin && (
-                                        <button onClick={() => { setFormData({ catalog_id: selectedCatalog.id, status: 'AVAILABLE' }); setViewState('ASSET_FORM'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold uppercase text-[10px] hover:bg-indigo-700">Tạo Tài Sản</button>
+                                        <button onClick={() => { setFormData({ catalog_id: selectedCatalog.id, status: 'AVAILABLE' }); setViewState('ASSET_FORM'); }} className="min-h-[44px] lg:min-h-[36px] px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold uppercase text-xs hover:bg-indigo-700">Tạo Tài Sản</button>
                                     )}
                                 </div>
                                 
@@ -929,10 +963,10 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {/* --- ASSET FORM --- */}
         {viewState === 'ASSET_FORM' &&
             <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-               <div className="px-4 py-4 md:px-8 border-b flex justify-between items-center">
-                    <h2 className="text-xl font-black uppercase text-slate-900 shrink-0 truncate">{formData.id ? 'Sửa Tài Sản' : 'Tạo Tài Sản Mới'}</h2>
-                    <div className="flex gap-2">
-                        <button onClick={() => setViewState(formData.id ? 'ASSET_DETAIL' : 'CATALOG_DETAIL')} className="px-5 py-2 text-slate-500 font-bold uppercase text-xs hover:bg-slate-100 rounded-xl">Hủy</button>
+               <div className="px-4 py-3 sm:py-4 md:px-8 border-b flex justify-between items-center gap-3">
+                    <h2 className="text-lg sm:text-xl font-black uppercase text-slate-900 shrink-0 truncate">{formData.id ? 'Sửa Tài Sản' : 'Tạo Tài Sản Mới'}</h2>
+                    <div className="flex gap-2 shrink-0">
+                        <button onClick={() => setViewState(formData.id ? 'ASSET_DETAIL' : 'CATALOG_DETAIL')} className="min-h-[44px] lg:min-h-[38px] px-5 py-2 text-slate-500 font-bold uppercase text-xs hover:bg-slate-100 rounded-xl">Hủy</button>
                         <button onClick={async () => {
                             try {
                                 await saveToolAsset({
@@ -942,22 +976,28 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                 });
                                 if (selectedCatalog) await loadCatalogDetails(selectedCatalog);
                             } catch(e) { alert('Lỗi lưu tài sản'); }
-                        }} disabled={!formData.asset_code} className="px-5 py-2 bg-indigo-600 text-white font-bold uppercase text-xs rounded-xl disabled:opacity-50">Lưu</button>
+                        }} disabled={!formData.asset_code} className="min-h-[44px] lg:min-h-[38px] px-5 py-2 bg-indigo-600 text-white font-bold uppercase text-xs rounded-xl disabled:opacity-50">Lưu</button>
                     </div>
                 </div> 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-2xl mx-auto w-full space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 max-w-2xl mx-auto w-full space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1 block"><label className="text-xs font-bold uppercase">Mã Tài Sản (Asset Tag) *</label><input value={formData.asset_code || ''} onChange={e => setFormData({...formData, asset_code: e.target.value.toUpperCase()})} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none h-12 text-indigo-700" placeholder="VD: QC-TC-001" /></div>
                         <div className="space-y-1 block"><label className="text-xs font-bold uppercase">Số Serial (S/N)</label><input value={formData.serial_number || ''} onChange={e => setFormData({...formData, serial_number: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none h-12" /></div>
                         <div className="space-y-1 block md:col-span-2">
                             <label className="text-xs font-bold uppercase">Trạng Thái</label>
-                            <select value={formData.status || 'AVAILABLE'} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl font-bold border-none h-12">
-                                <option value="AVAILABLE">Sẵn sàng (Kho)</option>
-                                <option value="IN_USE">Đang sử dụng</option>
-                                <option value="MAINTENANCE">Bảo trì</option>
-                                <option value="BROKEN">Hỏng</option>
-                                <option value="LOST">Thất lạc</option>
-                            </select>
+                            <Combobox
+                                value={formData.status || 'AVAILABLE'}
+                                onChange={(v) => setFormData({ ...formData, status: v || 'AVAILABLE' })}
+                                options={[
+                                    { value: 'AVAILABLE', label: 'Sẵn sàng (Kho)' },
+                                    { value: 'IN_USE', label: 'Đang sử dụng' },
+                                    { value: 'MAINTENANCE', label: 'Bảo trì' },
+                                    { value: 'BROKEN', label: 'Hỏng' },
+                                    { value: 'LOST', label: 'Thất lạc' },
+                                ]}
+                                allowClear={false}
+                                ariaLabel="Trạng thái tài sản"
+                            />
                         </div>
                         {isManagerOrAdmin && (
                             <div className="space-y-1 block md:col-span-2">
@@ -974,12 +1014,19 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                         )}
                         {formData.id && (
                              <div className="space-y-1 block md:col-span-2"><label className="text-xs font-bold uppercase text-red-500">Danger Zone</label>
-                             <button onClick={async () => {
-                                 if (window.confirm("Thực sự muốn xóa tài sản vật lý này?")) {
-                                     await deleteToolAsset(formData.id);
-                                     if(selectedCatalog) loadCatalogDetails(selectedCatalog);
-                                 }
-                             }} className="w-full p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl font-bold text-sm">XÓA TÀI SẢN NÀY</button>
+                             <button onClick={() => {
+                                 const targetAssetId = formData.id;
+                                 setConfirmDialog({
+                                     variant: 'danger',
+                                     title: 'Xóa tài sản vật lý',
+                                     message: 'Thực sự muốn xóa tài sản vật lý này?',
+                                     confirmLabel: 'Xóa tài sản',
+                                     onConfirm: async () => {
+                                         await deleteToolAsset(targetAssetId);
+                                         if (selectedCatalog) loadCatalogDetails(selectedCatalog);
+                                     }
+                                 });
+                             }} className="w-full min-h-[44px] p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl font-bold text-sm">XÓA TÀI SẢN NÀY</button>
                              </div>
                         )}
                     </div>
@@ -990,32 +1037,32 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {/* --- ASSET DETAIL --- */}
         {viewState === 'ASSET_DETAIL' && selectedAsset &&
             <div className="flex flex-col h-full">
-                <div className="px-4 py-3 md:px-8 bg-white border-b flex justify-between items-center shrink-0">
-                    <button onClick={() => { if(selectedCatalog) loadCatalogDetails(selectedCatalog); else setViewState('LIST'); }} className="p-2 border rounded-full hover:bg-slate-100 flex items-center justify-center w-8 h-8 shrink-0">{'<'}</button>
-                    <div className="flex-1 mx-4 truncate"><h2 className="text-xl font-black uppercase text-slate-900 truncate">Tài Sản: {selectedAsset.asset_code}</h2></div>
+                <div className="px-3 sm:px-4 py-3 md:px-8 bg-white border-b flex justify-between items-center gap-2 shrink-0">
+                    <button onClick={() => { if(selectedCatalog) loadCatalogDetails(selectedCatalog); else setViewState('LIST'); }} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 border rounded-full hover:bg-slate-100 flex items-center justify-center shrink-0 font-bold">{'<'}</button>
+                    <div className="flex-1 mx-2 sm:mx-4 truncate"><h2 className="text-base sm:text-xl font-black uppercase text-slate-900 truncate">Tài Sản: {selectedAsset.asset_code}</h2></div>
                     <div className="flex gap-2 shrink-0">
                         {isManagerOrAdmin && (
-                            <button onClick={() => { setFormData(selectedAsset); setViewState('ASSET_FORM'); }} className="p-2 border rounded-full hover:bg-slate-100"><Edit className="w-4 h-4"/></button>
+                            <button onClick={() => { setFormData(selectedAsset); setViewState('ASSET_FORM'); }} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2 border rounded-full hover:bg-slate-100"><Edit className="w-4 h-4"/></button>
                         )}
                     </div>
                 </div> 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 block">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 block">
                     <div className="max-w-4xl mx-auto space-y-6">
                          
                          <div className="p-6 md:p-8 bg-white rounded-3xl border shadow-sm">
-                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="font-black text-2xl uppercase tracking-tight text-indigo-700">{selectedAsset.asset_code}</h3>
+                             <div className="flex justify-between items-center gap-2 mb-6 flex-wrap">
+                                <h3 className="font-black text-xl sm:text-2xl uppercase tracking-tight text-indigo-700">{selectedAsset.asset_code}</h3>
                                 {getStatusBadge(selectedAsset.status)}
                              </div>
-                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 bg-slate-50 p-4 rounded-xl">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-slate-50 p-4 rounded-xl">
                                  <div><p className="text-xs text-slate-500 font-bold uppercase mb-1">Mã Loại (Catalog)</p><p className="font-medium text-sm">{(selectedAsset as any).catalog_code}</p></div>
                                  <div><p className="text-xs text-slate-500 font-bold uppercase mb-1">Tên Loại</p><p className="font-medium text-sm">{(selectedAsset as any).catalog_name}</p></div>
-                                 <div className="col-span-2"><p className="text-xs text-slate-500 font-bold uppercase mb-1">Số Serial</p><p className="font-medium text-sm">{selectedAsset.serial_number || '---'}</p></div>
+                                 <div className="sm:col-span-2"><p className="text-xs text-slate-500 font-bold uppercase mb-1">Số Serial</p><p className="font-medium text-sm">{selectedAsset.serial_number || '---'}</p></div>
                              </div>
                              
-                             <div className="mt-8 flex gap-4">
-                                 <button onClick={() => { setFormData({ tool_asset_id: selectedAsset.id, to_user_id: user.id }); setViewState('TRANSFER_FORM'); }} className="flex-1 py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-bold uppercase text-xs hover:bg-indigo-100 flex items-center justify-center gap-2"><ArrowRightLeft className="w-4 h-4"/> YÊU CẦU BÀN GIAO</button>
-                                 <button onClick={() => { setFormData({ tool_asset_id: selectedAsset.id, requested_by: user.id }); setViewState('CALIB_FORM'); }} className="flex-1 py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-bold uppercase text-xs hover:bg-amber-100 flex items-center justify-center gap-2"><CheckCircle className="w-4 h-4"/> Y.C HIỆU CHUẨN</button>
+                             <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                 <button onClick={() => { setFormData({ tool_asset_id: selectedAsset.id, to_user_id: user.id }); setViewState('TRANSFER_FORM'); }} className="flex-1 min-h-[44px] py-3 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-bold uppercase text-xs hover:bg-indigo-100 flex items-center justify-center gap-2"><ArrowRightLeft className="w-4 h-4"/> YÊU CẦU BÀN GIAO</button>
+                                 <button onClick={() => { setFormData({ tool_asset_id: selectedAsset.id, requested_by: user.id }); setViewState('CALIB_FORM'); }} className="flex-1 min-h-[44px] py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-bold uppercase text-xs hover:bg-amber-100 flex items-center justify-center gap-2"><CheckCircle className="w-4 h-4"/> Y.C HIỆU CHUẨN</button>
                              </div>
                          </div>
 
@@ -1033,7 +1080,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                                 </div>
                                                 <p className="text-sm">Từ: <strong className="text-indigo-600">{formatUserDisplayById(tr.from_user_id)}</strong> ➔ Tới: <strong className="text-indigo-600">{formatUserDisplayById(tr.to_user_id)}</strong></p>
                                                 {tr.status === 'PENDING' && (checkIsCurrentUser(tr.to_user_id) || isManagerOrAdmin) && (
-                                                    <button onClick={() => { setFormData(tr); setViewState('TRANSFER_FORM'); }} className="mt-3 w-full py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg uppercase">Xem / Phê Duyệt</button>
+                                                    <button onClick={() => { setFormData(tr); setViewState('TRANSFER_FORM'); }} className="mt-3 w-full min-h-[44px] lg:min-h-[36px] py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl uppercase">Xem / Phê Duyệt</button>
                                                 )}
                                             </div>
                                         ))}
@@ -1054,7 +1101,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                                 </div>
                                                 <p className="text-sm">Người YC: <strong>{formatUserDisplayById(cb.requested_by)}</strong></p>
                                                 {cb.status === 'PENDING' && isManagerOrAdmin && (
-                                                    <button onClick={() => { setFormData(cb); setViewState('CALIB_FORM'); }} className="mt-3 w-full py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg uppercase">Duyệt Yêu Cầu</button>
+                                                    <button onClick={() => { setFormData(cb); setViewState('CALIB_FORM'); }} className="mt-3 w-full min-h-[44px] lg:min-h-[36px] py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl uppercase">Duyệt Yêu Cầu</button>
                                                 )}
                                             </div>
                                         ))}
@@ -1070,11 +1117,11 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {/* --- TRANSFER FORM --- */}
         {viewState === 'TRANSFER_FORM' &&
             <div className="flex flex-col h-full bg-slate-50">
-                <div className="px-4 py-4 md:px-8 bg-white border-b flex justify-between items-center">
-                    <h2 className="text-lg font-black uppercase text-slate-900 truncate">Phiếu Luân Chuyển</h2>
-                    <button onClick={() => setViewState(selectedAsset ? 'ASSET_DETAIL' : 'LIST')} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 rounded-xl">Quay Lại</button>
+                <div className="px-4 py-3 sm:py-4 md:px-8 bg-white border-b flex justify-between items-center gap-3">
+                    <h2 className="text-base sm:text-lg font-black uppercase text-slate-900 truncate">Phiếu Luân Chuyển</h2>
+                    <button onClick={() => setViewState(selectedAsset ? 'ASSET_DETAIL' : 'LIST')} className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 rounded-xl shrink-0">Quay Lại</button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-2xl mx-auto w-full">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 max-w-2xl mx-auto w-full">
                     <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border space-y-6">
                         <div className="bg-indigo-50 p-4 rounded-xl">
                             <p className="text-xs font-bold text-indigo-400 uppercase mb-1">Tài Sản Bàn Giao</p>
@@ -1105,18 +1152,26 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                         <h4 className="font-bold text-sm uppercase flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500"/> Người nhận xác nhận</h4>
                                         <div className="space-y-3">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ảnh thực trạng (Tùy chọn)</p>
-                                            <label className="cursor-pointer bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center gap-2 hover:bg-slate-100 text-slate-500">
-                                                {formData.receiver_image ? <img src={formData.receiver_image} className="h-32 object-contain rounded-lg"/> : <><ImageIcon className="w-6 h-6"/><span className="text-xs font-bold">Chụp hoặc Tải Lên</span></>}
+                                            <label className="cursor-pointer bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center gap-2 hover:bg-slate-100 text-slate-500 min-h-[56px] justify-center">
+                                                {formData.receiver_image ? <img src={getProxyImageUrl(formData.receiver_image)} className="h-32 object-contain rounded-lg"/> : <><ImageIcon className="w-6 h-6"/><span className="text-xs font-bold">Chụp hoặc Tải Lên</span></>}
                                                 <input type="file" className="hidden" accept="image/*" onChange={async e => {
-                                                    if(e.target.files) setFormData({...formData, receiver_image: await uploadQMSImage(e.target.files[0], 'TRANSFER')});
+                                                    if(e.target.files?.[0]) setFormData({...formData, receiver_image: await uploadQMSImage(e.target.files[0], { entityType: 'TOOL_TRANSFER', entityId: formData.id || 'new', role: 'TRANSFER_IMAGE' })});
                                                 }}/>
                                             </label>
                                         </div>
                                         <SignaturePad label="Chữ ký người nhận" value={formData.receiver_signature || ''} onChange={s => setFormData({...formData, receiver_signature: s})} />
                                         <button onClick={async () => {
                                             if (!formData.receiver_signature) return alert("Bắt buộc phải ký tên xác nhận!");
+                                            let resolvedSig = formData.receiver_signature;
+                                            if (resolvedSig.startsWith('data:')) {
+                                                resolvedSig = await uploadQMSImage(resolvedSig, { entityType: 'TOOL_TRANSFER', entityId: formData.id || 'new', role: 'RECEIVER_SIGNATURE' });
+                                            }
+                                            let resolvedImg = formData.receiver_image;
+                                            if (resolvedImg && resolvedImg.startsWith('data:')) {
+                                                resolvedImg = await uploadQMSImage(resolvedImg, { entityType: 'TOOL_TRANSFER', entityId: formData.id || 'new', role: 'TRANSFER_IMAGE' });
+                                            }
                                             const confirmDate = Math.floor(Date.now()/1000);
-                                            const updatedTransfer = { ...formData, receiver_confirm_date: confirmDate };
+                                            const updatedTransfer = { ...formData, receiver_signature: resolvedSig, receiver_image: resolvedImg, receiver_confirm_date: confirmDate };
                                             await saveToolTransfer(updatedTransfer);
                                             setFormData(updatedTransfer);
                                             if (selectedAsset) {
@@ -1125,7 +1180,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                                 ]);
                                                 setTransfers(tData);
                                             }
-                                        }} className="w-full py-3 bg-indigo-600 text-white font-bold tracking-widest text-sm rounded-xl hover:bg-indigo-700 transition">XÁC NHẬN ĐÃ NHẬN ĐỦ</button>
+                                        }} className="w-full min-h-[44px] py-3 bg-indigo-600 text-white font-bold tracking-widest text-sm rounded-xl hover:bg-indigo-700 transition">XÁC NHẬN ĐÃ NHẬN ĐỦ</button>
                                     </div>
                                 )}
 
@@ -1145,10 +1200,14 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                         <SignaturePad label="Chữ ký quản lý" value={formData.manager_signature || ''} onChange={s => setFormData({...formData, manager_signature: s})} />
                                         <button onClick={async () => {
                                             if (!formData.manager_signature) return alert("Vui lòng ký tên phê duyệt");
-                                            await saveToolTransfer({ ...formData, status: 'APPROVED', manager_approve_date: Math.floor(Date.now()/1000) });
+                                            let resolvedMgrSig = formData.manager_signature;
+                                            if (resolvedMgrSig.startsWith('data:')) {
+                                                resolvedMgrSig = await uploadQMSImage(resolvedMgrSig, { entityType: 'TOOL_TRANSFER', entityId: formData.id || 'new', role: 'MANAGER_SIGNATURE' });
+                                            }
+                                            await saveToolTransfer({ ...formData, manager_signature: resolvedMgrSig, status: 'APPROVED', manager_approve_date: Math.floor(Date.now()/1000) });
                                             if (selectedAsset) loadAssetDetails(selectedAsset);
                                             else { setViewState('LIST'); loadMyAssets(); }
-                                        }} className="w-full py-3 bg-amber-600 text-white font-bold tracking-widest text-sm rounded-xl hover:bg-amber-700 transition">DUYỆT QUYẾT ĐỊNH LUÂN CHUYỂN</button>
+                                        }} className="w-full min-h-[44px] py-3 bg-amber-600 text-white font-bold tracking-widest text-sm rounded-xl hover:bg-amber-700 transition">DUYỆT QUYẾT ĐỊNH LUÂN CHUYỂN</button>
                                     </div>
                                 )}
 
@@ -1174,7 +1233,7 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                     setSelectedAssetIds([]);
                                     loadMyAssets();
                                 }
-                            }} className="w-full py-4 bg-indigo-600 text-white font-black text-sm tracking-widest rounded-2xl uppercase hover:bg-indigo-700 mt-4">Kích Hoạt Phiếu Luân Chuyển</button>
+                            }} className="w-full min-h-[44px] py-4 bg-indigo-600 text-white font-black text-sm tracking-widest rounded-2xl uppercase hover:bg-indigo-700 mt-4">Kích Hoạt Phiếu Luân Chuyển</button>
                         )}
                     </div>
                 </div>
@@ -1184,11 +1243,11 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
         {/* --- CALIBRATION FORM --- */}
         {viewState === 'CALIB_FORM' &&
             <div className="flex flex-col h-full bg-slate-50">
-                <div className="px-4 py-4 md:px-8 bg-white border-b flex justify-between items-center">
-                    <h2 className="text-lg font-black uppercase text-slate-900 truncate">Phiếu Hiệu Chuẩn</h2>
-                    <button onClick={() => setViewState('ASSET_DETAIL')} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 rounded-xl">Quay Lại</button>
+                <div className="px-4 py-3 sm:py-4 md:px-8 bg-white border-b flex justify-between items-center gap-3">
+                    <h2 className="text-base sm:text-lg font-black uppercase text-slate-900 truncate">Phiếu Hiệu Chuẩn</h2>
+                    <button onClick={() => setViewState('ASSET_DETAIL')} className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 rounded-xl shrink-0">Quay Lại</button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-2xl mx-auto w-full">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 max-w-2xl mx-auto w-full">
                     <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border space-y-6">
                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
                             <p className="text-xs font-bold text-amber-600 uppercase mb-1">Mã Tài Sản HC</p>
@@ -1203,8 +1262,8 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                         <div className="space-y-1">
                                             <div className="flex justify-between items-center mb-1">
                                                 <label className="text-[10px] font-bold uppercase text-slate-500">Giấy chứng nhận (Link)</label>
-                                                <label className="text-indigo-600 hover:text-indigo-700 cursor-pointer flex items-center gap-1 text-[10px] font-bold transition">
-                                                    <FileText className="w-3 h-3" />
+                                                <label className="min-h-[44px] lg:min-h-[32px] px-2 -mr-2 text-indigo-600 hover:text-indigo-700 cursor-pointer flex items-center gap-1.5 text-xs font-bold transition">
+                                                    <FileText className="w-3.5 h-3.5" />
                                                     Tải lên PDF thiết bị
                                                     <input 
                                                         type="file" 
@@ -1226,21 +1285,21 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                                             <input 
                                                 value={formData.certificate_url || ''} 
                                                 onChange={e => setFormData({...formData, certificate_url: e.target.value})} 
-                                                className="w-full p-3 bg-slate-50 rounded-xl font-medium text-sm" 
+                                                className="w-full min-h-[44px] p-3 bg-slate-50 rounded-xl font-medium text-sm" 
                                                 placeholder="Nhập Link hoặc Tải lên tệp PDF từ thiết bị..." 
                                             />
                                         </div>
-                                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Ghi chú kết quả</label><textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl h-20" /></div>
+                                        <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Ghi chú kết quả</label><textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl h-20 text-sm" /></div>
                                         <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-slate-500">Ngày H.C Tiếp Theo</label><input type="date" onChange={e => {
                                             const d = new Date(e.target.value);
                                             setFormData({...formData, next_calibration_date: Math.floor(d.getTime()/1000)});
-                                        }} className="w-full p-3 bg-slate-50 rounded-xl font-bold" /></div>
+                                        }} className="w-full min-h-[44px] p-3 bg-slate-50 rounded-xl font-bold text-sm" /></div>
                                         
-                                        <button onClick={async () => {
+                                        <button type="button" onClick={async () => {
                                             if (!formData.next_calibration_date) return alert("Vui lòng thiết lập ngày HC tiếp theo!");
                                             await saveToolCalibration({ ...formData, status: 'COMPLETED', calibration_date: Math.floor(Date.now()/1000), approved_by: user.id });
                                             if (selectedAsset) loadAssetDetails(selectedAsset);
-                                        }} className="w-full py-4 bg-green-600 text-white font-black text-sm uppercase tracking-widest rounded-xl hover:bg-green-700">CẬP NHẬT KẾT QUẢ TỐT</button>
+                                        }} className="w-full min-h-[48px] py-4 bg-green-600 text-white font-black text-sm uppercase tracking-widest rounded-xl hover:bg-green-700">CẬP NHẬT KẾT QUẢ TỐT</button>
                                     </div>
                                 )}
                                 {formData.status === 'COMPLETED' && <div className="p-4 bg-green-50 text-green-700 font-bold rounded-2xl text-center border border-green-200">✅ ĐÃ HOÀN TẤT CHU KỲ HIỆU CHUẨN</div>}
@@ -1248,16 +1307,30 @@ export const ToolsManagement: React.FC<ToolsManagementProps> = ({ user }) => {
                         ) : (
                             <div className="space-y-4">
                                 <div className="space-y-1"><label className="text-xs font-bold uppercase">Lý do / Tình trạng trước HC</label><textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl h-24 border-none text-sm font-medium focus:ring-2 focus:ring-amber-500 outline-none" placeholder="Máy bị lệch sai số, đến hạn kỳ..."></textarea></div>
-                                <button onClick={async () => {
+                                <button type="button" onClick={async () => {
                                     await saveToolCalibration({ ...formData, id: `CAL_${Date.now()}`, request_date: Math.floor(Date.now()/1000) });
                                     if (selectedAsset) loadAssetDetails(selectedAsset);
-                                }} className="w-full py-4 bg-amber-500 text-white font-black uppercase text-sm tracking-widest rounded-2xl hover:bg-amber-600 shadow-sm mt-4 text-shadow">PHÁT HÀNH PHIẾU YÊU CẦU HC</button>
+                                }} className="w-full min-h-[48px] py-4 bg-amber-500 text-white font-black uppercase text-sm tracking-widest rounded-2xl hover:bg-amber-600 shadow-sm mt-4 text-shadow">PHÁT HÀNH PHIẾU YÊU CẦU HC</button>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
         }
+        <ConfirmDialog
+          open={confirmDialog !== null}
+          variant={confirmDialog?.variant || 'info'}
+          title={confirmDialog?.title || ''}
+          message={confirmDialog?.message || ''}
+          confirmLabel={confirmDialog?.confirmLabel || 'Xác nhận'}
+          cancelLabel="Hủy"
+          onConfirm={async () => {
+            const action = confirmDialog?.onConfirm;
+            setConfirmDialog(null);
+            if (action) await action();
+          }}
+          onCancel={() => setConfirmDialog(null)}
+        />
     </div>
   );
 };

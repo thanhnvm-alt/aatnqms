@@ -1,14 +1,12 @@
-
-
 import { IPOItem } from '../types';
 import { MOCK_PLAN_DATA } from '../constants';
-// Fixed missing import member
 import { fetchPlans } from './apiService';
 
 export const fetchPlansFromSheet = async (): Promise<IPOItem[]> => {
   try {
-    const result = await fetchPlans('', 1, 200); 
-    return result && result.items && result.items.length > 0 ? result.items : MOCK_PLAN_DATA;
+    const result = await fetchPlans();
+    const list = Array.isArray(result) ? result : (result?.items || []);
+    return list.length > 0 ? list : MOCK_PLAN_DATA;
   } catch (error) {
     console.warn("Error fetching plans:", error);
     return MOCK_PLAN_DATA;

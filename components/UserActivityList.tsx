@@ -110,7 +110,7 @@ export const UserActivityList: React.FC<UserActivityListProps> = ({ userId, onCl
                 <Shield className="w-8 h-8 text-red-600 dark:text-red-450 mx-auto" />
                 <p className="text-xs font-black text-red-850 uppercase tracking-tight">Lỗi bảo mật hoặc kết nối</p>
                 <p className="text-[11px] text-red-650 dark:text-red-400 font-bold max-w-md mx-auto">{error}</p>
-                <button onClick={fetchActivity} className="px-4 py-1.5 bg-white dark:bg-slate-900 text-red-700 border border-red-200 rounded-md text-[9px] font-black uppercase tracking-wider hover:bg-red-50 transition-colors">Thử lại</button>
+                <button type="button" onClick={fetchActivity} className="min-h-[44px] lg:min-h-[36px] px-5 py-2 bg-white dark:bg-slate-900 text-red-700 border border-red-200 rounded-lg text-xs font-black uppercase tracking-wider hover:bg-red-50 transition-colors">Thử lại</button>
             </div>
         );
     }
@@ -147,21 +147,23 @@ export const UserActivityList: React.FC<UserActivityListProps> = ({ userId, onCl
             {/* TAB SELECTORS */}
             <div className="bg-slate-100 dark:bg-slate-800/60 p-1 rounded-lg flex gap-1">
                 <button 
+                    type="button"
                     onClick={() => setActiveTab('OPS')} 
-                    className={`flex-1 py-1.5 text-center text-[10px] font-black uppercase tracking-wider rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 min-h-[44px] lg:min-h-[36px] py-2 text-center text-xs lg:text-[11px] font-black uppercase tracking-wider rounded-md transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'OPS' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 shadow-sm border border-slate-200/50 dark:border-slate-850' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
                     }`}
                 >
-                    <Activity className="w-3.5 h-3.5" />
+                    <Activity className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                     Thao tác ({stats?.operations.length || 0})
                 </button>
                 <button 
+                    type="button"
                     onClick={() => setActiveTab('LOGINS')} 
-                    className={`flex-1 py-1.5 text-center text-[10px] font-black uppercase tracking-wider rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 min-h-[44px] lg:min-h-[36px] py-2 text-center text-xs lg:text-[11px] font-black uppercase tracking-wider rounded-md transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'LOGINS' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 shadow-sm border border-slate-200/50 dark:border-slate-850' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
                     }`}
                 >
-                    <Clock className="w-3.5 h-3.5" />
+                    <Clock className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                     Đăng nhập ({stats?.logins.length || 0})
                 </button>
             </div>
@@ -169,107 +171,169 @@ export const UserActivityList: React.FC<UserActivityListProps> = ({ userId, onCl
             {/* LIVE DATA CONTAINER */}
             <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
                 {activeTab === 'OPS' ? (
-                    <div className="overflow-x-auto no-scrollbar">
-                        <table className="w-full text-left border-collapse min-w-[500px]">
-                            <thead className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
-                                <tr>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thời gian</th>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Hành động</th>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Đối tượng</th>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-right">Chi tiết</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                                {(stats?.operations || []).map((log) => (
-                                    <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                                        <td className="px-3 py-1.5">
-                                            <p className="font-mono font-bold text-[10px] text-slate-500 dark:text-slate-400">{formatTime(log.timestamp)}</p>
-                                        </td>
-                                        <td className="px-3 py-1.5">
-                                            <span className={`inline-block px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-tight border rounded-md ${getActionColor(log.action)}`}>
-                                                {getActionLabel(log.action)}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-1.5">
-                                            <p className="text-[9px] font-mono font-bold text-slate-605 dark:text-slate-405 bg-slate-50 dark:bg-slate-800/40 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 inline-block uppercase">
-                                                {log.entity_type} {log.entity_id !== 'na' ? `#${log.entity_id.split('-').pop()}` : ''}
-                                            </p>
-                                        </td>
-                                        <td className="px-3 py-1.5 text-right">
-                                            <span className="text-[9px] text-slate-400 dark:text-slate-500">Bản ghi hệ thống</span>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {(!stats?.operations || stats.operations.length === 0) && (
+                    <>
+                        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/60">
+                            {(stats?.operations || []).map((log) => (
+                                <div key={log.id} className="p-3 space-y-1.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className={`inline-block px-2 py-0.5 text-[10px] uppercase font-bold tracking-tight border rounded-md ${getActionColor(log.action)}`}>
+                                            {getActionLabel(log.action)}
+                                        </span>
+                                        <span className="font-mono font-bold text-[10px] text-slate-500 dark:text-slate-400 tabular-nums shrink-0">{formatTime(log.timestamp)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                                        <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/40 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 uppercase truncate">
+                                            {log.entity_type} {log.entity_id !== 'na' ? `#${log.entity_id.split('-').pop()}` : ''}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">Bản ghi hệ thống</span>
+                                    </div>
+                                </div>
+                            ))}
+                            {(!stats?.operations || stats.operations.length === 0) && (
+                                <div className="py-8 text-center text-slate-400">
+                                    <Activity className="w-8 h-8 opacity-20 mx-auto mb-1" />
+                                    <p className="text-[10px] font-bold uppercase tracking-wider">Chưa ghi nhận hoạt động nào</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="hidden md:block overflow-x-auto no-scrollbar">
+                            <table className="w-full text-left border-collapse min-w-[500px]">
+                                <thead className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                                     <tr>
-                                        <td colSpan={4} className="py-8 text-center text-slate-400">
-                                            <Activity className="w-8 h-8 opacity-20 mx-auto mb-1" />
-                                            <p className="text-[9px] font-bold uppercase tracking-wider">Chưa ghi nhận hoạt động nào</p>
-                                        </td>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thời gian</th>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Hành động</th>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Đối tượng</th>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider text-right">Chi tiết</th>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto no-scrollbar">
-                        <table className="w-full text-left border-collapse min-w-[500px]">
-                            <thead className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
-                                <tr>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thời gian</th>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Địa chỉ IP</th>
-                                    <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thiết bị / Trình duyệt</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                                {(stats?.logins || []).map((log) => {
-                                    let ip = log.ip_address || '127.0.0.1';
-                                    let ua = log.user_agent || 'Chrome / WebApp';
-                                    try {
-                                        if (log.new_value) {
-                                            const p = JSON.parse(log.new_value);
-                                            if (p.ip) ip = p.ip;
-                                            if (p.userAgent) ua = p.userAgent;
-                                        }
-                                    } catch(e){}
-                                    return (
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                    {(stats?.operations || []).map((log) => (
                                         <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                             <td className="px-3 py-1.5">
                                                 <p className="font-mono font-bold text-[10px] text-slate-500 dark:text-slate-400">{formatTime(log.timestamp)}</p>
                                             </td>
                                             <td className="px-3 py-1.5">
-                                                <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
-                                                    <Globe className="w-3 h-3 text-blue-400 shrink-0" />
-                                                    {ip}
+                                                <span className={`inline-block px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-tight border rounded-md ${getActionColor(log.action)}`}>
+                                                    {getActionLabel(log.action)}
                                                 </span>
                                             </td>
                                             <td className="px-3 py-1.5">
-                                                <span className="flex items-center gap-1 text-[9px] font-bold text-slate-500 truncate max-w-xs" title={ua}>
-                                                    <Monitor className="w-3 h-3 text-slate-405 shrink-0" />
-                                                    {ua.includes('Mozilla') ? 'Google Chrome (macOS / Windows)' : ua}
-                                                </span>
+                                                <p className="text-[9px] font-mono font-bold text-slate-605 dark:text-slate-405 bg-slate-50 dark:bg-slate-800/40 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-800 inline-block uppercase">
+                                                    {log.entity_type} {log.entity_id !== 'na' ? `#${log.entity_id.split('-').pop()}` : ''}
+                                                </p>
+                                            </td>
+                                            <td className="px-3 py-1.5 text-right">
+                                                <span className="text-[9px] text-slate-400 dark:text-slate-500">Bản ghi hệ thống</span>
                                             </td>
                                         </tr>
-                                    );
-                                })}
-                                {(!stats?.logins || stats.logins.length === 0) && (
+                                    ))}
+                                    {(!stats?.operations || stats.operations.length === 0) && (
+                                        <tr>
+                                            <td colSpan={4} className="py-8 text-center text-slate-400">
+                                                <Activity className="w-8 h-8 opacity-20 mx-auto mb-1" />
+                                                <p className="text-[9px] font-bold uppercase tracking-wider">Chưa ghi nhận hoạt động nào</p>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/60">
+                            {(stats?.logins || []).map((log) => {
+                                let ip = log.ip_address || '127.0.0.1';
+                                let ua = log.user_agent || 'Chrome / WebApp';
+                                try {
+                                    if (log.new_value) {
+                                        const p = JSON.parse(log.new_value);
+                                        if (p.ip) ip = p.ip;
+                                        if (p.userAgent) ua = p.userAgent;
+                                    }
+                                } catch(e){}
+                                return (
+                                    <div key={log.id} className="p-3 space-y-1.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="flex items-center gap-1 text-xs font-mono font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                                                <Globe className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                                {ip}
+                                            </span>
+                                            <span className="font-mono font-bold text-[10px] text-slate-500 dark:text-slate-400 tabular-nums shrink-0">{formatTime(log.timestamp)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate" title={ua}>
+                                            <Monitor className="w-3.5 h-3.5 shrink-0" />
+                                            <span className="truncate">{ua.includes('Mozilla') ? 'Google Chrome (macOS / Windows)' : ua}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {(!stats?.logins || stats.logins.length === 0) && (
+                                <div className="py-8 text-center text-slate-400">
+                                    <Clock className="w-8 h-8 opacity-20 mx-auto mb-1" />
+                                    <p className="text-[10px] font-bold uppercase tracking-wider">Chưa ghi nhận lịch sử đăng nhập</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="hidden md:block overflow-x-auto no-scrollbar">
+                            <table className="w-full text-left border-collapse min-w-[500px]">
+                                <thead className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                                     <tr>
-                                        <td colSpan={3} className="py-8 text-center text-slate-404">
-                                            <Clock className="w-8 h-8 opacity-20 mx-auto mb-1" />
-                                            <p className="text-[9px] font-bold uppercase tracking-wider">Chưa ghi nhận lịch sử đăng nhập</p>
-                                        </td>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thời gian</th>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Địa chỉ IP</th>
+                                        <th className="px-3 py-1.5 text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thiết bị / Trình duyệt</th>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                    {(stats?.logins || []).map((log) => {
+                                        let ip = log.ip_address || '127.0.0.1';
+                                        let ua = log.user_agent || 'Chrome / WebApp';
+                                        try {
+                                            if (log.new_value) {
+                                                const p = JSON.parse(log.new_value);
+                                                if (p.ip) ip = p.ip;
+                                                if (p.userAgent) ua = p.userAgent;
+                                            }
+                                        } catch(e){}
+                                        return (
+                                            <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                                <td className="px-3 py-1.5">
+                                                    <p className="font-mono font-bold text-[10px] text-slate-500 dark:text-slate-400">{formatTime(log.timestamp)}</p>
+                                                </td>
+                                                <td className="px-3 py-1.5">
+                                                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                                                        <Globe className="w-3 h-3 text-blue-400 shrink-0" />
+                                                        {ip}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-1.5">
+                                                    <span className="flex items-center gap-1 text-[9px] font-bold text-slate-500 truncate max-w-xs" title={ua}>
+                                                        <Monitor className="w-3 h-3 text-slate-405 shrink-0" />
+                                                        {ua.includes('Mozilla') ? 'Google Chrome (macOS / Windows)' : ua}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {(!stats?.logins || stats.logins.length === 0) && (
+                                        <tr>
+                                            <td colSpan={3} className="py-8 text-center text-slate-404">
+                                                <Clock className="w-8 h-8 opacity-20 mx-auto mb-1" />
+                                                <p className="text-[9px] font-bold uppercase tracking-wider">Chưa ghi nhận lịch sử đăng nhập</p>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
                 )}
             </div>
 
             <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-lg border border-slate-150 dark:border-slate-800">
                 <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> PostgreSQL ISO Append-Only Log</span>
-                <button onClick={fetchActivity} className="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:rotate-45 duration-300">
-                    <RefreshCw className="w-2.5 h-2.5" /> Làm mới
+                <button type="button" onClick={fetchActivity} className="min-h-[44px] lg:min-h-[32px] px-3 rounded-lg flex items-center gap-1.5 hover:bg-slate-200/60 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    <RefreshCw className="w-3.5 h-3.5" /> Làm mới
                 </button>
             </div>
         </div>

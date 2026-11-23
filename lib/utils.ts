@@ -26,14 +26,39 @@ export function removeVietnameseTones(str: string): string {
     return str;
 }
 
+function parseDateInput(input: any): Date | null {
+    if (!input) return null;
+    if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+    if (typeof input === 'number') {
+        const d = new Date(input < 1e12 ? input * 1000 : input);
+        return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof input === 'string') {
+        const trimmed = input.trim();
+        if (!trimmed) return null;
+        if (/^\d+$/.test(trimmed)) {
+            const num = Number(trimmed);
+            const d = new Date(num < 1e12 ? num * 1000 : num);
+            return isNaN(d.getTime()) ? null : d;
+        }
+        // Match DD/MM/YYYY or DD-MM-YYYY
+        const ddmmyyyy = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+        if (ddmmyyyy) {
+            const [, d, m, y] = ddmmyyyy;
+            const dObj = new Date(Number(y), Number(m) - 1, Number(d));
+            return isNaN(dObj.getTime()) ? null : dObj;
+        }
+        const dObj = new Date(trimmed);
+        return isNaN(dObj.getTime()) ? null : dObj;
+    }
+    return null;
+}
+
 export function formatDateTime(timestamp: number | string | Date): string {
     if (!timestamp) return '';
     try {
-        let val: any = timestamp;
-        if (typeof timestamp === 'string' && /^\d+$/.test(timestamp)) {
-            val = Number(timestamp);
-        }
-        const date = new Date(typeof val === 'number' && val < 1e12 ? val * 1000 : val);
+        const date = parseDateInput(timestamp);
+        if (!date) return '';
         return date.toLocaleString('vi-VN', { 
             year: 'numeric', 
             month: '2-digit', 
@@ -44,18 +69,15 @@ export function formatDateTime(timestamp: number | string | Date): string {
             timeZone: 'Asia/Ho_Chi_Minh'
         });
     } catch (e) {
-        return String(timestamp);
+        return '';
     }
 }
 
 export function formatDisplayDate(timestamp: number | string | Date): string {
     if (!timestamp) return '';
     try {
-        let val: any = timestamp;
-        if (typeof timestamp === 'string' && /^\d+$/.test(timestamp)) {
-            val = Number(timestamp);
-        }
-        const date = new Date(typeof val === 'number' && val < 1e12 ? val * 1000 : val);
+        const date = parseDateInput(timestamp);
+        if (!date) return '';
         return date.toLocaleDateString('vi-VN', { 
             year: 'numeric', 
             month: '2-digit', 
@@ -63,7 +85,7 @@ export function formatDisplayDate(timestamp: number | string | Date): string {
             timeZone: 'Asia/Ho_Chi_Minh'
         });
     } catch (e) {
-        return String(timestamp);
+        return '';
     }
 }
 

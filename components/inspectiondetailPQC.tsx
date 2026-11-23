@@ -74,13 +74,14 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   // --- ISO RBAC LOGIC (CRITICAL) ---
-  const isApproved = inspection.status === InspectionStatus.APPROVED;
+  const stUpper = String(inspection.status || '').toUpperCase();
+  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(stUpper);
   const isGuest = user.role === 'GUEST';
   const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isOwner = inspection.inspectorName === user.name;
   
   const canModify = !isGuest && canUserModifyInspection(inspection, user);
-  const isLockedForUser = isApproved && !isManagerOrAdmin && !isGuest;
+  const isLockedForUser = ['LOCKED', 'VERIFIED', 'COMPLETED'].includes(stUpper) || (isApproved && !isManagerOrAdmin && !isGuest);
 
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;
@@ -230,30 +231,30 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
   if (viewingNcr) return <NCRDetail ncr={viewingNcr} user={user} onBack={() => setViewingNcr(null)} onViewInspection={() => setViewingNcr(null)} />;
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center px-4 md:px-8">
-          <div className="flex items-center gap-2">
-              <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700 shadow-sm" type="button"><ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400 dark:text-slate-500" /></button>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight">Chi tiết hồ sơ PQC</h2>
+    <div className="flex flex-col h-full min-h-0 bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-3 py-2.5 sm:px-4 md:px-8 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+              <button onClick={onBack} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 bg-slate-50 dark:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700 shadow-sm shrink-0" type="button" aria-label="Quay lại"><ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-300" /></button>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight truncate">Chi tiết hồ sơ PQC</h2>
           </div>
-          <div className="flex items-center gap-2">
-              <button onClick={handleExportPDF} className="p-2 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-700 shadow-sm" type="button"><Download className="w-4 h-4" /></button>
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <button onClick={handleExportPDF} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-slate-50 dark:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-700 shadow-sm" type="button" title="Xuất PDF" aria-label="Xuất PDF"><Download className="w-4 h-4" /></button>
               {isLockedForUser && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="min-h-[44px] lg:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700">
                       <Lock className="w-3.5 h-3.5" />
-                      <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Hồ sơ đã khóa</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Hồ sơ đã khóa</span>
                   </div>
               )}
               {canModify && (
                   <>
-                    <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all" type="button"><Edit3 className="w-4 h-4" /></button>
-                    <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/20 rounded-xl transition-all" type="button"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => onEdit(inspection.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-blue-600 dark:text-blue-400 bg-blue-50/70 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 border border-blue-200/70 dark:border-slate-700 rounded-xl transition-all" type="button" title="Chỉnh sửa" aria-label="Chỉnh sửa"><Edit3 className="w-4 h-4" /></button>
+                    <button onClick={() => onDelete(inspection.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-red-600 dark:text-red-400 bg-red-50/70 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200/70 dark:border-red-800/50 rounded-xl transition-all" type="button" title="Xóa" aria-label="Xóa"><Trash2 className="w-4 h-4" /></button>
                   </>
               )}
           </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 no-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4 pb-24 lg:pb-24 space-y-4 no-scrollbar">
         <div ref={pdfContainerRef} className="max-w-4xl mx-auto space-y-4">
             {/* --- HEADER INFO --- */}
             <div className="bg-white dark:bg-slate-900 rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
@@ -267,7 +268,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 
                 <div className="absolute right-0 top-0 p-12 opacity-5 pointer-events-none uppercase font-black text-7xl rotate-12 select-none">PQC</div>
                 
-                <div className="flex flex-col items-center mb-6 pt-8 md:pt-4">
+                <div className="flex flex-col items-center mb-6 pt-16 sm:pt-4">
                     <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-[0.1em] mb-1">{inspection.ten_ct}</p>
                     <h1 className="text-[14px] font-black text-slate-900 dark:text-slate-100 uppercase leading-tight tracking-tight text-center">{inspection.ten_hang_muc}</h1>
                 </div>
@@ -305,31 +306,31 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     </div>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner">
-                    <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 sm:p-5 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 shadow-inner tabular-nums">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
                         <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
-                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">SỐ IPO</p>
+                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">SỐ IPO</p>
                             <p className="text-lg font-black text-slate-700 dark:text-slate-300">{stats.ipo} <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">{inspection.dvt}</span></p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
-                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">KIỂM TRA</p>
+                            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">KIỂM TRA</p>
                             <p className="text-lg font-black text-blue-600 dark:text-blue-400">{stats.ins}</p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
-                            <p className="text-[9px] font-black text-green-600 dark:text-green-500 uppercase tracking-widest">ĐẠT</p>
+                            <p className="text-[10px] font-black text-green-600 dark:text-green-500 uppercase tracking-widest">ĐẠT</p>
                             <p className="text-lg font-black text-green-600 dark:text-green-500">{stats.pas}</p>
                         </div>
-                        <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20 rounded-xl py-1">
-                            <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">TỶ LỆ ĐẠT</p>
-                            <p className="text-lg font-black text-green-700">{stats.passRate}%</p>
+                        <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1 bg-green-50 dark:bg-green-900/20 rounded-xl py-1.5">
+                            <p className="text-[10px] font-black text-green-700 dark:text-green-400 uppercase tracking-widest">TỶ LỆ ĐẠT</p>
+                            <p className="text-lg font-black text-green-700 dark:text-green-400">{stats.passRate}%</p>
                         </div>
                         <div className="text-center md:border-r border-slate-200 dark:border-slate-700 space-y-1">
-                            <p className="text-[9px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest">HỎNG</p>
+                            <p className="text-[10px] font-black text-red-500 dark:text-red-400 uppercase tracking-widest">HỎNG</p>
                             <p className="text-lg font-black text-red-600 dark:text-red-400">{stats.fai}</p>
                         </div>
-                        <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20 rounded-xl py-1">
-                            <p className="text-[9px] font-black text-red-700 uppercase tracking-widest">TỶ LỆ HỎNG</p>
-                            <p className="text-lg font-black text-red-700">{stats.failRate}%</p>
+                        <div className="text-center space-y-1 bg-red-50 dark:bg-red-900/20 rounded-xl py-1.5">
+                            <p className="text-[10px] font-black text-red-700 dark:text-red-400 uppercase tracking-widest">TỶ LỆ HỎNG</p>
+                            <p className="text-lg font-black text-red-700 dark:text-red-400">{stats.failRate}%</p>
                         </div>
                     </div>
                 </div>
@@ -343,7 +344,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 {inspection.images && inspection.images.length > 0 ? (
                     <div className="flex gap-3 overflow-x-auto no-scrollbar py-2">
                         {inspection.images.map((img, i) => (
-                            <div key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="shrink-0 cursor-zoom-in hover:scale-105 transition-all">
+                            <button type="button" key={i} onClick={() => setLightboxState({ images: inspection.images!, index: i })} className="shrink-0 cursor-zoom-in hover:scale-105 transition-all rounded-2xl">
                                 <ProxyImage 
                                     src={typeof img === 'string' ? img : (img as any).url_hd} 
                                     alt="Ảnh hiện trường" 
@@ -351,12 +352,12 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                     showTimestamp={true}
                                     timestamp={typeof img === 'object' ? ((img as any).created_at || inspection.date) : inspection.date}
                                 />
-                            </div>
+                            </button>
                         ))}
                     </div>
                 ) : (
                     <div className="py-8 text-center bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                        <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Không có ảnh hiện trường tổng quát</p>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Không có ảnh hiện trường tổng quát</p>
                     </div>
                 )}
             </div>
@@ -367,11 +368,11 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                     <Activity className="w-4 h-4" /> Chi tiết kết quả kiểm tra
                 </h3>
                 {inspection.items.map((item, idx) => (
-                    <div key={idx} className={`bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div key={idx} className={`bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border shadow-sm transition-all ${item.status === CheckStatus.FAIL ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex flex-wrap gap-2">
-                                <span className={`px-3 py-0.5 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : item.status === CheckStatus.FAIL ? 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>{item.status}</span>
-                                <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-800">{item.category}</span>
+                                <span className={`px-3 py-0.5 rounded-lg text-[10px] font-black uppercase border tracking-widest shadow-sm ${item.status === CheckStatus.PASS ? 'text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : item.status === CheckStatus.FAIL ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>{item.status}</span>
+                                <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-800">{item.category}</span>
                             </div>
                         </div>
                         
@@ -379,7 +380,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                         
                         {item.notes && (
                             <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
-                                <p className="text-[11px] text-slate-600 dark:text-slate-400 dark:text-slate-500 italic leading-relaxed">"{item.notes}"</p>
+                                <p className="text-xs text-slate-600 dark:text-slate-300 italic leading-relaxed">"{item.notes}"</p>
                             </div>
                         )}
                         
@@ -387,7 +388,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                         {item.images && item.images.length > 0 && (
                             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 mt-2">
                                 {item.images.map((img, i) => (
-                                    <div key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="shrink-0 cursor-zoom-in hover:scale-105 transition-all">
+                                    <button type="button" key={i} onClick={() => setLightboxState({ images: item.images!, index: i })} className="shrink-0 cursor-zoom-in hover:scale-105 transition-all rounded-xl">
                                         <ProxyImage 
                                             src={typeof img === 'string' ? img : (img as any).url_hd} 
                                             alt="Ảnh hạng mục" 
@@ -395,7 +396,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                             showTimestamp={true}
                                             timestamp={typeof img === 'object' ? ((img as any).created_at || inspection.date) : inspection.date}
                                         />
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         )}
@@ -426,8 +427,9 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                     <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800 italic">"{item.ncr.issueDescription}"</p>
                                     
                                     <button 
+                                        type="button"
                                         onClick={() => setViewingNcr(item.ncr || null)} 
-                                        className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all shadow-lg shadow-slate-200"
+                                        className="w-full min-h-[44px] py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-xl text-[11px] font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all shadow-lg shadow-slate-200 dark:shadow-none"
                                     >
                                         <AlertOctagon className="w-4 h-4 text-red-500 dark:text-red-400" />
                                         XEM CHI TIẾT NCR
@@ -537,11 +539,13 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                 </div>
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                     {commentAttachments.length > 0 && (
-                        <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                        <div className="flex gap-3 overflow-x-auto no-scrollbar pt-2 pr-2 pb-1">
                             {commentAttachments.map((img, idx) => (
                                 <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 dark:border-slate-700 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
-                                    <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                                    <button type="button" onClick={() => handleEditCommentImage(idx)} aria-label={`Chỉnh sửa ảnh đính kèm ${idx + 1}`} className="w-full h-full rounded-2xl overflow-hidden border-2 border-blue-200 dark:border-slate-700 shadow-lg block">
+                                        <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                    </button>
+                                    <button type="button" onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} aria-label="Xóa ảnh đính kèm" className="absolute -top-2 -right-2 w-7 h-7 bg-red-600 text-white rounded-full shadow-xl flex items-center justify-center active:scale-90 transition-all z-10"><X className="w-4 h-4"/></button>
                                 </div>
                             ))}
                         </div>
@@ -565,14 +569,14 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                                     }
                                 }}
                                 placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." 
-                                className="w-full pl-5 pr-28 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
+                                className="w-full pl-5 pr-28 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] text-[12px] font-bold text-slate-900 dark:text-slate-100 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
                             />
-                            <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                                <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
-                                <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
+                            <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+                                <button type="button" onClick={() => commentCameraRef.current?.click()} aria-label="Chụp ảnh" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:hover:border-slate-700 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                                <button type="button" onClick={() => commentFileRef.current?.click()} aria-label="Chọn ảnh" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:hover:border-slate-700 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
                             </div>
                         </div>
-                        <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
+                        <button type="button" onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} aria-label="Gửi bình luận" className="min-w-[52px] min-h-[52px] lg:w-14 lg:h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
                     </div>
                 </div>
             </section>
@@ -580,11 +584,12 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
       </div>
 
       {/* --- MOBILE-OPTIMIZED BOTTOM ACTION BAR --- */}
-      <div className="sticky bottom-0 z-[110] bg-white dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-700 px-2 py-3 shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
-          <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2 h-12">
+      <div className="sticky bottom-0 z-[110] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-700 px-3 lg:pr-24 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-15px_30px_rgba(0,0,0,0.1)] shrink-0">
+          <div className="max-w-4xl mx-auto flex flex-row items-center justify-between gap-2.5 min-h-[48px]">
               <button 
+                type="button"
                 onClick={onBack} 
-                className="flex-1 h-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-black uppercase text-[8px] tracking-tight rounded-xl border border-slate-200 dark:border-slate-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2"
+                className="flex-1 min-h-[48px] lg:min-h-[44px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-black uppercase text-[10px] tracking-tight rounded-xl border border-slate-200 dark:border-slate-700 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-3"
               >
                   <ArrowLeft className="w-4 h-4" />
                   <span className="whitespace-nowrap">QUAY LẠI</span>
@@ -592,8 +597,9 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
               
               {!isApproved && (
                   <button 
+                    type="button"
                     onClick={() => setShowProductionModal(true)} 
-                    className="flex-1 h-full bg-indigo-50 text-indigo-600 font-black uppercase text-[8px] tracking-tight rounded-xl border border-indigo-200 hover:bg-indigo-100 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-2 shadow-sm"
+                    className="flex-1 min-h-[48px] lg:min-h-[44px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-black uppercase text-[10px] tracking-tight rounded-xl border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 active:scale-95 transition-all flex flex-row items-center justify-center gap-1.5 whitespace-nowrap overflow-hidden px-3 shadow-sm"
                   >
                       <UserPlus className="w-4 h-4" />
                       <span className="whitespace-nowrap">XÁC NHẬN SX</span>
@@ -605,13 +611,13 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
 
 
       {showProductionModal && (
-          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0"><div className="flex items-center gap-3"><div className="p-2.5 bg-indigo-100 text-indigo-600 rounded-xl shadow-inner"><UserPlus className="w-6 h-6" /></div><h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-sm tracking-tight">Sản xuất / Xưởng xác nhận</h3></div><button onClick={() => setShowProductionModal(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"><X className="w-7 h-7 text-slate-400 dark:text-slate-500"/></button></div>
-                  <div className="p-8 space-y-6 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/30 flex-1">
-                      <div className="space-y-5">
-                          <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2 flex items-center gap-1.5"><UserIcon className="w-4 h-4 text-indigo-500" /> Họ tên người đại diện *</label><input value={prodName} onChange={e => setProdName(e.target.value.toUpperCase())} className="w-full px-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] font-black text-sm uppercase outline-none focus:ring-4 focus:ring-indigo-100 shadow-sm transition-all" placeholder="NHẬP HỌ TÊN ĐẠI DIỆN XƯỞNG..." /></div>
-                          <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4 text-indigo-500" /> Ý kiến phản hồi / Ghi chú</label><textarea value={prodComment} onChange={e => setProdComment(e.target.value)} className="w-full px-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] font-bold text-xs outline-none focus:ring-4 focus:ring-indigo-100 h-32 resize-none shadow-sm transition-all" placeholder="Ghi chú phản hồi từ sản xuất (nếu có)..." /></div>
+          <div className="fixed inset-0 z-[240] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] border border-slate-200 dark:border-slate-800">
+                  <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0"><div className="flex items-center gap-2.5 min-w-0"><div className="p-2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-xl shadow-inner shrink-0"><UserPlus className="w-5 h-5" /></div><h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-sm tracking-tight truncate">Sản xuất / Xưởng xác nhận</h3></div><button type="button" onClick={() => setShowProductionModal(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0 cursor-pointer"><X className="w-5 h-5"/></button></div>
+                  <div className="p-3.5 sm:p-5 space-y-4 overflow-y-auto no-scrollbar bg-slate-50 dark:bg-slate-800/30 flex-1 min-h-0">
+                      <div className="space-y-4">
+                          <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1.5"><UserIcon className="w-4 h-4 text-indigo-500" /> Họ tên người đại diện *</label><input value={prodName} onChange={e => setProdName(e.target.value.toUpperCase())} className="w-full min-h-[44px] px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-sm text-slate-900 dark:text-slate-100 uppercase outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900/30 shadow-sm transition-all" placeholder="NHẬP HỌ TÊN ĐẠI DIỆN XƯỞNG..." /></div>
+                          <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4 text-indigo-500" /> Ý kiến phản hồi / Ghi chú</label><textarea value={prodComment} onChange={e => setProdComment(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900/30 h-28 resize-none shadow-sm transition-all" placeholder="Ghi chú phản hồi từ sản xuất (nếu có)..." /></div>
                           <SignaturePad 
                             label="Chữ ký xác nhận đại diện *" 
                             value={prodSig} 
@@ -620,7 +626,7 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
                           />
                       </div>
                   </div>
-                  <div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex gap-4 shrink-0"><button onClick={() => setShowProductionModal(false)} className="flex-1 py-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-black uppercase text-[11px] tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 rounded-2xl transition-all">Hủy</button><button onClick={handleProductionConfirm} disabled={isProcessing || !prodSig || !prodName.trim()} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] shadow-xl shadow-indigo-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>} LƯU XÁC NHẬN</button></div>
+                  <div className="px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 flex justify-end gap-2 shrink-0"><button type="button" onClick={() => setShowProductionModal(false)} className="min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-black uppercase text-xs tracking-wider hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all whitespace-nowrap shrink-0">Hủy</button><button type="button" onClick={handleProductionConfirm} disabled={isProcessing || !prodSig || !prodName.trim()} className="min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs tracking-wider shadow-md active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} LƯU XÁC NHẬN</button></div>
               </div>
           </div>
       )}

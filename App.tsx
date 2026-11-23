@@ -20,15 +20,16 @@ import {
 } from './constants';
 
 import { LoginPage } from './components/LoginPage';
-import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { GlobalHeader } from './components/GlobalHeader';
 import { Sidebar } from './components/Sidebar';
-import { ChatAI } from './components/ChatAI';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { MobileBottomBar } from './components/MobileBottomBar';
+import { ConfirmDialog } from './src/components/qms';
 import { 
   fetchInspections, 
   fetchDashboardStats,
   fetchInspectionById,
+  fetchPublicInspectionById,
   saveInspectionToSheet, 
   deleteInspectionFromSheet, 
   checkApiConnection, 
@@ -47,50 +48,110 @@ import {
   fetchSubcontractorBookingById
 } from './services/apiService';
 import { Loader2, X, FileText, ChevronRight, Bell } from 'lucide-react';
-import { QCAssignmentReminderModal } from './components/QCAssignmentReminderModal';
+import { buildSqcPrefillFromBooking } from './src/utils/bookingDocuments';
+import { canInspectM03Booking } from './src/utils/m03Rbac';
 
-const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
-const InspectionList = lazy(() => import('./components/InspectionList').then(m => ({ default: m.InspectionList })));
-const InspectionFormPQC = lazy(() => import('./components/inspectionformPQC').then(m => ({ default: m.InspectionFormPQC })));
-const InspectionFormIQC = lazy(() => import('./components/inspectionformIQC').then(m => ({ default: m.InspectionFormIQC })));
-const InspectionFormSQC_VT = lazy(() => import('./components/inspectionformSQC_VT').then(m => ({ default: m.InspectionFormSQC_VT })));
-const InspectionFormSQC_BTP = lazy(() => import('./components/inspectionformSQC_BTP').then(m => ({ default: m.InspectionFormSQC_BTP })));
-const InspectionFormSQC_TP = lazy(() => import('./components/inspectionformSQC_TP').then(m => ({ default: m.InspectionFormSQC_TP })));
-const InspectionFormFRS = lazy(() => import('./components/inspectionformFRS').then(m => ({ default: m.InspectionFormFRS })));
-const InspectionFormStepVecni = lazy(() => import('./components/inspectionformStepVecni').then(m => ({ default: m.InspectionFormStepVecni })));
-const InspectionFormFQC = lazy(() => import('./components/inspectionformFQC').then(m => ({ default: m.InspectionFormFQC })));
-const InspectionFormSPR = lazy(() => import('./components/inspectionformSPR').then(m => ({ default: m.InspectionFormSPR })));
-const InspectionFormSITE = lazy(() => import('./components/inspectionformSITE').then(m => ({ default: m.InspectionFormSITE })));
+const lazyWithRetry = <T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) =>
+  lazy(async () => {
+    const reloadFlag = 'qms_lazy_chunk_reloaded';
+    try {
+      const mod = await factory();
+      if (typeof window !== 'undefined') {
+        try { sessionStorage.removeItem(reloadFlag); } catch {}
+      }
+      return mod;
+    } catch (firstErr) {
+      await new Promise((r) => setTimeout(r, 250));
+      try {
+        const mod = await factory();
+        if (typeof window !== 'undefined') {
+          try { sessionStorage.removeItem(reloadFlag); } catch {}
+        }
+        return mod;
+      } catch (secondErr) {
+        if (typeof window !== 'undefined') {
+          let alreadyReloaded = false;
+          try { alreadyReloaded = sessionStorage.getItem(reloadFlag) === '1'; } catch {}
+          if (!alreadyReloaded) {
+            try { sessionStorage.setItem(reloadFlag, '1'); } catch {}
+            window.location.reload();
+            return new Promise<{ default: T }>(() => {});
+          }
+        }
+        throw secondErr;
+      }
+    }
+  });
 
-const InspectionDetailPQC = lazy(() => import('./components/inspectiondetailPQC').then(m => ({ default: m.InspectionDetailPQC })));
-const InspectionDetailIQC = lazy(() => import('./components/inspectiondetailIQC').then(m => ({ default: m.InspectionDetailIQC })));
-const InspectionDetailSQC_VT = lazy(() => import('./components/inspectiondetailSQC_VT').then(m => ({ default: m.InspectionDetailSQC_VT })));
-const InspectionDetailSQC_BTP = lazy(() => import('./components/inspectiondetailSQC_BTP').then(m => ({ default: m.InspectionDetailSQC_BTP })));
-const InspectionDetailSQC_TP = lazy(() => import('./components/inspectiondetailSQC_TP').then(m => ({ default: m.InspectionDetailSQC_TP })));
-const InspectionDetailFRS = lazy(() => import('./components/inspectiondetailFRS').then(m => ({ default: m.InspectionDetailFRS })));
-const InspectionDetailStepVecni = lazy(() => import('./components/inspectiondetailStepVecni').then(m => ({ default: m.InspectionDetailStepVecni })));
-const InspectionDetailFQC = lazy(() => import('./components/inspectiondetailFQC').then(m => ({ default: m.InspectionDetailFQC })));
-const InspectionDetailSPR = lazy(() => import('./components/inspectiondetailSPR').then(m => ({ default: m.InspectionDetailSPR })));
-const InspectionDetailSITE = lazy(() => import('./components/inspectiondetailSITE').then(m => ({ default: m.InspectionDetailSITE })));
+const ChatAI = lazyWithRetry(() => import('./components/ChatAI').then(m => ({ default: m.ChatAI })));
+const ChangePasswordModal = lazyWithRetry(() => import('./components/ChangePasswordModal').then(m => ({ default: m.ChangePasswordModal })));
+const QCAssignmentReminderModal = lazyWithRetry(() => import('./components/QCAssignmentReminderModal').then(m => ({ default: m.QCAssignmentReminderModal })));
+import { TraceabilityPanel, TraceabilityLookupModal } from './components/TraceabilityPanel';
 
-const Settings = lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
-const IPOPage = lazy(() => import('./components/IPOPage'));
-const ThreeDConverter = lazy(() => import('./components/ThreeDConverter').then(m => ({ default: m.ThreeDConverter })));
-const ProjectList = lazy(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
-const ProjectDetail = lazy(() => import('./components/ProjectDetail').then(m => ({ default: m.ProjectDetail })));
-const NCRList = lazy(() => import('./components/NCRList').then(m => ({ default: m.NCRList })));
-const DefectLibrary = lazy(() => import('./components/DefectLibrary').then(m => ({ default: m.DefectLibrary })));
-const DefectList = lazy(() => import('./components/DefectList').then(m => ({ default: m.DefectList })));
-const DefectDetail = lazy(() => import('./components/DefectDetail').then(m => ({ default: m.DefectDetail })));
-const SupplierManagement = lazy(() => import('./components/SupplierManagement').then(m => ({ default: m.SupplierManagement })));
-const SupplierDetail = lazy(() => import('./components/SupplierDetail').then(m => ({ default: m.SupplierDetail })));
-const MaterialManagement = lazy(() => import('./components/MaterialManagement').then(m => ({ default: m.MaterialManagement })));
-const ToolsManagement = lazy(() => import('./components/ToolsManagement').then(m => ({ default: m.ToolsManagement })));
-const Trash = lazy(() => import('./components/Trash').then(m => ({ default: m.Trash })));
-const QRScannerModal = lazy(() => import('./components/QRScannerModal').then(m => ({ default: m.QRScannerModal })));
-const SubcontractorBookingManagement = lazy(() => import('./components/SubcontractorBookingManagement').then(m => ({ default: m.SubcontractorBookingManagement })));
+const Dashboard = lazyWithRetry(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const InspectionList = lazyWithRetry(() => import('./components/InspectionList').then(m => ({ default: m.InspectionList })));
+const InspectionFormPQC = lazyWithRetry(() => import('./components/inspectionformPQC').then(m => ({ default: m.InspectionFormPQC })));
+const InspectionFormIQC = lazyWithRetry(() => import('./components/inspectionformIQC').then(m => ({ default: m.InspectionFormIQC })));
+const InspectionFormSQC_VT = lazyWithRetry(() => import('./components/inspectionformSQC_VT').then(m => ({ default: m.InspectionFormSQC_VT })));
+const InspectionFormSQC_BTP = lazyWithRetry(() => import('./components/inspectionformSQC_BTP').then(m => ({ default: m.InspectionFormSQC_BTP })));
+const InspectionFormSQC_TP = lazyWithRetry(() => import('./components/inspectionformSQC_TP').then(m => ({ default: m.InspectionFormSQC_TP })));
+const InspectionFormFRS = lazyWithRetry(() => import('./components/inspectionformFRS').then(m => ({ default: m.InspectionFormFRS })));
+const InspectionFormStepVecni = lazyWithRetry(() => import('./components/inspectionformStepVecni').then(m => ({ default: m.InspectionFormStepVecni })));
+const InspectionFormFQC = lazyWithRetry(() => import('./components/inspectionformFQC').then(m => ({ default: m.InspectionFormFQC })));
+const InspectionFormSPR = lazyWithRetry(() => import('./components/inspectionformSPR').then(m => ({ default: m.InspectionFormSPR })));
+const InspectionFormSITE = lazyWithRetry(() => import('./components/inspectionformSITE').then(m => ({ default: m.InspectionFormSITE })));
+
+const InspectionDetailPQC = lazyWithRetry(() => import('./components/inspectiondetailPQC').then(m => ({ default: m.InspectionDetailPQC })));
+const InspectionDetailIQC = lazyWithRetry(() => import('./components/inspectiondetailIQC').then(m => ({ default: m.InspectionDetailIQC })));
+const InspectionDetailSQC_VT = lazyWithRetry(() => import('./components/inspectiondetailSQC_VT').then(m => ({ default: m.InspectionDetailSQC_VT })));
+const InspectionDetailSQC_BTP = lazyWithRetry(() => import('./components/inspectiondetailSQC_BTP').then(m => ({ default: m.InspectionDetailSQC_BTP })));
+const InspectionDetailSQC_TP = lazyWithRetry(() => import('./components/inspectiondetailSQC_TP').then(m => ({ default: m.InspectionDetailSQC_TP })));
+const InspectionDetailFRS = lazyWithRetry(() => import('./components/inspectiondetailFRS').then(m => ({ default: m.InspectionDetailFRS })));
+const InspectionDetailStepVecni = lazyWithRetry(() => import('./components/inspectiondetailStepVecni').then(m => ({ default: m.InspectionDetailStepVecni })));
+const InspectionDetailFQC = lazyWithRetry(() => import('./components/inspectiondetailFQC').then(m => ({ default: m.InspectionDetailFQC })));
+const InspectionDetailSPR = lazyWithRetry(() => import('./components/inspectiondetailSPR').then(m => ({ default: m.InspectionDetailSPR })));
+const InspectionDetailSITE = lazyWithRetry(() => import('./components/inspectiondetailSITE').then(m => ({ default: m.InspectionDetailSITE })));
+
+const Settings = lazyWithRetry(() => import('./components/Settings').then(m => ({ default: m.Settings })));
+const IPOPage = lazyWithRetry(() => import('./components/IPOPage'));
+const ThreeDConverter = lazyWithRetry(() => import('./components/ThreeDConverter').then(m => ({ default: m.ThreeDConverter })));
+const ProjectList = lazyWithRetry(() => import('./components/ProjectList').then(m => ({ default: m.ProjectList })));
+const ProjectDetail = lazyWithRetry(() => import('./components/ProjectDetail').then(m => ({ default: m.ProjectDetail })));
+const NCRList = lazyWithRetry(() => import('./components/NCRList').then(m => ({ default: m.NCRList })));
+const DefectLibrary = lazyWithRetry(() => import('./components/DefectLibrary').then(m => ({ default: m.DefectLibrary })));
+const DefectList = lazyWithRetry(() => import('./components/DefectList').then(m => ({ default: m.DefectList })));
+const DefectDetail = lazyWithRetry(() => import('./components/DefectDetail').then(m => ({ default: m.DefectDetail })));
+const SupplierManagement = lazyWithRetry(() => import('./components/SupplierManagement').then(m => ({ default: m.default || m.SupplierManagement })));
+const SupplierDetail = lazyWithRetry(() => import('./components/SupplierDetail').then(m => ({ default: m.default || m.SupplierDetail })));
+const MaterialManagement = lazyWithRetry(() => import('./components/MaterialManagement').then(m => ({ default: m.MaterialManagement })));
+const ToolsManagement = lazyWithRetry(() => import('./components/ToolsManagement').then(m => ({ default: m.ToolsManagement })));
+const Trash = lazyWithRetry(() => import('./components/Trash').then(m => ({ default: m.Trash })));
+const QRScannerModal = lazyWithRetry(() => import('./components/QRScannerModal').then(m => ({ default: m.QRScannerModal })));
+const SubcontractorBookingManagement = lazyWithRetry(() => import('./components/SubcontractorBookingManagement').then(m => ({ default: m.SubcontractorBookingManagement })));
 
 const AUTH_STORAGE_KEY = 'aatn_auth_storage';
+
+const safeStorageGet = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key) || sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const safeStorageSet = (storageType: 'local' | 'session', key: string, value: string) => {
+  try {
+    const target = storageType === 'local' ? localStorage : sessionStorage;
+    target.setItem(key, value);
+  } catch {}
+};
+
+const safeStorageRemove = (key: string) => {
+  try { localStorage.removeItem(key); } catch {}
+  try { sessionStorage.removeItem(key); } catch {}
+};
 
 const DETAIL_COMPONENT_MAP: Record<string, any> = {
     'IQC': InspectionDetailIQC,
@@ -124,8 +185,10 @@ const App = () => {
     }
     return null;
   });
-  const [isDbReady, setIsDbReady] = useState(false);
+  const [isDbReady, setIsDbReady] = useState(true);
   const [view, setView] = useState<ViewState>('DASHBOARD');
+  const [deleteInspectionId, setDeleteInspectionId] = useState<string | null>(null);
+  const [hasVisitedList, setHasVisitedList] = useState(false);
   const [returnView, setReturnView] = useState<ViewState>('LIST');
   const [currentModule, setCurrentModule] = useState<string>('ALL');
   const [inspections, setInspections] = useState<Inspection[]>([]); 
@@ -173,60 +236,110 @@ const App = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showModuleSelector, setShowModuleSelector] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES'>('TEMPLATE');
+  const [qrTraceCode, setQrTraceCode] = useState<string | null>(null);
+  const [inspectionNavStack, setInspectionNavStack] = useState<string[]>([]);
+  const [settingsTab, setSettingsTab] = useState<'TEMPLATE' | 'USERS' | 'WORKSHOPS' | 'PROFILE' | 'ROLES' | 'DEPARTMENTS' | 'SYSTEM_AUDIT'>('TEMPLATE');
 
   useEffect(() => {
-    const localData = localStorage.getItem(AUTH_STORAGE_KEY) || sessionStorage.getItem(AUTH_STORAGE_KEY);
-    if (localData) { 
-        try { 
-            const parsedUser = JSON.parse(localData); 
-            if (parsedUser?.role) {
-                console.log('User:', parsedUser);
-                setUser(parsedUser); 
-                setView(parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
-            }
-        } catch (e) { console.error("Auth hydrate failed", e); } 
+    if (typeof window !== 'undefined') {
+      (window as any).__QMS_MARK_MOUNTED__?.();
     }
-    const startup = async () => {
-        try {
-            setIsDbReady(true);
-            await Promise.all([loadUsers(), loadRoles(), loadWorkshops(), loadTemplates()]);
-            
-            if (shareId) {
-                const inspection = await fetchInspectionById(shareId);
-                if (inspection) {
-                    setIsPublicView(true);
-                    setUser({
-                        id: 'guest',
-                        username: 'guest',
-                        name: 'Khách xem báo cáo',
-                        role: 'GUEST',
-                        avatar: '',
-                        workLocation: 'Hệ thống QMS',
-                    } as any);
-                    setActiveInspection(inspection);
-                    setView('DETAIL');
-                }
+    const localData = safeStorageGet(AUTH_STORAGE_KEY);
+    const authToken = safeStorageGet('aatn_qms_token');
+    if (localData && authToken) {
+      try {
+        const parsedUser = JSON.parse(localData);
+        if (parsedUser?.role) {
+          setUser(parsedUser);
+          const initialView: ViewState = parsedUser.role === 'QC' ? 'LIST' : 'DASHBOARD';
+          setView(initialView);
+          if (initialView === 'LIST') setHasVisitedList(true);
+          if (typeof window !== 'undefined') {
+            const traceParam = new URLSearchParams(window.location.search).get('trace');
+            if (traceParam && !shareId) {
+              setQrTraceCode(traceParam.trim());
             }
-        } catch (error) { setIsDbReady(true); }
+          }
+        }
+      } catch (e) {
+        console.error("Auth hydrate failed", e);
+        safeStorageRemove(AUTH_STORAGE_KEY);
+        safeStorageRemove('aatn_qms_token');
+      }
+    } else if (localData && !authToken && !shareId) {
+      // Clear legacy pre-JWT session without a Bearer token so user cleanly logs in
+      safeStorageRemove(AUTH_STORAGE_KEY);
+    }
+
+    const startup = async () => {
+      try {
+        setIsDbReady(true);
+        if (shareId) {
+          const inspection = await fetchPublicInspectionById(shareId);
+          if (inspection) {
+            setIsPublicView(true);
+            setUser({
+              id: 'guest',
+              username: 'guest',
+              name: 'Khách xem báo cáo',
+              role: 'GUEST',
+              avatar: '',
+              workLocation: 'Hệ thống QMS',
+            } as any);
+            setActiveInspection(inspection);
+            setView('DETAIL');
+          }
+        }
+      } catch (error) {
+        setIsDbReady(true);
+      }
     };
     startup();
+
+    const handleAuthExpired = () => {
+      if (!shareId) {
+        hydratedForUserRef.current = null;
+        safeStorageRemove(AUTH_STORAGE_KEY);
+        safeStorageRemove('aatn_qms_token');
+        setDashboardStats(null);
+        setUser(null);
+        setActiveInspection(null);
+        setView('DASHBOARD');
+      }
+    };
+    window.addEventListener('qms-auth-expired', handleAuthExpired);
+    return () => {
+      window.removeEventListener('qms-auth-expired', handleAuthExpired);
+    };
   }, []);
 
-  // Inspections load only once on startup if user is auth
+  // Track LIST visit once so InspectionList preserves state across DETAIL -> Back without eager Dashboard mount storm
   useEffect(() => {
-    if (user && isDbReady) {
-        loadInspections(inspectionsPage, inspectionFilters);
+    if (view === 'LIST' && !hasVisitedList) {
+      setHasVisitedList(true);
     }
-  }, [user, isDbReady, inspectionsPage, inspectionFilters]);
+  }, [view, hasVisitedList]);
 
+  // Hydrate directory/reference metadata only after user is authenticated (skip 5MB preload at LoginPage)
+  const hydratedForUserRef = useRef<string | null>(null);
   useEffect(() => {
-    // We remove interval loading for list to avoid loading everything, InspectionList will fetch.
-  }, [user, isDbReady, inspectionsPage, inspectionFilters, view]);
+    if (!user?.id || !isDbReady) return;
+    if (hydratedForUserRef.current === user.id) return;
+    hydratedForUserRef.current = user.id;
+    if (isPublicView) return;
+    Promise.all([loadUsers(), loadRoles(), loadWorkshops(), loadTemplates()]).catch(() => {});
+  }, [user?.id, isDbReady, isPublicView]);
+
+  // Inspections load only when user actually views LIST (or Projects/Form if empty)
+  useEffect(() => {
+    if (user && isDbReady && (view === 'LIST' || (inspections.length === 0 && (view === 'PROJECTS' || view === 'PROJECT_DETAIL')))) {
+      loadInspections(inspectionsPage, inspectionFilters);
+    }
+  }, [user, isDbReady, view, inspectionsPage, inspectionFilters]);
 
   useEffect(() => {
     if (user && isDbReady) {
-        if (view === 'PROJECTS') loadProjects(projectsSearch, projectsPage);
+      if (view === 'PROJECTS') loadProjects(projectsSearch, projectsPage);
     }
   }, [user, isDbReady, view, projectsPage, projectsSearch]);
 
@@ -241,7 +354,8 @@ const App = () => {
         const result = await fetchInspections(filters, page, 50);
         setInspections(result.items || []);
         setInspectionsTotal(result.total || 0);
-    } catch (e) {
+    } catch (e: any) {
+        if (e?.status === 401) return;
         console.error("Load inspections failed", e);
     } finally {
         setIsLoadingInspections(false);
@@ -253,7 +367,8 @@ const App = () => {
     try {
         const result = await fetchDashboardStats(filters);
         setDashboardStats(result);
-    } catch (e) {
+    } catch (e: any) {
+        if (e?.status === 401) return;
         console.error("ISO-FRONT: Load dashboard stats failed", e);
     } finally {
         setIsDashboardLoading(false);
@@ -272,7 +387,8 @@ const App = () => {
         const result = await fetchProjects(search, 1, 10000); 
         setProjects(result.items || []); 
         setProjectsTotal(result.total || 0);
-    } catch(e) {
+    } catch (e: any) {
+        if (e?.status === 401) return;
         console.error("Load projects failed", e);
     } 
   };
@@ -280,25 +396,28 @@ const App = () => {
   const handleLogin = (loggedInUser: User, remember: boolean) => {  
     const { password, ...safeUser } = loggedInUser; 
     setUser(safeUser as User); 
-    const storage = remember ? localStorage : sessionStorage; 
-    storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser)); 
-    setView(safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD'); 
+    safeStorageSet(remember ? 'local' : 'session', AUTH_STORAGE_KEY, JSON.stringify(safeUser)); 
+    const nextView: ViewState = safeUser.role === 'QC' ? 'LIST' : 'DASHBOARD';
+    setView(nextView); 
+    if (nextView === 'LIST') setHasVisitedList(true);
   };
 
   const handlePasswordChangeSuccess = (updatedUser: User) => {
     const { password, ...safeUser } = updatedUser;
     setUser(safeUser as User);
-    const storage = localStorage.getItem(AUTH_STORAGE_KEY) ? localStorage : sessionStorage;
-    storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+    let isLocal = false;
+    try { isLocal = Boolean(localStorage.getItem(AUTH_STORAGE_KEY)); } catch {}
+    safeStorageSet(isLocal ? 'local' : 'session', AUTH_STORAGE_KEY, JSON.stringify(safeUser));
   };
   
   const handleLogout = () => { 
+    hydratedForUserRef.current = null;
     setUser(null); 
     setView('DASHBOARD'); 
-    localStorage.removeItem(AUTH_STORAGE_KEY); 
-    localStorage.removeItem('aatn_qms_token');
-    localStorage.removeItem('aatn_saved_username'); 
-    sessionStorage.removeItem(AUTH_STORAGE_KEY); 
+    setHasVisitedList(false);
+    safeStorageRemove(AUTH_STORAGE_KEY);
+    safeStorageRemove('aatn_qms_token');
+    safeStorageRemove('aatn_saved_username');
   };
 
   const notifyUsers = async (targetRoles: string[], title: string, message: string, link?: { view: ViewState, id: string }, excludeUserId?: string, sender?: User) => {
@@ -365,20 +484,63 @@ const App = () => {
     }
   };
 
-  const handleSelectInspection = async (id: string) => { 
-    setReturnView(view);
-    setIsDetailLoading(true); 
-    try { 
+  const handleSelectInspection = async (id: string, options?: { pushStack?: boolean }) => {
+    const willPush = Boolean(options?.pushStack && view === 'DETAIL' && activeInspection?.id && activeInspection.id !== id);
+    if (willPush && activeInspection?.id) {
+      setInspectionNavStack(prev => [...prev, activeInspection.id]);
+    } else if (!options?.pushStack) {
+      if (view !== 'DETAIL') {
+        setReturnView(view);
+      }
+      setInspectionNavStack([]);
+    }
+    setIsDetailLoading(true);
+    try {
       if (!id) {
         throw new Error("Không tìm thấy mã hồ sơ trong liên kết.");
       }
-      const fullInspection = await fetchInspectionById(id); 
-      if (fullInspection) { setActiveInspection(fullInspection); setView('DETAIL'); } 
-      else { alert("Không tìm thấy phiếu."); }
-    } catch (error) { 
+      const fullInspection = isPublicView
+        ? await fetchPublicInspectionById(id)
+        : await fetchInspectionById(id);
+      if (fullInspection) {
+        setActiveInspection(fullInspection);
+        setView('DETAIL');
+        if (typeof document !== 'undefined') {
+          const mainEl = document.getElementById('main-scroll-container');
+          if (mainEl) mainEl.scrollTop = 0;
+        }
+      } else {
+        alert("Không tìm thấy phiếu.");
+      }
+    } catch (error) {
       console.error("Lỗi tải chi tiết:", error);
-      alert("Lỗi tải chi tiết: " + (error instanceof Error ? error.message : String(error))); 
-    } finally { setIsDetailLoading(false); } 
+      alert("Lỗi tải chi tiết: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
+  const handlePopInspectionStack = async () => {
+    if (inspectionNavStack.length === 0) {
+      if (!isPublicView) setView(returnView);
+      return;
+    }
+    const previousId = inspectionNavStack[inspectionNavStack.length - 1];
+    setInspectionNavStack(prev => prev.slice(0, -1));
+    setIsDetailLoading(true);
+    try {
+      const prevInspection = isPublicView
+        ? await fetchPublicInspectionById(previousId)
+        : await fetchInspectionById(previousId);
+      if (prevInspection) {
+        setActiveInspection(prevInspection);
+        setView('DETAIL');
+      }
+    } catch (error) {
+      console.error("Lỗi quay lại phiếu trước:", error);
+    } finally {
+      setIsDetailLoading(false);
+    }
   };
 
   const handleEditInspection = async (id: string) => { 
@@ -403,22 +565,38 @@ const App = () => {
   };
 
   const handleSaveInspection = async (newInspection: Inspection) => { 
-      const isNew = !newInspection.id || !inspections.find(i => i.id === newInspection.id);
-      await saveInspectionToSheet(newInspection); 
+      const hasExplicitBookingId = Object.prototype.hasOwnProperty.call(newInspection, 'booking_id');
+      const hasExplicitBookingCode = Object.prototype.hasOwnProperty.call(newInspection, 'booking_code');
+      const fallbackBookingId = !activeInspection && !hasExplicitBookingId ? (initialFormState as any)?.booking_id : undefined;
+      const fallbackBookingCode = !activeInspection && !hasExplicitBookingCode ? (initialFormState as any)?.booking_code : undefined;
+      const inspectionToSave: Inspection = {
+        ...newInspection,
+        ...(!hasExplicitBookingId && fallbackBookingId ? { booking_id: fallbackBookingId } : {}),
+        ...(!hasExplicitBookingCode && fallbackBookingCode ? { booking_code: fallbackBookingCode } : {}),
+      };
+      const isNew = !inspectionToSave.id || !inspections.find(i => i.id === inspectionToSave.id);
+      await saveInspectionToSheet(inspectionToSave); 
       
       if (isNew && user) {
         // Notify Managers and Admins about new report
-        notifyUsers(['MANAGER', 'ADMIN'], 'Phiếu báo cáo mới', `QC ${user.name} vừa gửi phiếu ${newInspection.type} cho dự án ${newInspection.ten_ct}`, { view: 'DETAIL', id: newInspection.id }, user.id, user);
+        notifyUsers(['MANAGER', 'ADMIN'], 'Phiếu báo cáo mới', `QC ${user.name} vừa gửi phiếu ${inspectionToSave.type} cho dự án ${inspectionToSave.ten_ct}`, { view: 'DETAIL', id: inspectionToSave.id }, user.id, user);
       }
-      
-      setView('LIST'); loadInspections(inspectionsPage, inspectionFilters); 
+
+      const hasLinkedBooking = Boolean(
+        (inspectionToSave as any)?.booking_id ||
+        (inspectionToSave as any)?.bookingId ||
+        (inspectionToSave as any)?.booking_code ||
+        (inspectionToSave as any)?.bookingCode
+      );
+      const isSqcType = String(inspectionToSave.type || '').toUpperCase().startsWith('SQC');
+      setView(hasLinkedBooking && isSqcType ? 'SUBCONTRACTOR_BOOKING' : 'LIST');
+      loadInspections(inspectionsPage, inspectionFilters); 
   };
 
   const startCreateInspection = async (moduleId: ModuleId) => {
       setShowModuleSelector(false);
       const template = templates[moduleId] || INITIAL_CHECKLIST_TEMPLATE;
       setInitialFormState({ 
-        ...initialFormState,
         type: moduleId, 
         items: JSON.parse(JSON.stringify(template)) 
       });
@@ -451,87 +629,15 @@ const App = () => {
   };
 
   const startSubcontractorInspection = (booking: any) => {
+    if (!canInspectM03Booking(user, booking, roles)) {
+      alert('Bạn không có quyền nghiệm thu SQC cho lịch hẹn này.');
+      return;
+    }
     const sqcType = (booking.sqcType as ModuleId) || 'SQC_BTP';
     const template = templates[sqcType] || SQC_BTP_CHECKLIST_TEMPLATE;
+    const prefill = buildSqcPrefillFromBooking(booking, sqcType, template);
 
-    const mappedItems = booking.items && booking.items.length > 0
-      ? booking.items.map((it: any, idx: number) => ({
-          id: it.id || (idx + 1).toString(),
-          name: it.itemName || 'Hạng mục gia công',
-          itemName: it.itemName || '',
-          category: 'Hạng mục kiểm tra',
-          specifications: it.specifications || '',
-          orderQty: it.quantity || 1,
-          quantity: it.quantity || 1,
-          unit: it.unit || 'Bộ',
-          status: 'PASS',
-          result: 'PASS',
-          isInspected: true
-        }))
-      : JSON.parse(JSON.stringify(template));
-
-    const mappedMaterials = booking.items && booking.items.length > 0
-      ? booking.items.map((it: any, idx: number) => ({
-          id: it.id || (idx + 1).toString(),
-          name: it.itemName || 'Hạng mục gia công',
-          category: 'Gia công ngoài',
-          inspectType: '100%',
-          scope: 'COMMON',
-          projectCode: booking.poNumber,
-          projectName: `PO ${booking.poNumber}`,
-          orderQty: it.quantity || 1,
-          deliveryQty: it.quantity || 1,
-          unit: it.unit || 'Bộ',
-          criteria: [],
-          items: [],
-          inspectQty: it.quantity || 1,
-          passQty: it.quantity || 1,
-          failQty: 0,
-          images: [],
-          type: 'Material',
-          specifications: it.specifications || ''
-        }))
-      : [];
-
-    const docList: any[] = [];
-    if (booking.documents) {
-      if (booking.documents.materialSpecUrl) {
-        docList.push({ id: 'doc_spec', name: 'Spec / Thông số kỹ thuật (PDF Booking)', verified: true, url: booking.documents.materialSpecUrl });
-      }
-      if (booking.documents.approvedSampleUrl) {
-        docList.push({ id: 'doc_sample', name: 'Mẫu duyệt / Mẫu đối chứng (PDF Booking)', verified: true, url: booking.documents.approvedSampleUrl });
-      }
-      if (booking.documents.shopdrawingUrl) {
-        docList.push({ id: 'doc_drawing', name: 'Shopdrawing / Bản vẽ (PDF Booking)', verified: true, url: booking.documents.shopdrawingUrl });
-      }
-      if (booking.documents.qualityAgreementUrl) {
-        docList.push({ id: 'doc_qa', name: 'Cam kết chất lượng (PDF Booking)', verified: true, url: booking.documents.qualityAgreementUrl });
-      }
-    }
-
-    setInitialFormState({
-      type: sqcType,
-      po_number: booking.poNumber,
-      ma_ct: booking.poNumber,
-      ten_ct: booking.poNumber,
-      supplier: booking.supplierName,
-      supplierName: booking.supplierName,
-      ma_nha_may: booking.supplierName,
-      workshop: booking.supplierName,
-      supplierAddress: booking.locationAddress,
-      location: booking.locationAddress,
-      dia_chi_xuong: booking.locationAddress,
-      nguoi_lien_he: booking.contactPerson,
-      so_dien_thoai: booking.contactPhone,
-      date: booking.requestedDate ? new Date(booking.requestedDate * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      booking_id: booking.id,
-      booking_code: booking.bookingCode,
-      items: mappedItems,
-      materials: mappedMaterials,
-      supportingDocs: docList.length > 0 ? docList : undefined,
-      referenceDocs: docList.map(d => ({ title: d.name, url: d.url || '#' }))
-    } as any);
-
+    setInitialFormState(prefill as any);
     setActiveInspection(null);
     setView('FORM');
   };
@@ -539,8 +645,9 @@ const App = () => {
   const handleStartInspectionByBookingId = async (bookingId: string) => {
     try {
       const bRes = await fetchSubcontractorBookingById(bookingId);
-      if (bRes && bRes.booking) {
-        startSubcontractorInspection(bRes.booking);
+      const bk = (bRes as any)?.booking || bRes;
+      if (bk) {
+        startSubcontractorInspection(bk);
       }
     } catch (e) {
       console.error("Lỗi khi tải thông tin booking:", e);
@@ -553,18 +660,20 @@ const App = () => {
   if (user.requirePasswordChange || user.require_password_change) {
     return (
       <div className="fixed inset-0 z-[300] bg-slate-950 flex items-center justify-center p-4">
-        <ChangePasswordModal 
-          onClose={() => {}} 
-          onSuccess={handlePasswordChangeSuccess} 
-          forcing={true} 
-          onLogout={handleLogout} 
-        />
+        <Suspense fallback={<LoadingFallback />}>
+          <ChangePasswordModal 
+            onClose={() => {}} 
+            onSuccess={handlePasswordChangeSuccess} 
+            forcing={true} 
+            onLogout={handleLogout} 
+          />
+        </Suspense>
       </div>
     );
   }
 
   return (
-    <InspectionProvider>
+      <InspectionProvider autoInit={hasVisitedList}>
       <div className="flex flex-row h-[100dvh] bg-slate-50 dark:bg-[#0b1120] overflow-hidden font-sans select-none text-slate-900 dark:text-slate-100 transition-colors duration-200">
         {!isPublicView && (
             <div className="hidden lg:block h-full shrink-0">
@@ -581,7 +690,7 @@ const App = () => {
           </div>
         )}
         <GlobalHeader 
-            user={user} view={view} onNavigate={setView} onLogout={handleLogout} 
+            user={user} roles={roles} view={view} onNavigate={setView} onLogout={handleLogout} 
             onRefresh={() => { if(view==='LIST') loadInspections(); if(view==='PROJECTS') { loadProjects(); } }} 
             onCreate={() => { setInitialFormState(undefined); setShowModuleSelector(true); }} 
             onScanClick={() => setShowQrScanner(true)} 
@@ -590,7 +699,8 @@ const App = () => {
             onNavigateToRecord={handleNavigateToRecord}
             isPublicView={isPublicView}
         />
-        <main className="flex-1 flex flex-col min-h-0 relative overflow-x-hidden overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0 px-2 md:px-6 safe-pb no-scrollbar" id="main-scroll-container">
+        <main className={`flex-1 flex flex-col min-h-0 relative overflow-x-hidden ${view === 'DETAIL' ? 'overflow-hidden pb-[calc(env(safe-area-inset-bottom)+3.75rem)] lg:pb-0' : 'overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+4.5rem)] lg:pb-0'} ${view === 'SUBCONTRACTOR_BOOKING' ? 'px-0' : 'px-2 md:px-6'} safe-pb no-scrollbar`} id="main-scroll-container">
+          <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>
                 {view === 'DASHBOARD' && (
                     <Dashboard 
@@ -607,6 +717,7 @@ const App = () => {
                     />
                 )}
                 
+                {hasVisitedList && (
                 <div className={view === 'LIST' ? "contents" : "hidden"}>
                     <InspectionList 
                         inspections={inspections}
@@ -631,11 +742,12 @@ const App = () => {
                         }}
                     />
                 </div>
+                )}
                 {view === 'FORM' && (
                     activeInspection?.type === 'IQC' || initialFormState?.type === 'IQC' ? <InspectionFormIQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> : 
-                    activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
-                    activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
-                    activeInspection?.type === 'SQC_TP' || initialFormState?.type === 'SQC_TP' ? <InspectionFormSQC_TP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} inspections={inspections} user={user} templates={templates} /> :
+                    activeInspection?.type === 'SQC_MAT' || initialFormState?.type === 'SQC_MAT' || activeInspection?.type === 'SQC_VT' || initialFormState?.type === 'SQC_VT' ? <InspectionFormSQC_VT initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView((activeInspection as any)?.booking_id || (initialFormState as any)?.booking_id ? 'SUBCONTRACTOR_BOOKING' : 'LIST')} inspections={inspections} user={user} templates={templates} /> :
+                    activeInspection?.type === 'SQC_BTP' || initialFormState?.type === 'SQC_BTP' ? <InspectionFormSQC_BTP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView((activeInspection as any)?.booking_id || (initialFormState as any)?.booking_id ? 'SUBCONTRACTOR_BOOKING' : 'LIST')} inspections={inspections} user={user} templates={templates} /> :
+                    activeInspection?.type === 'SQC_TP' || initialFormState?.type === 'SQC_TP' ? <InspectionFormSQC_TP initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView((activeInspection as any)?.booking_id || (initialFormState as any)?.booking_id ? 'SUBCONTRACTOR_BOOKING' : 'LIST')} inspections={inspections} user={user} templates={templates} /> :
                     activeInspection?.type === 'FSR' || initialFormState?.type === 'FSR' ? <InspectionFormFRS initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} inspections={inspections} /> :
                     activeInspection?.type === 'FQC' || initialFormState?.type === 'FQC' ? <InspectionFormFQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} inspections={inspections} /> :
                     activeInspection?.type === 'SPR' || initialFormState?.type === 'SPR' ? <InspectionFormSPR initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} inspections={inspections} /> :
@@ -643,51 +755,76 @@ const App = () => {
                     activeInspection?.type === 'SITE' || initialFormState?.type === 'SITE' ? <InspectionFormSITE initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} user={user} templates={templates} /> :
                     <InspectionFormPQC initialData={activeInspection || initialFormState} onSave={handleSaveInspection} onCancel={() => setView('LIST')} workshops={workshops} inspections={inspections} user={user} templates={templates} />
                 )}
-                {view === 'DETAIL' && activeInspection && (DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
-                  inspection: activeInspection, 
-                  user, 
-                  onBack: () => setView(returnView), 
-                  onEdit: handleEditInspection, 
-                  onDelete: async (id: string) => { 
-                    if (!canUserDeleteInspection(activeInspection, user)) {
-                        alert("Bạn không có quyền xóa hồ sơ này (Hồ sơ đã được duyệt/ký hoặc bạn chưa được cấp quyền xóa).");
-                        return;
-                    }
-                    if(window.confirm("Xóa phiếu này? Dữ liệu sẽ bị xóa vĩnh viễn khỏi audit log.")){ 
-                        await deleteInspectionFromSheet(id); loadInspections(); setView('LIST'); 
-                    } 
-                  }, 
-                  onApprove: async (id: string, sig: string, extra: any) => { 
+                {view === 'DETAIL' && activeInspection && (
+                  <div className="flex flex-col h-full min-h-0 overflow-hidden">
+                    <div className="shrink-0 mb-2">
+                      <TraceabilityPanel
+                        variant="banner-drawer"
+                        inspection={activeInspection}
+                        user={user}
+                        isPublicView={isPublicView}
+                        canGoBackInStack={inspectionNavStack.length > 0}
+                        onGoBackInStack={handlePopInspectionStack}
+                        onViewInspection={(targetId) => handleSelectInspection(targetId, { pushStack: true })}
+                      />
+                    </div>
+                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                      {DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'] ? React.createElement(DETAIL_COMPONENT_MAP[activeInspection.type || 'PQC'], { 
+                        inspection: activeInspection, 
+                        user, 
+                        onBack: () => {
+                          if (inspectionNavStack.length > 0) {
+                            handlePopInspectionStack();
+                          } else if (!isPublicView) {
+                            setView(returnView);
+                          }
+                        }, 
+                        onEdit: handleEditInspection, 
+                        onDelete: async (id: string) => { 
+                          if (!canUserDeleteInspection(activeInspection, user)) {
+                              alert("Bạn không có quyền xóa hồ sơ này (Hồ sơ đã được duyệt/ký hoặc bạn chưa được cấp quyền xóa).");
+                              return;
+                          }
+                          setDeleteInspectionId(id);
+                        }, 
+                  onApprove: async (id: string, sig: string, extra: any = {}) => { 
                     try {
                       const updated = { ...activeInspection, ...extra };
-                      const oldStatus = activeInspection.status;
+                      const oldStatus = String(activeInspection.status || '').toUpperCase();
                       
-                      // Handle explicit status or default to APPROVED if signature is provided
-                      if (extra.status) {
-                        updated.status = extra.status;
-                      } else if (sig || extra.managerSignature) {
+                      // Handle explicit status or default to APPROVED only if no explicit status provided
+                      if (extra?.status) {
+                        updated.status = String(extra.status).toUpperCase() as InspectionStatus;
+                      } else if (sig || extra?.managerSignature) {
                         updated.status = InspectionStatus.APPROVED;
                       }
 
-                      if (updated.status === InspectionStatus.APPROVED) {
+                      if (sig || extra?.managerSignature) {
                         updated.managerSignature = sig || extra.managerSignature;
                         updated.managerName = extra.managerName || user.name;
                       }
                       
                       await saveInspectionToSheet(updated); 
                       
-                      if (updated.status === InspectionStatus.APPROVED && oldStatus !== InspectionStatus.APPROVED) {
+                      const nextStatusUpper = String(updated.status || '').toUpperCase();
+                      if ((nextStatusUpper === 'APPROVED' || nextStatusUpper === 'VERIFIED' || nextStatusUpper === 'LOCKED') && oldStatus !== nextStatusUpper) {
                         const inspector = users.find(u => u.name === updated.inspectorName);
                         if (inspector) {
+                          const actionTitle =
+                            nextStatusUpper === 'LOCKED'
+                              ? 'Phiếu đã khóa hồ sơ ISO'
+                              : nextStatusUpper === 'VERIFIED'
+                                ? 'Phiếu đã được thẩm tra'
+                                : 'Phiếu đã được phê duyệt';
                           createNotification({
                             userId: inspector.id,
                             type: 'SUCCESS',
-                            title: 'Phiếu đã được phê duyệt',
-                            message: `Quản lý ${user.name} đã phê duyệt phiếu ${updated.type} của bạn`,
+                            title: actionTitle,
+                            message: `${user.name} đã cập nhật phiếu ${updated.type} sang trạng thái ${nextStatusUpper}`,
                             link: { view: 'DETAIL', id: updated.id }
                           });
                         }
-                      } else if (updated.status === InspectionStatus.REJECTED) {
+                      } else if (nextStatusUpper === 'REJECTED') {
                         const inspector = users.find(u => u.name === updated.inspectorName);
                         if (inspector) {
                           createNotification({
@@ -728,6 +865,7 @@ const App = () => {
                       alert("Lỗi bình luận: " + (error instanceof Error ? error.message : "Thất bại"));
                     }
                   },
+                  onViewInspection: handleSelectInspection,
                   onViewOnPlan: (insp: Inspection) => {
                     const matchingProj = projects.find(p => p.ma_ct === insp.ma_ct);
                     if (matchingProj) {
@@ -740,7 +878,10 @@ const App = () => {
                       setView('PROJECT_DETAIL');
                     }
                   }
-                }) : null)}
+                }) : null}
+                    </div>
+                  </div>
+                )}
                 {view === 'PROJECTS' && (
                     <ProjectList 
                         projects={projects} 
@@ -770,7 +911,7 @@ const App = () => {
                         initialFocusedPinId={projectInitialFocusedPinId}
                     />
                 )}
-                {view === 'IPO' && <IPOPage user={user} />}
+                {view === 'IPO' && <IPOPage user={user} onViewInspection={handleSelectInspection} />}
                 {view === 'NCR_LIST' && <NCRList currentUser={user} onSelectNcr={handleSelectInspection} />}
                 {view === 'DEFECT_LIBRARY' && <DefectLibrary currentUser={user} />}
                 {view === 'DEFECT_LIST' && <DefectList currentUser={user} onSelectDefect={d => { setActiveDefect(d); setView('DEFECT_DETAIL'); }} onViewInspection={handleSelectInspection} />}
@@ -781,102 +922,170 @@ const App = () => {
                 {view === 'SUPPLIER_DETAIL' && activeSupplier && <SupplierDetail supplier={activeSupplier} user={user} onBack={() => setView('SUPPLIERS')} onViewInspection={handleSelectInspection} />}
                 {view === 'SETTINGS' && (
                     <Settings 
-                        currentUser={user} allTemplates={templates} onSaveTemplate={async (id, items) => { await saveTemplate(id, items); loadTemplates(); }}
-        users={users} 
-        onAddUser={async (u) => { await saveUser(u); loadUsers(); }} 
-        onUpdateUser={async (u) => { 
-            await saveUser(u); 
-            if (user && u.id === user.id) {
-                const safeUser = {
-                    ...u,
-                    phong_ban: u.phong_ban || (u as any).phongBan || '',
-                    bo_phan: u.bo_phan || (u as any).boPhan || ''
-                };
-                if (localStorage.getItem(AUTH_STORAGE_KEY)) {
-                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
-                } else {
-                    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
-                }
-                setUser(safeUser as User);
-            }
-            await loadUsers(); 
-        }} 
-        onDeleteUser={async (id) => { await deleteUser(id); loadUsers(); }}
-        onImportUsers={async (importedUsers) => {
-            try {
-                await importUsersBatch(importedUsers);
-            } catch (err) {
-                console.warn('Batch import failed, falling back to sequential saveUser:', err);
-                for (const u of importedUsers) {
-                    await saveUser(u);
-                }
-            }
-            await loadUsers();
-        }}
-        workshops={workshops} 
-        onAddWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
-        onUpdateWorkshop={async (w) => { await saveWorkshop(w); loadWorkshops(); }} 
-        onDeleteWorkshop={async (id) => { await deleteWorkshop(id); loadWorkshops(); }}
-        onClose={() => setView('DASHBOARD')} 
-        onCheckConnection={async () => (await checkApiConnection()).ok} 
-        initialTab={settingsTab}
-    />
+                        currentUser={user}
+                        roles={roles}
+                        onRolesChanged={loadRoles}
+                        allTemplates={templates}
+                        onSaveTemplate={async (id, items) => {
+                            await saveTemplate(id, items);
+                            if (id === 'SQC_MAT') await saveTemplate('SQC_VT', items).catch(() => {});
+                            else if (id === 'SQC_VT') await saveTemplate('SQC_MAT', items).catch(() => {});
+                            await loadTemplates();
+                        }}
+                        users={users} 
+                        onAddUser={async (u) => { await saveUser(u); await loadUsers(); }} 
+                        onUpdateUser={async (u) => { 
+                            await saveUser(u); 
+                            if (user && u.id === user.id) {
+                                const safeUser = {
+                                    ...u,
+                                    phong_ban: u.phong_ban || (u as any).phongBan || '',
+                                    bo_phan: u.bo_phan || (u as any).boPhan || ''
+                                };
+                                if (localStorage.getItem(AUTH_STORAGE_KEY)) {
+                                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+                                } else {
+                                    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+                                }
+                                setUser(safeUser as User);
+                            }
+                            await loadUsers(); 
+                        }} 
+                        onPasswordUpdated={(updatedUser) => {
+                            if (updatedUser && user && updatedUser.id === user.id) {
+                                const safeUser = {
+                                    ...user,
+                                    ...updatedUser,
+                                    requirePasswordChange: false,
+                                    require_password_change: false,
+                                    phong_ban: updatedUser.phong_ban || (updatedUser as any).phongBan || user.phong_ban || '',
+                                    bo_phan: updatedUser.bo_phan || (updatedUser as any).boPhan || user.bo_phan || '',
+                                };
+                                if (localStorage.getItem(AUTH_STORAGE_KEY)) {
+                                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+                                } else {
+                                    sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser));
+                                }
+                                setUser(safeUser as User);
+                            }
+                            loadUsers();
+                        }}
+                        onDeleteUser={async (id) => { await deleteUser(id); await loadUsers(); }}
+                        onImportUsers={async (importedUsers) => {
+                            try {
+                                await importUsersBatch(importedUsers);
+                            } catch (err) {
+                                console.warn('Batch import failed, falling back to sequential saveUser:', err);
+                                for (const u of importedUsers) {
+                                    await saveUser(u);
+                                }
+                            }
+                            await loadUsers();
+                        }}
+                        workshops={workshops} 
+                        onAddWorkshop={async (w) => { await saveWorkshop(w); await loadWorkshops(); }} 
+                        onUpdateWorkshop={async (w) => { await saveWorkshop(w); await loadWorkshops(); }} 
+                        onDeleteWorkshop={async (id) => { await deleteWorkshop(id); await loadWorkshops(); }}
+                        onClose={() => setView('DASHBOARD')} 
+                        onCheckConnection={async () => (await checkApiConnection()).ok} 
+                        initialTab={settingsTab}
+                    />
                 )}
                 {view === 'TRASH' && <Trash user={user} onNavigate={setView} />}
                 {view === 'CONVERT_3D' && <ThreeDConverter />}
                 {view === 'SUBCONTRACTOR_BOOKING' && (
                     <SubcontractorBookingManagement 
                         currentUser={user} 
+                        rolesList={roles}
                         onStartInspection={startSubcontractorInspection}
+                        onViewInspection={handleSelectInspection}
                     />
                 )}
             </Suspense>
+          </ErrorBoundary>
         </main>
         <Suspense fallback={null}>
             {!isPublicView && <MobileBottomBar view={view} onNavigate={setView} user={user} rolesList={roles} />}
-            <ChatAI user={user} />
-            {showQrScanner && <QRScannerModal onClose={() => setShowQrScanner(false)} onScan={code => { setShowQrScanner(false); setInitialFormState({ ma_nha_may: code, workshop: code }); setShowModuleSelector(true); }} />}
-            <QCAssignmentReminderModal
-                currentUser={user}
-                onStartInspectionForBooking={handleStartInspectionByBookingId}
-                onNavigateToBookingList={() => setView('SUBCONTRACTOR_BOOKING')}
-                onClose={() => {}}
-            />
+            {!isPublicView && <ChatAI user={user} hideFloatingTriggerOnMobile={view === 'FORM' || view === 'DETAIL'} />}
+            {showQrScanner && (
+              <QRScannerModal
+                onClose={() => setShowQrScanner(false)}
+                onScan={(rawCode) => {
+                  setShowQrScanner(false);
+                  const trimmed = (rawCode || '').trim();
+                  if (!trimmed) return;
+                  const shareMatch = trimmed.match(/[?&]share=([^&#\s]+)/i);
+                  if (shareMatch && shareMatch[1]) {
+                    handleSelectInspection(decodeURIComponent(shareMatch[1]));
+                    return;
+                  }
+                  setQrTraceCode(trimmed);
+                }}
+              />
+            )}
+            {qrTraceCode && (
+              <TraceabilityLookupModal
+                open={Boolean(qrTraceCode)}
+                scannedCode={qrTraceCode}
+                user={user}
+                onClose={() => setQrTraceCode(null)}
+                onViewInspection={(targetId) => {
+                  setQrTraceCode(null);
+                  handleSelectInspection(targetId);
+                }}
+                onCreateNewForCode={(c) => {
+                  setQrTraceCode(null);
+                  setInitialFormState({ ma_nha_may: c, workshop: c });
+                  setShowModuleSelector(true);
+                }}
+              />
+            )}
+            {!isPublicView && (
+              <ErrorBoundary>
+                <QCAssignmentReminderModal
+                    currentUser={user}
+                    rolesList={roles}
+                    onStartInspectionForBooking={handleStartInspectionByBookingId}
+                    onNavigateToBookingList={() => setView('SUBCONTRACTOR_BOOKING')}
+                    onClose={() => {}}
+                />
+              </ErrorBoundary>
+            )}
         </Suspense>
         </div>
         
         {showModuleSelector && (
-            <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-                <div className="bg-white dark:bg-[#0f172a] w-full max-w-sm rounded-lg shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
-                    <header className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
-                        <div className="flex flex-col">
-                            <h3 className="font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider leading-none">LOẠI KIỂM TRA</h3>
-                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase mt-1">Chọn phiếu để khởi tạo</p>
+            <div className="fixed inset-0 z-[220] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+                <div className="bg-white dark:bg-[#0f172a] w-full max-w-sm rounded-lg shadow-2xl flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[85dvh] overflow-hidden animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+                    <header className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                        <div className="flex flex-col min-w-0">
+                            <h3 className="font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider leading-tight truncate">LOẠI KIỂM TRA</h3>
+                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase mt-0.5 truncate">Chọn phiếu để khởi tạo</p>
                         </div>
-                        <button onClick={() => setShowModuleSelector(false)} className="p-1 px-[7px] py-[7px] hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-md text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                        <button onClick={() => setShowModuleSelector(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 dark:text-slate-400 active:scale-90 transition-all shrink-0 cursor-pointer" title="Đóng"><X className="w-4 h-4"/></button>
                     </header>
                     
-                    <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1.5 bg-slate-50 dark:bg-slate-800/50/30">
+                    <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-2 bg-slate-50 dark:bg-slate-800/30">
                         {(ALL_MODULES || [])
                             .filter(m => (m.group === 'KIỂM TRA CHẤT LƯỢNG' || m.group === 'QC' || m.group === 'QA') && m.id !== 'SUPPLIERS' && m.id !== 'PROJECTS' && (user.allowedModules?.includes(m.id) || hasPermission(user, roles, m.id, 'VIEW') || hasPermission(user, roles, m.id, 'CREATE')))
                             .map(mod => (
                                 <button 
                                     key={mod.id} 
                                     onClick={() => startCreateInspection(mod.id)} 
-                                    className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg flex items-center gap-3 transition-all active:scale-[0.98] hover:border-blue-300 dark:border-slate-700 group shadow-sm"
+                                    className="w-full min-h-[54px] p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl flex items-center gap-3 transition-all active:scale-[0.98] hover:border-blue-300 dark:hover:border-blue-700 group shadow-sm"
                                 >
-                                    <div className="p-1.5 bg-slate-50 dark:bg-slate-800/50 rounded-md text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors border border-slate-50 group-hover:border-blue-600">
+                                    <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors border border-slate-100 dark:border-slate-700 group-hover:border-blue-600">
                                         <FileText className="w-5 h-5" />
                                     </div>
                                     <div className="flex-1 text-left min-w-0">
-                                        <span className="font-bold text-blue-800 text-[13px] tracking-tight truncate block group-hover:text-blue-900">
+                                        <span className="font-bold text-blue-800 dark:text-blue-300 text-sm tracking-tight truncate block group-hover:text-blue-900 dark:group-hover:text-blue-200">
                                             {mod.label}
                                         </span>
                                         <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-widest block mt-0.5">
                                             {mod.group} Control
                                         </span>
                                     </div>
-                                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 group-hover:text-blue-50 group-hover:bg-blue-50 dark:bg-slate-800/80 transition-colors">
+                                    <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 dark:group-hover:bg-slate-800 transition-colors">
                                         <ChevronRight className="w-4 h-4" />
                                     </div>
                                 </button>
@@ -884,10 +1093,10 @@ const App = () => {
                         }
                     </div>
                     
-                    <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                    <div className="px-4 py-2 sm:py-2.5 bg-slate-50/80 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0">
                         <button 
                             onClick={() => setShowModuleSelector(false)}
-                            className="w-full py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"
+                            className="w-full min-h-[44px] sm:min-h-[36px] py-2 sm:py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-widest hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
                         >
                             ĐÓNG DANH SÁCH
                         </button>
@@ -895,6 +1104,23 @@ const App = () => {
                 </div>
             </div>
         )}
+        <ConfirmDialog
+          open={deleteInspectionId !== null}
+          variant="danger"
+          title="Xác nhận xóa phiếu"
+          message="Xóa phiếu này? Hồ sơ sẽ được chuyển vào Thùng rác theo quy trình audit."
+          confirmLabel="Xác nhận xóa"
+          cancelLabel="Hủy"
+          onConfirm={async () => {
+            if (deleteInspectionId) {
+              await deleteInspectionFromSheet(deleteInspectionId);
+              loadInspections();
+              setView('LIST');
+            }
+            setDeleteInspectionId(null);
+          }}
+          onCancel={() => setDeleteInspectionId(null)}
+        />
       </div>
     </InspectionProvider>
   );

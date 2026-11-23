@@ -2,7 +2,13 @@ import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import * as api from "./apiService";
 
 const getApiKey = () => (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined);
-const ai = new GoogleGenAI({ apiKey: getApiKey() || '' });
+let aiInstance: GoogleGenAI | null = null;
+const getAiClient = (apiKey: string) => {
+    if (!aiInstance) {
+        aiInstance = new GoogleGenAI({ apiKey });
+    }
+    return aiInstance;
+};
 
 const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview'];
 
@@ -66,6 +72,7 @@ export const generateAIChatResponse = async (userMessage: string, history: any[]
             };
         }
 
+        const ai = getAiClient(apiKey);
         const chat = ai.chats.create({
             model: models[1], // Using gemini-3.1-flash-lite-preview
             history: history,
@@ -98,8 +105,8 @@ export const generateAIChatResponse = async (userMessage: string, history: any[]
                         callResult = data.items || [];
                     } else if (call.name === "getProjectInfo") {
                         const search = (call.args as any).search;
-                        const data = await api.fetchProjects(search, 1, 5);
-                        callResult = data.items || [];
+                        const projRes = await api.fetchProjects(search);
+                        callResult = Array.isArray(projRes) ? projRes : (projRes?.items || []);
                     } else if (call.name === "getNCRStats") {
                         const data = await api.fetchNcrs({}, 1, 100);
                         callResult = {

@@ -117,20 +117,21 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col items-center justify-center p-3 sm:p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md animate-in fade-in duration-300 overflow-y-auto">
       <button 
         onClick={onClose} 
-        className="absolute top-6 right-6 text-white p-3 bg-white dark:bg-slate-900/10 rounded-full active:scale-90 transition-transform z-50"
+        aria-label="Đóng"
+        className="fixed top-[max(1rem,env(safe-area-inset-top))] right-4 sm:top-6 sm:right-6 min-w-[44px] min-h-[44px] flex items-center justify-center text-white p-3 bg-white/10 hover:bg-white/20 rounded-full active:scale-90 transition-transform z-50"
       >
-        <X className="w-8 h-8"/>
+        <X className="w-7 h-7"/>
       </button>
 
-      <div className="text-center mb-8 max-w-xs">
-        <h3 className="text-white font-black text-xl uppercase tracking-widest mb-2">{title}</h3>
+      <div className="text-center mb-4 sm:mb-8 max-w-xs pt-6 sm:pt-0">
+        <h3 className="text-white font-black text-lg sm:text-xl uppercase tracking-widest mb-1.5 sm:mb-2">{title}</h3>
         <p className="text-slate-400 dark:text-slate-500 text-xs font-medium leading-relaxed">{subtitle}</p>
       </div>
 
-      <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-[3rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_60px_rgba(37,99,235,0.3)]">
+      <div className="w-full max-w-[260px] sm:max-w-sm aspect-square bg-slate-800 rounded-[2.5rem] sm:rounded-[3rem] overflow-hidden relative border-4 border-blue-500/50 shadow-[0_0_60px_rgba(37,99,235,0.3)] shrink-0">
         {/* Scanning Animation */}
         <div className="absolute inset-0 z-10 pointer-events-none">
           <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500 shadow-[0_0_15px_red] animate-[bounce_2s_infinite]"></div>
@@ -153,20 +154,20 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       </div>
 
       {error && (
-        <div className="mt-6 px-6 py-3 bg-red-500/20 border border-red-500/50 rounded-2xl flex items-center gap-3 text-red-400 text-xs font-bold animate-in slide-in-from-top-2">
+        <div className="mt-4 sm:mt-6 px-4 sm:px-6 py-3 bg-red-500/20 border border-red-500/50 rounded-2xl flex items-center gap-3 text-red-400 text-xs font-bold animate-in slide-in-from-top-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
-      <div className="mt-10 flex flex-col items-center gap-4 w-full max-w-xs">
+      <div className="mt-6 sm:mt-10 flex flex-col items-center gap-3 sm:gap-4 w-full max-w-xs shrink-0">
         <p className="text-blue-400 font-black text-[10px] uppercase tracking-[0.3em] animate-pulse">Scanning Live...</p>
         
-        <div className="h-px w-full bg-white dark:bg-slate-900/10 my-2"></div>
+        <div className="h-px w-full bg-white dark:bg-slate-900/10 my-1 sm:my-2"></div>
         
         <button 
           onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center justify-center gap-3 py-4 bg-white dark:bg-slate-900/5 hover:bg-white dark:bg-slate-900/10 text-white rounded-2xl border border-white/10 transition-all active:scale-95 group"
+          className="w-full min-h-[48px] flex items-center justify-center gap-3 py-3.5 sm:py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl border border-white/15 transition-all active:scale-95 group"
         >
           <ImageIcon className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
           <span className="text-xs font-black uppercase tracking-widest">Chọn ảnh từ thiết bị</span>

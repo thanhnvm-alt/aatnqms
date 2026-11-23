@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem } from '../types';
+import { Inspection, CheckItem, CheckStatus, InspectionStatus, User, MaterialIQC, ModuleId, DefectLibraryItem, SubcontractorBooking } from '../types';
 import { 
   Save, X, Box, FileText, QrCode, Loader2, Building2, UserCheck, 
   Calendar, CheckSquare, PenTool, Eraser, Plus, Trash2, 
@@ -24,6 +24,11 @@ interface InspectionFormProps {
 
 import { SignaturePad } from './SignaturePad';
 import { ProxyImage } from '../src/components/ProxyImage';
+import { getProxyImageUrl } from '../src/utils';
+import { ConfirmDialog } from '../src/components/qms';
+import { BookingReferenceDocsCard } from './BookingReferenceDocsCard';
+import { BookingSelectorField } from './BookingSelectorField';
+import { buildSqcPrefillFromBooking } from '../src/utils/bookingDocuments';
 
 export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({
@@ -65,6 +70,52 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   const [matSearch, setMatSearch] = useState('');
   const [matSearchInput, setMatSearchInput] = useState('');
+  const [deleteMatIdx, setDeleteMatIdx] = useState<number | null>(null);
+  const [pendingBookingPrefill, setPendingBookingPrefill] = useState<Partial<Inspection> | null>(null);
+
+  const applyBookingPrefill = (prefill: Partial<Inspection>, overwriteMaterials: boolean) => {
+      setFormData(prev => ({
+          ...prev,
+          booking_id: prefill.booking_id,
+          booking_code: prefill.booking_code,
+          po_number: prefill.po_number || prev.po_number,
+          ma_ct: prefill.ma_ct || prev.ma_ct,
+          ten_ct: prefill.ten_ct || prev.ten_ct,
+          supplier: prefill.supplier || prev.supplier,
+          supplierName: prefill.supplierName || prev.supplierName,
+          ma_nha_may: prefill.ma_nha_may || prev.ma_nha_may,
+          workshop: prefill.workshop || prev.workshop,
+          supplierAddress: prefill.supplierAddress || prev.supplierAddress,
+          location: prefill.location || prev.location,
+          dia_chi_xuong: prefill.dia_chi_xuong || prev.dia_chi_xuong,
+          nguoi_lien_he: prefill.nguoi_lien_he || prev.nguoi_lien_he,
+          so_dien_thoai: prefill.so_dien_thoai || prev.so_dien_thoai,
+          date: prefill.date || prev.date,
+          supportingDocs: prefill.supportingDocs || prev.supportingDocs,
+          referenceDocs: prefill.referenceDocs || prev.referenceDocs,
+          drawingImages: prefill.drawingImages && prefill.drawingImages.length > 0 ? prefill.drawingImages : prev.drawingImages,
+          ...(overwriteMaterials ? {
+              materials: prefill.materials || [],
+              items: prefill.items || prev.items,
+          } : {}),
+      }));
+  };
+
+  const handleSelectBooking = (booking: SubcontractorBooking) => {
+      const tpl = templates['SQC_BTP'] || [];
+      const prefill = buildSqcPrefillFromBooking(booking, 'SQC_BTP', tpl);
+      const hasCustomMaterials = (formData.materials || []).length > 0 && !formData.booking_id;
+      if (hasCustomMaterials && (prefill.materials || []).length > 0) {
+          applyBookingPrefill(prefill, false);
+          setPendingBookingPrefill(prefill);
+      } else {
+          applyBookingPrefill(prefill, (prefill.materials || []).length > 0);
+      }
+  };
+
+  const handleClearBooking = () => {
+      setFormData(prev => ({ ...prev, booking_id: undefined, booking_code: undefined }));
+  };
 
   const handleCommitMatSearch = () => {
       setMatSearch(matSearchInput);
@@ -94,10 +145,13 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
 
   useEffect(() => {
     PersistenceService.hasDraft('SQC_BTP', user.id).then(setHasDraft);
+    if (formData.po_number && (!formData.materials || formData.materials.length === 0)) {
+      handlePoBlur();
+    }
   }, []);
 
   useEffect(() => {
-    if (formData.po_number || (formData.materials && formData.materials.length > 0)) {
+    if (formData.po_number || formData.booking_code || (formData.materials && formData.materials.length > 0)) {
         PersistenceService.saveDraft('SQC_BTP', user.id, formData);
     }
   }, [formData]);
@@ -114,8 +168,6 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
     PersistenceService.clearDraft('SQC_BTP', user.id);
     setHasDraft(false);
   };
-
-  const getProxyImageUrl = (url: string) => url.startsWith('http') ? url : `/api/images/proxy?url=${encodeURIComponent(url)}`;
 
   const btpGroups = useMemo(() => {
       const btpTpl = templates['SQC_BTP'] || [];
@@ -258,7 +310,7 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
     setExpandedMaterial(newMaterial.id);
   };
 
-  const updateMaterial = (idx: number, field: keyof MaterialIQC, value: any) => {
+  const updateMaterial = (idx: number, field: string, value: any) => {
     if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
         value = value.replace(/,/g, '.');
     } 
@@ -509,7 +561,9 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
             const totalFailed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
 
             await onSave({ ...finalForm,
-                status: InspectionStatus.PENDING,
+                booking_id: finalForm.booking_id,
+                booking_code: finalForm.booking_code,
+                status: InspectionStatus.SUBMITTED,
                 inspectedQuantity: totalInspected,
                 passedQuantity: totalPassed,
                 failedQuantity: totalFailed,
@@ -542,8 +596,8 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                       </div>
                   </div>
                   <div className="flex gap-2">
-                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 dark:text-red-400">Xóa</button>
-                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-blue-200 active:scale-95 transition-all">Khôi phục</button>
+                      <button type="button" onClick={clearDraft} className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest hover:text-red-500 rounded-xl">Xóa</button>
+                      <button type="button" onClick={recoverDraft} className="min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-blue-200 active:scale-95 transition-all">Khôi phục</button>
                   </div>
               </div>
           </div>
@@ -593,35 +647,42 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
       )}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
         <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-teal-50 pb-2 mb-1">
-                <h3 className="text-teal-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN GIA CÔNG BÁN THÀNH PHẨM</h3>
-                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-teal-100 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1"><History className="w-3 h-3" /> Lịch sử ({historicalRecords.length})</button>
+            <div className="flex justify-between items-center border-b border-teal-50 dark:border-slate-800 pb-2 mb-1 gap-2">
+                <h3 className="text-teal-800 dark:text-teal-300 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4 shrink-0"/> I. THÔNG TIN GIA CÔNG BÁN THÀNH PHẨM</h3>
+                <button onClick={() => setShowHistory(true)} className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-teal-100 text-slate-600 dark:text-slate-300 rounded-lg font-bold uppercase text-[10px] flex items-center gap-1.5 shrink-0" type="button"><History className="w-3.5 h-3.5" /> Lịch sử ({historicalRecords.length})</button>
             </div>
+            <BookingSelectorField
+                bookingId={formData.booking_id}
+                bookingCode={formData.booking_code}
+                sqcType="SQC_BTP"
+                onSelectBooking={handleSelectBooking}
+                onClearBooking={handleClearBooking}
+            />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="md:col-span-2">
-                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-1">Lệnh Sản Xuất / PO Gia Công *</label>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1 ml-1">Lệnh Sản Xuất / PO Gia Công *</label>
                     <div className="relative flex items-center">
                         <input 
                             value={formData.po_number} 
                             onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} 
                             onBlur={handlePoBlur}
-                            className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-9 shadow-inner" 
+                            className="w-full pl-3 pr-12 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[38px] shadow-inner bg-white dark:bg-slate-900" 
                             placeholder="Mã LSX..."
                         />
-                        <button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 dark:text-slate-500" type="button"><QrCode className="w-4 h-4"/></button>
+                        <button onClick={() => setShowScanner(true)} className="absolute right-0.5 min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-500 hover:text-teal-600 dark:text-slate-400 rounded-md" type="button" aria-label="Quét mã QR"><QrCode className="w-4 h-4"/></button>
                     </div>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-1">Đối Tác Gia Công BTP *</label>
-                    <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] uppercase shadow-inner" placeholder="Tên đơn vị..."/>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1 ml-1">Đối Tác Gia Công BTP *</label>
+                    <input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[38px] uppercase shadow-inner bg-white dark:bg-slate-900" placeholder="Tên đơn vị..."/>
                 </div>
                 <div>
-                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-1">Địa chỉ xưởng *</label>
+                    <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1 ml-1">Địa chỉ xưởng *</label>
                     <div className="flex gap-1.5 items-center">
-                        <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="flex-1 px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-9 shadow-inner" placeholder="Địa chỉ..."/>
-                        <button onClick={handleGetLocation} disabled={isGettingLocation} className="p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500"><Locate className="w-4 h-4" /></button>
+                        <input value={formData.supplierAddress || ''} onChange={e => handleInputChange('supplierAddress', e.target.value)} className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[38px] shadow-inner bg-white dark:bg-slate-900" placeholder="Địa chỉ..."/>
+                        <button type="button" onClick={handleGetLocation} disabled={isGettingLocation} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:text-teal-600 shrink-0" aria-label="Lấy vị trí GPS"><Locate className="w-4 h-4" /></button>
                         {formData.location && (
-                            <a href={`https://www.google.com/maps/search/?api=1&query=${formData.location}`} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-800/50 text-teal-600">
+                            <a href={`https://www.google.com/maps/search/?api=1&query=${formData.location}`} target="_blank" rel="noopener noreferrer" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-teal-600 shrink-0" aria-label="Xem bản đồ">
                                 <MapPin className="w-4 h-4" />
                             </a>
                         )}
@@ -632,46 +693,53 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase flex items-center gap-2"><FileText className="w-3.5 h-3.5"/> DANH MỤC TÀI LIỆU HỖ TRỢ</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {['Bản vẽ có chữ ký', 'Spec', 'Chứng nhận nguyên liệu', 'Rập cỡ có chữ ký', 'Mẫu màu', 'Phiếu thông tin BTP'].map(doc => (
-                           <label key={doc} className="flex items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-600 dark:text-slate-400 dark:text-slate-500"><input type="checkbox" className="rounded accent-teal-600"/> {doc}</label>
+                           <label key={doc} className="min-h-[44px] flex items-center gap-2.5 bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"><input type="checkbox" className="w-4 h-4 rounded accent-teal-600 shrink-0"/> {doc}</label>
                         ))}
                     </div>
+                    <BookingReferenceDocsCard
+                        bookingCode={formData.booking_code}
+                        supportingDocs={formData.supportingDocs}
+                        referenceDocs={formData.referenceDocs}
+                    />
                 </div>
 
                 {/* Evidence Row */}
-                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-50">
-                    <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <label className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between">PHIẾU GIAO HÀNG<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
-                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-50 dark:border-slate-800">
+                    <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between gap-2"><span>PHIẾU GIAO HÀNG</span><div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-blue-600 dark:text-blue-400" type="button" aria-label="Chụp phiếu giao hàng"><Camera className="w-4 h-4"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-blue-600 dark:text-blue-400" type="button" aria-label="Tải phiếu giao hàng"><ImageIcon className="w-4 h-4"/></button></div></div>
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                             {formData.deliveryNoteImages?.map((img, i) => (
                                 <div key={i} className="relative group shrink-0">
                                     <div className="cursor-zoom-in" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })}>
-                                        <ProxyImage src={img} alt="Phiếu giao hàng" className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
+                                        <ProxyImage src={img} alt="Phiếu giao hàng" className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
                                     </div>
                                     <button
                                         onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
-                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"
                                         type="button"
+                                        aria-label="Xóa ảnh"
                                     >
-                                        <X className="w-2 h-2" />
+                                        <X className="w-3 h-3" />
                                     </button>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">BÁO CÁO NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3.5 h-3.5"/></button></div></label>
-                        <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                    <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center justify-between gap-2"><span>BÁO CÁO NCC</span><div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-emerald-600" type="button" aria-label="Chụp báo cáo NCC"><Camera className="w-4 h-4"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-emerald-600" type="button" aria-label="Tải báo cáo NCC"><ImageIcon className="w-4 h-4"/></button></div></div>
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                             {formData.reportImages?.map((img, i) => (
                                 <div key={i} className="relative group shrink-0">
                                     <div className="cursor-zoom-in" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })}>
-                                        <ProxyImage src={img} alt="Báo cáo NCC" className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
+                                        <ProxyImage src={img} alt="Báo cáo NCC" className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
                                     </div>
                                     <button
                                         onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
-                                        className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                        className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"
                                         type="button"
+                                        aria-label="Xóa ảnh"
                                     >
-                                        <X className="w-2 h-2" />
+                                        <X className="w-3 h-3" />
                                     </button>
                                 </div>
                             ))}
@@ -679,25 +747,26 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     </div>
                 </div>
 
-                <div className="md:col-span-2 space-y-1 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                    <label className="text-[9px] font-black text-indigo-600 uppercase flex items-center justify-between">Tải lên Bản vẽ / PO / Chất lượng
+                <div className="md:col-span-2 space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <div className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase flex items-center justify-between gap-2"><span>Tải lên Bản vẽ / PO / Chất lượng</span>
                         <div className="flex gap-1">
-                            <button onClick={() => { setActiveUploadContext({ type: 'DRAWING' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button>
-                            <button onClick={() => { setActiveUploadContext({ type: 'DRAWING' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3 h-3"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DRAWING' }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-indigo-600" type="button" aria-label="Chụp bản vẽ"><Camera className="w-4 h-4"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DRAWING' }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-indigo-600" type="button" aria-label="Tải bản vẽ"><ImageIcon className="w-4 h-4"/></button>
                         </div>
-                    </label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                         {formData.drawingImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
                                 <div className="cursor-zoom-in" onClick={() => setEditorState({ images: formData.drawingImages!, index: i, context: { type: 'DRAWING' } })}>
-                                    <ProxyImage src={img} alt="Bản vẽ" className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover" />
+                                    <ProxyImage src={img} alt="Bản vẽ" className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover" />
                                 </div>
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, drawingImages: prev.drawingImages?.filter((_, idx) => idx !== i) }))}
-                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"
                                     type="button"
+                                    aria-label="Xóa ảnh"
                                 >
-                                    <X className="w-2 h-2" />
+                                    <X className="w-3 h-3" />
                                 </button>
                             </div>
                         ))}
@@ -710,8 +779,8 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                 <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 text-xs">
                     <ClipboardList className="w-4 h-4 text-teal-600"/> II. DANH MỤC BTP KIỂM TRA ({formData.materials?.length || 0})
                 </h3>
-                <div className="flex items-center gap-2">
-                    <div className="relative">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 sm:flex-initial">
                         <input 
                             type="text" 
                             placeholder="Tìm vật tư..." 
@@ -719,12 +788,12 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                             onChange={e => setMatSearchInput(e.target.value)}
                             onBlur={handleCommitMatSearch}
                             onKeyDown={handleKeyDownMatSearch}
-                            className="pl-8 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-teal-100 shadow-sm"
+                            className="pl-8 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs w-full sm:w-52 min-h-[44px] lg:min-h-[38px] outline-none focus:ring-1 ring-teal-100 shadow-sm"
                         />
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     </div>
-                    <button onClick={handleAddMaterial} className="bg-teal-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3" type="button">
-                        <Plus className="w-3 h-3"/><span className="text-[10px] font-bold uppercase">Thêm BTP</span>
+                    <button onClick={handleAddMaterial} className="min-h-[44px] lg:min-h-[38px] bg-teal-600 text-white rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-4 hover:bg-teal-700 shrink-0" type="button">
+                        <Plus className="w-4 h-4"/><span className="text-[11px] font-bold uppercase">Thêm BTP</span>
                     </button>
                 </div>
             </div>
@@ -739,73 +808,73 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                     <div key={mat.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                         <div className={`p-3 flex items-center justify-between cursor-pointer transition-colors ${isExp ? 'bg-teal-50/50 border-b border-teal-100' : 'bg-white dark:bg-slate-900'}`} onClick={() => setExpandedMaterial(isExp ? null : mat.id)}>
                             <div className="flex items-center gap-3 flex-1 overflow-hidden"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${isExp ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>{matIdx + 1}</div><div className="flex-1 overflow-hidden"><h4 className="font-bold text-slate-800 dark:text-slate-200 uppercase text-xs truncate">{mat.category || 'BÁN THÀNH PHẨM MỚI'}</h4><div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">SL: {mat.deliveryQty} {mat.unit}</span><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${hasError ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20' : 'text-green-600 dark:text-green-500 bg-green-50 dark:bg-green-900/20'}`}>{passRate}% ĐẠT</span></div></div></div>
-                            <div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600 dark:text-red-400" type="button"><Trash2 className="w-4 h-4"/></button>{isExp ? <ChevronUp className="w-4 h-4 text-teal-500"/> : <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500"/>}</div>
+                            <div className="flex items-center gap-1.5"><button onClick={(e) => { e.stopPropagation(); setDeleteMatIdx(matIdx); }} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md" type="button" aria-label="Xóa BTP"><Trash2 className="w-4 h-4"/></button>{isExp ? <ChevronUp className="w-5 h-5 text-teal-500"/> : <ChevronDown className="w-5 h-5 text-slate-400 dark:text-slate-500"/>}</div>
                         </div>
                         {isExp && (
-                            <div className="p-4 space-y-4 bg-white dark:bg-slate-900 border-t border-slate-50">
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                                      <div className="col-span-6 md:col-span-3 space-y-1">
-                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Mã Định Danh *</label>
-                                         <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-8 shadow-inner uppercase" placeholder="Mã định danh..."/>
+                            <div className="p-4 space-y-4 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
+                                <div className="grid grid-cols-12 gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                                      <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-1">
+                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">Mã Định Danh *</label>
+                                         <input value={mat.name} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] shadow-inner uppercase bg-white dark:bg-slate-900" placeholder="Mã định danh..."/>
                                       </div>
-                                      <div className="col-span-6 md:col-span-3 space-y-1">
-                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Mã Dự Án</label>
-                                         <input value={mat.projectCode || ''} onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-8 shadow-inner uppercase" placeholder="Mã dự án..."/>
+                                      <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-1">
+                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">Mã Dự Án</label>
+                                         <input value={mat.projectCode || ''} onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] shadow-inner uppercase bg-white dark:bg-slate-900" placeholder="Mã dự án..."/>
                                       </div>
-                                      <div className="col-span-6 md:col-span-3 space-y-1">
-                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Tên Dự Án</label>
-                                         <input value={mat.projectName || ''} onChange={e => updateMaterial(matIdx, 'projectName', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-8 shadow-inner" placeholder="Tên dự án..."/>
+                                      <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-1">
+                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">Tên Dự Án</label>
+                                         <input value={mat.projectName || ''} onChange={e => updateMaterial(matIdx, 'projectName', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] shadow-inner bg-white dark:bg-slate-900" placeholder="Tên dự án..."/>
                                       </div>
-                                      <div className="col-span-6 md:col-span-3 space-y-1">
-                                          <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Tên Hạng Mục</label>
-                                          <input value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-8 shadow-inner" placeholder="Hạng mục..."/>
+                                      <div className="col-span-12 sm:col-span-6 md:col-span-3 space-y-1">
+                                          <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">Tên Hạng Mục</label>
+                                          <input value={mat.category || ''} onChange={e => updateMaterial(matIdx, 'category', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] shadow-inner bg-white dark:bg-slate-900" placeholder="Hạng mục..."/>
                                       </div>
-                                      <div className="col-span-4 md:col-span-2 space-y-1">
-                                          <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">ĐVT</label>
-                                          <input value={mat.unit || ''} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-8 shadow-inner uppercase" placeholder="DVT..."/>
+                                      <div className="col-span-6 sm:col-span-4 md:col-span-2 space-y-1">
+                                          <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">ĐVT</label>
+                                          <input value={mat.unit || ''} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] shadow-inner uppercase bg-white dark:bg-slate-900" placeholder="DVT..."/>
                                       </div>
-                                      <div className="col-span-4 md:col-span-3 space-y-1">
-                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">QC Kiểm Tra</label>
-                                         <input value={user.name} disabled className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-md font-bold text-[11px] h-8 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500"/>
+                                      <div className="col-span-6 sm:col-span-4 md:col-span-3 space-y-1">
+                                         <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">QC Kiểm Tra</label>
+                                         <input value={user.name} disabled className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"/>
                                       </div>
-                                      <div className="col-span-4 md:col-span-3 space-y-1">
-                                          <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">Ngày Kiểm Tra</label>
-                                          <input type="date" value={mat.date} onChange={e => updateMaterial(matIdx, 'date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-[11px] h-8 shadow-inner"/>
+                                      <div className="col-span-12 sm:col-span-4 md:col-span-3 space-y-1">
+                                          <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase">Ngày Kiểm Tra</label>
+                                          <input type="date" value={mat.date} onChange={e => updateMaterial(matIdx, 'date', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-xs min-h-[44px] lg:min-h-[36px] shadow-inner bg-white dark:bg-slate-900"/>
                                       </div>
                                  </div>
-                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">Giao(DN)</label><input onKeyDown={(e) => { 
+                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block text-center">Giao(DN)</label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-7 shadow-sm"/></div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-teal-600 uppercase block text-center">Kiểm tra</label><input onKeyDown={(e) => { 
+}} type="text" inputMode="decimal" value={mat.deliveryQty} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] shadow-sm tabular-nums"/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-teal-600 dark:text-teal-400 uppercase block text-center">Kiểm tra</label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1 border border-teal-300 rounded-md font-bold text-center text-teal-700 bg-white dark:bg-slate-900 text-[11px] h-7 shadow-sm"/></div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase flex items-center justify-between"><span>Đạt</span><span className="text-[8px] bg-green-100 dark:bg-green-900/30 px-1 rounded">{passRate}%</span></label><input onKeyDown={(e) => { 
+}} type="text" inputMode="decimal" value={mat.inspectQty} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className="w-full px-2 py-1.5 border border-teal-300 rounded-md font-bold text-center text-teal-700 dark:text-teal-300 bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] shadow-sm tabular-nums"/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase flex items-center justify-between"><span>Đạt</span><span className="text-[8px] bg-green-100 dark:bg-green-900/30 px-1 rounded tabular-nums">{passRate}%</span></label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white dark:bg-slate-900 text-[11px] h-7 shadow-sm"/></div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center justify-between"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded">{failRate}%</span></label><input onKeyDown={(e) => { 
+}} type="text" inputMode="decimal" value={mat.passQty} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-green-700 dark:text-green-400 bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] shadow-sm tabular-nums"/></div>
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase flex items-center justify-between"><span>Lỗi</span><span className="text-[8px] bg-red-100 px-1 rounded tabular-nums">{failRate}%</span></label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white dark:bg-slate-900 text-[11px] h-7 shadow-sm"/></div>
+}} type="text" inputMode="decimal" value={mat.failQty} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1.5 border border-red-300 rounded-md font-bold text-center text-red-700 dark:text-red-400 bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] shadow-sm tabular-nums"/></div>
                                  </div>
                                  <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 mt-2">
-                                    <label className="text-[9px] font-black text-indigo-600 uppercase flex items-center justify-between">
-                                        DANH MỤC HẠNG MỤC KIỂM TRA
+                                    <div className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase flex items-center justify-between gap-2">
+                                        <span>DANH MỤC HẠNG MỤC KIỂM TRA</span>
                                         <button 
                                             onClick={() => {
                                                 const newItems = [...(mat.items || []), 
@@ -839,21 +908,22 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                                 nextMats[matIdx] = { ...nextMats[matIdx], items: newItems };
                                                 setFormData(prev => ({ ...prev, materials: nextMats }));
                                             }}
-                                            className="p-1 hover:text-indigo-800 text-indigo-600"
+                                            className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center hover:text-indigo-800 text-indigo-600 rounded-lg border border-indigo-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                                             type="button"
+                                            aria-label="Thêm hạng mục kiểm tra"
                                         >
                                             <Plus className="w-4 h-4" />
                                         </button>
-                                    </label>
+                                    </div>
                                     <div className="space-y-2">
                                         {(mat.items || []).map((item, itemIdx) => (
                                             <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                                                <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
-                                                    <div className="flex-1 pr-2">
+                                                <div className="flex justify-between items-center mb-2 border-b border-slate-50 dark:border-slate-800 pb-2 gap-2">
+                                                    <div className="flex-1">
                                                         <input 
                                                             value={item.label || ''} 
                                                             onChange={e => updateMaterialItem(matIdx, itemIdx, 'label', e.target.value)}
-                                                            className="w-full font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-[11px]" 
+                                                            className="w-full min-h-[44px] lg:min-h-[34px] font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-xs" 
                                                             placeholder="Tên hạng mục..." 
                                                         />
                                                     </div>
@@ -863,10 +933,11 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                                             nextMats[matIdx].items = (nextMats[matIdx].items || []).filter((_, i) => i !== itemIdx);
                                                             setFormData(prev => ({ ...prev, materials: nextMats }));
                                                         }}
-                                                        className="p-1 text-slate-300 hover:text-red-500 dark:text-red-400 rounded-lg hover:bg-red-50 dark:bg-red-900/20"
+                                                        className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
                                                         type="button"
+                                                        aria-label="Xóa hạng mục"
                                                     >
-                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                        <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 </div>
                                                 
@@ -874,36 +945,36 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
                                                     <textarea 
                                                         value={item.notes || ''}
                                                         onChange={e => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)}
-                                                        className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] outline-none focus:ring-1 ring-teal-100"
+                                                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 ring-teal-100 bg-white dark:bg-slate-900"
                                                         placeholder="Ghi chú..."
                                                         rows={2}
                                                     />
                                                     
                                                     <div className="flex flex-wrap gap-2 items-center justify-between">
-                                                        <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 dark:border-slate-700 w-fit">
+                                                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg gap-1 border border-slate-200 dark:border-slate-700 w-fit">
                                                             {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
-                                                                <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : st === CheckStatus.FAIL ? 'bg-red-600 text-white' : 'bg-orange-500 text-white') : 'text-slate-400 dark:text-slate-500 hover:bg-white dark:bg-slate-900'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}</button>
+                                                                <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`min-h-[44px] lg:min-h-[34px] px-3 py-1.5 rounded-md font-bold uppercase transition-all text-[10px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : st === CheckStatus.FAIL ? 'bg-red-600 text-white' : 'bg-orange-500 text-white') : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-900'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'ĐK'}</button>
                                                             ))}
                                                         </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-teal-600" type="button"><Camera className="w-4 h-4"/></button>
-                                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-teal-600" type="button"><ImageIcon className="w-4 h-4"/></button>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-teal-600" type="button" aria-label="Chụp ảnh hạng mục"><Camera className="w-4 h-4"/></button>
+                                                            <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-teal-600" type="button" aria-label="Chọn ảnh hạng mục"><ImageIcon className="w-4 h-4"/></button>
                                                         </div>
                                                     </div>
                                                     
-                                                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[30px]">
+                                                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                                                         {(item.images || []).map((img, i) => (
                                                             <div key={i} className="relative group shrink-0">
                                                                 <div className="cursor-zoom-in" onClick={() => setEditorState({ images: item.images || [], index: i, context: { type: 'ITEM', matIdx, itemIdx } })}>
-                                                                    <ProxyImage src={img} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
+                                                                    <ProxyImage src={img} alt="Ảnh item" className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
                                                                 </div>
-                                                                <button onClick={() => {
+                                                                <button type="button" aria-label="Xóa ảnh" onClick={() => {
                                                                     const nextMats = [...(formData.materials || [])];
                                                                     const nextItems = [...(nextMats[matIdx].items || [])];
                                                                     nextItems[itemIdx].images = nextItems[itemIdx].images?.filter((_, idx) => idx !== i);
                                                                     nextMats[matIdx].items = nextItems;
                                                                     setFormData(prev => ({ ...prev, materials: nextMats }));
-                                                                }} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-2 h-2"/></button>
+                                                                }} className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-3 h-3"/></button>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -938,7 +1009,36 @@ export const InspectionFormSQC_BTP: React.FC<InspectionFormProps> = ({ initialDa
           />
         </section>
       </div>
-      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"><button onClick={onCancel} className="h-[44px] px-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest rounded-xl border border-slate-200 dark:border-slate-700 text-[10px]" type="button">HỦY BỎ</button><button onClick={handleSubmit} disabled={isSaving} className="h-[44px] flex-1 bg-teal-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-teal-800 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT SQC-BTP</span></button></div>
+      <div className="px-4 py-3 lg:pr-24 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-sm"><button onClick={onCancel} className="min-h-[44px] lg:min-h-[40px] px-6 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest rounded-xl border border-slate-200 dark:border-slate-700 text-[10px]" type="button">HỦY BỎ</button><button onClick={handleSubmit} disabled={isSaving} className="min-h-[44px] lg:min-h-[40px] flex-1 bg-teal-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-teal-800 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT SQC-BTP</span></button></div>
+      <ConfirmDialog
+        open={deleteMatIdx !== null}
+        variant="danger"
+        title="Xóa bán thành phẩm?"
+        message="Bạn có chắc chắn muốn xóa mục bán thành phẩm này khỏi phiếu SQC-BTP không?"
+        confirmLabel="Xóa mục"
+        onConfirm={() => {
+          if (deleteMatIdx !== null) {
+            setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== deleteMatIdx) }));
+          }
+          setDeleteMatIdx(null);
+        }}
+        onCancel={() => setDeleteMatIdx(null)}
+      />
+      <ConfirmDialog
+        open={pendingBookingPrefill !== null}
+        variant="info"
+        title="Cập nhật hạng mục từ Book QC?"
+        message="Phiếu hiện đã có danh sách bán thành phẩm. Bạn có muốn thay thế danh mục theo lịch Book QC vừa chọn không?"
+        confirmLabel="Thay thế danh mục"
+        cancelLabel="Giữ danh mục hiện tại"
+        onConfirm={() => {
+          if (pendingBookingPrefill) {
+            applyBookingPrefill(pendingBookingPrefill, true);
+          }
+          setPendingBookingPrefill(null);
+        }}
+        onCancel={() => setPendingBookingPrefill(null)}
+      />
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('po_number', data); setShowScanner(false); }} />}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileUpload} />

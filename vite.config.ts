@@ -3,6 +3,11 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 export default defineConfig(({ mode }) => {
   // Cast process to any to avoid TS error: Property 'cwd' does not exist on type 'Process'
   const env = loadEnv(mode, (process as any).cwd(), '');
@@ -27,12 +32,30 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       hmr: false,
+      ws: false,
     },
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
-        'react': path.resolve(__dirname, './node_modules/react'),
-        'react-dom': path.resolve(__dirname, './node_modules/react-dom')
+        'react': path.resolve(__dirname, 'node_modules/react'),
+        'react-dom': path.resolve(__dirname, 'node_modules/react-dom')
       }
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'lucide-react',
+        'clsx',
+        'tailwind-merge',
+        'recharts',
+        'xlsx',
+        'framer-motion',
+        'dexie'
+      ]
     },
     build: {
       outDir: 'dist',

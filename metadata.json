@@ -1,9 +1,8 @@
 {
-  "name": "AAG - Quality System",
-  "description": "ISO 9001:2015 Digital Quality Management System for high-end manufacturing. Decoupled image evidence architecture.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone",
-    "geolocation"
+  "name": "QMS - AA Corporation",
+  "description": "Hệ thống quản lý chất lượng QA/QC cho nhà máy và xưởng vệ tinh",
+  "request_frame_permissions": [],
+  "prompt_capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

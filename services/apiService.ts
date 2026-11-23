@@ -1,914 +1,964 @@
+import { 
+  SubcontractorBooking, 
+  Inspection, 
+  SubcontractorInspection, 
+  SubcontractorReinspectionCost, 
+  DefectLibraryItem, 
+  Supplier,
+  User,
+  Project,
+  Role,
+  RoleObject,
+  FloorPlan,
+  LayoutPin,
+  ProjectDocument,
+  Workshop,
+  Material,
+  RelatedSqcResponse,
+  RelatedBookingsResponse,
+  TraceabilityBundle
+} from '../types.js';
 
-import { Inspection, IPOItem, User, Workshop, CheckItem, Project, NCR, Notification, ViewState, Role, Defect, DefectLibraryItem, Supplier, FloorPlan, LayoutPin, ProjectDocument } from '../types';
-import imageCompression from 'browser-image-compression';
-
-// Helper to get auth headers from localStorage
 const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('aatn_qms_token');
-    if (!token) return {};
-    return {
-        'Authorization': `Bearer ${token}`
-    };
+  try {
+    const token = localStorage.getItem('aatn_qms_token') || sessionStorage.getItem('aatn_qms_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
 };
 
-const apiFetch = async (url: string, options: RequestInit = {}, retries = 1): Promise<any> => {
-    const headers = {
-        ...getAuthHeaders(),
-        ...(options.headers || {})
-    };
-    
-    // Ensure URL is relative or absolute correctly
-    const fetchUrl = url.startsWith('http') ? url : url;
-    
-    try {
-        const response = await fetch(fetchUrl, { ...options, headers: headers as HeadersInit });
-        const contentType = response.headers.get('content-type') || '';
-        
-        if (!response.ok) {
-            let errorMsg = `Request failed with status ${response.status}`;
-            if (contentType.includes('application/json')) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                errorMsg = errorData.error || errorData.message || errorMsg;
-            } else {
-                const text = await response.text().catch(() => '');
-                if (text.includes('<!doctype') || text.includes('<html')) {
-                    errorMsg = `Server error (${response.status}): Endpoint returned HTML page instead of JSON`;
-                } else if (text) {
-                    errorMsg = `Server error (${response.status}): ${text.substring(0, 100)}`;
-                }
-            }
+async function apiFetch(url: string, options: RequestInit = {}, retries: number = 2): Promise<any> {
+  const headers = {
+    ...getAuthHeaders(),
+    ...(options.headers || {}),
+  };
+  const fetchUrl = url.startsWith('http') ? url : url;
+  const controller = !options.signal ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 25000) : null;
 
-            // Handle token expiration or unauthorized access
-            if (response.status === 401) {
-                console.warn('Session expired or unauthorized. Logging out.');
-                localStorage.removeItem('aatn_qms_token');
-                localStorage.removeItem('aatn_auth_storage');
-                sessionStorage.removeItem('aatn_auth_storage');
-                if (typeof window !== 'undefined' && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
-                    window.location.reload();
-                }
-            }
-            
-            throw new Error(errorMsg);
-        }
+  try {
+    const response = await fetch(fetchUrl, {
+      ...options,
+      headers,
+      signal: options.signal || controller?.signal,
+    });
+    if (timeoutId) clearTimeout(timeoutId);
+    const contentType = response.headers.get('content-type') || '';
 
-        if (!contentType.includes('application/json')) {
-            const text = await response.text();
-            if (text.includes('<!doctype') || text.includes('<html')) {
-                throw new Error(`API returned HTML document instead of JSON (URL: ${url}). Check server route or login state.`);
-            }
-            try {
-                return JSON.parse(text);
-            } catch (e) {
-                throw new Error(`Invalid JSON response from ${url}: ${text.substring(0, 100)}`);
-            }
-        }
+    if (!response.ok) {
+      if (response.status === 429 && retries > 0) {
+        console.warn(`[apiFetch] Rate limit 429 encountered for ${url}, retrying in 2s... (${retries} retries left)`);
+        await new Promise((r) => setTimeout(r, 2000));
+        return apiFetch(url, options, retries - 1);
+      }
 
-        return await response.json();
-    } catch (err: any) {
-        const isGet = !options.method || options.method.toUpperCase() === 'GET';
-        if (isGet && retries > 0 && (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))) {
-            console.warn(`[apiFetch] Network issue for ${url}, retrying in 1.2s...`);
-            await new Promise(r => setTimeout(r, 1200));
-            return apiFetch(url, options, retries - 1);
+      let errorMsg = `Request failed with status ${response.status}`;
+      if (contentType.includes('application/json')) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        errorMsg = errorData.error || errorData.message || errorMsg;
+      } else {
+        const text = await response.text().catch(() => '');
+        if (text.includes('<!doctype') || text.includes('<html')) {
+          errorMsg = `Server error (${response.status}): Endpoint returned HTML page instead of JSON`;
+        } else if (text) {
+          errorMsg = `Server error (${response.status}): ${text.substring(0, 120)}`;
         }
-        throw err;
+      }
+
+      if (response.status === 401) {
+        console.warn('Session expired or unauthorized.');
+        try {
+          if (!url.includes('/api/auth/login') && !url.includes('/api/auth/forgot-password') && !url.includes('/api/auth/reset-password') && !url.includes('/api/public/')) {
+            try { localStorage.removeItem('aatn_qms_token'); } catch {}
+            try { localStorage.removeItem('aatn_auth_storage'); } catch {}
+            try { sessionStorage.removeItem('aatn_qms_token'); } catch {}
+            try { sessionStorage.removeItem('aatn_auth_storage'); } catch {}
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('qms-auth-expired'));
+            }
+          }
+        } catch {
+          // Ignore storage error
+        }
+      }
+      const err: any = new Error(errorMsg);
+      err.status = response.status;
+      throw err;
     }
+
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      if (text.includes('<!doctype') || text.includes('<html')) {
+        const msg = `API returned HTML document instead of JSON (URL: ${url}). Check server route or login state.`;
+        if (!url.includes('/api/system/audit-errors')) {
+          void fetch('/api/system/audit-errors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ method: options.method || 'GET', path: url, statusCode: 502, errorMessage: msg }),
+          }).catch(() => {});
+        }
+        const err: any = new Error(msg);
+        err.status = 502;
+        throw err;
+      }
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid JSON response from ${url}: ${text.substring(0, 100)}`);
+      }
+    }
+
+    return await response.json();
+  } catch (err: any) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      const timeoutErr: any = new Error(`Kết nối quá thời gian chờ cho ${url}`);
+      timeoutErr.status = 408;
+      throw timeoutErr;
+    }
+    const isGet = !options.method || options.method.toUpperCase() === 'GET';
+    const isRateLimit = err?.status === 429 || err.message?.includes('429') || err.message?.includes('Rate exceeded');
+    if ((isGet || isRateLimit) && retries > 0 && (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || isRateLimit)) {
+      console.warn(`[apiFetch] Issue for ${url} (${err.message}), retrying in 2s...`);
+      await new Promise((r) => setTimeout(r, 2000));
+      return apiFetch(url, options, retries - 1);
+    }
+    if (!err?.status && !url.includes('/api/system/audit-errors')) {
+      void fetch('/api/system/audit-errors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          method: options.method || 'GET',
+          path: url,
+          statusCode: 503,
+          errorMessage: err?.message || 'Network/Fetch failure',
+        }),
+      }).catch(() => {});
+    }
+    throw err;
+  }
+}
+
+// --- AUTHENTICATION API ---
+export const verifyUserCredentials = async (username: string, password: string): Promise<any> => {
+  return apiFetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
 };
 
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<any> => {
+  return apiFetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+};
+
+export const forgotPassword = async (email: string): Promise<any> => {
+  return apiFetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+};
+
+export const resetPassword = async (email: string, code: string, newPassword: string): Promise<any> => {
+  return apiFetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, newPassword }),
+  });
+};
+
+// --- SUBCONTRACTOR BOOKINGS & INSPECTIONS ---
+export const fetchSubcontractorBookings = async (filters: any = {}): Promise<{ bookings: SubcontractorBooking[] }> => {
+  const params = new URLSearchParams(filters);
+  return apiFetch(`/api/subcontractor-bookings?${params.toString()}`);
+};
+
+export const fetchSubcontractorBookingById = async (id: string): Promise<SubcontractorBooking | null> => {
+  return apiFetch(`/api/subcontractor-bookings/${id}`).catch(() => null);
+};
+
+export const createSubcontractorBooking = async (data: any): Promise<SubcontractorBooking> => {
+  return apiFetch('/api/subcontractor-bookings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteSubcontractorBooking = async (id: string): Promise<{ success: boolean }> => {
+  return apiFetch(`/api/subcontractor-bookings/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const updateSubcontractorBooking = async (id: string, updates: Partial<SubcontractorBooking>): Promise<SubcontractorBooking> => {
+  return apiFetch(`/api/subcontractor-bookings/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+};
+
+export const reconcileSubcontractorBookingsApi = async () => {
+  return apiFetch('/api/subcontractor-bookings/reconcile', {
+    method: 'POST',
+  });
+};
+
+export const manualOverrideBookingStatusApi = async (
+  id: string,
+  payload: {
+    result: 'PASS' | 'FAIL';
+    reason: string;
+    sqcCode?: string;
+    version?: number;
+  }
+): Promise<SubcontractorBooking> => {
+  return apiFetch(`/api/subcontractor-bookings/${encodeURIComponent(id)}/manual-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const fetchSubcontractorInspections = async (): Promise<{ inspections: SubcontractorInspection[] }> => {
+  return apiFetch('/api/subcontractor-inspections');
+};
+
+export const fetchSubcontractorReinspectionCosts = async (): Promise<{ costs: SubcontractorReinspectionCost[] }> => {
+  return apiFetch('/api/subcontractor-reinspection-costs');
+};
+
+export const fetchRelatedSqcForBooking = async (
+  bookingIdOrCode: string,
+  signal?: AbortSignal
+): Promise<RelatedSqcResponse> => {
+  return apiFetch(`/api/subcontractor-bookings/${encodeURIComponent(bookingIdOrCode)}/related-sqc`, {
+    signal,
+  });
+};
+
+export const fetchRelatedBookingsForInspection = async (
+  inspectionId: string,
+  signal?: AbortSignal
+): Promise<RelatedBookingsResponse> => {
+  return apiFetch(`/api/inspections/${encodeURIComponent(inspectionId)}/related-bookings`, {
+    signal,
+  });
+};
+
+export const fetchInspectionTraceability = async (
+  inspectionId: string,
+  signal?: AbortSignal
+): Promise<TraceabilityBundle> => {
+  return apiFetch(`/api/inspections/${encodeURIComponent(inspectionId)}/traceability`, {
+    signal,
+  });
+};
+
+export const fetchPublicInspectionTraceability = async (
+  inspectionId: string,
+  signal?: AbortSignal
+): Promise<TraceabilityBundle> => {
+  return apiFetch(`/api/public/inspections/${encodeURIComponent(inspectionId)}/traceability`, {
+    signal,
+  });
+};
+
+export const fetchTraceabilityByCodes = async (
+  params: { ipo?: string; po?: string; pr?: string; q?: string; inspectionId?: string },
+  signal?: AbortSignal
+): Promise<TraceabilityBundle> => {
+  const qs = buildCleanQuery(params);
+  return apiFetch(`/api/traceability${qs ? `?${qs}` : ''}`, { signal });
+};
+
+// --- SUPPLIERS API ---
+export const findSupplierByName = async (name: string): Promise<{ supplier: Supplier | null }> => {
+  return apiFetch(`/api/suppliers/find-by-name?name=${encodeURIComponent(name)}`);
+};
+
+export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20, sortBy: string = 'reports'): Promise<{ items: Supplier[], total: number }> => {
+  const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString(), sortBy });
+  return apiFetch(`/api/suppliers?${params.toString()}`);
+};
+
+export const saveSupplier = async (data: Partial<Supplier>): Promise<{ success: boolean, supplier: Supplier }> => {
+  return apiFetch('/api/suppliers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+};
+
+export const syncSuppliersFromBookingsApi = async (): Promise<{ success: boolean; updatedCount: number }> => {
+  return apiFetch('/api/suppliers/sync-from-bookings', {
+    method: 'POST',
+  });
+};
+
+
+export const deleteSupplier = async (id: string): Promise<{ success: boolean }> => {
+  return apiFetch(`/api/suppliers/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const fetchSupplierStats = async (name: string): Promise<any> => {
+  return apiFetch(`/api/suppliers/stats?name=${encodeURIComponent(name)}`);
+};
+
+export const fetchSupplierInspections = async (name: string): Promise<any> => {
+  return apiFetch(`/api/suppliers/inspections?name=${encodeURIComponent(name)}`);
+};
+
+export const fetchSupplierMaterials = async (name: string): Promise<any> => {
+  return apiFetch(`/api/suppliers/materials?name=${encodeURIComponent(name)}`);
+};
+
+// --- PO / PR & MATERIAL AUTO-LOOKUP ---
+export const lookupPoMaterials = async (q: string): Promise<{ items: any[] }> => {
+  return apiFetch(`/api/po-materials/lookup?q=${encodeURIComponent(q)}`);
+};
+
+// --- INSPECTIONS API ---
+// [Update - Danh Sách Phiếu] - [v3.1.0] - Chuẩn hóa truyền query params và để lỗi API hiển thị đúng Error Boundary
+const buildCleanQuery = (filters: any = {}, extra: Record<string, string> = {}) => {
+  const params = new URLSearchParams();
+  Object.entries({ ...(filters || {}), ...extra }).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && String(v).trim() !== '') {
+      params.set(k, String(v));
+    }
+  });
+  return params.toString();
+};
+
+export const fetchInspections = async (filters: any = {}, page: number = 1, limit: number = 200): Promise<{ data: Inspection[], items?: Inspection[], total: number }> => {
+  const qs = buildCleanQuery(filters, { page: page.toString(), limit: limit.toString() });
+  return apiFetch(`/api/inspections?${qs}`);
+};
+
+export const fetchInspectionsDates = async (filters: any = {}): Promise<{ date: string, count?: number }[]> => {
+  const qs = buildCleanQuery(filters);
+  return apiFetch(`/api/inspections/dates${qs ? `?${qs}` : ''}`);
+};
+
+export const fetchInspectionsProjects = async (filters: any = {}): Promise<{ ma_ct: string, ten_ct: string, count: number }[]> => {
+  const qs = buildCleanQuery(filters);
+  return apiFetch(`/api/inspections/projects${qs ? `?${qs}` : ''}`);
+};
+
+export const fetchInspectionById = async (id: string): Promise<Inspection | null> => {
+  const res = await apiFetch(`/api/inspections/${id}`).catch(async () => {
+    const listRes = await apiFetch(`/api/inspections?search=${encodeURIComponent(id)}`);
+    const items = Array.isArray(listRes) ? listRes : (listRes?.data || listRes?.items || []);
+    return items[0] || null;
+  });
+  return res?.inspection || res?.data || res || null;
+};
+
+export const fetchPublicInspectionById = async (id: string): Promise<Inspection | null> => {
+  const res = await apiFetch(`/api/public/inspections/${encodeURIComponent(id)}`).catch(() => null);
+  return res?.inspection || res?.data || res || null;
+};
+
+export const saveInspectionToSheet = async (inspection: Inspection): Promise<{ success: boolean, inspection: Inspection }> => {
+  return apiFetch('/api/inspections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(inspection),
+  });
+};
+
+export const deleteInspectionFromSheet = async (id: string): Promise<{ success: boolean }> => {
+  return apiFetch(`/api/inspections/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const deleteInspection = async (id: string): Promise<{ success: boolean }> => {
+  return apiFetch(`/api/inspections/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const fetchDeletedInspections = async (): Promise<Inspection[]> => {
+  return apiFetch('/api/inspections/deleted').catch(() => []);
+};
+
+export const restoreInspection = async (id: string): Promise<{ success: boolean }> => {
+  return apiFetch(`/api/inspections/${id}/restore`, {
+    method: 'POST',
+  });
+};
+
+export const permanentDeleteInspection = async (id: string): Promise<{ success: boolean }> => {
+  return apiFetch(`/api/inspections/${id}/permanent`, {
+    method: 'DELETE',
+  });
+};
+
+export const fetchDashboardStats = async (filters: any = {}): Promise<any> => {
+  const params = new URLSearchParams(filters);
+  return apiFetch(`/api/dashboard/stats?${params.toString()}`);
+};
+
+// --- IPO API ---
 export const fetchIpoData = async (page: number = 1, limit: number = 50, factoryOrder?: string, maTender?: string) => {
-    const params = new URLSearchParams();
-    params.append('page', page.toString());
-    params.append('limit', limit.toString());
-    if (factoryOrder) params.append('factoryOrder', factoryOrder);
-    if (maTender) params.append('maTender', maTender);
-    
-    return apiFetch(`/api/ipo?${params.toString()}`);
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('limit', limit.toString());
+  if (factoryOrder) params.append('factoryOrder', factoryOrder);
+  if (maTender) params.append('maTender', maTender);
+  return apiFetch(`/api/ipo?${params.toString()}`);
 };
 
 export const fetchIpoByFactoryOrder = async (factoryOrder: string) => {
-    return apiFetch(`/api/ipo?factoryOrder=${encodeURIComponent(factoryOrder)}`);
+  return apiFetch(`/api/ipo?factoryOrder=${encodeURIComponent(factoryOrder)}`);
 };
 
 export const fetchIpoDetailExtended = async (idFactoryOrder: string) => apiFetch(`/api/ipo/detail/${idFactoryOrder}`);
 
 export const saveIpoDetailExtended = async (detail: any) => apiFetch('/api/ipo/detail', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(detail)
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(detail),
 });
 
 export const saveIpoDrawingRecord = async (drawing: any) => apiFetch('/api/ipo/drawings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(drawing)
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(drawing),
 });
 
 export const saveIpoMaterialRecord = async (material: any) => apiFetch('/api/ipo/materials', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(material)
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(material),
 });
 
 export const saveIpoSampleRecord = async (sample: any) => apiFetch('/api/ipo/samples', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sample)
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(sample),
 });
 
 export const updateIpoSampleRecord = async (id: string, sample: any) => apiFetch(`/api/ipo/samples/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sample)
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(sample),
 });
 
-export const deleteIpoSampleRecord = async (id: string) => apiFetch(`/api/ipo/samples/${id}`, { 
-    method: 'DELETE' 
-});
+export const deleteIpoSampleRecord = async (id: string) => apiFetch(`/api/ipo/samples/${id}`, { method: 'DELETE' });
 
-export const fetchFloorPlans = async (projectId: string) => apiFetch(`/api/floor-plans?projectId=${projectId}`);
-export const saveFloorPlan = async (fp: FloorPlan) => apiFetch('/api/floor-plans', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fp)
-});
-export const deleteFloorPlan = async (id: string) => apiFetch(`/api/floor-plans/${id}`, { method: 'DELETE' });
-export const fetchLayoutPins = async (fpId: string) => apiFetch(`/api/layout-pins?fpId=${fpId}`);
-export const saveLayoutPin = async (pin: LayoutPin) => apiFetch('/api/layout-pins', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(pin)
-});
-
-// Lightweight concurrency queue to prevent network congestion on mobile/cellular uplinks
-class UploadQueue {
-    private running = 0;
-    private maxConcurrent = 2;
-    private queue: Array<() => Promise<void>> = [];
-
-    async run<T>(task: () => Promise<T>): Promise<T> {
-        return new Promise<T>((resolve, reject) => {
-            const execute = async () => {
-                this.running++;
-                try {
-                    const result = await task();
-                    resolve(result);
-                } catch (err) {
-                    reject(err);
-                } finally {
-                    this.running--;
-                    if (this.queue.length > 0) {
-                        const next = this.queue.shift();
-                        if (next) next();
-                    }
-                }
-            };
-
-            if (this.running < this.maxConcurrent) {
-                execute();
-            } else {
-                this.queue.push(execute);
-            }
-        });
-    }
+// --- UPLOAD & STORAGE (SIGNED URL ADAPTER) ---
+interface UploadStorageMeta {
+  entityType?: string;
+  type?: string;
+  entityId?: string;
+  role?: string;
 }
 
-const globalUploadQueue = new UploadQueue();
+function normalizeUploadMeta(metadata?: any): UploadStorageMeta {
+  if (!metadata) return {};
+  if (typeof metadata === 'string') return { role: metadata };
+  if (typeof metadata === 'object') {
+    return {
+      entityType: metadata.entityType || metadata.type || 'GENERAL',
+      entityId: metadata.entityId,
+      role: metadata.role,
+    };
+  }
+  return {};
+}
 
-// Client-side HTML5 canvas compression fallback (works reliably in sandboxed iframes without worker issues)
-const compressWithCanvasFallback = (blobOrFile: Blob | File, maxWidth = 1600, quality = 0.8): Promise<Blob> => {
-    return new Promise((resolve) => {
-        try {
-            const img = new Image();
-            const url = URL.createObjectURL(blobOrFile);
-            img.onload = () => {
-                URL.revokeObjectURL(url);
-                try {
-                    let { width, height } = img;
-                    if (width > maxWidth || height > maxWidth) {
-                        if (width > height) {
-                            height = Math.round((height * maxWidth) / width);
-                            width = maxWidth;
-                        } else {
-                            width = Math.round((width * maxWidth) / height);
-                            height = maxWidth;
-                        }
-                    }
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) {
-                        resolve(blobOrFile);
-                        return;
-                    }
-                    ctx.drawImage(img, 0, 0, width, height);
-                    canvas.toBlob(
-                        (b) => {
-                            resolve(b || blobOrFile);
-                        },
-                        'image/jpeg',
-                        quality
-                    );
-                } catch (e) {
-                    resolve(blobOrFile);
-                }
-            };
-            img.onerror = () => {
-                URL.revokeObjectURL(url);
-                resolve(blobOrFile);
-            };
-            img.src = url;
-        } catch (e) {
-            resolve(blobOrFile);
-        }
+export const getSignedDownloadUrl = async (keyOrUrl: string, ttlSeconds: number = 3600): Promise<string> => {
+  const params = new URLSearchParams({ key: keyOrUrl, ttlSeconds: String(ttlSeconds) });
+  const res = await apiFetch(`/api/storage/signed-download-url?${params.toString()}`);
+  return String(res?.url || keyOrUrl);
+};
+
+async function postUploadFile(
+  file: File | Blob,
+  filename?: string,
+  metadata?: any,
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  const meta = normalizeUploadMeta(metadata);
+  const safeFilename = filename || (file instanceof File ? file.name : '') || `upload_${Date.now()}.png`;
+  const contentType = file.type || 'application/octet-stream';
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    onProgress?.(10);
+    // Step 1: Request short-lived HMAC Signed Upload URL from server
+    const grant = await apiFetch('/api/storage/signed-upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: safeFilename,
+        contentType,
+        entityType: meta.entityType || meta.type || 'GENERAL',
+        entityId: meta.entityId,
+        role: meta.role,
+      }),
+      signal: controller.signal,
     });
-};
 
-const sendUploadXHR = (
-    formData: FormData, 
-    onProgress?: (percent: number) => void, 
-    retries = 2
-): Promise<string> => {
-    return new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/upload');
-        xhr.timeout = 50000; // 50 seconds timeout
-        
-        const authHeaders = getAuthHeaders();
-        for (const [key, value] of Object.entries(authHeaders)) {
-            xhr.setRequestHeader(key, value);
-        }
+    if (!grant?.uploadUrl) {
+      throw new Error('Máy chủ không cấp được Signed Upload URL.');
+    }
 
-        if (onProgress) {
-            xhr.upload.onprogress = (event) => {
-                if (event.lengthComputable) {
-                    const percent = Math.round((event.loaded / event.total) * 100);
-                    onProgress(percent);
-                }
-            };
-        }
-
-        xhr.onload = async () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    const data = JSON.parse(xhr.responseText);
-                    resolve(data.url || data.fileUrl || data.path);
-                } catch (e) {
-                    resolve(xhr.responseText);
-                }
-            } else if (xhr.status >= 500 && retries > 0) {
-                console.warn(`[upload] Server returned status ${xhr.status}, retrying upload (${retries} retries left)...`);
-                await new Promise((r) => setTimeout(r, 1500));
-                try {
-                    const retryResult = await sendUploadXHR(formData, onProgress, retries - 1);
-                    resolve(retryResult);
-                } catch (retryErr) {
-                    reject(retryErr);
-                }
-            } else {
-                let errorMsg = `Upload failed (${xhr.status})`;
-                try {
-                    const errorData = JSON.parse(xhr.responseText);
-                    if (errorData && errorData.error) errorMsg = errorData.error;
-                } catch (e) {}
-                
-                if (xhr.status === 413) {
-                    errorMsg = "Ảnh quá lớn để tải lên server (Giới hạn 10MB).";
-                }
-                reject(new Error(errorMsg));
-            }
-        };
-
-        xhr.onerror = async () => {
-            if (retries > 0) {
-                console.warn(`[upload] Network error during upload, auto-retrying (${retries} retries left)...`);
-                await new Promise((r) => setTimeout(r, 1500));
-                try {
-                    const retryResult = await sendUploadXHR(formData, onProgress, retries - 1);
-                    resolve(retryResult);
-                } catch (retryErr) {
-                    reject(retryErr);
-                }
-            } else {
-                reject(new Error("Lỗi kết nối mạng khi tải ảnh lên."));
-            }
-        };
-
-        xhr.ontimeout = async () => {
-            if (retries > 0) {
-                console.warn(`[upload] Upload timed out, auto-retrying (${retries} retries left)...`);
-                await new Promise((r) => setTimeout(r, 1500));
-                try {
-                    const retryResult = await sendUploadXHR(formData, onProgress, retries - 1);
-                    resolve(retryResult);
-                } catch (retryErr) {
-                    reject(retryErr);
-                }
-            } else {
-                reject(new Error("Quá thời gian tải ảnh lên (Timeout). Vui lòng thử lại."));
-            }
-        };
-
-        xhr.send(formData);
+    onProgress?.(35);
+    // Step 2: PUT binary content directly to the Signed URL endpoint (no auth header needed; verified by HMAC signature)
+    const putResp = await fetch(grant.uploadUrl, {
+      method: grant.method || 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: file,
+      signal: controller.signal,
     });
-};
+    clearTimeout(timeoutId);
 
-/**
- * ISO-Compliant File Upload
- * Uploads file to storage service and returns a permanent URL
- */
-export const uploadFileToStorage = async (
-    file: File | string, 
-    fileName: string, 
-    ma_ct?: string, 
-    onProgress?: (percent: number) => void
-): Promise<string> => {
-    let fileToUpload: File | Blob;
-    
-    if (typeof file === 'string') {
-        if (file.startsWith('http') || file.startsWith('/uploads/') || file.startsWith('/api/media/image/') || file.startsWith('data:')) {
-            return file;
-        }
-        try {
-            const res = await fetch(file);
-            fileToUpload = await res.blob();
-        } catch (e) {
-            console.error("Failed to fetch blob from string", e);
-            throw new Error("Failed to process image data");
-        }
-    } else {
-        fileToUpload = file;
+    const respContentType = putResp.headers.get('content-type') || '';
+    if (!putResp.ok) {
+      let errMsg = `Signed upload failed (${putResp.status})`;
+      if (respContentType.includes('application/json')) {
+        const errData = await putResp.json().catch(() => ({}));
+        errMsg = errData.error || errData.message || errMsg;
+      } else {
+        const text = await putResp.text().catch(() => '');
+        if (text) errMsg = `Signed upload failed (${putResp.status}): ${text.slice(0, 120)}`;
+      }
+      void fetch('/api/system/audit-errors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ method: 'PUT', path: '/api/storage/upload', statusCode: putResp.status, errorMessage: errMsg }),
+      }).catch(() => {});
+      throw new Error(errMsg);
     }
 
-    // Always attempt compression for images
-    const isImage = (fileToUpload.type && fileToUpload.type.startsWith('image/')) ||
-        /\.(jpe?g|png|webp|heic|heif|bmp)$/i.test(fileName || (fileToUpload as File).name || '');
-
-    if (isImage) {
-        try {
-            // First try browser-image-compression with useWebWorker: false to avoid sandboxed iframe Worker restrictions
-            const options = {
-                maxSizeMB: 0.45,
-                maxWidthOrHeight: 1600,
-                useWebWorker: false,
-                fileType: 'image/jpeg',
-                initialQuality: 0.8
-            };
-            const compressed = await imageCompression(fileToUpload as File, options);
-            fileToUpload = compressed;
-        } catch (compErr) {
-            console.warn("[upload] browser-image-compression fallback to Canvas:", compErr);
-            try {
-                fileToUpload = await compressWithCanvasFallback(fileToUpload, 1600, 0.8);
-            } catch (canvasErr) {
-                console.warn("[upload] Canvas compression also skipped, using original:", canvasErr);
-            }
-        }
+    onProgress?.(100);
+    const data = await putResp.json().catch(() => ({}));
+    const url = String(data.url || grant.accessUrl || '');
+    if (!url) throw new Error('Server không trả về URL hình ảnh sau khi tải lên');
+    return url;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      const msg = 'Tải ảnh lên quá thời gian chờ (30s)';
+      void fetch('/api/system/audit-errors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ method: 'PUT', path: '/api/storage/upload', statusCode: 408, errorMessage: msg }),
+      }).catch(() => {});
+      throw new Error(msg);
     }
-
-    const formData = new FormData();
-    formData.append('image', fileToUpload, fileName);
-    
-    const finalMaCt = ma_ct || (typeof window !== 'undefined' ? (window as any).current_ma_ct : undefined);
-    if (finalMaCt) {
-        formData.append('ma_ct', finalMaCt);
-    }
-    
-    return globalUploadQueue.run(() => sendUploadXHR(formData, onProgress));
-};
-
-export const fetchSuppliers = async (search: string = '', page: number = 1, limit: number = 20, sortBy: string = 'reports') => {
-    const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString(), sortBy });
-    return apiFetch(`/api/suppliers?${params.toString()}`);
-};
-export const saveSupplier = async (s: Supplier) => apiFetch('/api/suppliers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(s)
-});
-export const deleteSupplier = async (id: string) => apiFetch(`/api/suppliers/${id}`, { method: 'DELETE' });
-export const fetchSupplierStats = async (name: string) => apiFetch(`/api/suppliers/stats?name=${encodeURIComponent(name)}`);
-export const fetchSupplierInspections = async (name: string) => apiFetch(`/api/suppliers/inspections?name=${encodeURIComponent(name)}`);
-export const fetchSupplierMaterials = async (name: string) => apiFetch(`/api/suppliers/materials?name=${encodeURIComponent(name)}`);
+    throw err;
+  }
+}
 
 export const uploadQMSImage = async (
-    file: File | string, 
-    entityIdOrContext: string | { entityId: string, type: any, role: any, ma_ct?: string }, 
-    type?: any, 
-    role?: any,
-    onProgress?: (percent: number) => void
+  fileOrDataUrl: File | Blob | string,
+  metadata?: any,
+  _arg3?: any,
+  _arg4?: any,
+  onProgress?: (pct: number) => void
 ): Promise<string> => {
-    let entityId: string;
-    let finalType: any;
-    let finalMaCt: string | undefined = undefined;
-    
-    if (typeof entityIdOrContext === 'object') {
-        entityId = entityIdOrContext.entityId;
-        finalType = entityIdOrContext.type;
-        finalMaCt = entityIdOrContext.ma_ct;
-    } else {
-        entityId = entityIdOrContext;
-        finalType = type;
+  if (typeof fileOrDataUrl === 'string') {
+    const trimmed = fileOrDataUrl.trim();
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('/uploads/') ||
+      trimmed.startsWith('/api/storage/files/')
+    ) {
+      return trimmed;
     }
-    
-    return await uploadFileToStorage(file, `qms_${finalType}_${entityId}_${Date.now()}.jpg`, finalMaCt, onProgress);
-};
-
-export const fetchPlans = async (searchTerm: string = '', page: number = 1, limit: number = 20) => {
-    const params = new URLSearchParams({ search: searchTerm, page: page.toString(), limit: limit.toString() });
-    return apiFetch(`/api/plans?${params.toString()}`);
-};
-
-export const updatePlan = async (id: number | string, plan: Partial<IPOItem>) => {
-    return apiFetch(`/api/plans/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(plan)
-    });
-};
-
-export const fetchPlansByProject = async (maCt: string, limit?: number) => {
-    const params = new URLSearchParams({ maCt });
-    if (limit) params.append('limit', limit.toString());
-    return apiFetch(`/api/plans/by-project?${params.toString()}`);
-};
-
-export const fetchInspections = async (filters: any = {}, page: number = 1, limit?: number) => {
-    const params = new URLSearchParams({ ...filters, page: page.toString() });
-    if (limit) params.append('limit', limit.toString());
-    return apiFetch(`/api/inspections?${params.toString()}`);
-};
-
-export const fetchDashboardInspections = async (filters: any = {}) => {
-    const params = new URLSearchParams({ ...filters });
-    return apiFetch(`/api/dashboard/inspections?${params.toString()}`);
-};
-
-export const fetchDashboardStats = async (filters: any = {}) => {
-    const params = new URLSearchParams({ ...filters });
-    return apiFetch(`/api/dashboard/stats?${params.toString()}`);
-};
-
-export const fetchInspectionsDates = async (filters: any = {}): Promise<{ date: string, count?: number }[]> => {
-    const params = new URLSearchParams({ ...filters });
-    return apiFetch(`/api/inspections/dates?${params.toString()}`);
-};
-
-export const fetchInspectionsProjects = async (filters: any = {}): Promise<{ ma_ct: string, ten_ct: string, count: number }[]> => {
-    const params = new URLSearchParams({ ...filters });
-    return apiFetch(`/api/inspections/projects?${params.toString()}`);
-};
-
-export const fetchInspectionById = async (id: string) => {
-    return apiFetch(`/api/inspections/${id}`);
-};
-
-export const saveInspectionToSheet = async (inspection: Inspection) => {
-    return apiFetch('/api/inspections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(inspection)
-    });
-};
-
-export const deleteInspectionFromSheet = async (id: string) => {
-    return apiFetch(`/api/inspections/${id}`, { method: 'DELETE' });
-};
-
-export const deleteInspection = async (id: string) => {
-    return apiFetch(`/api/inspections/${id}`, { method: 'DELETE' });
-};
-
-export const fetchDeletedInspections = async () => apiFetch('/api/admin/deleted-inspections');
-export const restoreInspection = async (id: string) => apiFetch(`/api/admin/restore-inspection/${id}`, { method: 'POST' });
-export const permanentDeleteInspection = async (id: string) => apiFetch(`/api/admin/permanent-delete/${id}`, { method: 'DELETE' });
-
-export const saveNcrMapped = async (inspection_id: string, ncr: NCR, createdBy: string) => {
-    return apiFetch('/api/ncrs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inspection_id, ncr, createdBy })
-    });
-};
-
-export const fetchNcrs = async (filters: any = {}, page: number = 1, limit: number = 20) => {
-    const cleanParams: Record<string, string> = {
-        page: page.toString(),
-        limit: limit.toString()
-    };
-    if (filters) {
-        Object.entries(filters).forEach(([k, v]) => {
-            if (v !== undefined && v !== null && v !== '' && v !== 'ALL' && v !== 'NaN' && v !== 'undefined') {
-                cleanParams[k] = String(v);
-            }
-        });
+    if (trimmed.startsWith('data:')) {
+      const res = await fetch(trimmed);
+      const blob = await res.blob();
+      const rawExt = (blob.type.split('/')[1] || 'png').split(';')[0].split('+')[0];
+      const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
+      return postUploadFile(blob, `upload_${Date.now()}.${ext}`, metadata, onProgress);
     }
-    const params = new URLSearchParams(cleanParams);
-    return apiFetch(`/api/ncrs?${params.toString()}`);
+    return trimmed;
+  }
+
+  return postUploadFile(fileOrDataUrl, fileOrDataUrl instanceof File ? fileOrDataUrl.name : undefined, metadata, onProgress);
 };
 
-export const fetchNcrById = async (id: string) => {
-    return apiFetch(`/api/ncrs/${id}`);
-};
-
-export const deleteNcr = async (id: string) => {
-    return apiFetch(`/api/ncrs/${id}`, { method: 'DELETE' });
-};
-
-export const fetchDefects = async (filters: any = {}) => {
-    const params = new URLSearchParams(filters);
-    return apiFetch(`/api/defects?${params.toString()}`);
-};
-
-export const fetchUsers = async () => apiFetch('/api/users');
-export const saveUser = async (user: User) => apiFetch('/api/users', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user)
-});
-export const importUsersBatch = async (users: User[]): Promise<{ success: boolean; count: number; inserted?: number; updated?: number }> => {
-    return apiFetch('/api/users/batch-import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ users })
-    });
-};
-export const deleteUser = async (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' });
-
-export const fetchProjectDocuments = async (projectId: string): Promise<ProjectDocument[]> => {
-    return apiFetch(`/api/projects/${projectId}/documents`);
-};
-
-export const saveProjectDocument = async (doc: ProjectDocument): Promise<any> => {
-    return apiFetch('/api/projects/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(doc)
-    });
-};
-
-export const deleteProjectDocument = async (id: string): Promise<any> => {
-    return apiFetch(`/api/projects/documents/${id}`, {
-        method: 'DELETE'
-    });
-};
-
-export const verifyUserCredentials = async (username: string, password: string): Promise<{ user: User, token: string } | null> => {
-    return apiFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
-};
-
-export const changePassword = async (currentPassword: string, newPassword: string): Promise<any> => {
-    return apiFetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword })
-    });
-};
-
-export const forgotPassword = async (email: string): Promise<any> => {
-    return apiFetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-    });
-};
-
-export const resetPassword = async (email: string, code: string, newPassword: string): Promise<any> => {
-    return apiFetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code, newPassword })
-    });
-};
-
-export const fetchWorkshops = async () => apiFetch('/api/workshops');
-export const saveWorkshop = async (ws: Workshop) => apiFetch('/api/workshops', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ws)
-});
-export const deleteWorkshop = async (id: string) => apiFetch(`/api/workshops/${id}`, { method: 'DELETE' });
-
-export const fetchTemplates = async () => apiFetch('/api/templates');
-export const saveTemplate = async (moduleId: string, items: CheckItem[]) => apiFetch('/api/templates', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ moduleId, items })
-});
-
-export const fetchProjects = async (search: string = '', page: number = 1, limit: number = 20) => {
-    const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString() });
-    return apiFetch(`/api/projects?${params.toString()}`);
-};
-export const fetchProjectByCode = async (code: string) => apiFetch(`/api/projects/${code}`);
-export const updateProject = async (proj: Project) => apiFetch('/api/projects', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(proj)
-});
-
-export const fetchNotifications = async (userId: string, page: number = 1, limit: number = 50) => {
-    const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
-    return apiFetch(`/api/notifications/${userId}?${params.toString()}`);
-};
-export const markNotificationAsRead = async (id: string) => apiFetch(`/api/notifications/${id}/read`, { method: 'PUT' });
-export const markAllNotificationsAsRead = async (userId: string) => apiFetch(`/api/notifications/read-all/${userId}`, { method: 'PUT' });
-
-export const fetchRoles = async () => apiFetch('/api/roles');
-export const saveRole = async (role: Role) => apiFetch('/api/roles', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(role)
-});
-export const deleteRole = async (id: string) => apiFetch(`/api/roles/${id}`, { method: 'DELETE' });
-
-export const fetchDefectLibrary = async () => apiFetch('/api/defect-library');
-export const saveDefectLibraryItem = async (item: DefectLibraryItem) => apiFetch('/api/defect-library', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(item)
-});
-export const deleteDefectLibraryItem = async (id: string) => apiFetch(`/api/defect-library/${id}`, { method: 'DELETE' });
-
-export const exportDefectLibrary = async (format: 'xlsx' | 'csv' = 'xlsx') => {
-    const params = new URLSearchParams();
-    if (format === 'csv') params.append('format', 'csv');
-    const response = await fetch(`/api/export/defects?${params.toString()}`, {
-        headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_Defect_Library_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-};
-
-const importFile = async (url: string, file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-    });
-    
-    const responseClone = response.clone();
-
-    if (!response.ok) {
-        let errorMsg = 'Import failed';
-        try {
-            const errorData = await response.json();
-            errorMsg = errorData.error || errorMsg;
-        } catch (e) {
-            const text = await responseClone.text().catch(() => 'No response body');
-            errorMsg = `Import failed (${response.status}): ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`;
-        }
-        throw new Error(errorMsg);
+export const uploadFileToStorage = async (file: File | Blob | string, customName?: string, metadata?: any): Promise<string> => {
+  if (typeof file === 'string') {
+    if (file.trim().startsWith('data:')) {
+      const res = await fetch(file);
+      const blob = await res.blob();
+      return postUploadFile(blob, customName || `upload_${Date.now()}.png`, metadata);
     }
-    
-    try {
-        return await response.json();
-    } catch (e: any) {
-        const text = await responseClone.text().catch(() => 'No response body');
-        throw new Error(`Failed to parse response as JSON: ${e.message}. Response: ${text.substring(0, 200)}`);
-    }
+    return uploadQMSImage(file, metadata);
+  }
+  return postUploadFile(file, customName || (file instanceof File ? file.name : undefined), metadata);
 };
 
-export const importDefectLibraryFile = async (file: File) => importFile('/api/import/defects', file);
+// --- PLANS & MATERIALS & PROJECTS ---
+export const fetchPlans = async (search: string = '', page: number = 1, limit: number = 50): Promise<{ items: any[]; total: number }> => {
+  const params = new URLSearchParams({ search, page: String(page), limit: String(limit) });
+  const res = await apiFetch(`/api/plans?${params.toString()}`).catch(() => ({ items: [], total: 0 }));
+  if (Array.isArray(res)) return { items: res, total: res.length };
+  return { items: res?.items || [], total: Number(res?.total || (res?.items?.length ?? 0)) };
+};
 
-export const fetchMaterials = async (search: string = '', page: number = 1, limit: number = 50) => {
-    const params = new URLSearchParams();
-    params.append('page', page.toString());
-    params.append('limit', limit.toString());
-    if (search) params.append('search', search);
-    
-    return apiFetch(`/api/materials?${params.toString()}`);
+export const fetchPlansByProject = async (projectId: string): Promise<any[]> => {
+  const res = await apiFetch(`/api/plans?projectId=${encodeURIComponent(projectId)}`).catch(() => []);
+  return Array.isArray(res) ? res : (res?.items || []);
+};
+
+export const fetchMaterials = async (search: string = '', page: number = 1, limit: number = 50): Promise<any> => {
+  const params = new URLSearchParams({ search, page: page.toString(), limit: limit.toString() });
+  return apiFetch(`/api/materials?${params.toString()}`);
 };
 
 export const saveMaterial = async (material: any) => {
-    return apiFetch(material.id ? `/api/materials/${material.id}` : '/api/materials', {
-        method: material.id ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(material)
-    });
+  return apiFetch(material.id ? `/api/materials/${material.id}` : '/api/materials', {
+    method: material.id ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(material),
+  });
 };
 
 export const deleteMaterial = async (id: string) => {
-    return apiFetch(`/api/materials/${id}`, { method: 'DELETE' });
+  return apiFetch(`/api/materials/${id}`, { method: 'DELETE' });
 };
 
-export const exportNcrs = async (format: 'xlsx' | 'csv' = 'xlsx') => {
-    const params = new URLSearchParams();
-    if (format === 'csv') params.append('format', 'csv');
-    const response = await fetch(`/api/export/ncrs?${params.toString()}`, {
-        headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_NCR_List_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
+export const fetchProjects = async (search: string = '', page: number = 1, limit: number = 1000): Promise<{ items: Project[]; total: number }> => {
+  const params = new URLSearchParams({ search, page: String(page), limit: String(limit) });
+  const res = await apiFetch(`/api/projects?${params.toString()}`);
+  if (Array.isArray(res)) return { items: res, total: res.length };
+  return { items: res?.items || [], total: Number(res?.total || (res?.items?.length ?? 0)) };
 };
 
-export const importNcrsFile = async (file: File) => importFile('/api/import/ncrs', file);
+export const fetchProjectByCode = async (code: string): Promise<Project | null> => apiFetch(`/api/projects/${encodeURIComponent(code)}`).catch(() => null);
 
-export const exportMaterials = async (format: 'xlsx' | 'csv' = 'xlsx') => {
-    const params = new URLSearchParams();
-    if (format === 'csv') params.append('format', 'csv');
-    const response = await fetch(`/api/export/materials?${params.toString()}`, {
-        headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_Materials_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-};
-
-export const importMaterialsFile = async (file: File) => importFile('/api/import/materials', file);
-
-export const exportSuppliers = async (format: 'xlsx' | 'csv' = 'xlsx') => {
-    const params = new URLSearchParams();
-    if (format === 'csv') params.append('format', 'csv');
-    const response = await fetch(`/api/export/suppliers?${params.toString()}`, {
-        headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_Suppliers_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-};
-
-export const importSuppliersFile = async (file: File) => importFile('/api/import/suppliers', file);
-
-export const exportInspections = async (filters: any = {}, format: 'xlsx' | 'csv' = 'csv') => {
-    const cleanFilters: any = { ...filters };
-    if (format) cleanFilters.format = format;
-    const params = new URLSearchParams();
-    for (const key in cleanFilters) {
-        if (cleanFilters[key] !== undefined && cleanFilters[key] !== null && cleanFilters[key] !== '') {
-            params.append(key, String(cleanFilters[key]));
-        }
-    }
-    const response = await fetch(`/api/export/inspections?${params.toString()}`, {
-        headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_Inspections_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-};
-
-export const importInspectionsFile = async (file: File) => importFile('/api/import/inspections', file);
-
-export const exportIpoData = async (filters: any = {}, format: 'xlsx' | 'csv' = 'csv') => {
-    const cleanFilters: any = { ...filters };
-    if (format) cleanFilters.format = format;
-    const params = new URLSearchParams();
-    for (const key in cleanFilters) {
-        if (cleanFilters[key] !== undefined && cleanFilters[key] !== null && cleanFilters[key] !== '') {
-            params.append(key, String(cleanFilters[key]));
-        }
-    }
-    const response = await fetch(`/api/export/ipo?${params.toString()}`, {
-        headers: getAuthHeaders()
-    });
-    if (!response.ok) throw new Error('Export failed');
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AATN_IPO_Data_${Date.now()}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-};
-
-export const importIpoFile = async (file: File) => importFile('/api/import/ipo', file);
-
-export const checkApiConnection = async () => {
-    try {
-        const response = await fetch('/api/health');
-        return { ok: response.ok };
-    } catch (e) {
-        return { ok: false };
-    }
-};
-
-export const createNotification = async (params: { userId: string, type: Notification['type'], title: string, message: string, link?: { view: ViewState, id: string } }) => {
-    return apiFetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params)
-    });
-};
-
-
-
-// --- TOOLS EQUIPMENT ---
-export const fetchToolCatalogs = async () => apiFetch('/api/tool-catalogs');
-export const saveToolCatalog = async (catalog: any) => apiFetch('/api/tool-catalogs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(catalog)
+export const updateProject = async (project: Partial<Project>): Promise<Project> => apiFetch(`/api/projects/${encodeURIComponent(String(project.id || project.ma_ct || ''))}`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(project),
 });
+
+// --- NCRs API ---
+export const fetchNcrs = async (filters: any = {}, page: number = 1, limit: number = 50): Promise<{ items: any[], total: number }> => {
+  const params = new URLSearchParams({ ...filters, page: page.toString(), limit: limit.toString() });
+  return apiFetch(`/api/ncrs?${params.toString()}`);
+};
+
+export const fetchNcrById = async (id: string): Promise<any> => apiFetch(`/api/ncrs/${id}`).catch(() => null);
+
+export const deleteNcr = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/ncrs/${id}`, { method: 'DELETE' });
+
+export const saveNcrMapped = async (ncr: any): Promise<any> => apiFetch('/api/ncrs', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(ncr),
+});
+
+// --- DEFECT LIBRARY ---
+export const fetchDefects = async (filters: { status?: string } = {}): Promise<{ items: any[]; total: number }> => {
+  const params = new URLSearchParams();
+  if (filters?.status && filters.status !== 'ALL') {
+    params.set('status', filters.status);
+  }
+  const qs = params.toString();
+  const res = await apiFetch(`/api/defects${qs ? `?${qs}` : ''}`).catch(() => ({ items: [], total: 0 }));
+  if (Array.isArray(res)) return { items: res, total: res.length };
+  return { items: res?.items || [], total: Number(res?.total || (res?.items?.length ?? 0)) };
+};
+
+export const fetchDefectLibrary = async (): Promise<DefectLibraryItem[]> => apiFetch('/api/defect-library').catch(() => []);
+
+export const saveDefectLibraryItem = async (item: any): Promise<DefectLibraryItem> => apiFetch('/api/defect-library', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(item),
+});
+
+export const deleteDefectLibraryItem = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/defect-library/${id}`, { method: 'DELETE' });
+
+// --- USERS & ROLES ---
+export const fetchUsers = async (): Promise<User[]> => apiFetch('/api/users').then(res => res.users || res || []);
+
+export const fetchUserById = async (id: string): Promise<User> => apiFetch(`/api/users/${encodeURIComponent(id)}`);
+
+export const saveUser = async (user: Partial<User>): Promise<{ success: boolean, user: User }> => apiFetch('/api/users', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(user),
+});
+
+export const importUsersBatch = async (users: any[]): Promise<{ count: number }> => apiFetch('/api/users/import', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ users }),
+});
+
+export const deleteUser = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/users/${id}`, { method: 'DELETE' });
+
+export const fetchRoles = async (): Promise<any[]> => apiFetch('/api/roles').catch(() => []);
+
+export const saveRole = async (role: Partial<RoleObject> | Role): Promise<RoleObject> => apiFetch('/api/roles', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(role),
+});
+
+export const deleteRole = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/roles/${id}`, { method: 'DELETE' });
+
+// --- FLOOR PLANS & PINS ---
+export const fetchFloorPlans = async (projectId: string): Promise<FloorPlan[]> => apiFetch(`/api/floor-plans?projectId=${encodeURIComponent(projectId)}`).catch(() => []);
+
+export const saveFloorPlan = async (plan: Partial<FloorPlan>): Promise<FloorPlan> => apiFetch('/api/floor-plans', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(plan),
+});
+
+export const deleteFloorPlan = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/floor-plans/${id}`, { method: 'DELETE' });
+
+export const fetchLayoutPins = async (floorPlanId: string): Promise<LayoutPin[]> => apiFetch(`/api/layout-pins?floorPlanId=${encodeURIComponent(floorPlanId)}`).catch(() => []);
+
+export const saveLayoutPin = async (pin: Partial<LayoutPin>): Promise<LayoutPin> => apiFetch('/api/layout-pins', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(pin),
+});
+
+// --- PROJECT DOCUMENTS ---
+export const fetchProjectDocuments = async (projectId: string): Promise<ProjectDocument[]> => apiFetch(`/api/projects/${projectId}/documents`).catch(() => []);
+
+export const saveProjectDocument = async (doc: Partial<ProjectDocument>): Promise<ProjectDocument> => apiFetch('/api/projects/documents', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(doc),
+});
+
+export const deleteProjectDocument = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/projects/documents/${id}`, { method: 'DELETE' });
+
+// --- WORKSHOPS & TEMPLATES ---
+export const fetchWorkshops = async (): Promise<Workshop[]> => apiFetch('/api/workshops').catch(() => []);
+
+export const saveWorkshop = async (ws: Partial<Workshop>): Promise<Workshop> => apiFetch('/api/workshops', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(ws),
+});
+
+export const deleteWorkshop = async (id: string): Promise<{ success: boolean }> => apiFetch(`/api/workshops/${id}`, { method: 'DELETE' });
+
+export const fetchTemplates = async (): Promise<Record<string, any[]>> => apiFetch('/api/templates').catch(() => ({}));
+
+export const saveTemplate = async (id: string, items: any[]): Promise<{ success: boolean }> => apiFetch(`/api/templates/${id}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ items }),
+});
+
+// --- NOTIFICATIONS ---
+export const fetchNotifications = async (userId?: string, page: number = 1, limit: number = 50): Promise<any[]> => {
+  const params = new URLSearchParams();
+  if (userId) params.append('userId', userId);
+  params.append('page', String(page));
+  params.append('limit', String(limit));
+  return apiFetch(`/api/notifications?${params.toString()}`).catch(() => []);
+};
+
+export const markNotificationAsRead = async (id: string, userId?: string): Promise<{ success: boolean }> => apiFetch(`/api/notifications/${id}/read`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ userId }),
+});
+
+export const markAllNotificationsAsRead = async (userId?: string): Promise<{ success: boolean }> => apiFetch('/api/notifications/read-all', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ userId }),
+});
+
+export const createNotification = async (params: any): Promise<any> => apiFetch('/api/notifications', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(params),
+});
+
+// --- IMPORT / EXPORT HELPERS ---
+const importFileHelper = async (url: string, file: File): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Import failed' }));
+    throw new Error(errorData.error || 'Import failed');
+  }
+  return response.json();
+};
+
+const exportFileHelper = async (url: string, filenamePrefix: string, format: string = 'xlsx'): Promise<void> => {
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Export failed');
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `${filenamePrefix}_${Date.now()}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(downloadUrl);
+};
+
+export const exportDefectLibrary = async (format: string = 'xlsx') => exportFileHelper(`/api/export/defects?format=${format}`, 'AATN_Defect_Library', format);
+export const importDefectLibraryFile = async (file: File) => importFileHelper('/api/import/defects', file);
+
+export const exportNcrs = async (format: string = 'xlsx') => exportFileHelper(`/api/export/ncrs?format=${format}`, 'AATN_NCR_List', format);
+export const importNcrsFile = async (file: File) => importFileHelper('/api/import/ncrs', file);
+
+export const exportMaterials = async (format: string = 'xlsx') => exportFileHelper(`/api/export/materials?format=${format}`, 'AATN_Materials', format);
+export const importMaterialsFile = async (file: File) => importFileHelper('/api/import/materials', file);
+
+export const exportSuppliers = async (format: string = 'xlsx') => exportFileHelper(`/api/export/suppliers?format=${format}`, 'AATN_Suppliers', format);
+export const importSuppliersFile = async (file: File) => importFileHelper('/api/import/suppliers', file);
+
+export const exportInspections = async (filters: any = {}, format: string = 'csv') => {
+  const params = new URLSearchParams({ ...filters, format });
+  return exportFileHelper(`/api/export/inspections?${params.toString()}`, 'AATN_Inspections', format);
+};
+export const importInspectionsFile = async (file: File) => importFileHelper('/api/import/inspections', file);
+
+export const exportIpoData = async (filters: any = {}, format: string = 'csv') => {
+  const params = new URLSearchParams({ ...filters, format });
+  return exportFileHelper(`/api/export/ipo?${params.toString()}`, 'AATN_IPO_Data', format);
+};
+export const importIpoFile = async (file: File) => importFileHelper('/api/import/ipo', file);
+
+export const checkApiConnection = async (): Promise<{ ok: boolean }> => {
+  try {
+    const response = await fetch('/api/health');
+    return { ok: response.ok };
+  } catch (e) {
+    return { ok: false };
+  }
+};
+
+// --- TOOL MANAGEMENT ---
+export const fetchToolCatalogs = async () => apiFetch('/api/tool-catalogs');
+export const saveToolCatalog = async (catalog: any) => apiFetch('/api/tool-catalogs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(catalog) });
 export const deleteToolCatalog = async (id: string) => apiFetch(`/api/tool-catalogs/${id}`, { method: 'DELETE' });
 
 export const fetchToolAssets = async () => apiFetch('/api/tool-assets');
 export const fetchToolAssetsByCatalog = async (catalogId: string) => apiFetch(`/api/tool-catalogs/${catalogId}/assets`);
-export const saveToolAsset = async (asset: any) => apiFetch('/api/tool-assets', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(asset)
-});
+export const saveToolAsset = async (asset: any) => apiFetch('/api/tool-assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(asset) });
 export const deleteToolAsset = async (id: string) => apiFetch(`/api/tool-assets/${id}`, { method: 'DELETE' });
 
 export const fetchToolTransfers = async (assetId: string) => apiFetch(`/api/tool-assets/${assetId}/transfers`);
-export const saveToolTransfer = async (transfer: any) => apiFetch('/api/tool-transfers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(transfer)
-});
+export const saveToolTransfer = async (transfer: any) => apiFetch('/api/tool-transfers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(transfer) });
 
 export const fetchToolCalibrations = async (assetId: string) => apiFetch(`/api/tool-assets/${assetId}/calibrations`);
-export const saveToolCalibration = async (calib: any) => apiFetch('/api/tool-calibrations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(calib)
-});
+export const saveToolCalibration = async (calib: any) => apiFetch('/api/tool-calibrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(calib) });
 
+// --- AUDIT LOGS & USER ACTIVITY & ORGANIZATION ---
 export const fetchInspectionAuditLogs = async (id: string) => apiFetch(`/api/inspections/${id}/audit-logs`);
-
 export const fetchDepartments = async () => apiFetch('/api/departments');
+export const saveDepartment = async (dept: any) => apiFetch('/api/departments', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(dept),
+});
+export const deleteDepartment = async (id: string) => apiFetch(`/api/departments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
 export const fetchDivisions = async () => apiFetch('/api/divisions');
+export const saveDivision = async (div: any) => apiFetch('/api/divisions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(div),
+});
+export const deleteDivision = async (id: string) => apiFetch(`/api/divisions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
 export const fetchTeams = async () => apiFetch('/api/teams');
+export const saveTeam = async (team: any) => apiFetch('/api/teams', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(team),
+});
+export const deleteTeam = async (id: string) => apiFetch(`/api/teams/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const syncDepartmentsAdmin = async () => apiFetch('/api/admin/sync-departments', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+});
 export const fetchUserActivity = async (userId: string) => apiFetch(`/api/users/${userId}/activity`);
 
-// --- SUBCONTRACTOR QC BOOKING & INSPECTION SERVICES ---
-export const fetchSubcontractorBookings = async (filters: any = {}) => {
-    const params = new URLSearchParams();
-    if (filters.status) params.append('status', filters.status);
-    if (filters.search) params.append('search', filters.search);
-    if (filters.assignedQcId) params.append('assignedQcId', filters.assignedQcId);
-    return apiFetch(`/api/subcontractor-bookings?${params.toString()}`);
+// --- SYSTEM AUDIT & 12-MODULE DIAGNOSTICS ---
+export interface ApiErrorLogEntry {
+  id: string;
+  moduleId: string;
+  moduleName: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  errorMessage: string;
+  userId?: string | null;
+  durationMs: number;
+  timestamp: number;
+  details?: any;
+}
+
+export interface ModuleProbeResult {
+  moduleId: string;
+  moduleName: string;
+  endpoint: string;
+  table: string;
+  status: 'OK' | 'ERROR';
+  httpStatus: number;
+  rowCount: number;
+  latencyMs: number;
+  message: string;
+}
+
+export interface SystemAuditErrorsResponse {
+  items: ApiErrorLogEntry[];
+  total: number;
+  summary: Array<{ module_id: string; status_code: number; cnt: number }>;
+  modules: Array<{ moduleId: string; moduleName: string }>;
+}
+
+export const fetchSystemAuditErrors = async (filters: {
+  limit?: number;
+  moduleId?: string;
+  statusGroup?: string;
+  search?: string;
+} = {}): Promise<SystemAuditErrorsResponse> => {
+  const params = new URLSearchParams();
+  params.set('limit', String(filters.limit || 50));
+  if (filters.moduleId && filters.moduleId !== 'ALL') params.set('moduleId', filters.moduleId);
+  if (filters.statusGroup && filters.statusGroup !== 'ALL') params.set('statusGroup', filters.statusGroup);
+  if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
+  return apiFetch(`/api/system/audit-errors?${params.toString()}`);
 };
 
-export const fetchSubcontractorBookingById = async (id: string) => apiFetch(`/api/subcontractor-bookings/${id}`);
-
-export const createSubcontractorBooking = async (data: any) => apiFetch('/api/subcontractor-bookings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-});
-
-export const updateSubcontractorBooking = async (id: string, data: any) => apiFetch(`/api/subcontractor-bookings/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-});
-
-export const deleteSubcontractorBooking = async (id: string) => apiFetch(`/api/subcontractor-bookings/${id}`, {
-    method: 'DELETE'
-});
-
-export const submitSubcontractorInspection = async (data: any) => apiFetch('/api/subcontractor-inspections', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-});
-
-export const fetchSubcontractorReinspectionCosts = async () => apiFetch('/api/subcontractor-reinspection-costs');
-
-export const lookupPoMaterials = async (queryStr: string) => {
-    return apiFetch(`/api/erp/lookup-po?query=${encodeURIComponent(queryStr)}`);
+export const probeAllModules = async (): Promise<{ checkedAt: number; results: ModuleProbeResult[] }> => {
+  return apiFetch('/api/system/probe-modules', { method: 'POST' });
 };
 
-
-
+export const clearSystemAuditErrors = async (): Promise<{ success: boolean }> => {
+  return apiFetch('/api/system/audit-errors', { method: 'DELETE' });
+};

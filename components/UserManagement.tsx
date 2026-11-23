@@ -1,12 +1,13 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
-import { User, UserRole, ModuleId, Role, hasPermission } from '../types';
+import { User, UserRole, ModuleId, RoleObject, hasPermission } from '../types';
 import { ALL_MODULES } from '../constants';
 import { Button } from './Button';
 import { SignaturePad } from './SignaturePad';
-import { saveRole, fetchDepartments, fetchDivisions, fetchTeams } from '../services/apiService';
+import { fetchDepartments, fetchDivisions, fetchTeams, fetchUserById, uploadQMSImage } from '../services/apiService';
 import { 
   Edit2, 
   Trash2, 
@@ -21,27 +22,24 @@ import {
   StickyNote, 
   Camera, 
   Loader2, 
-  Search, 
   ShieldCheck, 
   CheckSquare, 
-  Square, 
   FileDown, 
   FileUp, 
   UserPlus, 
   Mail, 
   Info,
-  ChevronDown,
-  Hash,
   AlertCircle,
   Clock,
   Activity,
   Building,
   Filter,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Wand2
 } from 'lucide-react';
 import { UserActivityList } from './UserActivityList';
-import { SearchableSelect } from './SearchableSelect';
+import { Combobox, ConfirmDialog, PageActions, Pagination, SearchInput } from '../src/components/qms';
 
 export function getLocalAdvisoryModules(phong_ban: string, bo_phan: string): string[] {
     const pb = (phong_ban || '').trim().toLowerCase();
@@ -69,7 +67,7 @@ export function getLocalAdvisoryModules(phong_ban: string, bo_phan: string): str
 interface UserManagementProps {
   currentUser: User;
   users: User[];
-  roles?: Role[];
+  roles?: RoleObject[];
   onAddUser: (user: User) => Promise<void>;
   onUpdateUser: (user: User) => Promise<void>;
   onDeleteUser: (id: string) => Promise<void>;
@@ -84,15 +82,33 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   const [previewUsers, setPreviewUsers] = useState<User[]>([]);
   const [previewFileName, setPreviewFileName] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
 
   const [departments, setDepartments] = useState<{ id: string; name: string; divisions: string[] }[]>([]);
   const [divisionsState, setDivisionsState] = useState<{ id: string; name: string; departmentId: string }[]>([]);
   const [teamsState, setTeamsState] = useState<{ id: string; name: string; divisionId: string; leaderId?: string }[]>([]);
   const [selectedActUserId, setSelectedActUserId] = useState<string | null>(null);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
+
+  const isAdmin = String(currentUser?.role || '').toUpperCase().trim() === 'ADMIN';
+  const canCreate = isAdmin || hasPermission(currentUser, roles, 'SETTINGS_USERS', 'CREATE');
+  const canEditAny = isAdmin || hasPermission(currentUser, roles, 'SETTINGS_USERS', 'EDIT');
+  const canEditTarget = (target?: User | null) => {
+    if (isAdmin) return true;
+    if (!canEditAny) return false;
+    if (target && String(target.role || '').toUpperCase().trim() === 'ADMIN') return false;
+    return true;
+  };
+  const canDelete = isAdmin;
+  const canImport = isAdmin;
+  const canExport = isAdmin || hasPermission(currentUser, roles, 'SETTINGS_USERS', 'EXPORT');
+  const isReadOnlyView = !canCreate && !canEditAny && !canDelete;
 
   useEffect(() => {
     fetchDepartments()
@@ -108,20 +124,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
       .catch(err => console.error('Error fetching teams in UserManagement:', err));
   }, []);
 
-  const handleCommitSearch = () => {
-    setSearchTerm(searchInput);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleCommitSearch();
-    }
-  };
-  
-  const [filterRole, setFilterRole] = useState<string>('ALL');
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterPosition, setFilterPosition] = useState<string[]>([]);
-  const [filterDepartment, setFilterDepartment] = useState<string[]>([]);
+  const [filterRole, setFilterRole] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [filterPosition, setFilterPosition] = useState<string | null>(null);
+  const [filterDepartment, setFilterDepartment] = useState<string | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -188,27 +194,96 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
       const name = (u.name || '').toLowerCase();
       const username = (u.username || '').toLowerCase();
       const msnv = (u.msnv || '').toLowerCase();
-      const term = searchTerm.toLowerCase();
-      const matchesSearch = !term || name.includes(term) || username.includes(term) || msnv.includes(term);
+      const email = (u.email || '').toLowerCase();
+      const term = searchTerm.trim().toLowerCase();
+      const matchesSearch = !term || name.includes(term) || username.includes(term) || msnv.includes(term) || email.includes(term);
+      const uRole = String(u.role || 'QC').toUpperCase();
+      const matchesRole = !filterRole || uRole === String(filterRole).toUpperCase();
       const pos = u.position || 'Nhân viên';
-      const matchesPosition = filterPosition.length === 0 || filterPosition.includes(pos);
+      const matchesPosition = !filterPosition || pos === filterPosition;
       const uDept = u.phong_ban || (u as any).phongBan || 'Chưa gán bộ phận';
-      const matchesDepartment = filterDepartment.length === 0 || filterDepartment.includes(uDept);
+      const matchesDepartment = !filterDepartment || uDept === filterDepartment;
       const stat = u.status || 'Đang làm việc';
-      const matchesStatus = filterStatus.length === 0 || filterStatus.includes(stat);
-      return matchesSearch && matchesPosition && matchesDepartment && matchesStatus;
+      const matchesStatus = !filterStatus || stat === filterStatus;
+      return matchesSearch && matchesRole && matchesPosition && matchesDepartment && matchesStatus;
     });
-  }, [users, searchTerm, filterPosition, filterDepartment, filterStatus]);
+  }, [users, searchTerm, filterRole, filterPosition, filterDepartment, filterStatus]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterRole, filterPosition, filterDepartment, filterStatus]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [filteredUsers, currentPage]);
+
+  const roleOptions = useMemo(() => {
+    const base: { value: string; label: string }[] = [
+      { value: 'ADMIN', label: 'ADMIN — Quản trị hệ thống' },
+      { value: 'MANAGER', label: 'MANAGER — Quản lý' },
+      { value: 'QA', label: 'QA — Đảm bảo chất lượng' },
+      { value: 'QC_LEAD', label: 'QC_LEAD — Tổ trưởng QC' },
+      { value: 'QC', label: 'QC — Nhân viên kiểm tra' },
+      { value: 'PURCHASING', label: 'PURCHASING — Mua hàng' },
+      { value: 'VENDOR', label: 'VENDOR — Nhà cung cấp' },
+    ];
+    const seen = new Set(base.map(b => b.value.toUpperCase()));
+    const extra = (roles || [])
+      .map(r => ({ value: String(r.id || r.name).trim(), label: `${r.name}${r.description ? ` — ${r.description}` : ''}` }))
+      .filter(o => o.value && !seen.has(o.value.toUpperCase()));
+    return [...base, ...extra];
+  }, [roles]);
+
+  const selectableRoleOptions = useMemo(() => {
+    if (isAdmin) return roleOptions;
+    return roleOptions.filter(o => String(o.value).toUpperCase() !== 'ADMIN');
+  }, [roleOptions, isAdmin]);
 
   const uniquePositions = useMemo(() => Array.from(new Set(users.map(u => u.position || 'Nhân viên'))).filter(Boolean).sort(), [users]);
   const uniqueDepartments = useMemo(() => Array.from(new Set(users.map(u => u.phong_ban || (u as any).phongBan || 'Chưa gán bộ phận'))).filter(Boolean).sort(), [users]);
   const uniqueStatuses = useMemo(() => Array.from(new Set(users.map(u => u.status || 'Đang làm việc'))).filter(Boolean).sort(), [users]);
 
+  const applyRoleTemplate = (roleId: string) => {
+    if (!roleId) return;
+    if (!isAdmin && String(roleId).toUpperCase() === 'ADMIN') return;
+    const match = roles.find(r => String(r.id).toUpperCase() === String(roleId).toUpperCase() || String(r.name).toUpperCase() === String(roleId).toUpperCase());
+    if (!match || !Array.isArray(match.permissions)) {
+      setModalError(`Vai trò "${roleId}" chưa có ma trận quyền mẫu trong Hệ thống Vai trò.`);
+      return;
+    }
+    const sanitizedPerms = match.permissions
+      .filter(p => isAdmin || p.moduleId !== 'SYSTEM_ADMIN')
+      .map(p => {
+        if (p.moduleId === 'MATERIALS' || p.moduleId === 'IPO') {
+          return {
+            moduleId: p.moduleId,
+            actions: (p.actions || []).filter(a => a === 'VIEW' || a === 'VIEW_ALL' || a === 'EXPORT'),
+          };
+        }
+        return { moduleId: p.moduleId, actions: [...(p.actions || [])] };
+      })
+      .filter(p => p.actions.length > 0);
+    const allowedMods = Array.from(new Set(sanitizedPerms.map(p => p.moduleId)));
+    setModalError(null);
+    setFormData(prev => ({
+      ...prev,
+      allowedModules: allowedMods,
+      userPermissions: sanitizedPerms,
+    }));
+  };
+
   const handleOpenModal = (user?: User) => {
+    setModalError(null);
     if (user) {
+      if (!canEditTarget(user)) {
+        setFeedback({ type: 'error', message: 'Bạn không có quyền chỉnh sửa tài khoản Quản trị viên (ADMIN).' });
+        return;
+      }
       setEditingUser(user);
       setFormData({ 
         ...user,
+        password: '',
         phong_ban: user.phong_ban || (user as any).phongBan || '',
         bo_phan: user.bo_phan || (user as any).boPhan || '',
         workLocation: user.workLocation || (user as any).work_location || '',
@@ -219,36 +294,77 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
         division_id: (user as any).division_id || (user as any).divisionId || '',
         team_id: (user as any).team_id || (user as any).teamId || '',
         userPermissions: (user as any).userPermissions || (user as any).user_permissions || []
-      }); 
+      });
+      if (((user as any).hasAvatar && !user.avatar) || ((user as any).hasSignature && !user.signature_template)) {
+        fetchUserById(user.id).then((fullUser) => {
+          if (fullUser) {
+            setFormData(prev => ({
+              ...prev,
+              avatar: fullUser.avatar || prev.avatar,
+              signature_template: fullUser.signature_template || prev.signature_template,
+              signatureTemplate: fullUser.signatureTemplate || prev.signatureTemplate,
+            }));
+          }
+        }).catch(() => {});
+      }
     } else {
+      if (!canCreate) {
+        setFeedback({ type: 'error', message: 'Bạn không có quyền tạo tài khoản mới.' });
+        return;
+      }
       setEditingUser(null);
       setFormData({
-        name: '', username: '', password: '', role: 'QC', allowedModules: [],
+        name: '', username: '', password: '', role: 'QC', allowedModules: ['LIST'],
         msnv: '', email: '', position: '', workLocation: '', status: 'Đang làm việc',
         joinDate: new Date().toISOString().split('T')[0], education: '', notes: '',
         phong_ban: '', bo_phan: '',
         to_qc: '', la_to_truong: false,
-        department_id: '', division_id: '', team_id: '', userPermissions: []
+        department_id: '', division_id: '', team_id: '',
+        userPermissions: [{ moduleId: 'LIST', actions: ['VIEW'] }]
       });
     }
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formData.username || !formData.name) {
-      alert("Vui lòng điền đủ thông tin bắt buộc (*)");
+    setModalError(null);
+    if (!formData.username?.trim() || !formData.name?.trim()) {
+      setModalError('Vui lòng điền đủ Họ và tên và Tên đăng nhập (*).');
+      return;
+    }
+    if (!isAdmin && String(formData.role || '').toUpperCase() === 'ADMIN') {
+      setModalError('Chỉ Quản trị viên hệ thống (ADMIN) mới được cấp vai trò ADMIN.');
       return;
     }
     setIsSaving(true);
     try {
+        const targetEntityId = editingUser ? editingUser.id : 'new';
+        let resolvedAvatar = formData.avatar || '';
+        if (resolvedAvatar.startsWith('data:')) {
+            resolvedAvatar = await uploadQMSImage(resolvedAvatar, {
+                entityType: 'USER',
+                entityId: targetEntityId,
+                role: 'AVATAR',
+            });
+        }
+        let resolvedSig = formData.signature_template || formData.signatureTemplate || '';
+        if (resolvedSig.startsWith('data:')) {
+            resolvedSig = await uploadQMSImage(resolvedSig, {
+                entityType: 'USER',
+                entityId: targetEntityId,
+                role: 'SIGNATURE_TEMPLATE',
+            });
+        }
+        const sanitizedModules = (formData.allowedModules || []).filter(m => isAdmin || m !== 'SYSTEM_ADMIN');
+        const sanitizedPerms = ((formData as any).userPermissions || []).filter((p: any) => isAdmin || p.moduleId !== 'SYSTEM_ADMIN');
         const userData: any = {
           id: editingUser ? editingUser.id : `user_${Date.now()}`,
-          username: formData.username!,
-          name: formData.name!,
+          username: formData.username!.trim(),
+          name: formData.name!.trim(),
           role: formData.role || 'QC',
           password: formData.password || (editingUser ? editingUser.password : '123456'),
-          avatar: formData.avatar || '',
-          allowedModules: formData.allowedModules || [],
+          avatar: resolvedAvatar,
+          allowedModules: sanitizedModules,
           msnv: formData.msnv,
           email: formData.email,
           position: formData.position,
@@ -264,23 +380,42 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
           department_id: formData.department_id || '',
           division_id: formData.division_id || '',
           team_id: formData.team_id || '',
-          user_permissions: (formData as any).userPermissions || [],
-          signature_template: formData.signature_template || formData.signatureTemplate || '',
-          signatureTemplate: formData.signatureTemplate || formData.signature_template || ''
+          user_permissions: sanitizedPerms,
+          signature_template: resolvedSig,
+          signatureTemplate: resolvedSig
         };
         if (editingUser) await onUpdateUser(userData);
         else await onAddUser(userData);
         setIsModalOpen(false);
-    } catch (e) {
+        setFeedback({ type: 'success', message: editingUser ? `Đã cập nhật hồ sơ nhân sự ${userData.name}.` : `Đã thêm nhân sự mới ${userData.name}.` });
+    } catch (e: any) {
         console.error("Save user failed:", e);
-        alert("Lỗi khi lưu người dùng.");
+        setModalError("Lỗi khi lưu người dùng: " + (e?.message || "Thất bại"));
     } finally {
         setIsSaving(false);
     }
   };
 
+  const handleConfirmDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteUser(deleteUserTarget.id);
+      setFeedback({ type: 'success', message: `Đã xóa mềm tài khoản "${deleteUserTarget.name}".` });
+      setDeleteUserTarget(null);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Không thể xóa tài khoản.' });
+      setDeleteUserTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleExportExcel = () => {
-    if (!XLSX) return alert("Thư viện Excel chưa sẵn sàng.");
+    if (!XLSX) {
+      setFeedback({ type: 'error', message: 'Thư viện Excel chưa sẵn sàng.' });
+      return;
+    }
     const exportData = users.map(u => ({
       'MÃ NV': u.msnv || '',
       'EMAIL': u.email || '',
@@ -339,7 +474,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
           if (!onImportUsers) console.warn("onImportUsers handler is missing in props");
           return;
       }
-      if (!XLSX) return alert("Hệ thống đang tải thư viện Excel, vui lòng đợi giây lát.");
+      if (!XLSX) {
+        setFeedback({ type: 'error', message: 'Hệ thống đang tải thư viện Excel, vui lòng đợi giây lát.' });
+        return;
+      }
 
       setIsImporting(true);
       const reader = new FileReader();
@@ -353,7 +491,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
               const json = XLSX.utils.sheet_to_json(sheet);
 
               if (json.length === 0) {
-                  alert("File Excel không có dữ liệu hoặc định dạng không đúng.");
+                  setFeedback({ type: 'error', message: 'File Excel không có dữ liệu hoặc định dạng không đúng.' });
                   setIsImporting(false);
                   return;
               }
@@ -415,7 +553,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                       workLocation: workLocation,
                       joinDate: joinDate,
                       status: 'Đang làm việc',
-                      password: '123', 
+                      password: '123456', 
                       avatar: photo && (photo.startsWith('http://') || photo.startsWith('https://')) 
                           ? photo 
                           : `https://ui-avatars.com/api/?name=${encodeURIComponent(name || username)}&background=random&color=fff`,
@@ -429,13 +567,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
               if (importedUsers.length > 0) {
                   setPreviewUsers(importedUsers);
                   setPreviewFileName(file.name);
+                  setModalError(null);
                   setIsPreviewOpen(true);
               } else {
-                  alert("Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra tiêu đề các cột trong file: Employee / Họ tên, Email, UserID / Mã NV, Position / Chức vụ, Department / Phòng ban.");
+                  setFeedback({ type: 'error', message: 'Không tìm thấy dữ liệu hợp lệ. Vui lòng kiểm tra tiêu đề cột (Employee / Họ tên, Email, UserID / Mã NV...).' });
               }
           } catch (error) {
               console.error("Excel import error:", error);
-              alert("Lỗi khi xử lý file Excel. Hãy chắc chắn file không bị mật khẩu bảo vệ.");
+              setFeedback({ type: 'error', message: 'Lỗi khi xử lý file Excel. Hãy chắc chắn file không bị mật khẩu bảo vệ.' });
           } finally {
               setIsImporting(false);
               if (excelImportRef.current) excelImportRef.current.value = '';
@@ -443,7 +582,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
       };
 
       reader.onerror = () => {
-          alert("Lỗi khi đọc file từ thiết bị.");
+          setFeedback({ type: 'error', message: 'Lỗi khi đọc file từ thiết bị.' });
           setIsImporting(false);
       };
 
@@ -468,236 +607,388 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   const handleConfirmBatchImport = async () => {
       if (!previewUsers || previewUsers.length === 0 || !onImportUsers) return;
       setIsImporting(true);
+      setModalError(null);
       try {
           await onImportUsers(previewUsers);
-          setImportNotice(`Đã hoàn tất nạp nhân sự: Thêm mới ${previewStats.toInsert} tài khoản, Cập nhật thông tin ${previewStats.toUpdate} tài khoản có sẵn!`);
+          setFeedback({
+            type: 'success',
+            message: `Đã hoàn tất nạp nhân sự: Thêm mới ${previewStats.toInsert} tài khoản, Cập nhật thông tin ${previewStats.toUpdate} tài khoản có sẵn!`
+          });
           setIsPreviewOpen(false);
           setPreviewUsers([]);
-          setTimeout(() => setImportNotice(null), 6000);
       } catch (err: any) {
           console.error("Confirm import error:", err);
-          alert("Lỗi khi lưu dữ liệu người dùng: " + (err?.message || "Thất bại"));
+          setModalError("Lỗi khi lưu dữ liệu người dùng: " + (err?.message || "Thất bại"));
       } finally {
           setIsImporting(false);
       }
   };
 
+  const activeFilterCount = [filterRole, filterPosition, filterDepartment, filterStatus].filter(Boolean).length;
+
   return (
     <div className="space-y-3 animate-in fade-in duration-300 pb-2 md:pb-0">
-      {importNotice && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-3 rounded-lg flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-200 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>{importNotice}</span>
+      {isReadOnlyView && (
+        <div className="px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
+          <Info className="w-4 h-4 shrink-0" />
+          <span>Bạn đang xem danh sách nhân sự ở chế độ chỉ đọc.</span>
+        </div>
+      )}
+
+      {feedback && (
+        <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-200 ${
+          feedback.type === 'success'
+            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200'
+            : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300'
+        }`}>
+          <div className="flex items-center gap-2 min-w-0">
+            {feedback.type === 'success'
+              ? <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              : <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />}
+            <span>{feedback.message}</span>
           </div>
-          <button onClick={() => setImportNotice(null)} className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300">
+          <button type="button" onClick={() => setFeedback(null)} aria-label="Đóng thông báo" className="min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] -my-1 -mr-1.5 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* TOOLBAR */}
-      <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="p-1.5 bg-blue-600 text-white rounded-md shadow">
+      <PageActions
+        title="Nhân sự Hệ thống"
+        subtitle="ISO Competence Records"
+        totalCount={filteredUsers.length}
+        countLabel="nhân sự"
+        icon={
+          <div className="p-2 bg-blue-600 text-white rounded-lg shadow">
             <UserIcon className="w-5 h-5" />
           </div>
-          <div>
-            <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">Nhân sự Hệ thống</h3>
-            <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">ISO Competence Records</p>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto relative">
-          <div className="relative flex-1 sm:w-48">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-            <input type="text" placeholder="Tìm kiếm nhân sự..." value={searchInput} onChange={e => setSearchInput(e.target.value)} onBlur={handleCommitSearch} onKeyDown={handleKeyDown} className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/10 transition-all" />
-          </div>
-          
-          <div className="relative">
-             <button 
-                onClick={() => setIsFilterOpen(!isFilterOpen)} 
-                className={`p-1.5 rounded-md border transition-all shadow-sm flex items-center justify-center relative ${isFilterOpen || filterPosition.length > 0 || filterDepartment.length > 0 || filterStatus.length > 0 ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/50' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95'}`}
-             >
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto relative">
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Tìm tên, username, MSNV..."
+              className="flex-1 min-w-[200px] sm:w-56"
+            />
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                aria-label="Mở bộ lọc nhân sự"
+                className={`min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 rounded-lg border transition-all shadow-sm flex items-center justify-center relative ${isFilterOpen || activeFilterCount > 0 ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/50' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95'}`}
+              >
                 <Filter className="w-4 h-4" />
-                {(filterPosition.length > 0 || filterDepartment.length > 0 || filterStatus.length > 0) && (
-                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-900 rounded-full"></span>
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-900 rounded-full"></span>
                 )}
-             </button>
-             {isFilterOpen && (
-                 <>
-                   <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)} />
-                   <div className="absolute right-0 top-full mt-2 w-[320px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 p-3 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
-                       <SearchableSelect 
-                           className="z-[60]"
-                           label="Chức vụ" 
-                           options={uniquePositions} 
-                           values={filterPosition} 
-                           onChange={setFilterPosition} 
-                       />
-                       <SearchableSelect 
-                           className="z-[50]"
-                           label="Phòng ban / Bộ phận" 
-                           options={uniqueDepartments} 
-                           values={filterDepartment} 
-                           onChange={setFilterDepartment} 
-                       />
-                       <SearchableSelect 
-                           className="z-[40]"
-                           label="Trạng thái" 
-                           options={uniqueStatuses} 
-                           values={filterStatus} 
-                           onChange={setFilterStatus} 
-                       />
-                       <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
-                           <button onClick={() => { setFilterPosition([]); setFilterDepartment([]); setFilterStatus([]); }} className="text-[10px] uppercase font-black text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
-                               Xóa bộ lọc
-                           </button>
-                       </div>
-                   </div>
-                 </>
-             )}
-          </div>
-          {(hasPermission(currentUser, roles, 'SETTINGS_USERS', 'IMPORT') || hasPermission(currentUser, roles, 'SETTINGS_USERS', 'EXPORT')) && (
-            <div className="flex items-center gap-1.5">
-              {hasPermission(currentUser, roles, 'SETTINGS_USERS', 'IMPORT') && (
-                <button 
-                  onClick={() => excelImportRef.current?.click()} 
-                  disabled={isImporting}
-                  className={`p-1.5 rounded-md border transition-all shadow-sm flex items-center justify-center ${isImporting ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-slate-700' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-95'}`}
-                  title="Nhập từ Excel"
-                >
-                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
-                </button>
-              )}
-              {hasPermission(currentUser, roles, 'SETTINGS_USERS', 'EXPORT') && (
-                <button 
-                  onClick={handleExportExcel} 
-                  className="p-1.5 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
-                  title="Xuất ra Excel"
-                >
-                  <FileDown className="w-4 h-4" />
-                </button>
+              </button>
+              {isFilterOpen && (
+                <>
+                  <div className="fixed inset-0 z-[115]" onClick={() => setIsFilterOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px] max-h-[75dvh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-[120] p-3 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Vai trò</label>
+                      <Combobox
+                        value={filterRole}
+                        onChange={setFilterRole}
+                        options={roleOptions}
+                        placeholder="Tất cả vai trò"
+                        ariaLabel="Lọc theo vai trò"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Chức vụ</label>
+                      <Combobox
+                        value={filterPosition}
+                        onChange={setFilterPosition}
+                        options={uniquePositions.map(p => ({ value: p, label: p }))}
+                        placeholder="Tất cả chức vụ"
+                        ariaLabel="Lọc theo chức vụ"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Phòng ban / Bộ phận</label>
+                      <Combobox
+                        value={filterDepartment}
+                        onChange={setFilterDepartment}
+                        options={uniqueDepartments.map(d => ({ value: d, label: d }))}
+                        placeholder="Tất cả phòng ban"
+                        ariaLabel="Lọc theo phòng ban"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Trạng thái</label>
+                      <Combobox
+                        value={filterStatus}
+                        onChange={setFilterStatus}
+                        options={uniqueStatuses.map(s => ({ value: s, label: s }))}
+                        placeholder="Tất cả trạng thái"
+                        ariaLabel="Lọc theo trạng thái"
+                      />
+                    </div>
+                    <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => { setFilterRole(null); setFilterPosition(null); setFilterDepartment(null); setFilterStatus(null); }}
+                        className="min-h-[44px] lg:min-h-[34px] px-3 rounded-lg text-xs uppercase font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        Xóa bộ lọc
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
-          )}
-          <Button onClick={() => handleOpenModal()} icon={<UserPlus className="w-3.5 h-3.5" />} className="bg-blue-600 hover:bg-blue-750 font-black px-3.5 py-1.5 rounded-md text-[10px] uppercase flex-1 sm:flex-none">Thêm mới</Button>
-        </div>
-      </div>
+
+            {(canImport || canExport) && (
+              <div className="flex items-center gap-1.5">
+                {canImport && (
+                  <button
+                    type="button"
+                    onClick={() => excelImportRef.current?.click()}
+                    disabled={isImporting}
+                    className={`min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 rounded-lg border transition-all shadow-sm flex items-center justify-center ${isImporting ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-slate-700' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-95'}`}
+                    title="Nhập từ Excel (Chỉ ADMIN)"
+                  >
+                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+                  </button>
+                )}
+                {canExport && (
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
+                    title="Xuất ra Excel"
+                  >
+                    <FileDown className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {canCreate && (
+              <Button onClick={() => handleOpenModal()} icon={<UserPlus className="w-4 h-4" />} className="bg-blue-600 hover:bg-blue-700 font-bold min-h-[44px] lg:min-h-[38px] px-4 py-2 rounded-lg text-xs uppercase flex-1 sm:flex-none">
+                Thêm mới
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <input type="file" ref={excelImportRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} />
 
-      {/* USER LIST & HIGH DENSITY DUST TABLE */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden no-scrollbar">
-          <table className="w-full text-left border-collapse table-fixed">
-              <thead className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
-                  <tr>
-                      <th className="px-2 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nhân sự</th>
-                      <th className="hidden md:table-cell px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center w-24">Mã NV</th>
-                      <th className="hidden md:table-cell px-3 py-1.5 text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Chức vụ / Phòng ban</th>
-                      <th className="px-1 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center w-[60px] md:w-32">Trạng thái</th>
-                      <th className="px-1 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[65px] md:w-32">Thao tác</th>
+      {/* MOBILE USER CARDS (< md) */}
+      <div className="md:hidden space-y-2.5">
+        {paginatedUsers.map((u) => {
+          const allowEditRow = canEditTarget(u);
+          const allowDeleteRow = canDelete && u.username !== 'admin' && u.id !== currentUser.id;
+          return (
+          <div key={u.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-3.5 shadow-sm space-y-3">
+            <div className="flex items-start justify-between gap-2.5">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-xs shadow-sm shrink-0 ${getAvatarBg(u.role as string)}`}>
+                  {u.avatar ? <img src={getProxyImageUrl(u.avatar)} className="w-full h-full object-cover rounded-full" alt="" /> : getInitials(u.name)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-tight truncate">{u.name}</p>
+                    {(u.signature_template || (u as any).hasSignature) && (
+                      <span className="shrink-0 bg-green-50 text-green-600 px-1 py-0.5 rounded border border-green-100" title="Đã có chữ ký mẫu">
+                        <ShieldCheck className="w-3 h-3" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-slate-700 text-[10px] font-mono font-bold tabular-nums">{u.msnv || '---'}</span>
+                    <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ${getRoleBadgeStyle(String(u.role || 'QC'))}`}>{getRoleDisplayName(String(u.role || 'QC'))}</span>
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase">{u.position || 'Nhân viên'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{u.phong_ban || 'Chưa gán bộ phận'}</p>
+                </div>
+              </div>
+              <span className={`shrink-0 px-2 py-1 rounded-md border text-[10px] font-black uppercase tracking-tight ${
+                u.status === 'Đang làm việc' ? 'bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-500 border-green-200 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-200'
+              }`}>
+                {u.status || 'Đang làm việc'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button type="button" onClick={() => { setSelectedActUserId(u.id); setIsActivityOpen(true); }} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold active:scale-95 transition-all">
+                <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Nhật ký
+              </button>
+              {allowEditRow && (
+                <button type="button" onClick={() => handleOpenModal(u)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 text-xs font-bold active:scale-95 transition-all">
+                  <Edit2 className="w-4 h-4" /> Sửa
+                </button>
+              )}
+              {canDelete && (
+                <button type="button" onClick={() => setDeleteUserTarget(u)} disabled={!allowDeleteRow} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold disabled:opacity-30 active:scale-95 transition-all">
+                  <Trash2 className="w-4 h-4" /> Xóa
+                </button>
+              )}
+            </div>
+          </div>
+          );
+        })}
+        {filteredUsers.length === 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 py-12 flex flex-col items-center justify-center text-slate-400">
+            <UserIcon className="w-10 h-10 opacity-20 mb-2" />
+            <p className="text-xs font-bold uppercase tracking-wider">Không tìm thấy dữ liệu nhân sự</p>
+          </div>
+        )}
+      </div>
+
+      {/* DESKTOP / TABLET USER TABLE (md+) */}
+      <div className="hidden md:block bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto no-scrollbar">
+          <table className="w-full min-w-[700px] text-left border-collapse">
+              <thead className="bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
+                  <tr className="text-xs font-semibold uppercase text-slate-700 dark:text-slate-200">
+                      <th className="px-3 py-2.5">Nhân sự</th>
+                      <th className="px-3 py-2.5 text-center w-28">Mã NV</th>
+                      <th className="px-3 py-2.5">Chức vụ / Phòng ban</th>
+                      <th className="px-3 py-2.5 text-center w-36">Vai trò</th>
+                      <th className="px-3 py-2.5 text-center w-36">Trạng thái</th>
+                      <th className="px-3 py-2.5 text-right w-40">Thao tác</th>
                   </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
-                  {filteredUsers.map((u) => (
-                      <tr key={u.id} className="group hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-all text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          <td className="px-2 md:px-3 py-1.5">
-                              <div className="flex items-center gap-1 md:gap-2 overflow-hidden">
-                                  <div className={`w-5 h-5 md:w-8 md:h-8 rounded-full flex items-center justify-center text-white font-black text-[7px] md:text-[10px] shadow-sm shrink-0 ${getAvatarBg(u.role as string)}`}>
+                  {paginatedUsers.map((u) => {
+                      const allowEditRow = canEditTarget(u);
+                      const allowDeleteRow = canDelete && u.username !== 'admin' && u.id !== currentUser.id;
+                      return (
+                      <tr key={u.id} className="group hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-all text-sm font-medium text-slate-700 dark:text-slate-300">
+                          <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-2.5 overflow-hidden">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-sm shrink-0 ${getAvatarBg(u.role as string)}`}>
                                       {u.avatar ? <img src={getProxyImageUrl(u.avatar)} className="w-full h-full object-cover rounded-full" alt=""/> : getInitials(u.name)}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-1">
-                                          <p className="font-bold text-slate-900 dark:text-slate-100 text-[9px] md:text-[11px] uppercase tracking-tight truncate leading-tight">{u.name}</p>
-                                          {u.signature_template && (
-                                              <span className="shrink-0 text-[6px] md:text-[7px] bg-green-50 text-green-600 px-0.5 rounded border border-green-100" title="Đã có chữ ký mẫu">
-                                                  <ShieldCheck className="w-2 md:w-2.5 h-2 md:h-2.5" />
+                                      <div className="flex items-center gap-1.5">
+                                          <p className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase tracking-tight truncate leading-tight">{u.name}</p>
+                                          {(u.signature_template || (u as any).hasSignature) && (
+                                              <span className="shrink-0 bg-green-50 text-green-600 px-1 py-0.5 rounded border border-green-100" title="Đã có chữ ký mẫu">
+                                                  <ShieldCheck className="w-3 h-3" />
                                               </span>
                                           )}
                                       </div>
+                                      <p className="text-[11px] font-mono text-slate-400 truncate">@{u.username}</p>
                                   </div>
                               </div>
                           </td>
-                          <td className="hidden md:table-cell px-3 py-1.5 text-center">
-                              <span className="inline-block px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-md border border-blue-100 dark:border-slate-700 text-[9px] font-mono font-bold leading-none">
+                          <td className="px-3 py-2.5 text-center tabular-nums">
+                              <span className="inline-block px-2 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-md border border-blue-100 dark:border-slate-700 text-xs font-mono font-bold leading-none">
                                   {u.msnv || '---'}
                               </span>
                           </td>
-                          <td className="hidden md:table-cell px-3 py-1.5">
+                          <td className="px-3 py-2.5">
                               <div>
-                                  <p className="font-bold text-slate-800 dark:text-slate-200 leading-tight uppercase text-[10px]">{u.position || 'Nhân viên'}</p>
-                                  <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase leading-none mt-0.5">{u.phong_ban || 'Chưa gán bộ phận'}</p>
+                                  <p className="font-bold text-slate-800 dark:text-slate-200 leading-tight uppercase text-xs">{u.position || 'Nhân viên'}</p>
+                                  <p className="text-[11px] text-slate-400 dark:text-slate-500 uppercase leading-none mt-1">{u.phong_ban || 'Chưa gán bộ phận'}</p>
                                   {u.to_qc && (
                                       <div className="flex flex-wrap items-center gap-1 mt-1">
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-150 dark:border-indigo-900/40 uppercase leading-none">Tổ: {u.to_qc}</span>
-                                          {u.la_to_truong && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-150 dark:border-amber-900/40 uppercase leading-none">Tổ trưởng ⭐</span>}
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/40 uppercase leading-none">Tổ: {u.to_qc}</span>
+                                          {u.la_to_truong && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40 uppercase leading-none">Tổ trưởng</span>}
                                       </div>
                                   )}
                               </div>
                           </td>
-                          <td className="px-1 md:px-3 py-1.5 text-center">
-                              <span className={`inline-block px-1 md:px-1.5 py-0.5 rounded-md border text-[6px] md:text-[8px] font-black uppercase tracking-tight leading-none truncate w-full ${
-                                  u.status === 'Đang làm việc' ? 'bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-500 border-green-150 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-150'
+                          <td className="px-3 py-2.5 text-center">
+                              <span className={`inline-block px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-tight leading-none ${getRoleBadgeStyle(String(u.role || 'QC'))}`}>
+                                  {getRoleDisplayName(String(u.role || 'QC'))}
+                              </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                              <span className={`inline-block px-2 py-1 rounded-md border text-[10px] font-black uppercase tracking-tight leading-none ${
+                                  u.status === 'Đang làm việc' ? 'bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-500 border-green-200 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border-red-200'
                               }`}>
                                   {u.status || 'Đang làm việc'}
                               </span>
                           </td>
-                          <td className="px-1 md:px-3 py-1.5 text-right overflow-hidden">
-                              <div className="flex items-center justify-end gap-0.5 md:gap-1">
-                                  <button onClick={() => { setSelectedActUserId(u.id); setIsActivityOpen(true); }} className="p-0.5 md:p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700/60 active:scale-90 transition-all shrink-0"><Clock className="w-2.5 md:w-3.5 h-2.5 md:h-3.5"/></button>
-                                  <button onClick={() => handleOpenModal(u)} className="p-0.5 md:p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700/60 active:scale-90 transition-all shrink-0"><Edit2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5"/></button>
-                                  <button onClick={() => onDeleteUser(u.id)} disabled={u.username === 'admin'} className="p-0.5 md:p-1 text-slate-400 hover:text-red-500 bg-slate-50 dark:bg-slate-800 hover:bg-white rounded-md border border-slate-200 dark:border-slate-700/60 disabled:opacity-25 active:scale-90 transition-all shrink-0"><Trash2 className="w-2.5 md:w-3.5 h-2.5 md:h-3.5"/></button>
+                          <td className="px-3 py-2.5 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                  <button type="button" onClick={() => { setSelectedActUserId(u.id); setIsActivityOpen(true); }} title="Nhật ký hoạt động" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/60 active:scale-95 transition-all shrink-0"><Clock className="w-4 h-4"/></button>
+                                  {allowEditRow && (
+                                    <button type="button" onClick={() => handleOpenModal(u)} title="Chỉnh sửa" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 bg-slate-50 hover:bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700/60 active:scale-95 transition-all shrink-0"><Edit2 className="w-4 h-4"/></button>
+                                  )}
+                                  {canDelete && (
+                                    <button type="button" onClick={() => setDeleteUserTarget(u)} disabled={!allowDeleteRow} title="Xóa" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-500 hover:text-red-500 bg-slate-50 dark:bg-slate-800 hover:bg-white rounded-lg border border-slate-200 dark:border-slate-700/60 disabled:opacity-25 active:scale-95 transition-all shrink-0"><Trash2 className="w-4 h-4"/></button>
+                                  )}
                               </div>
                           </td>
                       </tr>
-                  ))}
+                      );
+                  })}
               </tbody>
           </table>
           {filteredUsers.length === 0 && (
               <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                   <UserIcon className="w-10 h-10 opacity-20 mb-2" />
-                  <p className="text-[9px] font-bold uppercase tracking-wider">Không tìm thấy dữ liệu nhân sự</p>
+                  <p className="text-xs font-bold uppercase tracking-wider">Không tìm thấy dữ liệu nhân sự</p>
               </div>
           )}
       </div>
 
+      {filteredUsers.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredUsers.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
+
       {/* DETAILED USER MODAL */}
-      {isModalOpen && (
-          <div className="fixed inset-0 z-[200] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
-                      <div className="flex items-center gap-3">
-                          <div className="p-2 bg-blue-600 text-white rounded-xl shadow-lg">
-                              <UserPlus className="w-5 h-5" />
+      {isModalOpen && createPortal(
+          <div className="fixed inset-0 z-[220] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+                  <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-1.5 bg-blue-600 text-white rounded-xl shadow-lg shrink-0">
+                              <UserPlus className="w-4 h-4" />
                           </div>
-                          <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tighter text-lg">
+                          <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tighter text-sm sm:text-base truncate">
                               {editingUser ? 'Cập nhật hồ sơ nhân sự' : 'Đăng ký nhân sự mới'}
                           </h3>
                       </div>
-                      <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-colors active:scale-90"><X className="w-7 h-7"/></button>
+                      <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 shrink-0 flex items-center justify-center rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-5 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
+                      {modalError && (
+                        <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>{modalError}</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
                           {/* Avatar & Basic */}
                           <div className="space-y-6 flex flex-col items-center">
                               <div className="w-32 h-32 rounded-[2rem] border-4 border-white shadow-2xl overflow-hidden relative group bg-slate-200 dark:bg-slate-700">
                                   <img src={getProxyImageUrl(formData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'New')}&background=random&color=fff`)} className="w-full h-full object-cover" alt="" />
-                                  <button onClick={() => avatarInputRef.current?.click()} className="absolute inset-0 bg-black/40 text-white md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="w-8 h-8"/></button>
+                                  <button type="button" onClick={() => avatarInputRef.current?.click()} aria-label="Đổi ảnh đại diện" className="absolute inset-0 bg-black/35 lg:bg-black/40 text-white opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera className="w-8 h-8"/></button>
                               </div>
                               <div className="w-full space-y-4">
                                   <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mã nhân viên (MSNV)</label>
-                                      <input value={formData.msnv || ''} onChange={e => setFormData({...formData, msnv: e.target.value.toUpperCase()})} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100" placeholder="AA-XXXX" />
+                                      <input value={formData.msnv || ''} onChange={e => setFormData({...formData, msnv: e.target.value.toUpperCase()})} className="w-full min-h-[44px] px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100" placeholder="AA-XXXX" />
                                   </div>
                                   <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Trạng thái</label>
-                                      <select value={formData.status || 'Đang làm việc'} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-sm uppercase outline-none focus:ring-4 ring-blue-100">
-                                          <option key="status-working" value="Đang làm việc">Đang làm việc</option>
-                                          <option key="status-leave" value="Nghỉ phép">Nghỉ phép</option>
-                                          <option key="status-quit" value="Đã nghỉ việc">Đã nghỉ việc</option>
-                                      </select>
+                                      <Combobox
+                                          value={formData.status || 'Đang làm việc'}
+                                          onChange={val => setFormData({...formData, status: val || 'Đang làm việc'})}
+                                          allowClear={false}
+                                          ariaLabel="Trạng thái nhân sự"
+                                          options={[
+                                              { value: 'Đang làm việc', label: 'Đang làm việc' },
+                                              { value: 'Nghỉ phép', label: 'Nghỉ phép' },
+                                              { value: 'Đã nghỉ việc', label: 'Đã nghỉ việc' }
+                                          ]}
+                                      />
                                   </div>
                                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                                       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Chữ ký mẫu (Template)</label>
@@ -714,7 +1005,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                           </div>
 
                           {/* Info Grid */}
-                          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5">
                               <div className="space-y-1 md:col-span-2">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><UserIcon className="w-3 h-3"/> Họ và tên *</label>
                                   <input value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-black text-sm uppercase outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="VD: NGUYỄN VĂN A" />
@@ -732,30 +1023,58 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   <input type="password" value={formData.password || ''} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder={editingUser ? "Bỏ trống để giữ nguyên" : "Mặc định: 123456"} />
                               </div>
                               <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><ShieldCheck className="w-3 h-3"/> Vai trò hệ thống (Role) *</label>
+                                  <div className="flex items-center gap-1.5">
+                                      <div className="flex-1 min-w-0">
+                                          <Combobox
+                                              value={String(formData.role || 'QC')}
+                                              onChange={val => setFormData({ ...formData, role: (val || 'QC') as UserRole })}
+                                              options={selectableRoleOptions}
+                                              allowClear={false}
+                                              disabled={!!editingUser && editingUser.username === 'admin'}
+                                              ariaLabel="Vai trò hệ thống"
+                                          />
+                                      </div>
+                                      <button
+                                          type="button"
+                                          onClick={() => applyRoleTemplate(String(formData.role || 'QC'))}
+                                          title="Nạp ma trận quyền từ Vai trò đã chọn"
+                                          className="min-h-[44px] lg:min-h-[38px] px-2.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[11px] font-bold flex items-center gap-1 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shrink-0"
+                                      >
+                                          <Wand2 className="w-3.5 h-3.5" />
+                                          <span className="hidden sm:inline">Nạp quyền</span>
+                                      </button>
+                                  </div>
+                              </div>
+                              <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Briefcase className="w-3 h-3"/> Chức vụ *</label>
-                                  <select 
-                                      value={['GIÁM ĐỐC', 'TRƯỞNG PHÒNG', 'TRƯỞNG BỘ PHẬN', 'TỔ TRƯỞNG', 'NHÂN VIÊN'].includes(String(formData.position).toUpperCase()) ? String(formData.position).toUpperCase() : (formData.position ? 'KHAC' : '')} 
-                                      onChange={e => {
-                                          const val = e.target.value;
-                                          if (val === 'KHAC') {
-                                              setFormData({...formData, position: 'Chức vụ mới'});
+                                  <Combobox
+                                      value={['GIÁM ĐỐC', 'TRƯỞNG PHÒNG', 'TRƯỞNG BỘ PHẬN', 'TỔ TRƯỞNG', 'NHÂN VIÊN'].includes(String(formData.position).toUpperCase()) ? String(formData.position).toUpperCase() : (formData.position ? 'KHAC' : null)}
+                                      onChange={val => {
+                                          const nextVal = val || '';
+                                          if (nextVal === 'KHAC') {
+                                              setFormData({...formData, position: formData.position && !['GIÁM ĐỐC', 'TRƯỞNG PHÒNG', 'TRƯỞNG BỘ PHẬN', 'TỔ TRƯỞNG', 'NHÂN VIÊN'].includes(String(formData.position).toUpperCase()) ? formData.position : 'Chức vụ mới'});
                                           } else {
-                                              setFormData({...formData, position: val, la_to_truong: val === 'TỔ TRƯỞNG' ? true : formData.la_to_truong});
+                                              setFormData({...formData, position: nextVal, la_to_truong: nextVal === 'TỔ TRƯỞNG' ? true : formData.la_to_truong});
                                           }
                                       }}
-                                      className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none shadow-sm cursor-pointer"
-                                  >
-                                      <option value="">-- Chọn Chức vụ --</option>
-                                      <option value="GIÁM ĐỐC">GIÁM ĐỐC</option>
-                                      <option value="TRƯỞNG PHÒNG">TRƯỞNG PHÒNG</option>
-                                      <option value="TRƯỞNG BỘ PHẬN">TRƯỞNG BỘ PHẬN</option>
-                                      <option value="TỔ TRƯỞNG">TỔ TRƯỞNG</option>
-                                      <option value="NHÂN VIÊN">NHÂN VIÊN</option>
-                                      {formData.position && !['GIÁM ĐỐC', 'TRƯỞNG PHÒNG', 'TRƯỞNG BỘ PHẬN', 'TỔ TRƯỞNG', 'NHÂN VIÊN'].includes(String(formData.position).toUpperCase()) && (
-                                          <option value="KHAC">{String(formData.position).toUpperCase()}</option>
-                                      )}
-                                      <option value="KHAC">+ KHÁC (TỰ NHẬP)...</option>
-                                  </select>
+                                      placeholder="-- Chọn Chức vụ --"
+                                      allowClear={true}
+                                      ariaLabel="Chức vụ"
+                                      options={[
+                                          { value: 'GIÁM ĐỐC', label: 'GIÁM ĐỐC' },
+                                          { value: 'TRƯỞNG PHÒNG', label: 'TRƯỞNG PHÒNG' },
+                                          { value: 'TRƯỞNG BỘ PHẬN', label: 'TRƯỞNG BỘ PHẬN' },
+                                          { value: 'TỔ TRƯỞNG', label: 'TỔ TRƯỞNG' },
+                                          { value: 'NHÂN VIÊN', label: 'NHÂN VIÊN' },
+                                          {
+                                              value: 'KHAC',
+                                              label: formData.position && !['GIÁM ĐỐC', 'TRƯỞNG PHÒNG', 'TRƯỞNG BỘ PHẬN', 'TỔ TRƯỞNG', 'NHÂN VIÊN'].includes(String(formData.position).toUpperCase())
+                                                  ? `KHÁC: ${String(formData.position).toUpperCase()}`
+                                                  : '+ KHÁC (TỰ NHẬP)...'
+                                          }
+                                      ]}
+                                  />
                                   
                                   {(!['GIÁM ĐỐC', 'TRƯỞNG PHÒNG', 'TRƯỞNG BỘ PHẬN', 'TỔ TRƯỞNG', 'NHÂN VIÊN'].includes(String(formData.position).toUpperCase()) || formData.position === 'Chức vụ mới') && (
                                       <input 
@@ -769,7 +1088,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                   la_to_truong: newPos.toUpperCase() === 'TỔ TRƯỞNG' ? true : formData.la_to_truong
                                               });
                                           }} 
-                                          className="mt-1.5 w-full px-4 py-2 text-xs font-bold uppercase bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2"
+                                          className="mt-1.5 w-full min-h-[44px] lg:min-h-[38px] px-4 py-2 text-xs font-bold uppercase bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2"
                                           placeholder="Nhập chức vụ mới..."
                                       />
                                   )}
@@ -780,13 +1099,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Building className="w-3 h-3 text-slate-400 dark:text-slate-500" /> Phòng ban</label>
-                                  <select 
-                                      value={formData.department_id || ''} 
-                                      onChange={e => {
-                                          const deptId = e.target.value;
+                                  <Combobox
+                                      value={formData.department_id || null}
+                                      onChange={val => {
+                                          const deptId = val || '';
                                           const deptObj = departments.find(d => d.id === deptId);
                                           const pbStr = deptObj ? deptObj.name : '';
-                                          
                                           setFormData(prev => ({
                                               ...prev,
                                               department_id: deptId,
@@ -800,23 +1118,19 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                               toQC: ''
                                           }));
                                       }}
-                                      className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none shadow-sm cursor-pointer"
-                                  >
-                                      <option value="">-- Chọn Phòng ban --</option>
-                                      {departments.map(d => (
-                                          <option key={d.id} value={d.id}>{d.name}</option>
-                                      ))}
-                                  </select>
+                                      placeholder="-- Chọn Phòng ban --"
+                                      ariaLabel="Phòng ban"
+                                      options={departments.map(d => ({ value: d.id, label: d.name }))}
+                                  />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Building className="w-3 h-3 text-slate-400 dark:text-slate-500" /> Bộ phận</label>
-                                  <select 
-                                      value={formData.division_id || ''} 
-                                      onChange={e => {
-                                          const divId = e.target.value;
+                                  <Combobox
+                                      value={formData.division_id || null}
+                                      onChange={val => {
+                                          const divId = val || '';
                                           const divObj = divisionsState.find(d => d.id === divId);
                                           const bpStr = divObj ? divObj.name : '';
-                                          
                                           setFormData(prev => ({
                                               ...prev,
                                               division_id: divId,
@@ -827,25 +1141,21 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                               toQC: ''
                                           }));
                                       }}
-                                      className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none shadow-sm cursor-pointer"
+                                      placeholder="-- Chọn Bộ phận --"
                                       disabled={!formData.department_id}
-                                  >
-                                      <option value="">-- Chọn Bộ phận --</option>
-                                      {divisionsState.filter(div => div.departmentId === formData.department_id).map(div => (
-                                          <option key={div.id} value={div.id}>{div.name}</option>
-                                      ))}
-                                  </select>
+                                      ariaLabel="Bộ phận"
+                                      options={divisionsState.filter(div => div.departmentId === formData.department_id).map(div => ({ value: div.id, label: div.name }))}
+                                  />
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Building className="w-3 h-3 text-slate-400 dark:text-slate-500" /> Tổ (Team)</label>
-                                  <select 
-                                      value={formData.team_id || ''} 
-                                      onChange={e => {
-                                          const teamId = e.target.value;
+                                  <Combobox
+                                      value={formData.team_id || null}
+                                      onChange={val => {
+                                          const teamId = val || '';
                                           const teamObj = teamsState.find(t => t.id === teamId);
                                           const tmStr = teamObj ? teamObj.name : '';
                                           const isLeaderOfThisTeam = teamObj?.leaderId === formData.id;
-                                          
                                           setFormData(prev => ({
                                               ...prev,
                                               team_id: teamId,
@@ -855,14 +1165,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                               position: isLeaderOfThisTeam ? 'TỔ TRƯỞNG' : prev.position
                                           }));
                                       }}
-                                      className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs uppercase outline-none shadow-sm cursor-pointer"
+                                      placeholder="-- Chọn Tổ --"
                                       disabled={!formData.division_id}
-                                  >
-                                      <option value="">-- Chọn Tổ --</option>
-                                      {teamsState.filter(team => team.divisionId === formData.division_id).map(team => (
-                                          <option key={team.id} value={team.id}>{team.name}</option>
-                                      ))}
-                                  </select>
+                                      ariaLabel="Tổ"
+                                      options={teamsState.filter(team => team.divisionId === formData.division_id).map(team => ({ value: team.id, label: team.name }))}
+                                  />
                               </div>
 
                               <div className="space-y-1">
@@ -873,10 +1180,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><UserIcon className="w-3 h-3 text-slate-400" /> Tổ QC</label>
                                   <input value={formData.to_qc || ''} onChange={e => setFormData({...formData, to_qc: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder="Ví dụ: Tổ 1 - Sơn bóng" />
                               </div>
-                              <div className="space-y-1 flex items-center pt-5">
-                                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                                      <input type="checkbox" checked={!!formData.la_to_truong} onChange={e => setFormData({...formData, la_to_truong: e.target.checked})} className="w-4 h-4 text-blue-600 bg-white dark:bg-slate-900 border-slate-300 rounded focus:ring-blue-500" />
-                                      <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Là Tổ trưởng (Team Leader)</span>
+                              <div className="space-y-1 flex items-center pt-3">
+                                  <label className="flex items-center gap-3 min-h-[44px] px-2 -ml-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer select-none">
+                                      <input type="checkbox" checked={!!formData.la_to_truong} onChange={e => setFormData({...formData, la_to_truong: e.target.checked})} className="w-5 h-5 text-blue-600 bg-white dark:bg-slate-900 border-slate-300 rounded focus:ring-blue-500" />
+                                      <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">Là Tổ trưởng (Team Leader)</span>
                                   </label>
                               </div>
                           </div>
@@ -906,10 +1213,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                           </div>
 
                           <div className="space-y-3 overflow-x-auto no-scrollbar pb-4 -mx-6 px-6">
-                              <table className="w-full text-left text-xs border-collapse table-fixed">
+                              <table className="w-full min-w-[660px] text-left text-xs border-collapse">
                                   <thead>
-                                      <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-900/10 sticky top-0 bg-white dark:bg-slate-900 z-20">
-                                          <th className="py-2 px-2 font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[8px] w-[140px] sticky left-0 bg-white dark:bg-slate-950/10 backdrop-blur-sm z-30 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] shadow-slate-100 dark:shadow-slate-800">Phân hệ / Module</th>
+                                      <tr className="border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-20">
+                                          <th className="py-2 px-2 font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[8px] w-[150px] sticky left-0 bg-white dark:bg-slate-900 z-30 shadow-[1px_0_0_0_rgba(0,0,0,0.08)] dark:shadow-slate-800">Phân hệ / Module</th>
                                           <th className="py-2 text-center font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest text-[8px] bg-blue-50/50 dark:bg-blue-950/10 border-x border-slate-100 dark:border-slate-800 w-[45px]">TRUY CẬP</th>
                                           {[
                                               { id: 'VIEW', title: 'VIEW', desc: 'xem' },
@@ -974,6 +1281,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                       </td>
                                                   </tr>
                                                   {groupModules.map(m => {
+                                                      const isSystemAdminMod = m.id === 'SYSTEM_ADMIN';
+                                                      const disableModuleGrant = isSystemAdminMod && !isAdmin;
                                                       const userPermissions = (formData.userPermissions || []) as any[];
                                                       const isAllowed = formData.allowedModules?.includes(m.id) || false;
                                                       const existingPerm = userPermissions.find(p => p.moduleId === m.id);
@@ -1033,10 +1342,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                               </td>
                                                               
                                                               {/* TRUY CẬP Column: QMS Blue brand checkbox */}
-                                                              <td className="py-1.5 text-center bg-blue-50/10 dark:bg-blue-950/5 border-x border-slate-100 dark:border-slate-800">
+                                                              <td className="py-1 text-center bg-blue-50/10 dark:bg-blue-950/5 border-x border-slate-100 dark:border-slate-800">
                                                                   <div className="flex justify-center">
-                                                                      <div 
+                                                                      <button
+                                                                          type="button"
+                                                                          disabled={disableModuleGrant}
                                                                           onClick={() => {
+                                                                              if (disableModuleGrant) return;
                                                                               const current = formData.allowedModules || [];
                                                                               const isCurrentlyAllowed = current.includes(m.id);
                                                                               setFormData(prev => ({
@@ -1046,15 +1358,17 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                                                       : [...current, m.id]
                                                                               }));
                                                                           }}
-                                                                          className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center cursor-pointer transition-all ${
-                                                                              isAllowed 
-                                                                                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-100/50 dark:shadow-none scale-105' 
-                                                                                  : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-transparent hover:border-blue-400'
-                                                                          }`}
-                                                                          title={`TRUY CẬP: ${isAllowed ? 'GỠ' : 'GÁN'}`}
+                                                                          className={`min-w-[44px] min-h-[44px] lg:min-w-[28px] lg:min-h-[28px] flex items-center justify-center rounded-md transition-colors ${disableModuleGrant ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-50/70 dark:hover:bg-blue-950/30'}`}
+                                                                          title={disableModuleGrant ? 'Chỉ ADMIN mới được cấp quyền SYSTEM_ADMIN' : `TRUY CẬP: ${isAllowed ? 'GỠ' : 'GÁN'}`}
                                                                       >
-                                                                          {isAllowed ? <CheckSquare className="w-2.5 h-2.5" /> : <div className="w-2.5 h-2.5" />}
-                                                                      </div>
+                                                                          <span className={`w-5 h-5 lg:w-4 lg:h-4 rounded border flex items-center justify-center transition-all ${
+                                                                              isAllowed 
+                                                                                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
+                                                                                  : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-transparent'
+                                                                          }`}>
+                                                                              {isAllowed ? <CheckSquare className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> : null}
+                                                                          </span>
+                                                                      </button>
                                                                   </div>
                                                               </td>
 
@@ -1068,7 +1382,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                               ].map(act => {
                                                                   if (!hasActions || !allowedActions.includes(act)) {
                                                                       return (
-                                                                          <td key={act} className="py-1.5 text-center text-slate-200 dark:text-slate-800 text-[8px]">
+                                                                          <td key={act} className="py-1 text-center text-slate-200 dark:text-slate-800 text-[8px]">
                                                                               <span className="select-none inline-block w-4 opacity-30">—</span>
                                                                           </td>
                                                                       );
@@ -1076,24 +1390,28 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
 
                                                                   const isChecked = existingPerm?.actions.includes(act) || false;
                                                                   return (
-                                                                      <td key={act} className="py-1.5 text-center border-r border-slate-50 dark:border-slate-800/30">
+                                                                      <td key={act} className="py-1 text-center border-r border-slate-50 dark:border-slate-800/30">
                                                                           <div className="flex justify-center">
-                                                                              <div 
+                                                                              <button
+                                                                                  type="button"
+                                                                                  disabled={!isAllowed || disableModuleGrant}
                                                                                   onClick={() => {
-                                                                                      if (!isAllowed) return;
+                                                                                      if (!isAllowed || disableModuleGrant) return;
                                                                                       toggleUserPermission(act);
                                                                                   }}
-                                                                                  className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-all ${
-                                                                                      !isAllowed 
-                                                                                          ? 'opacity-20 cursor-not-allowed border-slate-200 dark:border-slate-800' 
-                                                                                          : isChecked 
-                                                                                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm scale-105 cursor-pointer' 
-                                                                                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-transparent hover:border-emerald-400 cursor-pointer'
-                                                                                  }`}
+                                                                                  className={`min-w-[44px] min-h-[44px] lg:min-w-[28px] lg:min-h-[28px] flex items-center justify-center rounded-md transition-colors ${!isAllowed ? 'cursor-not-allowed opacity-25' : 'cursor-pointer hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30'}`}
                                                                                   title={`${act}: ${isChecked ? 'GỠ' : 'GÁN'}`}
                                                                               >
-                                                                                  {isChecked ? <CheckSquare className="w-2.5 h-2.5" /> : <div className="w-2.5 h-2.5" />}
-                                                                              </div>
+                                                                                  <span className={`w-5 h-5 lg:w-4 lg:h-4 rounded border flex items-center justify-center transition-all ${
+                                                                                      !isAllowed 
+                                                                                          ? 'border-slate-200 dark:border-slate-800' 
+                                                                                          : isChecked 
+                                                                                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' 
+                                                                                              : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-transparent'
+                                                                                  }`}>
+                                                                                      {isChecked ? <CheckSquare className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> : null}
+                                                                                  </span>
+                                                                              </button>
                                                                           </div>
                                                                       </td>
                                                                   );
@@ -1111,61 +1429,63 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
 
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><StickyNote className="w-4 h-4 text-slate-300"/> Ghi chú nội bộ (Audit Logs)</label>
-                          <textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full px-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl font-medium text-xs outline-none h-28 focus:ring-4 ring-blue-100 shadow-inner" placeholder="Thông tin kỹ năng, đào tạo, đánh giá chuyên môn..." />
+                          <textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full px-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl font-medium text-sm lg:text-xs outline-none h-28 focus:ring-4 ring-blue-100 shadow-inner" placeholder="Thông tin kỹ năng, đào tạo, đánh giá chuyên môn..." />
                       </div>
                   </div>
 
-                  <div className="p-6 md:p-8 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] z-10">
-                      <button onClick={() => setIsModalOpen(false)} className="order-2 md:order-1 px-8 py-4 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-600 dark:text-red-400 transition-colors">Hủy bỏ</button>
-                      <button onClick={handleSave} disabled={isSaving} className="order-1 md:order-2 px-16 py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-500/30 active:scale-95 flex items-center justify-center gap-3 transition-all">
-                          {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  <div className="px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 flex flex-col sm:flex-row justify-end gap-2 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] z-10">
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="order-2 sm:order-1 min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-colors whitespace-nowrap shrink-0">Hủy bỏ</button>
+                      <button type="button" onClick={handleSave} disabled={isSaving} className="order-1 sm:order-2 min-h-[44px] sm:min-h-[36px] px-6 py-2 sm:py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-[0.12em] shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-2 transition-all whitespace-nowrap shrink-0">
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           Lưu hồ sơ nhân sự
                       </button>
                   </div>
               </div>
-          </div>
+          </div>,
+          document.body
       )}
 
       {/* ACTIVITY HISTORY MODAL */}
-      {isActivityOpen && selectedActUserId && (
-          <div className="fixed inset-0 z-[250] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
-                      <div className="flex items-center gap-3">
-                          <div className="p-2.5 bg-indigo-600 text-white rounded-2xl shadow-lg">
-                              <Activity className="w-5 h-5" />
+      {isActivityOpen && selectedActUserId && createPortal(
+          <div className="fixed inset-0 z-[250] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+                  <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-1.5 bg-indigo-600 text-white rounded-xl shadow-lg shrink-0">
+                              <Activity className="w-4 h-4" />
                           </div>
-                          <div>
-                              <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tighter text-sm md:text-base flex items-center gap-2">
+                          <div className="min-w-0">
+                              <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tighter text-sm flex items-center gap-2 truncate">
                                   Nhật ký hoạt động nhân viên
                               </h3>
-                              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">
                                   Nhân sự: {users.find(u => u.id === selectedActUserId)?.name || '---'} (Mã NV: {users.find(u => u.id === selectedActUserId)?.msnv || '---'})
                               </p>
                           </div>
                       </div>
-                      <button onClick={() => { setIsActivityOpen(false); setSelectedActUserId(null); }} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-colors active:scale-90"><X className="w-7 h-7"/></button>
+                      <button type="button" onClick={() => { setIsActivityOpen(false); setSelectedActUserId(null); }} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 shrink-0 flex items-center justify-center rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors active:scale-90"><X className="w-5 h-5"/></button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-6 md:p-8 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
                       <UserActivityList userId={selectedActUserId} />
                   </div>
               </div>
-          </div>
+          </div>,
+          document.body
       )}
 
       {/* EXCEL IMPORT PREVIEW & CONFIRMATION MODAL */}
-      {isPreviewOpen && (
-        <div className="fixed inset-0 z-[260] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 font-sans">
+      {isPreviewOpen && createPortal(
+        <div className="fixed inset-0 z-[260] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-4xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 font-sans">
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-md">
-                  <FileSpreadsheet className="w-5 h-5" />
+            <div className="px-4 py-2 sm:py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 bg-emerald-600 text-white rounded-xl shadow-md shrink-0">
+                  <FileSpreadsheet className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-sm sm:text-base">
+                <div className="min-w-0">
+                  <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-sm truncate">
                     Xác nhận nạp danh sách nhân sự từ Excel
                   </h3>
                   <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -1179,8 +1499,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                 </div>
               </div>
               <button 
+                type="button"
                 onClick={() => { setIsPreviewOpen(false); setPreviewUsers([]); }} 
-                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
+                aria-label="Đóng"
+                className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 shrink-0 flex items-center justify-center text-slate-400 hover:text-rose-500 rounded-xl transition-colors"
                 title="Đóng"
               >
                 <X className="w-5 h-5" />
@@ -1188,7 +1510,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 no-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-4 no-scrollbar">
+              {modalError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
               {/* Permission & Security Policy Callout */}
               <div className="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl p-3.5 flex items-start gap-3">
                 <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
@@ -1216,7 +1544,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                   </span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
+                  <table className="w-full min-w-[680px] text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 text-[9px] font-black uppercase tracking-wider text-slate-400">
                         <th className="px-3 py-2 w-10 text-center">STT</th>
@@ -1272,7 +1600,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
+            <div className="px-4 py-2 sm:py-2.5 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50/80 dark:bg-slate-800/40 shrink-0">
               <div className="text-xs text-slate-500 dark:text-slate-400 font-bold">
                 Tổng cộng: <strong className="text-slate-900 dark:text-slate-100">{previewUsers.length}</strong> nhân sự (<span className="text-emerald-600 dark:text-emerald-400 font-bold">{previewStats.toInsert} thêm mới</span>, <span className="text-amber-600 dark:text-amber-400 font-bold">{previewStats.toUpdate} cập nhật</span>)
               </div>
@@ -1281,7 +1609,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                   type="button"
                   onClick={() => { setIsPreviewOpen(false); setPreviewUsers([]); }}
                   disabled={isImporting}
-                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-1 sm:flex-none whitespace-nowrap shrink-0"
                 >
                   Hủy bỏ
                 </button>
@@ -1289,7 +1617,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                   type="button"
                   onClick={handleConfirmBatchImport}
                   disabled={isImporting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                  className="min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex-1 sm:flex-none whitespace-nowrap shrink-0"
                 >
                   {isImporting ? (
                     <>
@@ -1306,10 +1634,26 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
+      <ConfirmDialog
+        open={!!deleteUserTarget}
+        title="Xác nhận xóa tài khoản"
+        message={
+          deleteUserTarget
+            ? `Bạn có chắc muốn xóa mềm tài khoản "${deleteUserTarget.name}" (@${deleteUserTarget.username})? Người dùng này sẽ không thể đăng nhập.`
+            : ''
+        }
+        variant="danger"
+        confirmLabel="Xóa tài khoản"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteUser}
+        onCancel={() => { if (!isDeleting) setDeleteUserTarget(null); }}
+      />
       
-      <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if(file){ const r = new FileReader(); r.onloadend = () => setFormData(prev => ({...prev, avatar: r.result as string})); r.readAsDataURL(file); } }} />
+      <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={async e => { const file = e.target.files?.[0]; if (file) { try { const url = await uploadQMSImage(file, { entityType: 'USER', entityId: editingUser?.id || 'new', role: 'AVATAR' }); setFormData(prev => ({...prev, avatar: url})); } catch (err: any) { setModalError("Lỗi tải ảnh lên: " + (err?.message || "Thất bại")); } finally { e.target.value = ''; } } }} />
     </div>
   );
 };

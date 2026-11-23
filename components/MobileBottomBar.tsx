@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ViewState, User, Role, ModuleId, hasPermission } from '../types';
+import { canViewM03 } from '../src/utils/m03Rbac';
 import { 
   LayoutDashboard, 
   FileSpreadsheet, 
@@ -45,6 +46,9 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
     { id: 'TRASH', label: 'Thùng Rác', icon: Trash2 },
   ].filter(tab => {
+    if (tab.id === 'SUBCONTRACTOR_BOOKING') {
+      return canViewM03(user, rolesList);
+    }
     return hasPermission(user, rolesList, tab.id as ModuleId, 'VIEW');
   });
 
@@ -57,7 +61,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
   return (
     <>
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] bg-white dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-700 shadow-[0_-10px_25px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
-        <div className="flex justify-around items-center h-[60px] px-1">
+        <div className="flex justify-around items-center h-[58px] px-1">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = view === tab.id || (moreTabs.some(t => t.id === view) && needsMoreTab === false); // if it was in moretabs it would be false anyway
@@ -66,7 +70,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
               <button
                 key={tab.id}
                 onClick={() => onNavigate(tab.id as ViewState)}
-                className="flex flex-col items-center justify-center min-w-[56px] flex-1 h-full relative group active:bg-slate-100 dark:active:bg-slate-800 transition-colors py-1 shrink-0"
+                className="flex flex-col items-center justify-center min-w-[56px] min-h-[48px] flex-1 h-full relative group active:bg-slate-100 dark:active:bg-slate-800 transition-colors py-1 shrink-0"
               >
                 <div className={`p-1 rounded-xl transition-all duration-300 ${
                   view === tab.id 
@@ -125,13 +129,14 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Menu Mở Rộng</h3>
               <button 
                 onClick={() => setShowMore(false)}
-                className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                title="Đóng menu"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="p-4 grid grid-cols-4 gap-3 overflow-y-auto no-scrollbar">
+            <div className="p-4 grid grid-cols-3 sm:grid-cols-4 gap-3 overflow-y-auto no-scrollbar">
               {moreTabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = view === tab.id;
@@ -143,7 +148,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ view, onNaviga
                         onNavigate(tab.id as ViewState);
                         setShowMore(false);
                     }}
-                    className={`flex flex-col items-center justify-start gap-2 p-2 rounded-2xl transition-all ${
+                    className={`min-h-[76px] flex flex-col items-center justify-start gap-2 p-2.5 rounded-2xl transition-all ${
                         isActive 
                         ? 'bg-blue-50 dark:bg-blue-900/20 border-transparent' 
                         : 'bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'

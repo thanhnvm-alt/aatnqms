@@ -1,3960 +1,2008 @@
-import dotenv from 'dotenv';
-dotenv.config();
-import express from "express";
-import cookieParser from "cookie-parser";
-import path from "path";
-import { fileURLToPath } from "url";
-import { query } from "./lib/db.js";
-// @ts-ignore
-import { runMigrations } from "./services/migrationService.js";
-import * as db from "./services/dbService.js";
-const { logAudit, logStatusChange } = db;
-import multer from 'multer';
+import express from 'express';
+import http from 'http';
+import path from 'path';
 import fs from 'fs';
-import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
-import { v2 as cloudinary } from 'cloudinary';
-import { google } from 'googleapis';
-import { Readable, pipeline } from 'stream';
-import { promisify } from 'util';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import * as pdfParse from 'pdf-parse';
-import { GoogleGenAI } from "@google/genai";
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import * as dbService from './services/dbService.js';
+import * as dbMod from './services/dbModuleService.js';
+import * as storageService from './services/storageService.js';
+import { runMigrations } from './services/migrationService.js';
+import { backfillTraceabilityIndex } from './services/traceabilityIndexService.js';
+import {
+  getM03Capabilities,
+  canViewM03,
+  canCreateM03,
+  canReconcileM03,
+  canEditM03Booking,
+  canDeleteM03Booking,
+  canAssignM03Booking,
+  canManualOverrideM03Booking,
+  canInspectM03Booking,
+  canViewM03RelatedSqc,
+} from './src/utils/m03Rbac.js';
 
-const pipelineAsync = promisify(pipeline);
-const JWT_SECRET = 'aatn_qms_secret_key_2026_fixed';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-/**
- * Backend permission checker for SYSTEM_ADMIN matrix
- */
-async function checkPermission(userId: string, moduleId: string, action: string = 'VIEW'): Promise<boolean> {
-  const user = await db.getUserById(userId);
-  if (!user) return false;
-
-  const rawPerms = (user as any).user_permissions || (user as any).userPermissions || [];
-  let perms: any[] = [];
-  try {
-      perms = typeof rawPerms === 'string' ? JSON.parse(rawPerms) : rawPerms;
-  } catch (e) {
-      perms = [];
-  }
-
-  if (!Array.isArray(perms)) perms = [];
-
-  // Master check: SYSTEM_ADMIN row grants rights to EVERYTHING
-  const sa = perms.find((p: any) => p.moduleId === 'SYSTEM_ADMIN');
-  if (sa && sa.actions && sa.actions.includes(action)) return true;
-
-  // Specific module check
-  const target = perms.find((p: any) => p.moduleId === moduleId);
-  if (target && target.actions && target.actions.includes(action)) return true;
-
-  return false;
-}
-
-// Khởi tạo Gemini SDK dựa trên biến môi trường
-const apiKey = process.env.GEMINI_API_KEY;
-
-if (!apiKey) {
-  console.warn("GEMINI_API_KEY is not defined in environment variables");
-}
-
-const genAI = apiKey ? new GoogleGenAI({ apiKey }) : null;
-
-// Configure Google Drive safely
-let drive: any = null;
-
-try {
-  if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_CLIENT_SECRET && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_DRIVE_CLIENT_ID,
-      process.env.GOOGLE_DRIVE_CLIENT_SECRET,
-      process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://developers.google.com/oauthplayground'
-    );
-    oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_DRIVE_REFRESH_TOKEN });
-    
-    // Log new tokens to potentially update in DB or environment
-    oauth2Client.on('tokens', (tokens) => {
-      console.log('Google OAuth2 emitted new tokens.');
-      if (tokens.refresh_token) {
-        console.log('NEW REFRESH TOKEN (Please save this securely):', tokens.refresh_token);
-      }
-      console.log('NEW ACCESS TOKEN (Expires in ms):', tokens.expiry_date);
-    });
-
-    drive = google.drive({ version: 'v3', auth: oauth2Client });
-    
-  } else {
-    console.log("Google Drive OAuth2 configuration skipped: credentials missing.");
-  }
-} catch (err) {
-  console.error("Error configuring Google Drive:", err);
-}
-
-// Memory caches to prevent duplicate API requests and handle concurrent execution safely
-const folderCache = new Map<string, string>(); // key: parentFolderId::folderName, value: folderId
-const ongoingFolderCreations = new Map<string, Promise<string>>(); // key: parentFolderId::folderName, value: Promise
-
-async function getOrCreateFolder(parentFolderId: string, folderName: string): Promise<string> {
-  if (!drive) throw new Error("Google Drive is not configured");
-  
-  const cacheKey = `${parentFolderId}::${folderName}`;
-  
-  // 1. Check memory cache first
-  if (folderCache.has(cacheKey)) {
-    const cachedId = folderCache.get(cacheKey)!;
-    console.log(`[Google Drive] Memory cache HIT for "${folderName}" (ID: ${cachedId}) inside parent ${parentFolderId}`);
-    return cachedId;
-  }
-  
-  // 2. Check if there is an ongoing resolution/creation for this folder
-  if (ongoingFolderCreations.has(cacheKey)) {
-    console.log(`[Google Drive] Ongoing folder resolution detected for "${folderName}", waiting...`);
-    return await ongoingFolderCreations.get(cacheKey)!;
-  }
-  
-  // 3. Create a new resolution/creation promise and register it
-  const creationPromise = (async () => {
-    const query = `name = '${folderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and '${parentFolderId}' in parents and trashed = false`;
-    
-    console.log(`[Google Drive] Checking existence of folder "${folderName}" inside parent ID: ${parentFolderId}...`);
-    // First, list existing folders inside this parent matching the name
-    const response = await drive.files.list({
-      q: query,
-      spaces: 'drive',
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-    
-    const files = response.data.files || [];
-    if (files.length > 0 && files[0].id) {
-      const existingId = files[0].id;
-      console.log(`[Google Drive] Thư mục "${folderName}" ĐÃ TỒN TẠI (ID: ${existingId}). Sẽ sử dụng thư mục hiện có này.`);
-      folderCache.set(cacheKey, existingId);
-      return existingId;
-    }
-    
-    // If not found, create it
-    console.log(`[Google Drive] Thư mục "${folderName}" CHƯA TỒN TẠI. Tiến hành tạo mới thư mục này...`);
-    const createResponse = await drive.files.create({
-      requestBody: {
-        name: folderName,
-        mimeType: 'application/vnd.google-apps.folder',
-        parents: [parentFolderId],
-      },
-      fields: 'id',
-      supportsAllDrives: true,
-    });
-    
-    const newId = createResponse.data.id;
-    if (!newId) {
-      throw new Error(`Failed to create Google Drive folder: ${folderName}`);
-    }
-    
-    console.log(`[Google Drive] Tạo thành công thư mục "${folderName}" mới (ID: ${newId})`);
-    folderCache.set(cacheKey, newId);
-    return newId;
-  })();
-  
-  ongoingFolderCreations.set(cacheKey, creationPromise);
-  
-  try {
-    return await creationPromise;
-  } finally {
-    // Delete from ongoing map to allow fresh status if the folder is modified in the future,
-    // but the resolved ID is permanently cached in folderCache.
-    ongoingFolderCreations.delete(cacheKey);
-  }
-}
-
-async function resolveDriveUploadFolder(ma_ct?: string): Promise<string> {
-  const rootFolderId = "15X82uMuF1V1NuTsl7Bw_6FDMd-6pSD9h";
-  
-  // 1. Resolve Project Folder
-  const projectFolderName = (ma_ct && ma_ct.trim()) ? ma_ct.trim() : "CHUA_PHAN_LOAI";
-  const projectFolderId = await getOrCreateFolder(rootFolderId, projectFolderName);
-  
-  // 2. Resolve Date Folder
-  const d = new Date();
-  const tzOffset = 7 * 60 * 60 * 1000; // ICT (UTC+7)
-  const localTime = new Date(d.getTime() + tzOffset);
-  const year = localTime.getUTCFullYear();
-  const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(localTime.getUTCDate()).padStart(2, '0');
-  const uploadDate = `${year}-${month}-${day}`;
-  
-  const dateFolderId = await getOrCreateFolder(projectFolderId, uploadDate);
-  return dateFolderId;
-}
-
-async function uploadToDriveWithRetry(
-  fileMetadata: { name: string; parents: string[] },
-  tempFilePath: string,
-  mimeType: string,
-  maxRetries = 2
-): Promise<string> {
-  let lastError: any = null;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const fileStream = fs.createReadStream(tempFilePath);
-      const driveRes = await drive.files.create({
-        requestBody: fileMetadata,
-        media: {
-          mimeType,
-          body: fileStream,
-        },
-        fields: 'id, webViewLink, webContentLink',
-        supportsAllDrives: true,
-      }, {
-        timeout: 15000,
-      });
-      if (driveRes.data && driveRes.data.id) {
-        return driveRes.data.id;
-      }
-      throw new Error("Google Drive API did not return a valid file ID");
-    } catch (err: any) {
-      lastError = err;
-      const status = err.status || err.code || (err.response && err.response.status);
-      console.warn(`[Google Drive] Upload attempt ${attempt}/${maxRetries} failed with status ${status}:`, err.message);
-      if (attempt < maxRetries) {
-        const delay = attempt * 1200;
-        console.log(`[Google Drive] Waiting ${delay}ms before retrying upload...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
-  }
-  throw lastError;
-}
-
-// Configure Cloudinary safely
-if (process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true
-  });
-} else {
-  console.log("Cloudinary configuration skipped: credentials missing.");
-}
-
-// Update upload directory to use /tmp which is writable on Google Cloud Run and Vercel environments
-const uploadDir = path.join('/tmp', 'qms_uploads');
-try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-} catch (err) {
-  console.warn("Could not create upload directory:", err);
-}
-
-const imageCacheDir = path.join('/tmp', 'qms_image_cache');
-try {
-  if (!fs.existsSync(imageCacheDir)) {
-    fs.mkdirSync(imageCacheDir, { recursive: true });
-  }
-} catch (err) {
-  console.warn("Could not create image cache directory:", err);
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage: storage });
-const memoryUpload = multer({ storage: multer.memoryStorage() });
+const UPLOAD_DIR = storageService.UPLOAD_DIR;
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-app.use(cookieParser());
+const PORT = 3000;
 
-// Request logging for debugging
-app.use((req, res, next) => {
-  // Check for malformed URI
-  try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    decodeURIComponent(url.pathname);
-  } catch (e) {
-    console.warn(`[Malformed URI] Rejecting request: ${req.url}`);
-    return res.status(400).json({ error: 'Malformed URI' });
-  }
-
-  if (!req.url.startsWith('/_vite') && !req.url.startsWith('/@')) {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  }
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
   next();
+}, express.static(UPLOAD_DIR), (_req, res) => {
+  res.status(404).json({ error: 'Uploaded file not found' });
 });
 
-// RBAC Middleware (JWT Verification)
-const authenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  let token = '';
-
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
-  } else if (req.query.token) {
-    token = req.query.token as string;
-  } else if (req.cookies && req.cookies['aatn_qms_token']) {
-    token = req.cookies['aatn_qms_token'];
-  }
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    (req as any).user = decoded;
-    next();
-  } catch (err) {
-    console.error('JWT Verification Error:', err);
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-  }
+// Attach JWT user context, enforce authentication on protected routes, & capture all API errors (>= 400) for System Audit
+const isPublicApiRoute = (method: string, pathUrl: string): boolean => {
+  const cleanPath = (pathUrl || '').split('?')[0];
+  if (method === 'GET' && cleanPath === '/api/health') return true;
+  if (method === 'POST' && (cleanPath === '/api/auth/login' || cleanPath === '/api/auth/forgot-password' || cleanPath === '/api/auth/reset-password')) return true;
+  if (method === 'GET' && cleanPath.startsWith('/api/public/inspections/')) return true;
+  if (method === 'GET' && (cleanPath === '/api/proxy-image' || cleanPath === '/api/images/proxy')) return true;
+  if (method === 'GET' && (cleanPath.startsWith('/api/media/image') || cleanPath.startsWith('/api/image') || cleanPath.startsWith('/api/media/') || cleanPath.startsWith('/display-image') || cleanPath.startsWith('/media/stream'))) return true;
+  if ((method === 'PUT' || method === 'POST') && cleanPath === '/api/storage/upload') return true;
+  if (method === 'GET' && cleanPath.startsWith('/api/storage/files/')) return true;
+  if (method === 'POST' && cleanPath === '/api/system/audit-errors') return true;
+  return false;
 };
 
-const optionalAuthenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  let token = '';
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
-  } else if (req.query.token) {
-    token = req.query.token as string;
-  } else if (req.cookies && req.cookies['aatn_qms_token']) {
-    token = req.cookies['aatn_qms_token'];
-  }
-
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as any;
-      (req as any).user = decoded;
-    } catch (err) {
-      console.warn('Optional auth token invalid, proceeding as anonymous:', err);
-    }
-  }
-  next();
-};
-
-const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-// Serve uploads directory statically if not using cloud storage
-app.use('/uploads', express.static('/tmp/qms_uploads'));
-
-// Health check route
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", env: process.env.NODE_ENV });
-});
-
-// --- PDF Upload for Procedures ---
-app.post("/api/procedures/upload", memoryUpload.single('image'), async (req, res) => {
-    try {
-        if (!req.file || req.file.mimetype !== 'application/pdf') {
-            return res.status(400).json({ error: 'Please upload a PDF file' });
-        }
-        
-        // pdfParse is the default export if imported as `import pdfParse from 'pdf-parse'`, 
-        // but if imported as `import * as pdfParse`, it might be `pdfParse.default`
-        const data = await (pdfParse as any).default(req.file.buffer);
-        const title = req.file.originalname.replace('.pdf', '');
-        
-        await query(`INSERT INTO "${process.env.DB_SCHEMA || 'appQAQC'}"."procedures" (title, content, category, version) VALUES ($1, $2, 'ISO', '1.0')`, 
-            [title, data.text]);
-        
-        res.json({ message: 'Procedural document uploaded and indexed successfully' });
-    } catch (error) {
-        console.error("PDF upload error:", error);
-        res.status(500).json({ error: 'Failed to process PDF' });
-    }
-});
-
-// --- Robust Public Google Drive File Downloader (with Large File Bypass) ---
-async function fetchGoogleDrivePublicFile(fileId: string): Promise<{ buffer: Buffer; contentType: string } | null> {
-  const fallbacks = [
-    `https://docs.google.com/uc?export=download&id=${fileId}`,
-    `https://drive.google.com/uc?export=download&id=${fileId}`,
-    `https://drive.google.com/uc?export=view&id=${fileId}`,
-    `https://lh3.googleusercontent.com/u/0/d/${fileId}`,
-    `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
-    `https://lh3.googleusercontent.com/d/${fileId}=w1600`,
-    `https://lh3.googleusercontent.com/d/${fileId}`
-  ];
-
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml,application/pdf,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Cache-Control': 'no-cache'
-  };
-
-  for (const publicUrl of fallbacks) {
-    try {
-      const response = await fetch(publicUrl, { headers });
-      
-      if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'application/octet-stream';
-        
-        // If Google Drive returns HTML, it could be a warning/confirmation page for virus scan
-        if (contentType.includes('text/html')) {
-          const html = await response.text();
-          // Extract confirmation token if it's a "large file virus scan" dialog page
-          const confirmMatch = html.match(/[&?]confirm=([a-zA-Z0-9_-]+)/);
-          if (confirmMatch && confirmMatch[1]) {
-            const confirmToken = confirmMatch[1];
-            const confirmedUrl = `https://docs.google.com/uc?export=download&id=${fileId}&confirm=${confirmToken}`;
-            const confirmedRes = await fetch(confirmedUrl, { headers });
-            if (confirmedRes.ok) {
-              const resContentType = confirmedRes.headers.get('content-type') || '';
-              if (!resContentType.includes('text/html')) {
-                const arrayBuffer = await confirmedRes.arrayBuffer();
-                return {
-                  buffer: Buffer.from(arrayBuffer),
-                  contentType: resContentType || 'application/pdf'
-                };
-              }
-            }
-          }
-          continue; // skip if it's just a general HTML error/sign-in page
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-        return {
-          buffer: Buffer.from(arrayBuffer),
-          contentType: contentType
-        };
-      }
-    } catch (pubErr) {
-      console.warn(`[Drive Proxy] Fallback fetch error for ${publicUrl}:`, pubErr);
-    }
-  }
-  return null;
-}
-
-// --- Optimized Google Drive Image & Document Streaming Handler ---
-const streamGoogleDriveImage = async (req: express.Request, res: express.Response) => {
-  const { fileId } = req.params as { fileId: string };
-  const isDownload = req.query.download === '1' || req.query.download === 'true';
-  
-  if (drive) {
-    try {
-      let mimeType = '';
-      let fileName = 'file';
-
-      try {
-        const meta = await drive.files.get({
-          fileId,
-          fields: 'id, name, mimeType',
-          supportsAllDrives: true
-        });
-        if (meta.data) {
-          if (meta.data.mimeType) mimeType = meta.data.mimeType;
-          if (meta.data.name) fileName = meta.data.name;
-        }
-      } catch (metaErr: any) {
-        console.warn(`[Drive Stream Proxy] Metadata notice for ${fileId}:`, metaErr?.message || metaErr);
-      }
-
-      // Single API call: Fetch the file content as a stream directly
-      const response = await drive.files.get(
-        { fileId, alt: 'media', supportsAllDrives: true },
-        { responseType: 'stream' }
-      );
-
-      // Determine Content-Type accurately
-      const rawContentType = response.headers['content-type'];
-      let contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || mimeType;
-
-      if (fileName.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf' || (contentType && contentType.includes('pdf'))) {
-        contentType = 'application/pdf';
-      } else if (!contentType || contentType === 'application/octet-stream') {
-        contentType = mimeType || 'image/jpeg';
-      }
-      
-      // Set headers (NO redirects, NO google locations)
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Access-Control-Allow-Origin', '*'); 
-      res.setHeader('Cache-Control', 'private, max-age=604800'); // 7 Days Cache 
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-
-      const disposition = isDownload ? 'attachment' : 'inline';
-      res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(fileName)}"`);
-      
-      // Efficiently pipe using native Node.js stream pipeline (prevents memory leaks on interrupt)
-      await pipelineAsync(response.data, res);
-      return;
-
-    } catch (error: any) {
-      const status = error.response?.status || error.code || 500;
-      console.warn(`[Drive Stream Proxy Error] File ${fileId}: ${status} - ${error.message}. Checking public fallback...`);
-    }
-  }
-
-  // Fallback to public downloader if not configured OR if Google Drive Auth API fails
-  try {
-    const fallbackData = await fetchGoogleDrivePublicFile(fileId);
-    if (fallbackData) {
-      res.setHeader('Content-Type', fallbackData.contentType);
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'private, max-age=604800');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      if (isDownload) {
-        res.setHeader('Content-Disposition', `attachment; filename="download_${fileId}"`);
-      } else {
-        res.setHeader('Content-Disposition', 'inline');
-      }
-      res.send(fallbackData.buffer);
-      return;
-    }
-  } catch (pubFallbackErr: any) {
-    console.error(`[Drive Stream Proxy Fallback Error] File ${fileId}:`, pubFallbackErr);
-  }
-
-  // Final failure response
-  if (!res.headersSent) {
-    res.status(500).json({ error: 'Error streaming file from upstream' });
-  }
-};
-
-// Map all secure proxy endpoints to the optimized streaming handler
-app.get("/api/media/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
-app.get("/api/media/file/:fileId", optionalAuthenticate, streamGoogleDriveImage);
-app.get("/api/media/document/:fileId", optionalAuthenticate, streamGoogleDriveImage);
-app.get("/media/stream/:fileId", optionalAuthenticate, streamGoogleDriveImage);
-app.get("/display-image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
-app.get("/api/image/:fileId", optionalAuthenticate, streamGoogleDriveImage);
-
-// API routes
-  app.post("/api/upload", optionalAuthenticate, memoryUpload.single('image'), async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      const user = (req as any).user || { username: 'SYSTEM' };
-      const ma_ct = req.body.ma_ct;
-      const originalName = req.file.originalname || 'image.jpg';
-      const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const uniqueName = `qms_${Date.now()}_${Math.round(Math.random() * 1e6)}_${safeName}`;
-      
-      let fileUrl = "";
-      let fileId = "";
-
-      // Tier 1: If Google Drive is configured, attempt upload to Google Drive
-      if (drive) {
-        let targetFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-        try {
-          targetFolderId = await resolveDriveUploadFolder(ma_ct);
-        } catch (fErr) {
-          console.error("Failed to resolve hierarchical folder, using root folder:", fErr);
-        }
-
-        const fileMetadata = {
-          name: originalName,
-          parents: targetFolderId ? [targetFolderId] : []
-        };
-
-        const tempFilePath = path.join("/tmp", `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`);
-        try {
-          fs.writeFileSync(tempFilePath, req.file.buffer);
-          fileId = await uploadToDriveWithRetry(fileMetadata, tempFilePath, req.file.mimetype || 'image/jpeg');
-          fileUrl = `/api/media/image/${fileId}`;
-          console.log(`[Google Drive] Successfully uploaded fileId: ${fileId}`);
-        } catch (driveErr: any) {
-          console.warn("[Google Drive Upload Failed] Falling back to local storage:", driveErr?.message || driveErr);
-        } finally {
-          if (fs.existsSync(tempFilePath)) {
-            try { fs.unlinkSync(tempFilePath); } catch (e) {}
-          }
-        }
-      }
-
-      // Tier 2: Cloudinary fallback if configured and Drive was not used or failed
-      const useCloudinary = !fileUrl && !!(process.env.CLOUDINARY_URL || (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET));
-      if (useCloudinary) {
-        try {
-          const b64 = Buffer.from(req.file.buffer).toString("base64");
-          const dataURI = "data:" + req.file.mimetype + ";base64," + b64;
-          const result = await cloudinary.uploader.upload(dataURI, { folder: "qms_uploads" });
-          fileUrl = result.secure_url;
-          fileId = result.public_id;
-        } catch (cErr: any) {
-          console.warn("[Cloudinary Upload Failed] Falling back to local storage:", cErr?.message || cErr);
-        }
-      }
-
-      // Tier 3: Local storage fallback (stored in /tmp/qms_uploads and served via /uploads/)
-      if (!fileUrl) {
-        const uploadDir = '/tmp/qms_uploads';
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        const localFilePath = path.join(uploadDir, uniqueName);
-        fs.writeFileSync(localFilePath, req.file.buffer);
-        fileUrl = `/uploads/${uniqueName}`;
-        fileId = uniqueName;
-        console.log(`[Local Storage Fallback] Saved file to ${fileUrl}`);
-      }
-
-      // Audit Trail (ISO Requirement)
-      try {
-        await logAudit(
-          user.username || 'SYSTEM', 
-          'IMAGE_UPLOAD', 
-          'attachment', 
-          fileId, 
-          null, 
-          { 
-            filename: originalName, 
-            mimeType: req.file.mimetype, 
-            size: req.file.size,
-            url: fileUrl,
-            storage: fileUrl.startsWith('/api/media/image') ? 'GOOGLE_DRIVE' : (fileUrl.startsWith('/uploads') ? 'LOCAL' : 'CLOUDINARY')
-          }
-        );
-      } catch (auditErr) {
-        console.warn("Failed to log audit for upload:", auditErr);
-      }
-
-      return res.json({ 
-        id: fileId, 
-        url: fileUrl, 
-        fileUrl: fileUrl, 
-        url_hd: fileUrl,
-        url_thumbnail: fileUrl,
-        originalName: originalName, 
-        size: req.file.size,
-        mime: req.file.mimetype
-      });
-
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      res.status(500).json({ error: 'Upload failed', details: error.message });
-    }
-  });
-
-  app.get("/api/ipo", async (req, res) => {
-    try {
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { factoryOrder, maTender, material, page = 1, limit = 50 } = req.query;
-      const p = parseInt(page as string, 10);
-      const l = parseInt(limit as string, 10);
-      const offset = (p - 1) * l;
-      
-      let sql = `SELECT "ID_Factory_Order" as id, "ID_Factory_Order", "Ma_Tender", "Project_name", "Material_description", "Quantity_IPO", "Base_Unit" FROM "${schema}"."ipo" WHERE 1=1`;
-      let countSql = `SELECT COUNT(*) as total FROM "${schema}"."ipo" WHERE 1=1`;
-      const params: any[] = [];
-      
-      if (factoryOrder) {
-        sql += ` AND "ID_Factory_Order" = $${params.length + 1}`;
-        countSql += ` AND "ID_Factory_Order" = $${params.length + 1}`;
-        params.push(factoryOrder);
-      }
-      if (maTender) {
-        sql += ` AND "Ma_Tender" = $${params.length + 1}`;
-        countSql += ` AND "Ma_Tender" = $${params.length + 1}`;
-        params.push(maTender);
-      }
-      if (material) {
-        const pStr = `%${material}%`;
-        const idx = params.length + 1;
-        sql += ` AND ("Ma_Tender" ILIKE $${idx} OR "ID_Factory_Order" ILIKE $${idx} OR "Material_description" ILIKE $${idx})`;
-        countSql += ` AND ("Ma_Tender" ILIKE $${idx} OR "ID_Factory_Order" ILIKE $${idx} OR "Material_description" ILIKE $${idx})`;
-        params.push(pStr);
-      }
-      
-      const [result, countResult] = await Promise.all([
-        query(sql + ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, l, offset]),
-        query(countSql, params)
-      ]);
-
-      res.json({
-        items: result.rows,
-        total: parseInt(countResult.rows[0].total, 10),
-        page: p,
-        limit: l
-      });
-    } catch (error) {
-      console.error('Error fetching IPO data:', error);
-      res.status(500).json({ error: 'Failed to fetch IPO data' });
-    }
-  });
-
-  app.get("/api/ipo/detail/:id", authenticate, async (req, res) => {
-    try {
-      const id = String(req.params.id);
-      const detail = await db.getIpoDetailById(id);
-      const drawings = await db.getIpoDrawings(id);
-      const materials = await db.getIpoMaterials(id);
-      const samples = await db.getIpoSamples(id);
-      res.json({ detail, drawings, materials, samples });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch IPO details' });
-    }
-  });
-
-  app.post("/api/ipo/detail", authenticate, async (req, res) => {
-    try {
-      await db.saveIpoDetail(req.body);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save IPO detail' });
-    }
-  });
-
-  app.post("/api/ipo/drawings", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.saveIpoDrawingRecord({ ...req.body, created_by: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save drawing record' });
-    }
-  });
-
-  app.post("/api/ipo/materials", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.saveIpoMaterialRecord({ ...req.body, created_by: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save material record' });
-    }
-  });
-
-  app.post("/api/ipo/samples", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.saveIpoSampleRecord({ ...req.body, created_by: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save sample record' });
-    }
-  });
-
-  app.put("/api/ipo/samples/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.updateIpoSampleRecord(req.params.id as string, { ...req.body, updated_by: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update sample record' });
-    }
-  });
-
-  app.delete("/api/ipo/samples/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteIpoSampleRecord(req.params.id as string);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete sample record' });
-    }
-  });
-
-  // --- AUTH ---
-  app.post("/api/auth/login", async (req, res) => {
-    console.log("Login attempt for username:", req.body?.username);
-    try {
-      const { username, password } = req.body;
-      const user = await db.getUserByUsername(username);
-      
-      let isMatch = false;
-      if (user && user.password) {
-        if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
-          isMatch = await bcrypt.compare(password, user.password);
-        } else {
-          // Fallback for plain text passwords in DB
-          isMatch = password === user.password;
-        }
-      }
-
-      if (user && isMatch) {
-        // Create JWT - Increased to 30 days for better UX
-        const token = jwt.sign(
-          { id: user.id, username: user.username, role: user.role, name: user.name },
-          JWT_SECRET,
-          { expiresIn: '30d' }
-        );
-        
-        // Set secure HTTP cookie for images and API streaming
-        res.cookie('aatn_qms_token', token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-        });
-
-        // Log Audit Login
-        await db.logAudit(user.id, 'LOGIN', 'user', user.id, null, {
-          ip: req.ip,
-          userAgent: req.headers['user-agent'] || 'unknown'
-        });
-
-        // Don't send password back
-        const { password: _, ...userWithoutPassword } = user;
-        res.json({ user: userWithoutPassword, token });
-      } else {
-        res.status(401).json({ error: 'Invalid credentials' });
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Authentication failed' });
-    }
-  });
-
-  app.post("/api/auth/change-password", authenticate, async (req, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      const loggedInUser = (req as any).user;
-      
-      const user = await db.getUserByUsername(loggedInUser.username);
-      if (!user) {
-        return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
-      }
-
-      // Check current password
-      let isMatch = false;
-      if (user.password) {
-        if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
-          isMatch = await bcrypt.compare(currentPassword, user.password);
-        } else {
-          isMatch = currentPassword === user.password;
-        }
-      }
-
-      if (!isMatch) {
-        return res.status(400).json({ error: 'Mật khẩu hiện tại không chính xác' });
-      }
-
-      // Validate new password complexity: min 6 chars, mandatory upper & lower case letters.
-      if (!newPassword || newPassword.length < 6) {
-        return res.status(400).json({ error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' });
-      }
-      if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
-        return res.status(400).json({ error: 'Mật khẩu mới bắt buộc phải chứa cả ký tự hoa và thường' });
-      }
-
-      // Save user with new password and reset change flag
-      const updatedUserPayload = {
-        ...user,
-        password: newPassword,
-        require_password_change: false,
-        requirePasswordChange: false
-      };
-
-      await db.saveUser(updatedUserPayload);
-      
-      const { password: _, ...userWithoutPassword } = updatedUserPayload;
-      res.json({ success: true, user: userWithoutPassword });
-    } catch (error: any) {
-      console.error('Change password error:', error);
-      res.status(500).json({ error: 'Đổi mật khẩu thất bại, lỗi hệ thống', details: error.message });
-    }
-  });
-
-  // In-memory store for password reset codes (email -> { code, expiresAt })
-  const passwordResetCodes = new Map<string, { code: string; expiresAt: number }>();
-
-  app.post("/api/auth/forgot-password", async (req, res) => {
-    try {
-      const { email } = req.body;
-      if (!email) {
-        return res.status(400).json({ error: 'Vui lòng cung cấp địa chỉ email' });
-      }
-
-      const user = await db.getUserByEmail(email.trim());
-      if (!user) {
-        return res.status(404).json({ error: 'Không tìm thấy tài khoản với email này trong hệ thống' });
-      }
-
-      // Generate 6-digit code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
-
-      passwordResetCodes.set(email.toLowerCase().trim(), { code, expiresAt });
-
-      console.log(`[Password Reset] Code for ${email}: ${code}`);
-
-      res.json({ 
-        success: true, 
-        message: 'Mã xác thực khôi phục mật khẩu đã được gửi đến email của bạn.',
-        // For development convenience, return code in response so tester/user can see it immediately
-        devCode: code 
-      });
-    } catch (error: any) {
-      console.error('Forgot password error:', error);
-      res.status(500).json({ error: 'Lỗi hệ thống khi yêu cầu khôi phục mật khẩu' });
-    }
-  });
-
-  app.post("/api/auth/reset-password", async (req, res) => {
-    try {
-      const { email, code, newPassword } = req.body;
-      if (!email || !code || !newPassword) {
-        return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin' });
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      const record = passwordResetCodes.get(normalizedEmail);
-
-      if (!record) {
-        return res.status(400).json({ error: 'Mã xác thực không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu lại.' });
-      }
-
-      if (Date.now() > record.expiresAt) {
-        passwordResetCodes.delete(normalizedEmail);
-        return res.status(400).json({ error: 'Mã xác thực đã hết hạn (15 phút). Vui lòng yêu cầu lại mã mới.' });
-      }
-
-      if (record.code !== code.trim()) {
-        return res.status(400).json({ error: 'Mã xác thực không chính xác' });
-      }
-
-      // Validate new password complexity
-      if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' });
-      }
-      if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
-        return res.status(400).json({ error: 'Mật khẩu mới bắt buộc phải chứa cả ký tự hoa và thường' });
-      }
-
-      const user = await db.getUserByEmail(normalizedEmail);
-      if (!user) {
-        return res.status(404).json({ error: 'Không tìm thấy tài khoản người dùng' });
-      }
-
-      // Hash password with bcrypt
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-      const updatedUserPayload = {
-        ...user,
-        password: hashedPassword,
-        require_password_change: false,
-        requirePasswordChange: false
-      };
-
-      await db.saveUser(updatedUserPayload);
-      passwordResetCodes.delete(normalizedEmail);
-
-      await db.logAudit(user.id, 'RESET_PASSWORD', 'user', user.id, null, { email: normalizedEmail });
-
-      res.json({ success: true, message: 'Khôi phục mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới.' });
-    } catch (error: any) {
-      console.error('Reset password error:', error);
-      res.status(500).json({ error: 'Lỗi hệ thống khi đặt lại mật khẩu' });
-    }
-  });
-
-  app.post("/api/chat", express.json(), async (req, res) => {
-    const { message, context } = req.body;
-    
-    if (!genAI) {
-        console.error("DEBUG: genAI is not initialized (GEMINI_API_KEY missing)");
-        return res.status(500).json({ error: "Server API Key not configured" });
-    }
-    
-    try {
-        // --- RAG: Fetch relevant history (NCRs) and Procedures (ISO) ---
-        let ragContext = "";
-        try {
-            // Basic extraction of ID/Code from message for lookup
-            const match = message.match(/[A-Z0-9-]{3,}/i);
-            
-            // Fetch NCRs
-            if (match) {
-                const results = await db.getNcrs({ search: match[0] }, 1, 3);
-                if (results.items && results.items.length > 0) {
-                    ragContext += "\nLỊCH SỬ XỬ LÝ SỰ CỐ (NCRs) LIÊN QUAN:\n" + 
-                        results.items.map((ncr: any) => `- ID: ${ncr.id}, Mô tả: ${ncr.issueDescription}, Trạng thái: ${ncr.status}`).join('\n');
-                }
-            }
-
-            // Fetch Procedures
-            const procResults = await query(`SELECT title, content FROM "${process.env.DB_SCHEMA || 'appQAQC'}"."procedures" LIMIT 5`);
-            if (procResults.rows && procResults.rows.length > 0) {
-                ragContext += "\nQUY TRÌNH & QUY CHUẨN ISO LIEN QUAN:\n" + 
-                    procResults.rows.map((p: any) => `- ${p.title}: ${p.content.substring(0, 200)}...`).join('\n');
-            }
-        } catch (e) {
-            console.error("RAG Context fetch failed:", e);
-        }
-
-        // Define fallback models
-        const models = ['gemini-2.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview'];
-        let response;
-        
-        for (const modelName of models) {
-            try {
-                const result = await genAI.models.generateContent({
-                    model: modelName,
-                    contents: [{ role: 'user', parts: [{ text: message }] }],
-                    config: {
-                        temperature: 0.1,
-                        systemInstruction: `Bạn là trợ lý dữ liệu QA/QC chuyên nghiệp cho hệ thống AATN.
-                        
-                        NGỮ CẢNH DỮ LIỆU:
-                        ${context}
-                        ${ragContext}
- 
-                        HƯỚNG DẪN TRẢ LỜI:
-                        1. Trả lời cực kỳ ngắn gọn và chính xác dựa trên DỮ LIỆU và LỊCH SỬ SỰ CỐ.
-                        2. Nếu tìm thấy mã dự án/nhà máy, liệt kê tiến độ theo danh sách.
-                        3. Sử dụng **in đậm** cho các mã số và trạng thái quan trọng.
-                        4. Dựa vào LỊCH SỬ SỰ CỐ (NCR) để đưa ra lời khuyên xử lý nếu có.
-                        5. Nếu không thấy, hãy trả lời tổng quát.`,
-                    },
-                });
-                response = result;
-                break; // If successful, break the loop
-            } catch (err: any) {
-                console.warn(`Model ${modelName} failed, trying next...`, err.message);
-                if (modelName === models[models.length - 1]) throw err; // If last model failed, throw
-            }
-        }
-        res.json({ text: response!.text });
-    } catch (error) {
-        console.error("AI Proxy Error:", error);
-        res.status(500).json({ error: "AI Service Error, please try again in a few moments." });
-    }
-  });
-
-  // --- PLANS ---
-  app.get("/api/plans", authenticate, async (req, res) => {
-    try {
-      const { search, page = 1, limit = 20 } = req.query;
-      const result = await db.getPlansPaginated(String(search || ''), Number(page), Number(limit), (req as any).user);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch plans' });
-    }
-  });
-
-  app.put("/api/plans/:id", authenticate, async (req, res) => {
-    try {
-      await db.updatePlan(String(req.params.id), req.body);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to update plan' });
-    }
-  });
-
-  app.get("/api/plans/by-project", async (req, res) => {
-    try {
-      const { maCt, limit } = req.query;
-      const result = await db.getPlansByProject(String(maCt || ''), limit ? Number(limit) : undefined);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch plans by project' });
-    }
-  });
-
-  // --- WORKSHOPS ---
-  app.get("/api/workshops", async (req, res) => {
-    try {
-      const result = await db.getWorkshops();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch workshops' });
-    }
-  });
-
-  app.post("/api/workshops", authenticate, async (req, res) => {
-    try {
-      await db.saveWorkshop(req.body);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save workshop' });
-    }
-  });
-
-  app.delete("/api/workshops/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteWorkshop(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete workshop' });
-    }
-  });
-
-  // --- TEMPLATES ---
-  app.get("/api/templates", async (req, res) => {
-    try {
-      const result = await db.getTemplates();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch templates' });
-    }
-  });
-
-  app.post("/api/templates", authenticate, async (req, res) => {
-    try {
-      const { moduleId, items } = req.body;
-      await db.saveTemplate(moduleId, items);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save template' });
-    }
-  });
-
-  // --- FLOOR PLANS ---
-  app.get("/api/floor-plans", async (req, res) => {
-    try {
-      const { projectId } = req.query;
-      const result = await db.getFloorPlans(String(projectId || ''));
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch floor plans' });
-    }
-  });
-
-  app.post("/api/floor-plans", authenticate, async (req, res) => {
-    try {
-      await db.saveFloorPlan(req.body);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save floor plan' });
-    }
-  });
-
-  app.delete("/api/floor-plans/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteFloorPlan(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete floor plan' });
-    }
-  });
-
-  // --- LAYOUT PINS ---
-  app.get("/api/layout-pins", async (req, res) => {
-    try {
-      const { fpId } = req.query;
-      const result = await db.getLayoutPins(String(fpId || ''));
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch layout pins' });
-    }
-  });
-
-  app.post("/api/layout-pins", authenticate, async (req, res) => {
-    try {
-      await db.saveLayoutPin(req.body);
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("Layout Pins Error:", error);
-      res.status(500).json({ error: error.message || 'Failed to save layout pin' });
-    }
-  });
-
-  // --- TOOLS EQUIPMENT ---
-  app.get("/api/tool-catalogs", authenticate, async (req, res) => {
-    try {
-      const catalogs = await db.getToolCatalogs();
-      res.json(catalogs);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch tool catalogs' });
-    }
-  });
-
-  app.post("/api/tool-catalogs", authenticate, async (req, res) => {
-    try {
-      await db.saveToolCatalog(req.body);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/tool-catalogs/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteToolCatalog(req.params.id as string);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/tool-assets", authenticate, async (req, res) => {
-    try {
-      const assets = await db.getToolAssets();
-      res.json(assets);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch tool assets' });
-    }
-  });
-
-  app.get("/api/tool-catalogs/:id/assets", authenticate, async (req, res) => {
-    try {
-      const assets = await db.getToolAssetsByCatalog(req.params.id as string);
-      res.json(assets);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch related tool assets' });
-    }
-  });
-
-  app.post("/api/tool-assets", authenticate, async (req, res) => {
-    try {
-      await db.saveToolAsset(req.body);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/tool-assets/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteToolAsset(req.params.id as string);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/tool-assets/:id/transfers", authenticate, async (req, res) => {
-    try {
-      const transfers = await db.getToolTransfers(req.params.id as string);
-      res.json(transfers);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch tool transfers' });
-    }
-  });
-
-  app.post("/api/tool-transfers", authenticate, async (req, res) => {
-    try {
-      if (req.body.tool_asset_id && !req.body.tool_asset_ids) {
-          req.body.tool_asset_ids = [req.body.tool_asset_id];
-      }
-      await db.saveToolTransfer(req.body);
-      if (req.body.status === 'APPROVED' && req.body.to_user_id && req.body.tool_asset_ids?.length > 0) {
-         for (const tId of req.body.tool_asset_ids) {
-            const tool = await db.getToolAssetById(tId);
-            if (tool) {
-              tool.current_user_id = req.body.to_user_id;
-              await db.saveToolAsset(tool);
-            }
-         }
-      }
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/tool-assets/:id/calibrations", authenticate, async (req, res) => {
-    try {
-      const calib = await db.getToolCalibrations(req.params.id as string);
-      res.json(calib);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch calibrations' });
-    }
-  });
-
-  app.post("/api/tool-calibrations", authenticate, async (req, res) => {
-    try {
-      await db.saveToolCalibration(req.body);
-      if (req.body.next_calibration_date && req.body.status === 'COMPLETED') {
-         const tool = await db.getToolAssetById(req.body.tool_asset_id);
-         if (tool) {
-           tool.next_calibration_date = req.body.next_calibration_date;
-           await db.saveToolAsset(tool);
-         }
-      }
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // --- DEFECTS (NCRs) ---
-  app.get("/api/defects", async (req, res) => {
-    try {
-      const result = await db.getNcrs(req.query as any);
-      res.json({ items: result.items, total: result.total });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch defects' });
-    }
-  });
-  app.get("/api/inspections", authenticate, async (req, res) => {
-    try {
-      const userAgent = req.headers['user-agent'] || '';
-      const isMobile = /mobile|android|iphone|ipad|phone/i.test(userAgent) || req.query.isMobile === 'true';
-
-      const filters = {
-        status: req.query.status as string,
-        search: req.query.search as string,
-        qc: req.query.qc as string,
-        workshop: req.query.workshop as string,
-        project: req.query.project as string,
-        type: req.query.type as string,
-        startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string,
-        ma_nha_may: req.query.ma_nha_may as string,
-        unixStart: req.query.unixStart as string,
-        unixEnd: req.query.unixEnd as string,
-        stage: (req.query.stage || req.query.inspectionStage) as string,
-        inspectionStage: (req.query.inspectionStage || req.query.stage) as string
-      };
-
-      // if mobile and no startDate provided, we now allow everything as requested
-      const page = Number(req.query.page) || 1;
-      const limit = req.query.limit ? Number(req.query.limit) : undefined;
-      const result = await db.getInspectionsList(filters, page, limit, (req as any).user);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch inspections' });
-    }
-  });
-
-  app.get("/api/dashboard/inspections", authenticate, async (req, res) => {
-    try {
-      const filters = {
-        status: req.query.status as string,
-        search: req.query.search as string,
-        qc: req.query.qc as string,
-        workshop: req.query.workshop as string,
-        project: req.query.project as string,
-        type: req.query.type as string,
-        startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string,
-        unixStart: req.query.unixStart as string,
-        unixEnd: req.query.unixEnd as string,
-        stage: (req.query.stage || req.query.inspectionStage) as string,
-        inspectionStage: (req.query.inspectionStage || req.query.stage) as string
-      };
-
-      const result = await db.getDashboardInspectionsList(filters, (req as any).user);
-      res.json(result);
-    } catch (error) {
-      console.error("Dashboard API error:", error);
-      res.status(500).json({ error: 'Failed to fetch dashboard inspections' });
-    }
-  });
-
-  app.get("/api/dashboard/stats", authenticate, async (req, res) => {
-    try {
-      const filters = {
-        status: req.query.status as string,
-        search: req.query.search as string,
-        qc: req.query.qc as string,
-        workshop: req.query.workshop as string,
-        project: req.query.project as string,
-        type: req.query.type as string,
-        startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string,
-        unixStart: req.query.unixStart as string,
-        unixEnd: req.query.unixEnd as string,
-        stage: (req.query.stage || req.query.inspectionStage) as string,
-        inspectionStage: (req.query.inspectionStage || req.query.stage) as string
-      };
-
-      const stats = await db.getDashboardStats(filters, (req as any).user);
-      res.json(stats);
-    } catch (error) {
-      console.error("Dashboard stats API error:", error);
-      res.status(500).json({ error: 'Failed to fetch dashboard aggregate statistics' });
-    }
-  });
-
-  app.get("/api/inspections/dates", authenticate, async (req, res) => {
-    try {
-      const dates = await db.getInspectionsDatesList(req.query, (req as any).user);
-      res.json(dates);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch inspections dates' });
-    }
-  });
-
-  app.get("/api/inspections/projects", authenticate, async (req, res) => {
-    try {
-      const projects = await db.getInspectionsProjectsList(req.query, (req as any).user);
-      res.json(projects);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch inspections projects' });
-    }
-  });
-
-  app.get("/api/inspections/:id", async (req, res) => {
-    try {
-      const result = await db.getInspectionById(req.params.id);
-      if (!result) return res.status(404).json({ error: 'Inspection not found' });
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch inspection' });
-    }
-  });
-
-  app.get("/api/inspections/:id/audit-logs", authenticate, async (req, res) => {
-    try {
-      const logs = await db.getEntityAuditLogs('inspection', String(req.params.id));
-      res.json(logs);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch audit logs for inspection' });
-    }
-  });
-
-  app.post("/api/inspections", authenticate, async (req, res) => {
-    try {
-      const payload = req.body;
-      const userName = (req as any).user?.name;
-      
-      // Tách phiếu (Split) logic for SQC_TP if needed
-      if (payload.type === 'SQC_TP' && payload.splitRequired && Array.isArray(payload.materials) && payload.materials.length > 0) {
-          for (let i = 0; i < payload.materials.length; i++) {
-              const mat = payload.materials[i];
-              const childPayload = {
-                  ...payload,
-                  id: `${payload.id}-${i + 1}`,
-                  ma_ct: mat.po_number || mat.ma_ct || mat.projectCode || payload.ma_ct, // PO from item
-                  materials: [mat],
-                  // Remove split flag for safety
-                  splitRequired: false
-              };
-              await db.saveInspection(childPayload, userName);
-          }
-          try { await db.deleteInspection(payload.id); } catch(e){}
-      } else {
-          await db.saveInspection(payload, userName);
-      }
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("Inspections Save Error:", error);
-      res.status(500).json({ error: error.message || 'Failed to save inspection' });
-    }
-  });
-
-  app.delete("/api/inspections/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.deleteInspection(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete inspection' });
-    }
-  });
-
-  // --- NCRs ---
-  app.get("/api/ncrs", authenticate, async (req, res) => {
-    try {
-      const filters = req.query;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
-      const result = await db.getNcrs(filters, page, limit);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error in GET /api/ncrs:", error);
-      res.status(500).json({ error: error?.message || 'Failed to fetch NCRs' });
-    }
-  });
-
-  app.get("/api/ncrs/:id", authenticate, async (req, res) => {
-    try {
-      const result = await db.getNcrById(String(req.params.id));
-      if (result) {
-        res.json(result);
-      } else {
-        res.status(404).json({ error: 'NCR not found' });
-      }
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch NCR detail' });
-    }
-  });
-
-  app.post("/api/ncrs", authenticate, async (req, res) => {
-    try {
-      const { inspection_id, ncr, createdBy } = req.body;
-      const id = await db.saveNcrMapped(inspection_id, ncr, createdBy);
-      res.json({ id });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save NCR' });
-    }
-  });
-
-  app.delete("/api/ncrs/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.deleteNcr(String(req.params.id), String(user.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete NCR' });
-    }
-  });
-
-  // --- USERS ---
-  app.get("/api/users", async (req, res) => {
-    try {
-      const result = await db.getUsers();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch users' });
-    }
-  });
-
-  // --- ADMIN / TRASH ---
-  app.get("/api/admin/deleted-inspections", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'VIEW'))) {
-        return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
-      }
-      const result = await db.getDeletedInspections();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch deleted inspections' });
-    }
-  });
-
-  app.post("/api/admin/restore-inspection/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
-      }
-      await db.restoreInspection(String(req.params.id));
-      await logAudit(user.id, 'RESTORE_INSPECTION', 'inspection', String(req.params.id), null, { restoredBy: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to restore inspection' });
-    }
-  });
-
-  app.delete("/api/admin/permanent-delete/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
-      }
-      await db.hardDeleteInspection(String(req.params.id));
-      await logAudit(user.id, 'PERMANENT_DELETE', 'inspection', String(req.params.id), null, { deletedBy: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to permanently delete inspection' });
-    }
-  });
-
-  app.post("/api/users", authenticate, async (req, res) => {
-    try {
-      const authUser = (req as any).user;
-      const targetUserId = req.body.id;
-      const isAdmin = await checkPermission(authUser.id, 'SYSTEM_ADMIN', 'EDIT_ALL');
-
-      if (!isAdmin && authUser.id !== targetUserId) {
-        return res.status(403).json({ error: 'Unauthorized: Admin access required or can only update own profile' });
-      }
-
-      let userData = req.body;
-
-      // If not admin and updating own profile, protect sensitive fields
-      if (!isAdmin && authUser.id === targetUserId) {
-        const existingUser = await db.getUserById(targetUserId);
-        if (!existingUser) {
-          return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Sanitize update: preserve sensitive fields from existing record
-        userData = {
-          ...req.body,
-          role: existingUser.role,
-          user_permissions: existingUser.user_permissions,
-          userPermissions: existingUser.userPermissions,
-          msnv: existingUser.msnv,
-          phong_ban: existingUser.phong_ban,
-          phongBan: existingUser.phongBan,
-          bo_phan: existingUser.bo_phan,
-          boPhan: existingUser.boPhan,
-          status: existingUser.status,
-          username: existingUser.username, // Username shouldn't be changed through profile settings
-          id: existingUser.id // Ensure ID remains the same
-        };
-      }
-
-      await db.saveUser(userData);
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error('Error saving user:', error);
-      res.status(500).json({ error: 'Failed to save user', details: error.message });
-    }
-  });
-
-  app.post("/api/users/batch-import", authenticate, async (req, res) => {
-    try {
-      const authUser = (req as any).user;
-      const isAdmin = await checkPermission(authUser.id, 'SYSTEM_ADMIN', 'EDIT_ALL');
-      if (!isAdmin) {
-        return res.status(403).json({ error: 'Unauthorized: Admin access required to batch import users' });
-      }
-
-      const users = req.body.users;
-      if (!Array.isArray(users) || users.length === 0) {
-        return res.status(400).json({ error: 'No users provided for import' });
-      }
-
-      const result = await db.batchImportUsers(users, authUser.id);
-      res.json(result);
-    } catch (error: any) {
-      console.error('Error in batch import users:', error);
-      res.status(500).json({ error: 'Failed to import users', details: error.message });
-    }
-  });
-
-  app.delete("/api/users/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: Admin access required' });
-      }
-      await db.deleteUser(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete user' });
-    }
-  });
-
-  // --- DEPARTMENTS ---
-  app.get("/api/departments", async (req, res) => {
-    try {
-      const result = await db.getDepartments();
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to fetch departments', details: error.message });
-    }
-  });
-
-  app.post("/api/departments", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
-      }
-      await db.saveDepartment(req.body);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to save department', details: error.message });
-    }
-  });
-
-  app.delete("/api/departments/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
-      }
-      await db.deleteDepartment(req.params.id as string);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to delete department', details: error.message });
-    }
-  });
-
-  app.post("/api/admin/sync-departments", authenticate, async (req, res) => {
-    try {
-      const result = await db.syncUserDepartmentsAndTeams();
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to synchronize department data', details: error.message });
-    }
-  });
-
-  // --- DIVISIONS ---
-  app.get("/api/divisions", async (req, res) => {
-    try {
-      const result = await db.getDivisions();
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to fetch divisions', details: error.message });
-    }
-  });
-
-  app.post("/api/divisions", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
-      }
-      await db.saveDivision(req.body);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to save division', details: error.message });
-    }
-  });
-
-  app.delete("/api/divisions/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: Admin or Manager only' });
-      }
-      await db.deleteDivision(req.params.id as string);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to delete division', details: error.message });
-    }
-  });
-
-  // --- TEAMS ---
-  app.get("/api/teams", async (req, res) => {
-    try {
-      const result = await db.getTeams();
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to fetch teams', details: error.message });
-    }
-  });
-
-  app.post("/api/teams", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'EDIT_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: SYSTEM_ADMIN permission required' });
-      }
-      await db.saveTeam(req.body);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to save team', details: error.message });
-    }
-  });
-
-  app.delete("/api/teams/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (!(await checkPermission(user.id, 'SYSTEM_ADMIN', 'DELETE_ALL'))) {
-        return res.status(403).json({ error: 'Unauthorized: SYSTEM_ADMIN permission required' });
-      }
-      await db.deleteTeam(req.params.id as string);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to delete team', details: error.message });
-    }
-  });
-
-  // --- USER ACTIVITY LOG OPERATIONS ---
-  app.post("/api/user-activity/log", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      const { action, entityType, entityId, details } = req.body;
-      if (!action) {
-        return res.status(400).json({ error: 'Missing action field' });
-      }
-      await db.logAudit(user.id, action, entityType || 'web_action', entityId || 'na', null, details || {});
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to log user action', details: error.message });
-    }
-  });
-
-  app.get("/api/users/:id/activity", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      const targetUserId = req.params.id as string;
-      
-      // Admin sees everyone, normal users only see themselves
-      if (user.id !== targetUserId && !(await checkPermission(user.id, 'SYSTEM_ADMIN', 'VIEW'))) {
-        return res.status(403).json({ error: 'Forbidden. You do not have permission to view operations of this user.' });
-      }
-      
-      const stats = await db.getUserActivityStats(targetUserId);
-      res.json(stats);
-    } catch (error: any) {
-      res.status(500).json({ error: 'Failed to fetch user operations activity', details: error.message });
-    }
-  });
-
-  // --- SUPPLIERS ---
-  app.get("/api/suppliers", async (req, res) => {
-    try {
-      const { search, page = 1, limit = 20, sortBy = 'reports' } = req.query;
-      const result = await db.getSuppliersPaginated(String(search || ''), Number(page), Number(limit), String(sortBy));
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      res.status(500).json({ error: 'Failed to fetch suppliers' });
-    }
-  });
-
-  app.get("/api/suppliers/stats", async (req, res) => {
-    try {
-      const { name } = req.query;
-      const result = await db.getSupplierStats(String(name || ''));
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch supplier stats' });
-    }
-  });
-
-  app.get("/api/suppliers/inspections", async (req, res) => {
-    try {
-      const { name } = req.query;
-      const result = await db.getSupplierInspections(String(name || ''));
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch supplier inspections' });
-    }
-  });
-
-  app.get("/api/suppliers/materials", async (req, res) => {
-    try {
-      const { name } = req.query;
-      const result = await db.getSupplierMaterials(String(name || ''));
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch supplier materials' });
-    }
-  });
-
-  app.post("/api/suppliers", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.saveSupplier(req.body, user.id);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save supplier' });
-    }
-  });
-
-  app.delete("/api/suppliers/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.deleteSupplier(String(req.params.id), String(user.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete supplier' });
-    }
-  });
-
-  // --- PROJECTS ---
-  app.post("/api/projects", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.updateProject(req.body, user.id);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save project' });
-    }
-  });
-
-  app.get("/api/projects", async (req, res) => {
-    try {
-      const { search, page = 1, limit = 20 } = req.query;
-      const result = await db.getProjectsPaginated(String(search || ''), Number(page), Number(limit));
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch projects' });
-    }
-  });
-
-  app.get("/api/projects/:code", async (req, res) => {
-    try {
-      const result = await db.getProjectByCode(req.params.code);
-      if (!result) return res.status(404).json({ error: 'Project not found' });
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch project' });
-    }
-  });
-
-  // --- PROJECT DOCUMENTS ---
-  app.get("/api/projects/:projectId/documents", authenticate, async (req, res) => {
-    try {
-      const result = await db.getProjectDocuments(req.params.projectId as string);
-      res.json(result);
-    } catch (error) {
-      console.error('Failed to fetch project documents:', error);
-      res.status(500).json({ error: 'Failed to fetch project documents' });
-    }
-  });
-
-  app.post("/api/projects/documents", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      const doc = {
-        ...req.body,
-        createdBy: user.name || user.username
-      };
-      await db.saveProjectDocument(doc);
-      await logAudit(user.id, 'ADD_PROJECT_DOCUMENT', 'project_document', doc.id, null, doc);
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error('Failed to save project document:', error);
-      res.status(500).json({ error: 'Failed to save project document', details: error.message });
-    }
-  });
-
-  app.delete("/api/projects/documents/:id", authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      await db.deleteProjectDocument(req.params.id as string);
-      await logAudit(user.id, 'DELETE_PROJECT_DOCUMENT', 'project_document', req.params.id as string, null, { deletedBy: user.name });
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Failed to delete project document:', error);
-      res.status(500).json({ error: 'Failed to delete project document' });
-    }
-  });
-
-  // --- NOTIFICATIONS ---
-  app.get("/api/notifications/:userId", async (req, res) => {
-    try {
-      const page = parseInt(req.query.page as string || '1');
-      const limit = parseInt(req.query.limit as string || '50');
-      const result = await db.getNotifications(req.params.userId, page, limit);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch notifications' });
-    }
-  });
-
-  app.post("/api/notifications", authenticate, async (req, res) => {
-    try {
-      const { userId, type, title, message, link } = req.body;
-      await db.addNotification(userId, type, title, message, link);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to create notification' });
-    }
-  });
-
-  app.put("/api/notifications/:id/read", authenticate, async (req, res) => {
-    try {
-      await db.markNotificationRead(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to mark notification as read' });
-    }
-  });
-
-  app.put("/api/notifications/read-all/:userId", authenticate, async (req, res) => {
-    try {
-      await db.markAllNotificationsRead(String(req.params.userId));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to mark all notifications as read' });
-    }
-  });
-
-  // --- ROLES ---
-  app.get("/api/roles", async (req, res) => {
-    try {
-      const result = await db.getRoles();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch roles' });
-    }
-  });
-
-  app.post("/api/roles", authenticate, async (req, res) => {
-    try {
-      await db.saveRole(req.body);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save role' });
-    }
-  });
-
-  app.delete("/api/roles/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteRole(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete role' });
-    }
-  });
-
-  // --- DEFECT LIBRARY ---
-  app.get("/api/defect-library", async (req, res) => {
-    try {
-      const result = await db.getDefectLibrary();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch defect library' });
-    }
-  });
-
-  app.post("/api/defect-library", authenticate, async (req, res) => {
-    try {
-      await db.saveDefectLibraryItem(req.body);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to save defect library item' });
-    }
-  });
-
-  app.delete("/api/defect-library/:id", authenticate, async (req, res) => {
-    try {
-      await db.deleteDefectLibraryItem(String(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete defect library item' });
-    }
-  });
-
-  // Material API
-  app.get("/api/materials", async (req, res) => {
-    try {
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { page = 1, limit = 50, search = '' } = req.query;
-      const p = parseInt(page as string, 10);
-      const l = parseInt(limit as string, 10);
-      const offset = (p - 1) * l;
-
-      let sql = `SELECT id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "createdAt" FROM "${schema}"."material" WHERE 1=1`;
-      const params: any[] = [];
-      let where = '';
-      if (search) {
-        where = ` AND (material ILIKE $1 OR "shortText" ILIKE $1 OR "projectName" ILIKE $1 OR "Ma_Tender" ILIKE $1 OR "purchaseDocument" ILIKE $1)`;
-        params.push(`%${search}%`);
-      }
-
-      const countSql = `SELECT COUNT(*) as total FROM "${schema}"."material" WHERE 1=1 ${where}`;
-      
-      const [result, countResult] = await Promise.all([
-        query(sql + where + ` ORDER BY "createdAt" DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, l, offset]),
-        query(countSql, params)
-      ]);
-
-      res.json({
-        items: result.rows,
-        total: parseInt(countResult.rows[0].total, 10),
-        page: p,
-        limit: l
-      });
-    } catch (error) {
-      console.error('Error fetching materials:', error);
-      res.status(500).json({ error: 'Failed to fetch materials' });
-    }
-  });
-
-  app.post("/api/materials", authenticate, express.json(), async (req, res) => {
-    try {
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { material, shortText, orderUnit, orderQuantity, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order } = req.body;
-      const result = await query(
-        `INSERT INTO "${schema}"."material" ("id", "material", "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()) RETURNING *`,
-        [crypto.randomUUID(), material, shortText, orderUnit, orderQuantity || 0, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order]
-      );
-      
-      const user = (req as any).user;
-      await logAudit(String(user.id), 'CREATE_MATERIAL', 'material', String(result.rows[0].id), null, result.rows[0]);
-      
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error('Error creating material:', error);
-      res.status(500).json({ error: 'Failed to create material' });
-    }
-  });
-
-  app.put("/api/materials/:id", authenticate, express.json(), async (req, res) => {
-    try {
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { id } = req.params;
-      const { material, shortText, orderUnit, orderQuantity, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order } = req.body;
-      
-      const existing = await query(`SELECT * FROM "${schema}"."material" WHERE id = $1`, [id]);
-      const oldValue = existing.rows[0];
-
-      const result = await query(
-        `UPDATE "${schema}"."material" SET "material" = $1, "shortText" = $2, "orderUnit" = $3, "orderQuantity" = $4, "supplierName" = $5, "projectName" = $6, "purchaseDocument" = $7, "deliveryDate" = $8, "Ma_Tender" = $9, "Factory_Order" = $10, "updatedAt" = NOW() WHERE "id" = $11 RETURNING *`,
-        [material, shortText, orderUnit, orderQuantity || 0, supplierName, projectName, purchaseDocument, deliveryDate, Ma_Tender, Factory_Order, id]
-      );
-
-      const user = (req as any).user;
-      await logAudit(String(user.id), 'UPDATE_MATERIAL', 'material', String(id), oldValue, result.rows[0]);
-
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error('Error updating material:', error);
-      res.status(500).json({ error: 'Failed to update material' });
-    }
-  });
-
-  app.delete("/api/materials/:id", authenticate, async (req, res) => {
-    try {
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { id } = req.params;
-      
-      const existing = await query(`SELECT * FROM "${schema}"."material" WHERE id = $1`, [id]);
-      if (existing.rows.length > 0) {
-        // Only try to set deleted_at if the column exists (which we know it doesn't for material, but we'll try to be safe)
-        try {
-          await query(`UPDATE "${schema}"."material" SET "deleted_at" = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE "id" = $1`, [id]);
-        } catch (e) {
-          // Fallback: hard delete if soft delete fails due to missing column
-          await query(`DELETE FROM "${schema}"."material" WHERE "id" = $1`, [id]);
-        }
-        const user = (req as any).user;
-        await logAudit(String(user.id), 'DELETE_MATERIAL', 'material', String(id), existing.rows[0], null);
-      }
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Error deleting material:', error);
-      res.status(500).json({ error: 'Failed to delete material' });
-    }
-  });
-
-function formatCsvRow(fields: any[]): string {
-  return fields.map(field => {
-    if (field === null || field === undefined) return '""';
-    let str = String(field);
-    str = str.replace(/"/g, '""');
-    return `"${str}"`;
-  }).join(',') + '\r\n';
-}
-
-  app.get("/api/export/ncrs", async (req, res) => {
-    try {
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`
-            SELECT 
-                n.id, n.inspection_id, n.defect_code, n.severity, n.status, n.description, 
-                n.responsible_person, n.deadline, n.created_by, n.created_at,
-                i.ma_ct, i.ten_ct
-            FROM "${schema}"."ncrs" n
-            LEFT JOIN "${schema}"."forms_pqc" i ON n.inspection_id = i.id
-            WHERE n.deleted_at IS NULL
-            ORDER BY n.created_at DESC
-        `);
-
-        if (req.query.format === 'csv') {
-            const filename = `AATN_NCR_List_${Date.now()}.csv`;
-            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            res.setHeader("Content-Type", "text/csv; charset=utf-8");
-            res.write('\uFEFF');
-
-            const headers = [
-                'Mã NCR', 'Mã hồ sơ gốc', 'Mã dự án', 'Tên dự án', 'Mã lỗi',
-                'Mức độ', 'Trạng thái', 'Mô tả lỗi', 'Người phụ trách', 'Hạn xử lý',
-                'Người tạo', 'Ngày tạo'
-            ];
-            res.write(formatCsvRow(headers));
-
-            for (const r of result.rows) {
-                let createdStr = '';
-                if (r.created_at) {
-                    const ts = Number(r.created_at);
-                    const d = new Date(ts > 100000000000 ? ts : ts * 1000);
-                    if (!isNaN(d.getTime())) createdStr = d.toISOString().slice(0, 19).replace('T', ' ');
-                }
-                res.write(formatCsvRow([
-                    r.id || '', r.inspection_id || '', r.ma_ct || '', r.ten_ct || '',
-                    r.defect_code || '', r.severity || 'MINOR', r.status || 'OPEN',
-                    r.description || '', r.responsible_person || '', r.deadline || '',
-                    r.created_by || '', createdStr
-                ]));
-            }
-            res.end();
-            return;
-        }
-
-        const filename = `AATN_NCR_List_${Date.now()}.xlsx`;
-        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        // Use streaming writer for large files
-        const workbook = new ExcelJS.Workbook();
-
-        const sheet = workbook.addWorksheet('NCRs', {
-          views: [{ state: 'frozen', ySplit: 1 }]
-        });
-
-        // 4.2 Locked Headers
-        await sheet.protect('aatn_protect', {
-          selectLockedCells: true,
-          selectUnlockedCells: true
-        });
-
-        sheet.columns = [
-            { header: 'Mã NCR', key: 'id', width: 20 },
-            { header: 'Mã hồ sơ gốc', key: 'inspection_id', width: 25 },
-            { header: 'Mã dự án', key: 'ma_ct', width: 15 },
-            { header: 'Tên dự án', key: 'ten_ct', width: 30 },
-            { header: 'Mã lỗi', key: 'defect_code', width: 20 },
-            { header: 'Mức độ', key: 'severity', width: 15 },
-            { header: 'Trạng thái', key: 'status', width: 15 },
-            { header: 'Mô tả lỗi', key: 'description', width: 40 },
-            { header: 'Người phụ trách', key: 'responsible_person', width: 25 },
-            { header: 'Hạn xử lý', key: 'deadline', width: 15 },
-            { header: 'Người tạo', key: 'created_by', width: 25 },
-            { header: 'Ngày tạo', key: 'created_at', width: 20 }
-        ];
-
-        for (const r of result.rows) {
-            const row = sheet.addRow({
-                id: String(r.id), // 1. Preserve leading zeros
-                inspection_id: String(r.inspection_id),
-                ma_ct: r.ma_ct,
-                ten_ct: r.ten_ct,
-                defect_code: r.defect_code,
-                severity: r.severity || 'MINOR',
-                status: r.status || 'OPEN',
-                description: r.description,
-                responsible_person: r.responsible_person,
-                deadline: r.deadline,
-                created_by: r.created_by,
-                created_at: r.created_at ? new Date(Number(r.created_at) > 100000000000 ? Number(r.created_at) : Number(r.created_at) * 1000) : null // 3. Date object
-            });
-
-            // 4.2 Unlock data cells
-            row.eachCell((cell, colNumber) => {
-              cell.protection = { locked: false };
-              
-              // 3. Constant Date Format
-              if (colNumber === 12 && cell.value instanceof Date) {
-                 cell.numFmt = 'yyyy-mm-dd hh:mm:ss';
-              }
-              
-              // 4.1 Data Validation for Status
-              if (colNumber === 7) {
-                cell.dataValidation = {
-                  type: 'list',
-                  allowBlank: true,
-                  formulae: ['"OPEN,IN_PROGRESS,CLOSED"']
-                };
-              }
-
-              // 4.1 Data Validation for Severity
-              if (colNumber === 6) {
-                cell.dataValidation = {
-                  type: 'list',
-                  allowBlank: true,
-                  formulae: ['"MINOR,MAJOR,CRITICAL"']
-                };
-              }
-            });
-
-            
-        }
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error('Error exporting NCRs:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to export NCRs' });
-        }
-    }
-  });
-
-  // Image Proxy API
-  app.get("/api/proxy-image", (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    let token = '';
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
-    } else if (req.query.token) {
-      token = req.query.token as string;
-    } else if (req.cookies && req.cookies['aatn_qms_token']) {
-      token = req.cookies['aatn_qms_token'];
-    }
-
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        (req as any).user = decoded;
-        return next();
-      } catch (err) {
-        // Continue to check if public safe URL
-      }
-    }
-
-    const imageUrl = req.query.url as string;
-    if (imageUrl && (
-        imageUrl.includes('googleusercontent.com') ||
-        imageUrl.includes('drive.google.com') ||
-        imageUrl.includes('unsplash.com') ||
-        imageUrl.includes('google.com')
-    )) {
-      return next();
-    }
-
-    return res.status(401).json({ error: 'Unauthorized: Authentication required' });
-  }, async (req, res) => {
-    try {
-    const imageUrl = req.query.url as string;
-    if (!imageUrl) return res.status(400).send('Missing url');
-    
-    let fileId = '';
-
-    // Pattern 1: lh3.googleusercontent.com/u/0/d/FILE_ID or /d/FILE_ID
-    if (imageUrl.includes('googleusercontent.com/u/0/d/') || imageUrl.includes('googleusercontent.com/d/')) {
-        const splitPart = imageUrl.includes('/u/0/d/') ? '/u/0/d/' : '/d/';
-        fileId = imageUrl.split(splitPart)[1]?.split('=')[0]?.split('?')[0]?.split('&')[0]?.split('/')[0];
-    } 
-    // Pattern 2: drive.google.com/file/d/FILE_ID/view
-    else if (imageUrl.includes('drive.google.com/file/d/')) {
-        fileId = imageUrl.split('/d/')[1]?.split('/')[0]?.split('?')[0]?.split('&')[0];
-    }
-    // Pattern 3: drive.google.com/open?id=FILE_ID or uc?id=FILE_ID
-    else if (imageUrl.includes('id=')) {
-        const urlParams = new URLSearchParams(imageUrl.split('?')[1]?.split('&token')[0]); // try to isolate params if malformed
-        // fallback string parsing if URLSearchParams fails
-        const idMatch = imageUrl.match(/id=([^&?]+)/);
-        fileId = idMatch ? idMatch[1] : (urlParams.get('id') || '');
-    }
-
-    const cacheKey = fileId || crypto.createHash('sha256').update(imageUrl).digest('hex');
-    const cachePath = path.join(imageCacheDir, `${cacheKey}.bin`);
-    const metaPath = path.join(imageCacheDir, `${cacheKey}.meta`);
-
-    // Check disk cache first
-    if (fs.existsSync(cachePath) && fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        res.set('Content-Type', meta.contentType || 'image/jpeg');
-        res.set('Access-Control-Allow-Origin', '*');
-        res.set('Cache-Control', 'public, max-age=31536000');
-        res.set('X-Cache', 'HIT');
-        
-        const readStream = fs.createReadStream(cachePath);
-        await pipelineAsync(readStream, res);
+app.use('/api', async (req: any, res, next) => {
+  const start = Date.now();
+
+  let capturedErrorMsg = '';
+  const origJson = res.json.bind(res);
+  res.json = ((body: any) => {
+    if (res.statusCode >= 400 && body && typeof body === 'object') {
+      capturedErrorMsg = String(body.error || body.message || body.details || '');
+    }
+    return origJson(body);
+  }) as any;
+
+  const origSend = res.send.bind(res);
+  res.send = ((body: any) => {
+    if (res.statusCode >= 400 && !capturedErrorMsg) {
+      capturedErrorMsg = typeof body === 'string' ? body.slice(0, 300) : '';
+    }
+    return origSend(body);
+  }) as any;
+
+  res.on('finish', () => {
+    if (res.statusCode >= 400) {
+      const fullPath = req.originalUrl || req.url;
+      // Avoid feedback loop if audit-errors endpoint itself is polled
+      if (fullPath.startsWith('/api/system/audit-errors') && req.method === 'GET') {
         return;
-      } catch (cacheErr) {
-        console.warn(`[Proxy Cache] Failed to read disk cache for ${cacheKey}:`, cacheErr);
+      }
+      const mod = dbMod.resolveModuleFromPath(fullPath);
+      dbMod.recordApiErrorLog({
+        moduleId: mod.moduleId,
+        moduleName: mod.moduleName,
+        method: req.method,
+        path: fullPath,
+        statusCode: res.statusCode,
+        errorMessage: capturedErrorMsg || `HTTP ${res.statusCode} ${res.statusMessage || ''}`.trim(),
+        userId: req.authUser?.id || req.user?.id || req.user?.username || null,
+        durationMs: Date.now() - start,
+        details: {
+          query: req.query && Object.keys(req.query).length > 0 ? req.query : undefined,
+          ip: req.ip || req.socket?.remoteAddress || undefined,
+        },
+      }).catch(() => {});
+    }
+  });
+
+  try {
+    const decoded = dbMod.verifyJwtToken(req.headers?.authorization);
+    if (decoded) {
+      const liveUser = await dbMod.getAuthenticatedUserContext(decoded?.id || decoded?.username);
+      if (liveUser) {
+        req.authUser = liveUser;
+        req.user = liveUser;
       }
     }
 
-    if (fileId && fileId.length > 20) {
-        // Attempt 1: Using configured Google Drive client (Auth access)
-        if (drive) {
-          try {
-            const response = await drive.files.get({
-                fileId: fileId,
-                alt: 'media',
-                supportsAllDrives: true
-            }, { responseType: 'stream' });
-            
-            const rawContentType = response.headers['content-type'];
-            const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) || 'image/jpeg';
-            res.set('Content-Type', contentType);
-            res.set('Access-Control-Allow-Origin', '*');
-            res.set('Cache-Control', 'public, max-age=31536000');
-            res.set('X-Content-Type-Options', 'nosniff');
-            res.set('X-Cache', 'MISS');
-            
-            // Capture stream to memory buffer to write cache in the background
-            const chunks: any[] = [];
-            response.data.on('data', (chunk: any) => chunks.push(chunk));
-            response.data.on('end', () => {
-              const buffer = Buffer.concat(chunks);
-              fs.writeFile(cachePath, buffer, (err) => {
-                if (!err) fs.writeFile(metaPath, JSON.stringify({ contentType }), () => {});
-              });
-            });
-            
-            await pipelineAsync(response.data, res);
-            return;
-          } catch (driveErr: any) {
-            // Extract a clean status and message from the Google API error response
-            const status = driveErr.response?.status || driveErr.code || 500;
-            let msg = '';
-            
-            if (driveErr.response?.data?.error?.message) {
-                msg = driveErr.response.data.error.message;
-            } else if (typeof driveErr.message === 'string') {
-                msg = driveErr.message;
-            } else {
-                msg = 'Upstream Error';
-            }
-            
-            // Ensure message is a single line and truncated
-            msg = msg.replace(/[\r\n]+/g, ' ').trim();
-            if (msg.length > 200) {
-               msg = msg.substring(0, 150) + '...';
-            }
-            
-            const isNotFound = status === 404;
-            const logMsg = `[Drive Proxy] Auth fetch ${isNotFound ? 'rejected (404 Not Found)' : `failed: ${status}`} for ${fileId}${isNotFound ? '' : ` - ${msg}`}. Trying public fallback...`;
-            console.warn(logMsg);
-          }
-        }
-
-        // Attempt 2: Public fallback (for files shared as "Anyone with link")
-        const fallbackData = await fetchGoogleDrivePublicFile(fileId);
-        if (fallbackData) {
-            res.set('Content-Type', fallbackData.contentType);
-            res.set('Access-Control-Allow-Origin', '*');
-            res.set('Cache-Control', 'public, max-age=31536000');
-            res.set('X-Cache', 'MISS');
-            res.send(fallbackData.buffer);
-            
-            // Write to cache in background
-            fs.writeFile(cachePath, fallbackData.buffer, (err) => {
-              if (!err) fs.writeFile(metaPath, JSON.stringify({ contentType: fallbackData.contentType }), () => {});
-            });
-            return;
-        }
-
-        // Attempt 3: Final fallback to redirect to the original URL if proxy fails entirely.
-        console.warn(`[Drive Proxy] All proxied fetches failed for ${fileId}, redirecting to original URL.`);
-        return res.redirect(imageUrl);
-    }
-
-    // Fallback for non-drive URLs
-    const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error(`Failed to fetch fallback: ${response.status} - ${response.statusText}`);
-    
-    const buffer = await response.arrayBuffer();
-    const nodeBuffer = Buffer.from(buffer);
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    res.set('Content-Type', contentType);
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Cache-Control', 'public, max-age=31536000');
-    res.set('X-Cache', 'MISS');
-    res.send(nodeBuffer);
-
-    // Write to cache in background
-    fs.writeFile(cachePath, nodeBuffer, (err) => {
-      if (!err) fs.writeFile(metaPath, JSON.stringify({ contentType }), () => {});
-    });
-    } catch (error: any) {
-      if (!res.headersSent) {
-        console.error('Proxy error:', error.message || error);
-        res.status(500).send('Error proxying image');
+    if (!isPublicApiRoute(req.method, req.originalUrl || req.url)) {
+      if (!req.authUser) {
+        return res.status(401).json({
+          error: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
+        });
       }
     }
-  });
 
-  app.post("/api/import/ncrs", memoryUpload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(req.file.buffer);
-        
-        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
-        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
-
-        const validResults = [];
-        const errorLogs = [];
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
-            const row = worksheet.getRow(rowIndex);
-            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
-
-            try {
-              const id = row.getCell(1).text?.trim(); 
-              const defectCode = row.getCell(5).text?.trim();
-              const description = row.getCell(8).text?.trim();
-              const status = row.getCell(7).text?.trim()?.toUpperCase() || 'OPEN';
-              const severity = row.getCell(6).text?.trim()?.toUpperCase() || 'MEDIUM';
-              const responsiblePerson = row.getCell(9).text?.trim();
-
-              if (!defectCode) continue;
-              
-              if (id && id.startsWith('NCR-')) {
-                  await query(`
-                      UPDATE "${schema}"."ncrs" 
-                      SET "defect_code" = $1, "description" = $2, "status" = $3, "severity" = $4, "responsible_person" = $5, "updated_at" = (EXTRACT(epoch FROM now()))::bigint
-                      WHERE "id" = $6
-                  `, [defectCode, description, status, severity, responsiblePerson, id]);
-              } else {
-                  const newId = `NCR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                  await query(`
-                      INSERT INTO "${schema}"."ncrs" ("id", "defect_code", "description", "status", "severity", "responsible_person", "created_at", "updated_at") 
-                      VALUES ($1, $2, $3, $4, $5, $6, (EXTRACT(epoch FROM now()))::bigint, (EXTRACT(epoch FROM now()))::bigint)
-                  `, [newId, defectCode, description, status, severity, responsiblePerson]);
-              }
-              validResults.push(id || 'NEW');
-            } catch (err: any) {
-              errorLogs.push({ row_index: rowIndex, error_message: err.message });
-            }
-        }
-
-        res.json({ 
-          success: true, 
-          imported_count: validResults.length,
-          errors: errorLogs 
-        });
-    } catch (error) {
-        console.error('Error importing NCRs:', error);
-        res.status(500).json({ error: 'Failed to import NCRs' });
-    }
-  });
-
-  // --- DEFECT LIBRARY EXPORT/IMPORT ---
-  app.get("/api/export/defects", async (req, res) => {
-    try {
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`SELECT * FROM "${schema}"."defect_library" ORDER BY "defect_code" ASC`);
-        
-        if (req.query.format === 'csv') {
-            const filename = `AATN_Defect_Library_${Date.now()}.csv`;
-            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            res.setHeader("Content-Type", "text/csv; charset=utf-8");
-            res.write('\uFEFF');
-
-            const headers = [
-                'ID', 'Mã lỗi', 'Tên lỗi (VN)', 'Tên lỗi (EN)',
-                'Công đoạn', 'Phân loại', 'Mức độ mặc định', 'Mô tả chi tiết'
-            ];
-            res.write(formatCsvRow(headers));
-
-            for (const r of result.rows) {
-                res.write(formatCsvRow([
-                    r.id || '', r.defect_code || '', r.name || '', r.name_en || '',
-                    r.stage || '', r.category || '', r.severity || 'MINOR', r.description || ''
-                ]));
-            }
-            res.end();
-            return;
-        }
-
-        const filename = `AATN_Defect_Library_${Date.now()}.xlsx`;
-        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        const workbook = new ExcelJS.Workbook();
-
-        const sheet = workbook.addWorksheet('DefectLibrary', { views: [{ state: 'frozen', ySplit: 1 }] });
-
-        sheet.columns = [
-            { header: 'ID', key: 'id', width: 25 },
-            { header: 'Mã lỗi', key: 'defect_code', width: 20 },
-            { header: 'Tên lỗi (VN)', key: 'name', width: 30 },
-            { header: 'Tên lỗi (EN)', key: 'name_en', width: 30 },
-            { header: 'Công đoạn', key: 'stage', width: 20 },
-            { header: 'Phân loại', key: 'category', width: 20 },
-            { header: 'Mức độ mặc định', key: 'severity', width: 15 },
-            { header: 'Mô tả chi tiết', key: 'description', width: 40 }
-        ];
-
-        for (const r of result.rows) {
-            const row = sheet.addRow({
-                id: String(r.id),
-                defect_code: String(r.defect_code),
-                name: r.name,
-                name_en: r.name_en,
-                stage: r.stage,
-                category: r.category,
-                severity: r.severity || 'MINOR',
-                description: r.description
-            });
-            
-        }
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error('Error exporting defect library:', error);
-        if (!res.headersSent) res.status(500).json({ error: 'Failed to export defect library' });
-    }
-  });
-
-  app.post("/api/import/defects", memoryUpload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(req.file.buffer);
-        
-        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
-        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
-
-        const validResults = [];
-        const errorLogs = [];
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
-            const row = worksheet.getRow(rowIndex);
-            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
-
-            try {
-              const id = row.getCell(1).text?.trim() || `DEF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-              const defect_code = row.getCell(2).text?.trim();
-              const name = row.getCell(3).text?.trim();
-              
-              if (!defect_code || !name) continue;
-
-              await query(`
-                  INSERT INTO "${schema}"."defect_library" (id, defect_code, name, stage, category, description, severity, suggested_action, updated_at) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (EXTRACT(epoch FROM now()))::bigint)
-                  ON CONFLICT(id) DO UPDATE SET 
-                      defect_code = EXCLUDED.defect_code, name = EXCLUDED.name, stage = EXCLUDED.stage,
-                      category = EXCLUDED.category, description = EXCLUDED.description, severity = EXCLUDED.severity,
-                      suggested_action = EXCLUDED.suggested_action, updated_at = EXCLUDED.updated_at
-              `, [id, defect_code, name, row.getCell(5).text?.trim(), row.getCell(6).text?.trim(), row.getCell(8).text?.trim(), row.getCell(7).text?.trim()?.toUpperCase() || 'MINOR', '']);
-              
-              validResults.push(id);
-            } catch (err: any) {
-              errorLogs.push({ row_index: rowIndex, error_message: err.message });
-            }
-        }
-        res.json({ success: true, count: validResults.length, errors: errorLogs });
-    } catch (error) {
-        console.error('Error importing defect library:', error);
-        res.status(500).json({ error: 'Failed to import defect library' });
-    }
-  });
-
-  // --- MATERIALS EXPORT/IMPORT ---
-  app.get("/api/export/materials", async (req, res) => {
-    try {
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`SELECT * FROM "${schema}"."material" ORDER BY "material" ASC`);
-        
-        if (req.query.format === 'csv') {
-            const filename = `AATN_Materials_${Date.now()}.csv`;
-            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            res.setHeader("Content-Type", "text/csv; charset=utf-8");
-            res.write('\uFEFF');
-
-            const headers = [
-                'Mã vật tư', 'Tên vật tư', 'Đơn vị tính', 'Số lượng', 'Nhà cung cấp',
-                'Tên dự án', 'Chứng từ mua hàng', 'Ngày giao hàng', 'Mã Tender',
-                'Mã nhà máy (Factory Order)', 'ID'
-            ];
-            res.write(formatCsvRow(headers));
-
-            for (const r of result.rows) {
-                res.write(formatCsvRow([
-                    r.material || '', r.shortText || '', r.orderUnit || '',
-                    r.orderQuantity || 0, r.supplierName || '', r.projectName || '',
-                    r.purchaseDocument || '', r.deliveryDate || '', r.Ma_Tender || '',
-                    r.Factory_Order || '', r.id || ''
-                ]));
-            }
-            res.end();
-            return;
-        }
-
-        const filename = `AATN_Materials_${Date.now()}.xlsx`;
-        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        const workbook = new ExcelJS.Workbook();
-
-        const sheet = workbook.addWorksheet('Materials', { views: [{ state: 'frozen', ySplit: 1 }] });
-
-        sheet.columns = [
-            { header: 'Mã vật tư', key: 'material', width: 20 },
-            { header: 'Tên vật tư', key: 'shortText', width: 30 },
-            { header: 'Đơn vị tính', key: 'orderUnit', width: 15 },
-            { header: 'Số lượng', key: 'orderQuantity', width: 15 },
-            { header: 'Nhà cung cấp', key: 'supplierName', width: 30 },
-            { header: 'Tên dự án', key: 'projectName', width: 30 },
-            { header: 'Chứng từ mua hàng', key: 'purchaseDocument', width: 25 },
-            { header: 'Ngày giao hàng', key: 'deliveryDate', width: 15 },
-            { header: 'Mã Tender', key: 'Ma_Tender', width: 15 },
-            { header: 'Mã nhà máy (Factory Order)', key: 'Factory_Order', width: 20 },
-            { header: 'ID', key: 'id', width: 25 }
-        ];
-
-        for (const r of result.rows) {
-            const row = sheet.addRow({
-                material: String(r.material || ''),
-                shortText: r.shortText,
-                orderUnit: r.orderUnit,
-                orderQuantity: Number(r.orderQuantity || 0),
-                supplierName: r.supplierName,
-                projectName: r.projectName,
-                purchaseDocument: r.purchaseDocument,
-                deliveryDate: r.deliveryDate,
-                Ma_Tender: String(r.Ma_Tender || ''),
-                Factory_Order: String(r.Factory_Order || ''),
-                id: String(r.id)
-            });
-            
-        }
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error('Error exporting materials:', error);
-        if (!res.headersSent) res.status(500).json({ error: 'Failed to export materials' });
-    }
-  });
-
-  app.post("/api/import/materials", memoryUpload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(req.file.buffer);
-        
-        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
-        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
-
-        const validResults = [];
-        const errorLogs = [];
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
-            const row = worksheet.getRow(rowIndex);
-            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
-
-            try {
-              const material = row.getCell(1).text?.trim();
-              const shortText = row.getCell(2).text?.trim();
-              const id = row.getCell(11).text?.trim() || `MAT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-              if (!material || !shortText) continue;
-
-              await query(`
-                  INSERT INTO "${schema}"."material" (id, material, "shortText", "orderUnit", "orderQuantity", "supplierName", "projectName", "purchaseDocument", "deliveryDate", "Ma_Tender", "Factory_Order", "updatedAt") 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, (EXTRACT(epoch FROM now()))::bigint)
-                  ON CONFLICT(id) DO UPDATE SET 
-                      material = EXCLUDED.material, "shortText" = EXCLUDED."shortText", "orderUnit" = EXCLUDED."orderUnit",
-                      "orderQuantity" = EXCLUDED."orderQuantity", "supplierName" = EXCLUDED."supplierName",
-                      "projectName" = EXCLUDED."projectName", "purchaseDocument" = EXCLUDED."purchaseDocument",
-                      "deliveryDate" = EXCLUDED."deliveryDate", "Ma_Tender" = EXCLUDED."Ma_Tender",
-                      "Factory_Order" = EXCLUDED."Factory_Order", "updatedAt" = EXCLUDED."updatedAt"
-              `, [id, material, shortText, row.getCell(3).text?.trim(), Number(row.getCell(4).value || 0), row.getCell(5).text?.trim(), row.getCell(6).text?.trim(), row.getCell(7).text?.trim(), row.getCell(8).text?.trim(), row.getCell(9).text?.trim(), row.getCell(10).text?.trim()]);
-              
-              validResults.push(id);
-            } catch (err: any) {
-              errorLogs.push({ row_index: rowIndex, error_message: err.message });
-            }
-        }
-        res.json({ success: true, count: validResults.length, errors: errorLogs });
-    } catch (error) {
-        console.error('Error importing materials:', error);
-        res.status(500).json({ error: 'Failed to import materials' });
-    }
-  });
-
-  // --- SUPPLIERS EXPORT/IMPORT ---
-  app.get("/api/export/suppliers", async (req, res) => {
-    try {
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const result = await query(`SELECT * FROM "${schema}"."suppliers" WHERE "deleted_at" IS NULL ORDER BY "name" ASC`);
-        
-        if (req.query.format === 'csv') {
-            const filename = `AATN_Suppliers_${Date.now()}.csv`;
-            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            res.setHeader("Content-Type", "text/csv; charset=utf-8");
-            res.write('\uFEFF');
-
-            const headers = [
-                'ID', 'Mã NCC', 'Tên nhà cung cấp', 'Địa chỉ', 'Người liên hệ',
-                'SĐT', 'Email', 'Phân loại', 'Trạng thái'
-            ];
-            res.write(formatCsvRow(headers));
-
-            for (const r of result.rows) {
-                res.write(formatCsvRow([
-                    r.id || '', r.code || '', r.name || '', r.address || '',
-                    r.contact_person || '', r.phone || '', r.email || '',
-                    r.category || '', r.status || 'ACTIVE'
-                ]));
-            }
-            res.end();
-            return;
-        }
-
-        const filename = `AATN_Suppliers_${Date.now()}.xlsx`;
-        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        const workbook = new ExcelJS.Workbook();
-
-        const sheet = workbook.addWorksheet('Suppliers', {
-          views: [{ state: 'frozen', ySplit: 1 }]
-        });
-
-        await sheet.protect('aatn_sup_protect', {
-          selectLockedCells: true,
-          selectUnlockedCells: true
-        });
-
-        sheet.columns = [
-            { header: 'ID', key: 'id', width: 25 },
-            { header: 'Mã NCC', key: 'code', width: 15 },
-            { header: 'Tên nhà cung cấp', key: 'name', width: 30 },
-            { header: 'Địa chỉ', key: 'address', width: 40 },
-            { header: 'Người liên hệ', key: 'contact_person', width: 25 },
-            { header: 'SĐT', key: 'phone', width: 20 },
-            { header: 'Email', key: 'email', width: 25 },
-            { header: 'Phân loại', key: 'category', width: 20 },
-            { header: 'Trạng thái', key: 'status', width: 15 }
-        ];
-
-        for (const r of result.rows) {
-            const row = sheet.addRow({
-                id: String(r.id), // 1. Preserve zeros
-                code: String(r.code || ''),
-                name: r.name,
-                address: r.address,
-                contact_person: r.contact_person,
-                phone: String(r.phone || ''), // 1. Preserve zeros
-                email: r.email,
-                category: r.category,
-                status: r.status || 'ACTIVE'
-            });
-
-            row.eachCell((cell, colNumber) => {
-              cell.protection = { locked: false };
-              if (colNumber === 9) { // Status dropdown
-                cell.dataValidation = {
-                  type: 'list',
-                  allowBlank: true,
-                  formulae: ['"ACTIVE,INACTIVE"']
-                };
-              }
-            });
-
-            
-        }
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error('Error exporting suppliers:', error);
-        if (!res.headersSent) res.status(500).json({ error: 'Failed to export suppliers' });
-    }
-  });
-
-  app.post("/api/import/suppliers", memoryUpload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(req.file.buffer);
-        
-        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
-        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
-
-        const validResults = [];
-        const errorLogs = [];
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
-            const row = worksheet.getRow(rowIndex);
-            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
-
-            try {
-              const id = row.getCell(1).text?.trim() || `SUP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-              const code = row.getCell(2).text?.trim();
-              const name = row.getCell(3).text?.trim();
-              
-              if (!code || !name) continue;
-
-              await query(`
-                  INSERT INTO "${schema}"."suppliers" (id, code, name, address, contact_person, phone, email, category, status, updated_at) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, (EXTRACT(epoch FROM now()))::bigint)
-                  ON CONFLICT(id) DO UPDATE SET 
-                      code = EXCLUDED.code, name = EXCLUDED.name, address = EXCLUDED.address,
-                      contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email,
-                      category = EXCLUDED.category, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
-              `, [id, code, name, row.getCell(4).text?.trim(), row.getCell(5).text?.trim(), row.getCell(6).text?.trim(), row.getCell(7).text?.trim(), row.getCell(8).text?.trim(), row.getCell(9).text?.trim()?.toUpperCase() || 'ACTIVE']);
-              
-              validResults.push(id);
-            } catch (err: any) {
-              errorLogs.push({ row_index: rowIndex, error_message: err.message });
-            }
-        }
-        res.json({ success: true, count: validResults.length, errors: errorLogs });
-    } catch (error) {
-        console.error('Error importing suppliers:', error);
-        res.status(500).json({ error: 'Failed to import suppliers' });
-    }
-  });
-
-  // --- IPO EXPORT ---
-  app.get("/api/export/ipo", async (req, res) => {
-    try {
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-        if (req.query.format === 'csv') {
-            const filename = `AATN_IPO_Data_${Date.now()}.csv`;
-            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            res.setHeader("Content-Type", "text/csv; charset=utf-8");
-            res.write('\uFEFF');
-
-            const headers = [
-                'ID', 'ID Factory Order', 'Mã Tender', 'Tên dự án',
-                'Mô tả vật tư', 'Số lượng IPO', 'Đơn vị tính'
-            ];
-            res.write(formatCsvRow(headers));
-
-            const CHUNK_SIZE = 5000;
-            let offset = 0;
-            let hasMore = true;
-
-            while (hasMore) {
-                const chunkRes = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "id" ASC LIMIT $1 OFFSET $2`, [CHUNK_SIZE, offset]);
-                if (chunkRes.rows.length === 0) {
-                    hasMore = false;
-                    break;
-                }
-
-                for (const r of chunkRes.rows) {
-                    res.write(formatCsvRow([
-                        r.id || '', r.ID_Factory_Order || '', r.Ma_Tender || '',
-                        r.Project_name || '', r.Material_description || '',
-                        r.Quantity_IPO || 0, r.Base_Unit || ''
-                    ]));
-                }
-
-                if (chunkRes.rows.length < CHUNK_SIZE) {
-                    hasMore = false;
-                } else {
-                    offset += CHUNK_SIZE;
-                }
-            }
-
-            res.end();
-            return;
-        }
-
-        const result = await query(`SELECT * FROM "${schema}"."ipo" ORDER BY "id" ASC LIMIT 50000`);
-        
-        const filename = `AATN_IPO_Data_${Date.now()}.xlsx`;
-        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        const workbook = new ExcelJS.Workbook();
-
-        const sheet = workbook.addWorksheet('IPO_Data', { views: [{ state: 'frozen', ySplit: 1 }] });
-
-        sheet.columns = [
-            { header: 'ID', key: 'id', width: 25 },
-            { header: 'ID Factory Order', key: 'ID_Factory_Order', width: 20 },
-            { header: 'Mã Tender', key: 'Ma_Tender', width: 15 },
-            { header: 'Tên dự án', key: 'Project_name', width: 30 },
-            { header: 'Mô tả vật tư', key: 'Material_description', width: 40 },
-            { header: 'Số lượng IPO', key: 'Quantity_IPO', width: 15 },
-            { header: 'Đơn vị tính', key: 'Base_Unit', width: 15 }
-        ];
-
-        for (const r of result.rows) {
-            const row = sheet.addRow({
-                id: String(r.id),
-                ID_Factory_Order: String(r.ID_Factory_Order || ''),
-                Ma_Tender: String(r.Ma_Tender || ''),
-                Project_name: r.Project_name,
-                Material_description: r.Material_description,
-                Quantity_IPO: Number(r.Quantity_IPO || 0),
-                Base_Unit: r.Base_Unit
-            });
-            
-        }
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error('Error exporting IPO data:', error);
-        if (!res.headersSent) res.status(500).json({ error: 'Failed to export IPO data' });
-    }
-  });
-  app.post("/api/import/ipo", memoryUpload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(req.file.buffer);
-        
-        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
-        if (!worksheet) return res.status(400).json({ error: 'No worksheet found' });
-
-        const validResults = [];
-        const errorLogs = [];
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-
-        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
-            const row = worksheet.getRow(rowIndex);
-            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
-
-            try {
-              const idText = row.getCell(1).text?.trim();
-              const factoryOrder = row.getCell(2).text?.trim();
-              const maTender = row.getCell(3).text?.trim();
-              const projectName = row.getCell(4).text?.trim();
-              const materialDesc = row.getCell(5).text?.trim();
-              const qty = Number(row.getCell(6).value || 0);
-              const unit = row.getCell(7).text?.trim();
-
-              if (!factoryOrder) continue;
-
-              // If id exists, try update, else insert
-              if (idText && !isNaN(Number(idText))) {
-                  await query(`
-                      UPDATE "${schema}"."ipo" 
-                      SET "ID_Factory_Order" = $1, "Ma_Tender" = $2, "Project_name" = $3, "Material_description" = $4, "Quantity_IPO" = $5, "Base_Unit" = $6, "updatedAt" = now()
-                      WHERE "id" = $7
-                  `, [factoryOrder, maTender, projectName, materialDesc, qty, unit, Number(idText)]);
-                  validResults.push(idText);
-              } else {
-                  const result = await query(`
-                      INSERT INTO "${schema}"."ipo" ("ID_Factory_Order", "Ma_Tender", "Project_name", "Material_description", "Quantity_IPO", "Base_Unit", "createdAt", "updatedAt") 
-                      VALUES ($1, $2, $3, $4, $5, $6, now(), now())
-                      RETURNING "id"
-                  `, [factoryOrder, maTender, projectName, materialDesc, qty, unit]);
-                  validResults.push(result.rows[0].id);
-              }
-            } catch (err: any) {
-              errorLogs.push({ row_index: rowIndex, error_message: err.message });
-            }
-        }
-        
-        if (validResults.length > 0) {
-            await db.refreshProjectsMV();
-        }
-        
-        res.json({ success: true, count: validResults.length, errors: errorLogs });
-    } catch (error) {
-        console.error('Error importing IPO data:', error);
-        res.status(500).json({ error: 'Failed to import IPO data' });
-    }
-  });
-
-  app.get("/api/export/inspections", async (req, res) => {
-    try {
-        const filters = {
-            status: req.query.status as string,
-            search: req.query.search as string,
-            qc: req.query.qc as string,
-            workshop: req.query.workshop as string,
-            project: req.query.project as string,
-            type: req.query.type as string,
-            startDate: req.query.startDate as string,
-            endDate: req.query.endDate as string,
-            unixStart: req.query.unixStart as string,
-            unixEnd: req.query.unixEnd as string,
-            stage: (req.query.stage || req.query.inspectionStage) as string,
-            inspectionStage: (req.query.inspectionStage || req.query.stage) as string
-        };
-
-        if (req.query.format === 'csv') {
-            const filename = `AATN_Inspections_${Date.now()}.csv`;
-            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-            res.setHeader("Content-Type", "text/csv; charset=utf-8");
-            res.write('\uFEFF');
-
-            const headers = [
-                'Mã hồ sơ', 'Loại phiếu', 'Mã dự án', 'Tên dự án', 'Hạng mục/Mô tả',
-                'Mã nhà máy', 'Headcode', 'QC kiểm tra', 'Xưởng', 'Công đoạn sản xuất',
-                'Ngày thực hiện', 'Trạng thái', 'SL ĐĐH', 'SLkiem', 'SLDat',
-                'TLDat', 'SLLoi', 'TLLoi', 'Kết luận/Ghi chú', 'Hình ảnh hiện trường', 'ĐVT/Unit'
-            ];
-            res.write(formatCsvRow(headers));
-
-            const formatImageLinks = (imgs: any) => {
-                if (!imgs) return [];
-                let arr: string[] = [];
-                if (typeof imgs === 'string') {
-                    try { arr = JSON.parse(imgs); } catch(e) { arr = [imgs]; }
-                } else if (Array.isArray(imgs)) {
-                    arr = imgs;
-                }
-                return arr.filter(Boolean).map(id => {
-                    const str = typeof id === 'string' ? id : String(id);
-                    return str.startsWith('http') ? str : `https://drive.google.com/open?id=${str}`;
-                });
-            };
-
-            const CHUNK_SIZE = 5000;
-            let page = 1;
-            let hasMore = true;
-
-            while (hasMore) {
-                const result = await db.getInspectionsList(filters, page, CHUNK_SIZE, (req as any).user);
-                if (!result.items || result.items.length === 0) {
-                    hasMore = false;
-                    break;
-                }
-
-                // --- FETCH DETAILS BATCHING FOR CSV CHUNK ---
-                const itemsByType = new Map<string, any[]>();
-                for (const item of result.items) {
-                   const typeStr = item.type ? item.type.toLowerCase() : 'pqc';
-                   if (!itemsByType.has(typeStr)) itemsByType.set(typeStr, []);
-                   itemsByType.get(typeStr)!.push(item);
-                }
-
-                for (const [typeStr, items] of itemsByType.entries()) {
-                   const fullTableName = (db as any).getTableName(typeStr);
-                   const ids = items.map(it => it.id);
-                   try {
-                      const detailRes = await query(`SELECT * FROM ${fullTableName} WHERE id = ANY($1::text[])`, [ids]);
-                      const detailMap = new Map(detailRes.rows.map((r: any) => [r.id, r]));
-                      for (const item of items) {
-                          const d = detailMap.get(item.id) as any;
-                          if (d) {
-                             for (const key of Object.keys(d)) {
-                                if (key !== 'id' && key !== 'type' && d[key] !== null && d[key] !== undefined) {
-                                    (item as any)[key] = d[key];
-                                }
-                             }
-                          }
-                      }
-                   } catch (e: any) {
-                      console.warn(`Failed to fetch details for table ${fullTableName} in CSV export:`, e.message);
-                   }
-                }
-                // --- END FETCH DETAILS BATCHING ---
-
-                for (const item of result.items) {
-                    let rowDateStr = '';
-                    if (item.date) {
-                        if (/^\d{2}\/\d{2}\/\d{4}$/.test(String(item.date))) {
-                            rowDateStr = String(item.date);
-                        } else if (!isNaN(Number(item.date)) && Number(item.date) > 100000000) {
-                            const ts = Number(item.date);
-                            const d = new Date(ts > 100000000000 ? ts : ts * 1000);
-                            if (!isNaN(d.getTime())) rowDateStr = d.toISOString().slice(0, 10);
-                        } else {
-                            const d = new Date(item.date);
-                            if (!isNaN(d.getTime())) rowDateStr = d.toISOString().slice(0, 10);
-                        }
-                    }
-
-                    const so_luong_ipo = Number((item as any).so_luong_ipo || (item as any).sl_ipo || (item as any).qty_ipo || 0);
-                    const inspectedQuantity = Number((item as any).inspectedQuantity || (item as any).inspected_qty || (item as any).qty_total || 0);
-                    const passedQuantity = Number((item as any).passedQuantity || (item as any).passed_qty || (item as any).qty_pass || 0);
-                    const failedQuantity = Number((item as any).failedQuantity || (item as any).failed_qty || (item as any).qty_fail || 0);
-
-                    let passedPercentage = '';
-                    let failedPercentage = '';
-                    if (inspectedQuantity > 0) {
-                        passedPercentage = ((passedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
-                        failedPercentage = ((failedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
-                    }
-
-                    let allImages: string[] = [];
-                    allImages.push(...formatImageLinks((item as any).images || (item as any).images_json));
-                    allImages.push(...formatImageLinks((item as any).reportImages || (item as any).report_images_json));
-                    allImages.push(...formatImageLinks((item as any).deliveryNoteImages || (item as any).delivery_images_json));
-
-                    if ((item as any).items_json) {
-                        try {
-                            const itemsArr = typeof (item as any).items_json === 'string' ? JSON.parse((item as any).items_json) : (item as any).items_json;
-                            if (Array.isArray(itemsArr)) {
-                                itemsArr.forEach((i: any) => {
-                                    if (i.images) allImages.push(...formatImageLinks(i.images));
-                                });
-                            }
-                        } catch(e) {}
-                    }
-                    if ((item as any).materials_json) {
-                        try {
-                            const matArr = typeof (item as any).materials_json === 'string' ? JSON.parse((item as any).materials_json) : (item as any).materials_json;
-                            if (Array.isArray(matArr)) {
-                                matArr.forEach((m: any) => {
-                                    if (m.items && Array.isArray(m.items)) {
-                                        m.items.forEach((i: any) => {
-                                            if (i.images) allImages.push(...formatImageLinks(i.images));
-                                        });
-                                    }
-                                });
-                            }
-                        } catch(e) {}
-                    }
-
-                    const siteImages = Array.from(new Set(allImages)).join(' ');
-
-                    const row = [
-                        item.id || '',
-                        item.type || '',
-                        item.ma_ct || '',
-                        item.ten_ct || '',
-                        item.ten_hang_muc || '',
-                        item.ma_nha_may || '',
-                        item.headcode || '',
-                        item.inspectorName || '',
-                        item.workshop || '',
-                        item.inspectionStage || (item as any).stage || '',
-                        rowDateStr,
-                        item.status || '',
-                        so_luong_ipo,
-                        inspectedQuantity,
-                        passedQuantity,
-                        passedPercentage,
-                        failedQuantity,
-                        failedPercentage,
-                        (item as any).summary || '',
-                        siteImages,
-                        (item as any).dvt || ''
-                    ];
-
-                    res.write(formatCsvRow(row));
-                }
-
-                if (result.items.length < CHUNK_SIZE) {
-                    hasMore = false;
-                } else {
-                    page++;
-                }
-            }
-
-            res.end();
-            return;
-        }
-
-        const result = await db.getInspectionsList(filters, 1, 50000);
-        
-        // --- FETCH DETAILS BATCHING ---
-        const schema = process.env.DB_SCHEMA || 'appQAQC';
-        const itemsByType = new Map<string, any[]>();
-        for (const item of result.items) {
-           const typeStr = item.type ? item.type.toLowerCase() : 'pqc';
-           if (!itemsByType.has(typeStr)) itemsByType.set(typeStr, []);
-           itemsByType.get(typeStr)!.push(item);
-        }
-
-        for (const [typeStr, items] of itemsByType.entries()) {
-           const fullTableName = (db as any).getTableName(typeStr);
-
-           const CHUNK_SIZE = 1000;
-           for (let i = 0; i < items.length; i += CHUNK_SIZE) {
-               const chunk = items.slice(i, i + CHUNK_SIZE);
-               const ids = chunk.map(it => it.id);
-               try {
-                  // db.getTableName returns '"schema"."tablename"' so we use it directly
-                  const detailRes = await query(`SELECT * FROM ${fullTableName} WHERE id = ANY($1::text[])`, [ids]);
-                  const detailMap = new Map(detailRes.rows.map((r: any) => [r.id, r]));
-                  for (const item of chunk) {
-                      const d = detailMap.get(item.id) as any;
-                      if (d) {
-                         for (const key of Object.keys(d)) {
-                            if (key !== 'id' && key !== 'type' && d[key] !== null && d[key] !== undefined) {
-                                (item as any)[key] = d[key];
-                            }
-                         }
-                      }
-                  }
-               } catch (e: any) {
-                  console.warn(`Failed to fetch details for table ${fullTableName} in export:`, e.message);
-               }
-           }
-        }
-        // --- END FETCH DETAILS BATCHING ---
-
-        const filename = `AATN_Inspections_${Date.now()}.xlsx`;
-        res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-
-        const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Inspections', {
-          views: [{ state: 'frozen', ySplit: 1 }]
-        });
-
-        await sheet.protect('aatn_ins_protect', {
-          selectLockedCells: true,
-          selectUnlockedCells: true
-        });
-
-        sheet.columns = [
-            { header: 'Mã hồ sơ', key: 'id', width: 20 },
-            { header: 'Loại phiếu', key: 'type', width: 15 },
-            { header: 'Mã dự án', key: 'ma_ct', width: 15 },
-            { header: 'Tên dự án', key: 'ten_ct', width: 30 },
-            { header: 'Hạng mục/Mô tả', key: 'ten_hang_muc', width: 30 },
-            { header: 'Mã nhà máy', key: 'ma_nha_may', width: 15 },
-            { header: 'Headcode', key: 'headcode', width: 15 },
-            { header: 'QC kiểm tra', key: 'inspectorName', width: 25 },
-            { header: 'Xưởng', key: 'workshop', width: 20 },
-            { header: 'Công đoạn sản xuất', key: 'inspectionStage', width: 20 },
-            { header: 'Ngày thực hiện', key: 'date', width: 15 },
-            { header: 'Trạng thái', key: 'status', width: 15 },
-            { header: 'SL ĐĐH', key: 'so_luong_ipo', width: 10 },
-            { header: 'SLkiem', key: 'inspectedQuantity', width: 10 },
-            { header: 'SLDat', key: 'passedQuantity', width: 10 },
-            { header: 'TLDat', key: 'passedPercentage', width: 10 },
-            { header: 'SLLoi', key: 'failedQuantity', width: 10 },
-            { header: 'TLLoi', key: 'failedPercentage', width: 10 },
-            { header: 'Kết luận/Ghi chú', key: 'summary', width: 40 },
-            { header: 'Hình ảnh hiện trường', key: 'siteImages', width: 50 },
-            { header: 'ĐVT/Unit', key: 'dvt', width: 15 }
-        ];
-
-        for (const item of result.items) {
-            let rowDate = null;
-            if (item.date) {
-                // Handle DD/MM/YYYY
-                if (/^\d{2}\/\d{2}\/\d{4}$/.test(item.date)) {
-                    const [d, m, y] = item.date.split('/');
-                    rowDate = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
-                } else if (!isNaN(Number(item.date)) && Number(item.date) > 100000000) {
-                    const ts = Number(item.date);
-                    rowDate = new Date(ts > 100000000000 ? ts : ts * 1000);
-                } else {
-                    rowDate = new Date(item.date);
-                }
-                if (rowDate && isNaN(rowDate.getTime())) rowDate = null;
-            }
-            
-            let rowUpdated = null;
-            if (item.updatedAt) {
-                const ts = Number(item.updatedAt);
-                // If it's in seconds (like normally stored) multiply by 1000, 
-                // if it's already in ms (very large), keep as is.
-                rowUpdated = new Date(ts > 100000000000 ? ts : ts * 1000);
-                if (isNaN(rowUpdated.getTime())) rowUpdated = null;
-            }
-
-            const formatImageLinks = (imgs: any) => {
-                if (!imgs) return [];
-                let arr: string[] = [];
-                if (typeof imgs === 'string') {
-                    try { arr = JSON.parse(imgs); } catch(e) { arr = [imgs]; }
-                } else if (Array.isArray(imgs)) {
-                    arr = imgs;
-                }
-                return arr.filter(Boolean).map(id => id.startsWith('http') ? id : `https://drive.google.com/open?id=${id}`);
-            };
-
-            let allImages: string[] = [];
-            allImages.push(...formatImageLinks((item as any).images));
-            allImages.push(...formatImageLinks((item as any).reportImages));
-            allImages.push(...formatImageLinks((item as any).deliveryNoteImages));
-
-            if ((item as any).items_json) {
-                try {
-                    const itemsArr = typeof (item as any).items_json === 'string' ? JSON.parse((item as any).items_json) : (item as any).items_json;
-                    if (Array.isArray(itemsArr)) {
-                        itemsArr.forEach(i => {
-                            if (i.images) allImages.push(...formatImageLinks(i.images));
-                        });
-                    }
-                } catch(e) {}
-            }
-            if ((item as any).materials_json) {
-                try {
-                    const matArr = typeof (item as any).materials_json === 'string' ? JSON.parse((item as any).materials_json) : (item as any).materials_json;
-                    if (Array.isArray(matArr)) {
-                        matArr.forEach(m => {
-                            if (m.items && Array.isArray(m.items)) {
-                                m.items.forEach((i: any) => {
-                                    if (i.images) allImages.push(...formatImageLinks(i.images));
-                                });
-                            }
-                        });
-                    }
-                } catch(e) {}
-            }
-
-            const siteImages = allImages.join('\n');
-
-            const so_luong_ipo = Number((item as any).so_luong_ipo || (item as any).sl_ipo || (item as any).qty_ipo || 0);
-            const inspectedQuantity = Number((item as any).inspectedQuantity || (item as any).inspected_qty || (item as any).qty_total || 0);
-            const passedQuantity = Number((item as any).passedQuantity || (item as any).passed_qty || (item as any).qty_pass || 0);
-            const failedQuantity = Number((item as any).failedQuantity || (item as any).failed_qty || (item as any).qty_fail || 0);
-            
-            let passedPercentage = '';
-            let failedPercentage = '';
-            if (inspectedQuantity > 0) {
-                passedPercentage = ((passedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
-                failedPercentage = ((failedQuantity / inspectedQuantity) * 100).toFixed(2) + '%';
-            }
-
-            const row = sheet.addRow({
-                id: String(item.id || ''),
-                type: item.type || '',
-                ma_ct: String(item.ma_ct || ''),
-                ten_ct: String(item.ten_ct || ''),
-                ten_hang_muc: String(item.ten_hang_muc || ''),
-                ma_nha_may: String(item.ma_nha_may || ''),
-                headcode: String(item.headcode || ''),
-                inspectorName: String(item.inspectorName || ''),
-                workshop: String(item.workshop || ''),
-                inspectionStage: String(item.inspectionStage || (item as any).stage || ''),
-                date: rowDate,
-                status: String(item.status || ''),
-                so_luong_ipo: so_luong_ipo,
-                inspectedQuantity: inspectedQuantity,
-                passedQuantity: passedQuantity,
-                passedPercentage: passedPercentage,
-                failedQuantity: failedQuantity,
-                failedPercentage: failedPercentage,
-                summary: String((item as any).summary || ''),
-                siteImages: siteImages,
-                dvt: String((item as any).dvt || '')
-            });
-
-            row.eachCell((cell, colNumber) => {
-              cell.protection = { locked: false };
-              if (colNumber === 20) { // siteImages is the 20th column
-                  cell.alignment = { wrapText: true };
-              }
-              // date is col index 11, updatedAt is 21
-              if ((colNumber === 11 || colNumber === 21) && cell.value instanceof Date) {
-                 cell.numFmt = 'yyyy-mm-dd hh:mm:ss';
-              }
-              if (colNumber === 12) { // Status dropdown
-                cell.dataValidation = {
-                  type: 'list',
-                  allowBlank: true,
-                  formulae: ['"DRAFT,SUBMITTED,APPROVED,REJECTED,VERIFIED,LOCKED"']
-                };
-              }
-            });
-        }
-
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (error) {
-        console.error('Error exporting inspections:', error);
-        if (!res.headersSent) res.status(500).json({ error: 'Failed to export inspections' });
-    }
-  });
-
-  // --- INSPECTIONS IMPORT ---
-  app.post("/api/import/inspections", authenticate, memoryUpload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(req.file.buffer);
-        
-        const worksheet = workbook.getWorksheet(1) || workbook.worksheets[0];
-        if (!worksheet) return res.status(400).json({ error: 'No worksheet found in Excel file' });
-
-        const validResults = [];
-        const errorLogs = [];
-        let colMap: Record<string, number> = {};
-
-        // Map headers from the first row
-        const firstRow = worksheet.getRow(1);
-        firstRow.eachCell((cell, colNumber) => {
-            const headerText = cell.text?.trim()?.toLowerCase();
-            if (headerText) colMap[headerText] = colNumber;
-        });
-
-        // Use standard for loop for async/await support
-        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
-            const row = worksheet.getRow(rowIndex);
-            if (!row || !row.values || (Array.isArray(row.values) && row.values.length <= 1)) continue;
-
-            try {
-                const getCol = (names: string[]) => {
-                    for (const name of names) {
-                        const idx = colMap[name.toLowerCase()];
-                        if (idx) return row.getCell(idx).text?.trim();
-                    }
-                    return '';
-                };
-
-                const getVal = (names: string[]) => {
-                    for (const name of names) {
-                        const idx = colMap[name.toLowerCase()];
-                        if (idx) return row.getCell(idx).value;
-                    }
-                    return 0;
-                };
-
-                const cleanNumber = (val: any) => {
-                    if (typeof val === 'number') return val;
-                    if (!val) return 0;
-                    const cleaned = String(val).replace(/[^\d.-]/g, '');
-                    const num = parseFloat(cleaned);
-                    return isNaN(num) ? 0 : num;
-                };
-
-                const id = getCol(['mã hồ sơ', 'id', 'mã']);
-                const ma_ct = getCol(['mã dự án', 'ma_ct', 'mã công trình', 'project code', 'ma_du_an']);
-                const type = getCol(['loại phiếu', 'type', 'module', 'loại', 'loai phieu', 'loai_phieu', 'form type', 'form_type']) || 'PQC';
-                const isSharedType = ['IQC', 'SQC_VT', 'SQC_MAT', 'SQM_MAT'].includes(String(type).toUpperCase());
-                
-                if (!ma_ct && !isSharedType) continue; // Skip empty rows silently or log if needed
-
-                const inspection_date_raw = getVal(['ngày thực hiện', 'ngày thực', 'date']);
-                let updatedAt = Math.floor(Date.now() / 1000);
-
-                if (inspection_date_raw) {
-                    if (inspection_date_raw instanceof Date) {
-                        updatedAt = Math.floor(inspection_date_raw.getTime() / 1000);
-                    } else {
-                        const dateStr = String(inspection_date_raw).trim();
-                        // Try DD/MM/YYYY
-                        const parts = dateStr.split('/');
-                        if (parts.length === 3) {
-                            const day = parseInt(parts[0], 10);
-                            const month = parseInt(parts[1], 10) - 1;
-                            const year = parseInt(parts[2], 10);
-                            const d = new Date(year, month, day);
-                            if (!isNaN(d.getTime())) updatedAt = Math.floor(d.getTime() / 1000);
-                        } else {
-                            const d = new Date(dateStr);
-                            if (!isNaN(d.getTime())) updatedAt = Math.floor(d.getTime() / 1000);
-                        }
-                    }
-                }
-
-                // Mapping specific columns
-                const getValFromHeaders = (headers: string[]) => {
-                    const found = Object.keys(colMap).find(h => headers.some(req => h.toLowerCase().includes(req.toLowerCase())));
-                    return found ? row.getCell(colMap[found]).text?.trim() || String(row.getCell(colMap[found]).value || '').trim() : null;
-                };
-
-                const convertDriveIdToProxy = (val: string) => {
-                    if (!val || val === '0' || val === 'false') return [];
-                    const items = val.split(/[,;\n]/).map(u => u.trim()).filter(u => u);
-                    return items.map(u => {
-                        if (u.length >= 25 && u.length <= 50 && !u.includes('/') && !u.includes(':')) {
-                            const driveUrl = `https://lh3.googleusercontent.com/u/0/d/${u}`;
-                            return `/api/proxy-image?url=${encodeURIComponent(driveUrl)}`;
-                        }
-                        if (u.includes('drive.google.com') && !u.includes('/api/proxy-image')) {
-                            return `/api/proxy-image?url=${encodeURIComponent(u)}`;
-                        }
-                        return u;
-                    });
-                };
-
-                const hinh_anh_val = getValFromHeaders(['hình ảnh hiện trường', 'ảnh hiện trường', 'hình ảnh', 'images', 'image', 'ảnh', 'hình ảnh hiện trường tổng quát']);
-                const images = convertDriveIdToProxy(hinh_anh_val || '');
-
-                const chu_ky_qc_val = getValFromHeaders(['chữ ký qc', 'qc signature', 'chu ky qc', 'ký qc']);
-                const qcSignatures = convertDriveIdToProxy(chu_ky_qc_val || '');
-                const qcSignature = qcSignatures.length > 0 ? qcSignatures[0] : null;
-
-                const inspectorNameRaw = getValFromHeaders(['qc kiểm tra', 'qc thẩm định', 'qc', 'qc_name', 'inspector', 'inspectorname']);
-
-                const inspection: any = {
-                    id: id || `INS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                    type: type,
-                    ma_ct,
-                    ten_ct: getCol(['tên dự án', 'ten_ct', 'tên công trình', 'project name']),
-                    ten_hang_muc: getCol(['hạng mục', 'hạng mục/mô tả', 'ten_hang_muc', 'item name', 'hang_muc', 'ten_hang_muc']),
-                    ma_nha_may: getCol(['mã nhà máy', 'ma_nha_may', 'factory code', 'ma_nm']),
-                    headcode: getCol(['headcode']),
-                    inspectorName: inspectorNameRaw || (req as any).user?.name,
-                    workshop: getCol(['xưởng', 'workshop']),
-                    inspectionStage: getCol(['công đoạn', 'công đoạn sản xuất', 'stage']),
-                    date: getCol(['ngày thực hiện', 'ngày thực', 'date']),
-                    status: getCol(['trạng thái', 'status'])?.toUpperCase() || 'DRAFT',
-                    so_luong_ipo: cleanNumber(getVal(['sl đđh', 'sl ipo', 'so_luong_ipo'])),
-                    inspectedQuantity: cleanNumber(getVal(['slkiem', 'sl kiểm', 'inspected quantity', 'inspected_qty', 'inspectedquantity'])),
-                    passedQuantity: cleanNumber(getVal(['sldat', 'sl đạt', 'passed quantity', 'passed_qty', 'passedquantity'])),
-                    failedQuantity: cleanNumber(getVal(['slloi', 'sl lỗi', 'sl hồng', 'failed quantity', 'failed_qty', 'failedquantity'])),
-                    summary: getCol(['kết luận/ghi chú', 'kết luận', 'summary']),
-                    responsiblePerson: getCol(['phụ trách', 'người phụ trách', 'responsibleperson']), 
-                    dvt: getCol(['đvt/unit', 'dvt', 'unit']),
-                    items: [],
-                    images,
-                    signature: qcSignature,
-                    comments: [],
-                    updatedAt
-                };
-
-                // Fallback for numbers
-                if (inspection.so_luong_ipo === 0) inspection.so_luong_ipo = cleanNumber(getCol(['sl đđh', 'sl ipo', 'so_luong_ipo']));
-                if (inspection.inspectedQuantity === 0) inspection.inspectedQuantity = cleanNumber(getCol(['slkiem', 'sl kiểm', 'inspectedquantity']));
-                if (inspection.passedQuantity === 0) inspection.passedQuantity = cleanNumber(getCol(['sldat', 'sl đạt', 'passedquantity']));
-                if (inspection.failedQuantity === 0) inspection.failedQuantity = cleanNumber(getCol(['slloi', 'sl lỗi', 'sl hồng', 'failedquantity']));
-
-                await db.saveInspection(inspection, (req as any).user?.name);
-                validResults.push(inspection.id);
-            } catch (err: any) {
-                console.error(`❌ Error importing row ${rowIndex}:`, err.message);
-                errorLogs.push({ row_index: rowIndex, error_message: err.message });
-            }
-        }
-
-        res.json({ success: true, count: validResults.length, errors: errorLogs });
-    } catch (error) {
-        console.error('Error importing inspections:', error);
-        res.status(500).json({ error: 'Failed to import inspections' });
-    }
-  });
-
-  app.use((req, res, next) => {
-    console.log("Received request:", req.method, req.url);
     next();
-  });
-
-  app.post("/api/query", authenticate, async (req, res) => {
-    console.log("Received query request:", req.body, "Content-Type:", req.headers['content-type']);
-    try {
-      if (!req.body || !req.body.sql) {
-        console.error("Invalid request body for /api/query:", req.body, "Content-Type:", req.headers['content-type']);
-        return res.status(400).json({ error: 'Request body or SQL query is missing' });
-      }
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      let { sql, args } = req.body;
-      
-      const user = (req as any).user;
-      
-      // Basic SQLite to PostgreSQL syntax conversion
-      let pgSql = sql as string;
-      
-      // Replace ? with $1, $2, etc.
-      let paramIndex = 1;
-      pgSql = pgSql.replace(/\?/g, () => `$${paramIndex++}`);
-      
-      // Replace AUTOINCREMENT with SERIAL or just remove it if it's in CREATE TABLE (we don't need to create tables here)
-      pgSql = pgSql.replace(/AUTOINCREMENT/gi, '');
-      
-      // Replace unixepoch() with EXTRACT(epoch FROM now())
-      pgSql = pgSql.replace(/unixepoch\(\)/gi, 'EXTRACT(epoch FROM now())');
-      
-      // Handle PRAGMA table_info
-      if (pgSql.toUpperCase().startsWith('PRAGMA TABLE_INFO')) {
-        const match = pgSql.match(/PRAGMA table_info\((['"]?)(.*?)\1\)/i);
-        if (match) {
-          const tableName = match[2];
-          pgSql = `SELECT column_name as name, data_type as type FROM information_schema.columns WHERE table_schema = $2 AND table_name = $1`;
-          args = [tableName, schema];
-        }
-      }
-      
-      // Set search path
-      await query(`SET search_path TO "${schema}"`);
-      
-      // Log mutation queries
-      const isMutation = pgSql.toUpperCase().match(/INSERT|UPDATE|DELETE|ALTER|DROP/);
-      if (isMutation) {
-        await logAudit(String(user.id), 'RAW_SQL_MUTATION', 'database', 'raw', { sql: pgSql, args }, null);
-      }
-      
-      const result = await query(pgSql, args || []);
-      res.json({ rows: result.rows, rowCount: result.rowCount });
-    } catch (error: any) {
-      console.error('Error executing query:', error.message, req.body ? req.body.sql : 'No SQL');
-      res.status(500).json({ error: error.message || 'Unknown error' });
-    }
-  });
-
-  app.post("/api/batch", authenticate, express.json(), async (req, res) => {
-    try {
-      const schema = process.env.DB_SCHEMA || 'appQAQC';
-      const { queries } = req.body; // Array of { sql, args } or strings
-      const user = (req as any).user;
-      
-      await query(`SET search_path TO "${schema}"`);
-      await query('BEGIN');
-      
-      const results = [];
-      for (let q of queries) {
-        let sql = typeof q === 'string' ? q : q.sql;
-        let args = typeof q === 'string' ? [] : (q.args || []);
-        
-        let paramIndex = 1;
-        sql = sql.replace(/\?/g, () => `$${paramIndex++}`);
-        sql = sql.replace(/AUTOINCREMENT/gi, '');
-        sql = sql.replace(/unixepoch\(\)/gi, 'EXTRACT(epoch FROM now())');
-        
-        const isMutation = sql.toUpperCase().match(/INSERT|UPDATE|DELETE|ALTER|DROP/);
-        if (isMutation) {
-          await logAudit(String(user.id), 'BATCH_SQL_MUTATION', 'database', 'batch', { sql, args }, null);
-        }
-
-        const result = await query(sql, args);
-        results.push({ rows: result.rows, rowCount: result.rowCount });
-      }
-      
-      await query('COMMIT');
-      res.json(results);
-    } catch (error: any) {
-      await query('ROLLBACK');
-      console.error('Error executing batch:', error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-// Error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('SERVER ERROR:', err);
-  
-  if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
-    return res.status(400).send({ error: 'Bad JSON' });
-  }
-
-  // If it's an API request, always return JSON
-  if (req.url.startsWith('/api/')) {
-    return res.status(err.status || 500).json({ 
-      error: err.message || 'Internal Server Error',
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
-  }
-  
-  next(err);
-});
-
-// Run migrations before starting the server
-(async () => {
-  try {
-    await runMigrations();
   } catch (err) {
-    console.error("Critical error during startup migrations:", err);
+    next(err);
   }
-})();
+});
 
-// Diagnostic endpoint for database schema
-app.get('/api/diag/db', async (req, res) => {
+const getActorId = (req: any): string | null => req.authUser?.id || req.user?.id || req.user?.username || null;
+
+const requireAdmin = (req: any, res: any, next: any) => {
+  if (!req.authUser || !dbMod.isServerAdmin(req.authUser)) {
+    return res.status(403).json({ error: 'Từ chối truy cập: Yêu cầu quyền Quản trị viên (ADMIN).' });
+  }
+  return next();
+};
+
+const requireTrashAccess = (req: any, res: any, next: any) => {
+  if (
+    !req.authUser ||
+    (!dbMod.isServerAdmin(req.authUser) &&
+      !dbMod.hasServerPermission(req.authUser, 'INSPECTIONS', 'DELETE') &&
+      !dbMod.hasServerPermission(req.authUser, 'TRASH', 'VIEW'))
+  ) {
+    return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền thao tác với Thùng rác (M12).' });
+  }
+  return next();
+};
+
+const sendErr = (res: any, err: any, fallbackStatus = 500) => {
+  const status = err?.statusCode && Number.isInteger(err.statusCode) ? err.statusCode : fallbackStatus;
+  return res.status(status).json({ error: err?.message || 'Internal Server Error' });
+};
+
+// --- M00: HEALTH & AUTH ENDPOINTS ---
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', version: '3.1.0', timestamp: Date.now() });
+});
+
+app.get('/api/public/inspections/:id', async (req, res) => {
   try {
-    const schema = process.env.DB_SCHEMA || 'appQAQC';
-    const tables = [
-      'forms_pqc', 'forms_iqc', 'forms_sqc_vt', 'forms_sqc_btp', 'forms_fsr', 'forms_step', 'forms_fqc', 'forms_spr', 'forms_site', 
-      'ncrs', 'users', 'material', 'suppliers', 'projects', 'ipo',
-      'defect_library', 'floor_plans', 'layout_pins', 'workshops', 'templates', 'qms_roles', 'audit_logs', 'status_history'
-    ];
-    
-    const results: any = {};
-    
-    for (const table of tables) {
-      const colCheck = await query(`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE LOWER(table_schema) = LOWER($1) AND LOWER(table_name) = LOWER($2)
-      `, [schema, table]);
-      
-      results[table] = {
-        exists: colCheck.rowCount > 0,
-        columns: colCheck.rows.map((r: any) => `${r.column_name} (${r.data_type})`),
-        has_deleted_at: colCheck.rows.some((r: any) => r.column_name === 'deleted_at')
-      };
+    const inspection = await dbService.getPublicInspectionShareById(req.params.id);
+    if (!inspection) {
+      return res.status(404).json({ error: 'Inspection not found' });
     }
-    
-    res.json({
-      schema,
-      database_url_set: !!process.env.DATABASE_URL,
-      tables: results
+    res.json({ inspection: storageService.signPublicMediaUrls(inspection, 3600) });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/public/inspections/:id/traceability', async (req, res) => {
+  try {
+    const bundle = await dbService.resolveTraceability({
+      inspectionId: req.params.id,
+      isPublic: true,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, stack: err.stack });
-  }
-});
-
-// --- SUBCONTRACTOR QC BOOKING & INSPECTIONS API ENDPOINTS ---
-
-app.get("/api/subcontractor-bookings", async (req, res) => {
-  try {
-    const filters = {
-      status: req.query.status as string,
-      search: req.query.search as string,
-      assignedQcId: req.query.assignedQcId as string
-    };
-    const bookings = await db.getSubcontractorBookings(filters);
-    res.json({ bookings });
-  } catch (err: any) {
-    console.error("Error fetching subcontractor bookings:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/subcontractor-bookings/:id", async (req, res) => {
-  try {
-    const booking = await db.getSubcontractorBookingById(req.params.id);
-    if (!booking) {
-      return res.status(404).json({ error: "Booking not found" });
+    if (!bundle) {
+      return res.status(404).json({ error: 'Inspection not found' });
     }
-    res.json(booking);
+    res.json(storageService.signPublicMediaUrls(bundle, 3600));
   } catch (err: any) {
-    console.error("Error fetching subcontractor booking:", err);
-    res.status(500).json({ error: err.message });
+    sendErr(res, err);
   }
 });
 
-// Helper: Quy định nghiệm thu trước 24 tiếng theo mốc 15:00 giờ Việt Nam (ICT, UTC+7)
-function getVietnamBookingPolicy() {
-  const now = new Date();
-  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const vnDate = new Date(utcMs + (7 * 3600000));
-  
-  const vnHour = vnDate.getHours();
-  const isAfter15h = vnHour >= 15;
-  const daysToAdd = isAfter15h ? 2 : 1;
-  
-  const targetDate = new Date(vnDate.getFullYear(), vnDate.getMonth(), vnDate.getDate() + daysToAdd);
-  const yyyy = targetDate.getFullYear();
-  const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(targetDate.getDate()).padStart(2, '0');
-  const minDateStr = `${yyyy}-${mm}-${dd}`;
-  
-  const tomorrow = new Date(vnDate.getFullYear(), vnDate.getMonth(), vnDate.getDate() + 1);
-  const tomorrowDisplay = `${String(tomorrow.getDate()).padStart(2, '0')}/${String(tomorrow.getMonth() + 1).padStart(2, '0')}/${tomorrow.getFullYear()}`;
-  
-  const dayAfter = new Date(vnDate.getFullYear(), vnDate.getMonth(), vnDate.getDate() + 2);
-  const dayAfterDisplay = `${String(dayAfter.getDate()).padStart(2, '0')}/${String(dayAfter.getMonth() + 1).padStart(2, '0')}/${dayAfter.getFullYear()}`;
-  
-  const timeStr = `${String(vnHour).padStart(2, '0')}:${String(vnDate.getMinutes()).padStart(2, '0')}`;
-  
-  return {
-    vnHour,
-    isAfter15h,
-    minDateStr,
-    tomorrowDisplay,
-    dayAfterDisplay,
-    timeStr
-  };
-}
-
-function parseDateToYMD(rawDate: any): string {
-  if (!rawDate) return '';
-  if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
-    return rawDate.slice(0, 10);
-  }
-  const ts = typeof rawDate === 'number' ? (rawDate > 1e11 ? rawDate : rawDate * 1000) : new Date(rawDate).getTime();
-  if (isNaN(ts) || ts <= 0) return '';
-  const d = new Date(ts + 7 * 3600000);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-app.post("/api/subcontractor-bookings", async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
-    const policy = getVietnamBookingPolicy();
-    const reqDateStr = parseDateToYMD(req.body.requestedDate);
+    const result = await dbMod.authenticateUser(req.body?.username, req.body?.password, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers['user-agent'],
+    });
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err, 401);
+  }
+});
 
-    if (reqDateStr && reqDateStr < policy.minDateStr) {
-      return res.status(400).json({ 
-        error: policy.isAfter15h
-          ? `Quy định đặt lịch QC nghiệm thu trước 24 tiếng: Hiện tại đã sau 15:00 (${policy.timeStr}), ngày nghiệm thu phải chọn từ ngày mốt (${policy.dayAfterDisplay}) trở đi, không được chọn ngày mai.`
-          : `Quy định đặt lịch QC nghiệm thu trước 24 tiếng: Đặt trước 15:00 (${policy.timeStr}), ngày nghiệm thu sớm nhất phải từ ngày mai (${policy.tomorrowDisplay}) trở đi.`
+app.post('/api/auth/change-password', async (req: any, res) => {
+  try {
+    const userId = req.authUser?.id;
+    if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập để đổi mật khẩu' });
+    const result = await dbMod.changeUserPassword(userId, req.body?.currentPassword, req.body?.newPassword);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err, 400);
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const result = await dbMod.requestPasswordReset(req.body?.email);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err, 400);
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const result = await dbMod.confirmPasswordReset(req.body?.email, req.body?.code, req.body?.newPassword);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err, 400);
+  }
+});
+
+// --- M01: DASHBOARD ---
+app.get('/api/dashboard/stats', async (req, res) => {
+  try {
+    const stats = await dbService.getDashboardStats(req.query);
+    res.json(stats);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M02: PROJECTS, DOCUMENTS, FLOOR PLANS & PINS ---
+app.get('/api/projects', async (req, res) => {
+  try {
+    const search = String(req.query.search || '');
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '500', 10);
+    const result = await dbMod.getProjectsList(search, page, limit);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/projects/:projectId/documents', async (req, res) => {
+  try {
+    const docs = await dbMod.getProjectDocuments(req.params.projectId);
+    res.json(docs);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/projects/documents', async (req: any, res) => {
+  try {
+    const doc = await dbMod.saveProjectDocument(req.body, getActorId(req));
+    res.json(doc);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/projects/documents/:id', async (req: any, res) => {
+  try {
+    const result = await dbMod.deleteProjectDocument(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/projects/:code', async (req, res) => {
+  try {
+    const project = await dbMod.getProjectByCode(req.params.code);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    res.json(project);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.put('/api/projects/:id', async (req: any, res) => {
+  try {
+    const updated = await dbMod.updateProjectRecord(req.params.id, req.body, getActorId(req));
+    res.json(updated);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/floor-plans', async (req, res) => {
+  try {
+    const projectId = String(req.query.projectId || '');
+    const plans = await dbMod.getFloorPlans(projectId);
+    res.json(plans);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/floor-plans', async (req: any, res) => {
+  try {
+    const plan = await dbMod.saveFloorPlan(req.body, getActorId(req));
+    res.json(plan);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/floor-plans/:id', async (req: any, res) => {
+  try {
+    const result = await dbMod.deleteFloorPlan(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/layout-pins', async (req, res) => {
+  try {
+    const floorPlanId = String(req.query.floorPlanId || '');
+    const pins = await dbMod.getLayoutPins(floorPlanId);
+    res.json(pins);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/layout-pins', async (req: any, res) => {
+  try {
+    const pin = await dbMod.saveLayoutPin(req.body, getActorId(req));
+    res.json(pin);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M03: SUBCONTRACTOR BOOKINGS & PO-MATERIAL LOOKUP (RBAC ENFORCED) ---
+const requireM03View = (req: any, res: any, next: any) => {
+  if (!req.authUser || !canViewM03(req.authUser)) {
+    return res.status(403).json({
+      error: 'Từ chối truy cập: Bạn không có quyền xem module Lịch nghiệm thu (M03).',
+    });
+  }
+  return next();
+};
+
+const requireM03Reconcile = (req: any, res: any, next: any) => {
+  if (!req.authUser || !canReconcileM03(req.authUser)) {
+    return res.status(403).json({
+      error: 'Từ chối truy cập: Chỉ ADMIN, MANAGER, QA, QC_LEAD hoặc tài khoản có quyền SIGN1/SIGN2 mới được đối chiếu lịch nghiệm thu.',
+    });
+  }
+  return next();
+};
+
+app.get('/api/subcontractor-bookings', requireM03View, async (req, res) => {
+  try {
+    const bookings = await dbService.getSubcontractorBookings(req.query);
+    res.json({ bookings: storageService.signPublicMediaUrls(bookings, 86400) });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/subcontractor-bookings', async (req: any, res) => {
+  try {
+    const caps = getM03Capabilities(req.authUser);
+    if (!caps.canCreate) {
+      return res.status(403).json({
+        error: 'Từ chối truy cập: Bạn không có quyền tạo mới Lịch nghiệm thu (CREATE).',
       });
     }
 
-    const booking = await db.createSubcontractorBooking(req.body);
-    res.status(201).json(booking);
+    const payload = { ...(req.body || {}) };
+    if (!caps.canAssignQc) {
+      payload.status = 'PENDING';
+      payload.assignedQcId = null;
+      payload.assignedQcName = null;
+    }
+    if (!caps.canEditAll && !caps.isManagerial) {
+      payload.requesterId = req.authUser.id;
+      payload.requesterName = req.authUser.name || req.authUser.username || payload.requesterName;
+    }
+
+    const booking = await dbService.createSubcontractorBooking(payload, getActorId(req));
+    res.json(storageService.signPublicMediaUrls(booking, 86400));
   } catch (err: any) {
-    console.error("Error creating subcontractor booking:", err);
-    res.status(500).json({ error: err.message });
+    sendErr(res, err);
   }
 });
 
-app.put("/api/subcontractor-bookings/:id", async (req, res) => {
+app.post('/api/subcontractor-bookings/reconcile', requireM03Reconcile, async (_req, res) => {
   try {
-    if (req.body.requestedDate) {
-      const current = await db.getSubcontractorBookingById(req.params.id);
-      if (current && current.status === 'PENDING') {
-        const policy = getVietnamBookingPolicy();
-        const reqDateStr = parseDateToYMD(req.body.requestedDate);
-        const currentDateStr = parseDateToYMD(current.requestedDate);
-        if (reqDateStr && reqDateStr !== currentDateStr && reqDateStr < policy.minDateStr) {
-          return res.status(400).json({ 
-            error: policy.isAfter15h
-              ? `Quy định đặt lịch QC trước 24 tiếng: Sau 15:00 (${policy.timeStr}), ngày nghiệm thu phải chọn từ ngày mốt (${policy.dayAfterDisplay}) trở đi.`
-              : `Quy định đặt lịch QC trước 24 tiếng: Đặt trước 15:00 (${policy.timeStr}), ngày nghiệm thu sớm nhất phải từ ngày mai (${policy.tomorrowDisplay}) trở đi.`
+    const result = await dbService.reconcileSubcontractorBookings();
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/subcontractor-bookings/:id/related-sqc', requireM03View, async (req, res) => {
+  try {
+    const result = await dbService.getRelatedSqcInspectionsForBooking(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/subcontractor-bookings/:id', requireM03View, async (req, res) => {
+  try {
+    const booking = await dbService.getSubcontractorBookingById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Not found' });
+    res.json(storageService.signPublicMediaUrls(booking, 86400));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/subcontractor-bookings/:id/manual-status', async (req: any, res) => {
+  try {
+    const existing = await dbService.getSubcontractorBookingById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy phiếu Book QC để gán trạng thái thủ công.' });
+    }
+
+    const caps = getM03Capabilities(req.authUser);
+    if (!caps.canAssignQc) {
+      return res.status(403).json({
+        error: 'Từ chối truy cập: Chỉ Tổ trưởng QC, QA, MANAGER, ADMIN hoặc tài khoản có quyền SIGN1/SIGN2 mới được gán trạng thái thủ công.',
+      });
+    }
+
+    if (!canManualOverrideM03Booking(req.authUser, existing)) {
+      return res.status(403).json({
+        error: 'Phiếu Book QC đã hoàn thành (COMPLETED) hoặc đã hủy (CANCELLED), không thể gán trạng thái thủ công.',
+      });
+    }
+
+    const body = req.body || {};
+    const result = String(body.result || '').toUpperCase().trim();
+    const reason = String(body.reason || '').trim();
+    const sqcCode = body.sqcCode !== undefined ? String(body.sqcCode || '').trim() : undefined;
+    const version = body.version !== undefined ? Number(body.version) : undefined;
+
+    if (result !== 'PASS' && result !== 'FAIL') {
+      return res.status(400).json({ error: 'Vui lòng chọn kết quả hợp lệ (PASS hoặc FAIL).' });
+    }
+    if (!reason || reason.length > 1000) {
+      return res.status(400).json({ error: 'Vui lòng nhập lý do gán trạng thái thủ công (tối đa 1000 ký tự).' });
+    }
+    if (sqcCode && sqcCode.length > 120) {
+      return res.status(400).json({ error: 'Mã phiếu SQC tham chiếu tối đa 120 ký tự.' });
+    }
+    if (version !== undefined && !Number.isFinite(version)) {
+      return res.status(400).json({ error: 'Giá trị version không hợp lệ.' });
+    }
+
+    const updated = await dbService.manualOverrideSubcontractorBookingStatus(
+      req.params.id,
+      {
+        result: result as 'PASS' | 'FAIL',
+        reason,
+        sqcCode,
+        version,
+      },
+      req.authUser
+    );
+
+    res.json(storageService.signPublicMediaUrls(updated, 86400));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+const handleUpdateBooking = async (req: any, res: any) => {
+  try {
+    const existing = await dbService.getSubcontractorBookingById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy phiếu Book QC để cập nhật' });
+    }
+
+    const body = req.body || {};
+    const caps = getM03Capabilities(req.authUser);
+    const existingStatus = String(existing.status || '').toUpperCase().trim();
+    const hasStatusChange =
+      body.status !== undefined &&
+      String(body.status || '').toUpperCase().trim() !== existingStatus;
+    const nextStatus = hasStatusChange
+      ? String(body.status || '').toUpperCase().trim()
+      : existingStatus;
+
+    const assignKeys = [
+      'assignedQcId',
+      'assignedQcName',
+      'rejectionReason',
+      'suggestedDate',
+      'rejectedAt',
+      'rejectedByName',
+    ];
+    const hasAssignChanges =
+      assignKeys.some((k) => body[k] !== undefined) ||
+      (hasStatusChange && (nextStatus === 'ASSIGNED' || nextStatus === 'RETURNED_FOR_SUPPLEMENT'));
+
+    const contentKeys = [
+      'sqcType',
+      'poId',
+      'poNumber',
+      'supplierId',
+      'supplierName',
+      'locationAddress',
+      'contactPerson',
+      'contactPhone',
+      'requestedDate',
+      'notes',
+      'items',
+      'documents',
+      'commodityLine',
+    ];
+    const hasContentChanges = contentKeys.some((k) => body[k] !== undefined);
+
+    if (existingStatus === 'COMPLETED') {
+      return res.status(403).json({
+        error: 'Từ chối cập nhật: Phiếu Book QC đã hoàn thành nghiệm thu (COMPLETED) và bị khóa chỉnh sửa.',
+      });
+    }
+
+    if (hasAssignChanges) {
+      if (!canAssignM03Booking(req.authUser, existing)) {
+        return res.status(403).json({
+          error:
+            existingStatus === 'CANCELLED'
+              ? 'Không thể phân công QC hoặc phản hồi cho phiếu Book QC đã hủy.'
+              : 'Từ chối truy cập: Bạn không có quyền Phân công QC hoặc Trả lại yêu cầu bổ sung (yêu cầu SIGN1/SIGN2 hoặc ADMIN/MANAGER/QA/QC_LEAD).',
+        });
+      }
+    }
+
+    if (hasContentChanges) {
+      if (existingStatus === 'CANCELLED') {
+        return res.status(403).json({
+          error: 'Từ chối sửa: Phiếu Book QC đã bị hủy (CANCELLED), không thể chỉnh sửa nội dung.',
+        });
+      }
+      if (!canEditM03Booking(req.authUser, existing)) {
+        return res.status(403).json({
+          error: 'Từ chối truy cập: Bạn không có quyền sửa thông tin phiếu Book QC này (cần EDIT_ALL hoặc EDIT_OWN trên phiếu do mình tạo).',
+        });
+      }
+    }
+
+    if (hasStatusChange) {
+      if (existingStatus === 'CANCELLED' && !caps.isManagerial) {
+        return res.status(403).json({
+          error: 'Từ chối truy cập: Phiếu Book QC đã hủy chỉ cấp Quản lý mới có thể khôi phục trạng thái.',
+        });
+      }
+      if (nextStatus === 'IN_PROGRESS' || nextStatus === 'COMPLETED') {
+        if (!canInspectM03Booking(req.authUser, existing) && !caps.canAssignQc) {
+          return res.status(403).json({
+            error: 'Từ chối truy cập: Bạn không có quyền cập nhật trạng thái nghiệm thu cho phiếu Book QC này.',
+          });
+        }
+      } else if (nextStatus === 'CANCELLED') {
+        if (
+          !canEditM03Booking(req.authUser, existing) &&
+          !canDeleteM03Booking(req.authUser, existing) &&
+          !caps.canAssignQc
+        ) {
+          return res.status(403).json({
+            error: 'Từ chối truy cập: Bạn không có quyền hủy phiếu Book QC này.',
+          });
+        }
+      } else if (nextStatus !== 'ASSIGNED' && nextStatus !== 'RETURNED_FOR_SUPPLEMENT') {
+        if (!caps.canAssignQc && !canEditM03Booking(req.authUser, existing)) {
+          return res.status(403).json({
+            error: 'Từ chối truy cập: Bạn không có quyền thay đổi trạng thái phiếu Book QC này.',
           });
         }
       }
     }
 
-    const booking = await db.updateSubcontractorBooking(req.params.id, req.body);
-    res.json(booking);
+    if (!hasAssignChanges && !hasContentChanges && !hasStatusChange) {
+      if (!canEditM03Booking(req.authUser, existing) && !canAssignM03Booking(req.authUser, existing)) {
+        return res.status(403).json({
+          error: 'Từ chối truy cập: Bạn không có quyền cập nhật phiếu Book QC này.',
+        });
+      }
+    }
+
+    const updated = await dbService.updateSubcontractorBooking(req.params.id, body, getActorId(req));
+    res.json(storageService.signPublicMediaUrls(updated, 86400));
   } catch (err: any) {
-    console.error("Error updating subcontractor booking:", err);
-    res.status(500).json({ error: err.message });
+    sendErr(res, err);
+  }
+};
+app.patch('/api/subcontractor-bookings/:id', handleUpdateBooking);
+app.put('/api/subcontractor-bookings/:id', handleUpdateBooking);
+
+app.delete('/api/subcontractor-bookings/:id', async (req: any, res) => {
+  try {
+    const existing = await dbService.getSubcontractorBookingById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy phiếu Book QC để xóa.' });
+    }
+    if (String(existing.status || '').toUpperCase().trim() === 'COMPLETED') {
+      return res.status(403).json({
+        error: 'Từ chối xóa: Phiếu Book QC đã hoàn thành nghiệm thu (COMPLETED) là hồ sơ bất biến, không được phép xóa.',
+      });
+    }
+    if (!canDeleteM03Booking(req.authUser, existing)) {
+      return res.status(403).json({
+        error: 'Từ chối truy cập: Bạn không có quyền xóa phiếu Book QC này (cần DELETE_ALL hoặc DELETE_OWN trên phiếu do mình tạo).',
+      });
+    }
+    const success = await dbService.deleteSubcontractorBooking(req.params.id, getActorId(req));
+    res.json({ success });
+  } catch (err: any) {
+    sendErr(res, err);
   }
 });
 
-app.delete("/api/subcontractor-bookings/:id", async (req, res) => {
+app.get('/api/po-materials/lookup', async (req: any, res) => {
   try {
-    const result = await db.deleteSubcontractorBooking(req.params.id);
+    const canLookup =
+      canViewM03(req.authUser) ||
+      canCreateM03(req.authUser) ||
+      dbMod.hasServerPermission(req.authUser, 'MATERIALS', 'VIEW') ||
+      dbMod.hasServerPermission(req.authUser, 'IPO', 'VIEW') ||
+      dbMod.hasServerPermission(req.authUser, 'LIST', 'VIEW') ||
+      dbMod.hasServerPermission(req.authUser, 'INSPECTIONS', 'VIEW');
+    if (!canLookup) {
+      return res.status(403).json({
+        error: 'Từ chối truy cập: Bạn không có quyền tra cứu vật tư PO / IPO.',
+      });
+    }
+    const q = String(req.query.q || '');
+    const result = await dbService.lookupPoMaterials(q);
     res.json(result);
   } catch (err: any) {
-    console.error("Error deleting subcontractor booking:", err);
-    res.status(500).json({ error: err.message });
+    sendErr(res, err);
   }
 });
 
-app.post("/api/subcontractor-inspections", async (req, res) => {
+app.get('/api/subcontractor-inspections', requireM03View, async (_req, res) => {
   try {
-    const result = await db.createSubcontractorInspection(req.body);
-    res.status(201).json(result);
-  } catch (err: any) {
-    console.error("Error creating subcontractor inspection:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/subcontractor-reinspection-costs", async (req, res) => {
-  try {
-    const costs = await db.getSubcontractorReinspectionCosts();
-    res.json({ costs });
-  } catch (err: any) {
-    console.error("Error fetching reinspection costs:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/erp/lookup-po", async (req, res) => {
-  try {
-    const { query: q } = req.query;
-    const result = await db.lookupPoMaterials(String(q || ''));
+    const result = await dbService.getSubcontractorInspections();
     res.json(result);
   } catch (err: any) {
-    console.error("Error looking up PO materials:", err);
-    res.status(500).json({ error: err.message });
+    sendErr(res, err);
   }
 });
 
-// API Catch-all for debugging
-app.all("/api/*all", (req, res) => {
-  console.warn(`API Route not found: ${req.method} ${req.url}`);
-  res.status(404).json({ 
-    error: "API Route not found", 
-    method: req.method, 
-    url: req.url,
-    hint: "Check if the route is defined in server.ts and if the request path is correct."
+app.get('/api/subcontractor-reinspection-costs', requireM03View, async (_req, res) => {
+  try {
+    const result = await dbService.getSubcontractorReinspectionCosts();
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M04: SUPPLIERS ---
+app.get('/api/suppliers/find-by-name', async (req, res) => {
+  try {
+    const name = String(req.query.name || '');
+    const supplier = await dbService.findSupplierByNameOrCode(name);
+    res.json({ supplier });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/suppliers', async (req, res) => {
+  try {
+    const search = String(req.query.search || '');
+    const limit = parseInt(req.query.limit as string || '200', 10);
+    const result = await dbService.getSuppliers(search, limit);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/suppliers', async (req: any, res) => {
+  try {
+    const supplier = await dbService.upsertSupplier(req.body, getActorId(req));
+    res.json({ success: true, supplier });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/suppliers/:id', async (req: any, res) => {
+  try {
+    const result = await dbMod.softDeleteSupplierRecord(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/suppliers/sync-from-bookings', async (_req, res) => {
+  try {
+    const result = await dbService.syncSuppliersFromBookings();
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/suppliers/stats', async (req, res) => {
+  try {
+    const name = String(req.query.name || '');
+    const stats = await dbService.getSupplierStats(name);
+    res.json(stats);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/suppliers/inspections', async (req, res) => {
+  try {
+    const name = String(req.query.name || '');
+    const items = await dbService.getSupplierInspections(name);
+    res.json({ items });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/suppliers/materials', async (req, res) => {
+  try {
+    const name = String(req.query.name || '');
+    const items = await dbService.getSupplierMaterials(name);
+    res.json({ items });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M05 & M12: INSPECTIONS & TRASH ---
+app.get('/api/inspections', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '200', 10);
+    const result = await dbService.getInspectionsList(req.query, page, limit);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/dates', async (req, res) => {
+  try {
+    const dates = await dbService.getInspectionsDates(req.query);
+    res.json(dates);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/projects', async (req, res) => {
+  try {
+    const projects = await dbService.getInspectionsProjects(req.query);
+    res.json(projects);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/deleted', requireTrashAccess, async (_req, res) => {
+  try {
+    const items = await dbMod.getDeletedInspectionsList();
+    res.json(items);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/inspections/sync', async (_req, res) => {
+  try {
+    const result = await dbService.syncMissingInspectionsFromForms();
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/inspections', async (req: any, res) => {
+  try {
+    const result = await dbMod.upsertInspectionRecord(req.body, getActorId(req), req.authUser);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/:id', async (req, res) => {
+  try {
+    const inspection = await dbService.getInspectionById(req.params.id);
+    if (!inspection) {
+      return res.status(404).json({ error: 'Inspection not found' });
+    }
+    res.json({ inspection: storageService.signPublicMediaUrls(inspection, 86400) });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/inspections/:id', async (req: any, res) => {
+  try {
+    const canDel =
+      dbMod.isServerAdmin(req.authUser) ||
+      dbMod.hasServerPermission(req.authUser, 'INSPECTIONS', 'DELETE') ||
+      dbMod.hasServerPermission(req.authUser, 'INSPECTIONS', 'EDIT');
+    if (!canDel) {
+      return res.status(403).json({ error: 'Bạn không có quyền xóa phiếu kiểm tra.' });
+    }
+    const result = await dbMod.softDeleteInspectionRecord(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/inspections/:id/restore', requireTrashAccess, async (req: any, res) => {
+  try {
+    const result = await dbMod.restoreInspectionRecord(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/inspections/:id/permanent', requireAdmin, async (req: any, res) => {
+  try {
+    const result = await dbMod.permanentDeleteInspectionRecord(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/:id/related-bookings', async (req: any, res) => {
+  try {
+    if (!canViewM03(req.authUser) && !canViewM03RelatedSqc(req.authUser)) {
+      return res.status(403).json({
+        error: 'Từ chối truy cập: Bạn không có quyền xem liên kết Booking QC của phiếu kiểm tra.',
+      });
+    }
+    const result = await dbService.getRelatedBookingsForInspection(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/:id/traceability', async (req, res) => {
+  try {
+    const bundle = await dbService.resolveTraceability({
+      inspectionId: req.params.id,
+      isPublic: false,
+    });
+    if (!bundle) {
+      return res.status(404).json({ error: 'Inspection not found' });
+    }
+    res.json(bundle);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/traceability', async (req, res) => {
+  try {
+    const bundle = await dbService.resolveTraceability({
+      inspectionId: req.query.inspectionId ? String(req.query.inspectionId) : undefined,
+      ipo: req.query.ipo ? String(req.query.ipo) : undefined,
+      po: req.query.po ? String(req.query.po) : undefined,
+      pr: req.query.pr ? String(req.query.pr) : undefined,
+      q: req.query.q ? String(req.query.q) : undefined,
+      isPublic: false,
+    });
+    if (!bundle) {
+      return res.status(404).json({ error: 'Traceability record not found' });
+    }
+    res.json(bundle);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/inspections/:id/audit-logs', async (req, res) => {
+  try {
+    const logs = await dbService.getInspectionAuditLogs(req.params.id);
+    res.json(logs);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M06: NCR & DEFECT TRACKER ---
+app.get('/api/ncrs', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    const result = await dbService.getNcrs(req.query, page, limit);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/ncrs/:id', async (req, res) => {
+  try {
+    const ncr = await dbService.getNcrById(req.params.id);
+    if (!ncr) return res.status(404).json({ error: 'NCR not found' });
+    res.json(ncr);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/ncrs', async (req: any, res) => {
+  try {
+    const ncr = await dbService.upsertNcr(req.body, getActorId(req), req.authUser);
+    res.json(ncr);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/ncrs/:id', async (req: any, res) => {
+  try {
+    const canDel =
+      dbMod.isServerAdmin(req.authUser) ||
+      dbMod.hasServerPermission(req.authUser, 'NCR_LIST', 'DELETE') ||
+      dbMod.hasServerPermission(req.authUser, 'NCR_LIST', 'EDIT');
+    if (!canDel) {
+      return res.status(403).json({ error: 'Bạn không có quyền xóa báo cáo NCR.' });
+    }
+    const success = await dbService.deleteNcr(req.params.id, getActorId(req));
+    res.json({ success });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/defects', async (req, res) => {
+  try {
+    const result = await dbMod.getDefectsList({ status: String(req.query.status || 'ALL') });
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M07: DEFECT LIBRARY ---
+app.get('/api/defect-library', async (_req, res) => {
+  try {
+    const items = await dbMod.getDefectLibraryList();
+    res.json(items);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/defect-library', async (req: any, res) => {
+  try {
+    const item = await dbMod.saveDefectLibraryRecord(req.body, getActorId(req));
+    res.json(item);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/defect-library/:id', async (req: any, res) => {
+  try {
+    const result = await dbMod.softDeleteDefectLibraryRecord(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M08: MATERIALS (100% READ-ONLY) ---
+app.get('/api/materials', async (req, res) => {
+  try {
+    const search = String(req.query.search || '');
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    const result = await dbMod.getMaterialsReadOnly(search, page, limit);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+const readOnlyMaterialGuard = (_req: any, res: any) => {
+  res.status(403).json({
+    error: 'Vi phạm quy tắc READ-ONLY: Bảng nguyên vật liệu (material) đồng bộ từ ERP là chỉ đọc, không được phép INSERT/UPDATE/DELETE từ QMS.',
+  });
+};
+app.post('/api/materials', readOnlyMaterialGuard);
+app.put('/api/materials/:id', readOnlyMaterialGuard);
+app.delete('/api/materials/:id', readOnlyMaterialGuard);
+app.post('/api/import/materials', readOnlyMaterialGuard);
+
+// --- M09: TOOL MANAGEMENT ---
+app.get('/api/tool-catalogs', async (_req, res) => {
+  try {
+    res.json(await dbService.getToolCatalogs());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/tool-catalogs', async (req: any, res) => {
+  try {
+    res.json(await dbService.saveToolCatalog(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.delete('/api/tool-catalogs/:id', async (req: any, res) => {
+  try {
+    res.json(await dbService.deleteToolCatalog(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/tool-assets', async (_req, res) => {
+  try {
+    res.json(await dbService.getToolAssets());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.get('/api/tool-catalogs/:catalogId/assets', async (req, res) => {
+  try {
+    res.json(await dbService.getToolAssetsByCatalog(req.params.catalogId));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/tool-assets', async (req: any, res) => {
+  try {
+    res.json(await dbService.saveToolAsset(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.delete('/api/tool-assets/:id', async (req: any, res) => {
+  try {
+    res.json(await dbService.deleteToolAsset(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/tool-assets/:assetId/transfers', async (req, res) => {
+  try {
+    res.json(await dbService.getToolTransfers(req.params.assetId));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/tool-transfers', async (req: any, res) => {
+  try {
+    res.json(await dbService.saveToolTransfer(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/tool-assets/:assetId/calibrations', async (req, res) => {
+  try {
+    res.json(await dbService.getToolCalibrations(req.params.assetId));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/tool-calibrations', async (req: any, res) => {
+  try {
+    res.json(await dbService.saveToolCalibration(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M10: IPO DATA (CORE `ipo` STRICTLY READ-ONLY) & PLANS ---
+app.get('/api/ipo', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    const factoryOrder = String(req.query.factoryOrder || '');
+    const maTender = String(req.query.maTender || '');
+    const result = await dbMod.getIpoReadOnly({ page, limit, factoryOrder, maTender });
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/import/ipo', (_req, res) => {
+  res.status(403).json({
+    error: 'Vi phạm quy tắc READ-ONLY: Bảng đơn hàng sản xuất (ipo) đồng bộ từ ERP là chỉ đọc, không được phép ghi/import từ QMS.',
   });
 });
 
-// Vite middleware for development
-if (process.env.NODE_ENV !== "production") {
-  (async () => {
-    try {
-      const vitePkg = "vite";
-      const { createServer: createViteServer } = await import(vitePkg);
-      const vite = await createViteServer({
-        server: { 
-          middlewareMode: true,
-          hmr: false
-        },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    } catch (e) {
-      console.warn("Vite dev server failed to load (expected in production):", e);
+app.get('/api/ipo/detail/:idFactoryOrder', async (req, res) => {
+  try {
+    const result = await dbMod.getIpoDetailExtended(req.params.idFactoryOrder);
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/ipo/detail', async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveIpoDetailExtendedRecord(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/ipo/drawings', async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveIpoDrawingRecord(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/ipo/materials', async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveIpoMaterialHistoryRecord(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/ipo/samples', async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveIpoSampleHistoryRecord(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.put('/api/ipo/samples/:id', async (req: any, res) => {
+  try {
+    res.json(await dbMod.updateIpoSampleHistoryRecord(req.params.id, req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/ipo/samples/:id', async (req: any, res) => {
+  try {
+    res.json(await dbMod.deleteIpoSampleHistoryRecord(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/plans', async (req, res) => {
+  try {
+    const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '200', 10);
+    res.json(await dbMod.getPlansList({ projectId, search, page, limit }));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- M11: USERS, ROLES, WORKSHOPS, TEMPLATES, ORG, NOTIFICATIONS ---
+app.get('/api/users', async (req, res) => {
+  try {
+    const includeMedia = req.query.includeMedia === '1' || req.query.includeMedia === 'true';
+    const users = await dbMod.getUsersList({ includeMedia });
+    res.json(users);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const user = await dbMod.getUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/users/import', requireAdmin, async (req: any, res) => {
+  try {
+    const result = await dbMod.importUsersBatchRecords(req.body?.users || [], getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/users', async (req: any, res) => {
+  try {
+    const isAdmin = dbMod.isServerAdmin(req.authUser);
+    const existingTarget = req.body?.id ? await dbMod.getUserById(String(req.body.id)) : null;
+    const reqAction = existingTarget ? 'EDIT' : 'CREATE';
+    const hasUserMgmtPerm =
+      dbMod.hasServerPermission(req.authUser, 'SETTINGS_USERS', reqAction) ||
+      dbMod.hasServerPermission(req.authUser, 'SETTINGS', reqAction);
+
+    if (isAdmin || hasUserMgmtPerm) {
+      if (!isAdmin) {
+        const targetRoleUpper = String(req.body?.role || '').trim().toUpperCase();
+        const existingRoleUpper = String(existingTarget?.role || '').trim().toUpperCase();
+        if (targetRoleUpper === 'ADMIN' || existingRoleUpper === 'ADMIN') {
+          return res.status(403).json({ error: 'Từ chối truy cập: Chỉ ADMIN mới có quyền tạo hoặc chỉnh sửa tài khoản vai trò ADMIN.' });
+        }
+        const incomingPerms = Array.isArray(req.body?.userPermissions || req.body?.user_permissions)
+          ? (req.body.userPermissions || req.body.user_permissions)
+          : [];
+        const hasSysAdminGrant = incomingPerms.some((p: any) => String(p?.moduleId || '').toUpperCase() === 'SYSTEM_ADMIN');
+        const incomingModules = Array.isArray(req.body?.allowedModules || req.body?.allowed_modules)
+          ? (req.body.allowedModules || req.body.allowed_modules).map((m: any) => String(m || '').toUpperCase())
+          : [];
+        if (hasSysAdminGrant || incomingModules.includes('SYSTEM_ADMIN')) {
+          return res.status(403).json({ error: 'Từ chối truy cập: Không thể cấp quyền SYSTEM_ADMIN nếu bạn không phải ADMIN.' });
+        }
+      }
+      const result = await dbMod.upsertUserRecord(req.body, getActorId(req));
+      return res.json(result);
     }
-  })();
-} else {
-  const distPath = path.join(__dirname, 'dist');
-  
-  if (!fs.existsSync(distPath)) {
-    console.error("CRITICAL ERROR: 'dist' directory not found!");
-    console.error("Please run 'npm run build' before starting the server in production mode.");
-    
-    app.get("*all", (req, res) => {
-      if (req.url.startsWith('/api/')) return;
-      res.status(500).send(`
-        <div style="font-family: sans-serif; padding: 40px; text-align: center;">
-          <h1 style="color: #e11d48;">Production Build Missing</h1>
-          <p>The <code>dist</code> directory was not found on the server.</p>
-          <p>Please run <code>npm run build</code> to generate the frontend assets before starting the server.</p>
-          <hr style="margin: 20px auto; width: 100px; border: 0; border-top: 1px solid #e2e8f0;">
-          <p style="color: #64748b; font-size: 0.875rem;">Domain: ${req.hostname}</p>
-        </div>
-      `);
+
+    // Non-admin self-profile update only: strip privileged fields to prevent role/permission escalation
+    if (req.body?.id && String(req.body.id) === String(req.authUser?.id)) {
+      const {
+        role: _r,
+        status: _s,
+        allowedModules: _am,
+        allowed_modules: _am2,
+        userPermissions: _up,
+        user_permissions: _up2,
+        la_to_truong: _ltt,
+        requirePasswordChange: _rpc,
+        require_password_change: _rpc2,
+        password: _pw,
+        ...safeProfileFields
+      } = req.body || {};
+      const result = await dbMod.upsertUserRecord(
+        {
+          ...req.authUser,
+          ...safeProfileFields,
+          id: req.authUser.id,
+          role: req.authUser.role,
+          status: req.authUser.status,
+          allowedModules: req.authUser.allowedModules,
+          userPermissions: req.authUser.userPermissions,
+          la_to_truong: req.authUser.la_to_truong,
+        },
+        getActorId(req)
+      );
+      return res.json(result);
+    }
+
+    return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền chỉnh sửa tài khoản người dùng khác.' });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/users/:id', requireAdmin, async (req: any, res) => {
+  try {
+    const result = await dbMod.softDeleteUserRecord(req.params.id, getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/users/:userId/activity', async (req: any, res) => {
+  try {
+    const isSelf = String(req.authUser?.id) === String(req.params.userId);
+    const canViewActivity =
+      isSelf ||
+      dbMod.isServerAdmin(req.authUser) ||
+      dbMod.hasServerPermission(req.authUser, 'SETTINGS_USERS', 'VIEW');
+    if (!canViewActivity) {
+      return res.status(403).json({ error: 'Từ chối truy cập lịch sử hoạt động của người dùng khác.' });
+    }
+    const stats = await dbMod.getUserActivityLogs(req.params.userId);
+    res.json(stats);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/roles', async (_req, res) => {
+  try {
+    res.json(await dbMod.getRolesList());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/roles', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveRoleRecord(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/roles/:id', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbMod.deleteRoleRecord(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/workshops', async (_req, res) => {
+  try {
+    res.json(await dbMod.getWorkshopsList());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/workshops', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveWorkshopRecord(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/workshops/:id', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbMod.deleteWorkshopRecord(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/templates', async (_req, res) => {
+  try {
+    res.json(await dbMod.getTemplatesMap());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/templates/:id', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbMod.saveTemplateRecord(req.params.id, req.body?.items || [], getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/admin/sync-departments', requireAdmin, async (_req, res) => {
+  try {
+    res.json(await dbMod.syncDepartmentsForUsers());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/notifications', async (req: any, res) => {
+  try {
+    const requestedUserId = String(req.query.userId || req.query.user_id || '').trim();
+    const userId = dbMod.isServerAdmin(req.authUser) && requestedUserId
+      ? requestedUserId
+      : String(req.authUser?.id || '').trim();
+    const page = parseInt(req.query.page as string || '1', 10);
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    res.json(await dbService.getNotifications(userId, page, limit));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/notifications/:id/read', async (req: any, res) => {
+  try {
+    const requestedUserId = req.body?.userId ? String(req.body.userId).trim() : '';
+    const userId = dbMod.isServerAdmin(req.authUser) && requestedUserId
+      ? requestedUserId
+      : String(req.authUser?.id || '').trim();
+    res.json(await dbService.markNotificationAsRead(req.params.id, userId));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/notifications/read-all', async (req: any, res) => {
+  try {
+    const requestedUserId = String(req.body?.userId || req.query?.userId || '').trim();
+    const userId = dbMod.isServerAdmin(req.authUser) && requestedUserId
+      ? requestedUserId
+      : String(req.authUser?.id || '').trim();
+    res.json(await dbService.markAllNotificationsAsRead(userId));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/notifications', async (req, res) => {
+  try {
+    res.json(await dbService.createNotificationRecord(req.body));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/departments', async (_req, res) => {
+  try {
+    res.json(await dbService.getDepartments());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/departments', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbService.upsertDepartment(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.delete('/api/departments/:id', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbService.deleteDepartment(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/divisions', async (_req, res) => {
+  try {
+    res.json(await dbService.getDivisions());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/divisions', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbService.upsertDivision(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.delete('/api/divisions/:id', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbService.deleteDivision(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/teams', async (_req, res) => {
+  try {
+    res.json(await dbService.getTeams());
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.post('/api/teams', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbService.upsertTeam(req.body, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+app.delete('/api/teams/:id', requireAdmin, async (req: any, res) => {
+  try {
+    res.json(await dbService.deleteTeam(req.params.id, getActorId(req)));
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// --- SIGNED STORAGE ADAPTER & SAFE IMAGE PROXY ---
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: storageService.MAX_STORAGE_FILE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (storageService.isAllowedMimeType(file.mimetype)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Định dạng tệp không được hỗ trợ: ${file.mimetype || 'unknown'}`));
+  },
+});
+
+const uploadFieldsMiddleware = memoryUpload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
+  { name: 'files', maxCount: 10 },
+]);
+
+app.post('/api/storage/signed-upload-url', (req: any, res) => {
+  try {
+    const grant = storageService.createSignedUploadUrl({
+      filename: req.body?.filename || req.body?.fileName,
+      contentType: req.body?.contentType || req.body?.mimeType,
+      entityType: req.body?.entityType || req.body?.type,
+      entityId: req.body?.entityId,
+      role: req.body?.role,
+      ttlSeconds: req.body?.ttlSeconds,
     });
-  } else {
-    console.log("Serving static files from:", distPath);
-    app.use(express.static(distPath));
-    
-    // Standard SPA fallback for Express 5
-    app.get("*all", (req, res) => {
-      if (req.url.startsWith('/api/')) return; // Should have been caught by API catch-all
-      res.sendFile(path.join(distPath, 'index.html'));
+    res.json(grant);
+  } catch (err: any) {
+    sendErr(res, err, 400);
+  }
+});
+
+app.get('/api/storage/signed-download-url', (req: any, res) => {
+  try {
+    const rawKey = String(req.query.key || req.query.url || '').trim();
+    if (!rawKey) return res.status(400).json({ error: 'Thiếu tham số key hoặc url' });
+    const ttl = parseInt(String(req.query.ttlSeconds || '3600'), 10);
+    const signedUrl = storageService.createSignedDownloadUrl(rawKey, ttl);
+    res.json({ url: signedUrl, expiresIn: ttl });
+  } catch (err: any) {
+    sendErr(res, err, 400);
+  }
+});
+
+const rawBinaryStorageMiddleware = express.raw({
+  type: () => true,
+  limit: storageService.MAX_STORAGE_FILE_BYTES,
+});
+
+const handleSignedStorageUpload = async (req: any, res: any) => {
+  try {
+    const verification = storageService.verifySignedStorageRequest({
+      action: 'upload',
+      key: String(req.query.key || ''),
+      expires: req.query.expires as string | undefined,
+      sig: req.query.sig as string | undefined,
     });
+    if (!verification.ok) {
+      return res.status((verification as any).statusCode).json({ error: (verification as any).error });
+    }
+
+    const contentType = String(req.headers['content-type'] || '').toLowerCase();
+    if (contentType.includes('multipart/form-data')) {
+      return uploadFieldsMiddleware(req, res, async (err: any) => {
+        if (err) {
+          const status = err?.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+          return res.status(status).json({ error: err?.message || 'Lỗi tải tệp lên' });
+        }
+        const filesObj = (req.files || {}) as Record<string, Express.Multer.File[]>;
+        const primary =
+          req.file ||
+          filesObj.file?.[0] ||
+          filesObj.image?.[0] ||
+          filesObj.files?.[0];
+        if (!primary) {
+          return res.status(400).json({ error: 'Không có tệp được tải lên' });
+        }
+        try {
+          const stored = await storageService.writeStorageBuffer(verification.storageKey, primary.buffer);
+          return res.json({
+            ...stored,
+            url: stored.accessUrl,
+            signedDownloadUrl: storageService.createSignedDownloadUrl(stored.storageKey, 3600),
+            filename: primary.originalname,
+            mimetype: primary.mimetype,
+          });
+        } catch (writeErr: any) {
+          return sendErr(res, writeErr);
+        }
+      });
+    }
+
+    return rawBinaryStorageMiddleware(req, res, async (err: any) => {
+      if (err) {
+        const status = err?.type === 'entity.too.large' ? 413 : 400;
+        return res.status(status).json({ error: err?.message || 'Lỗi đọc luồng dữ liệu tải lên' });
+      }
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: 'Nội dung tệp tải lên rỗng.' });
+      }
+      try {
+        const stored = await storageService.writeStorageBuffer(verification.storageKey, req.body);
+        return res.json({
+          ...stored,
+          url: stored.accessUrl,
+          signedDownloadUrl: storageService.createSignedDownloadUrl(stored.storageKey, 3600),
+        });
+      } catch (writeErr: any) {
+        return sendErr(res, writeErr);
+      }
+    });
+  } catch (err: any) {
+    return sendErr(res, err);
+  }
+};
+
+app.put('/api/storage/upload', handleSignedStorageUpload);
+app.post('/api/storage/upload', handleSignedStorageUpload);
+
+app.get('/api/storage/files/*storageKey', (req: any, res) => {
+  try {
+    const rawParam = Array.isArray(req.params.storageKey)
+      ? req.params.storageKey.join('/')
+      : String(req.params.storageKey || '');
+    const cleanKey = storageService.sanitizeStorageKey(decodeURIComponent(rawParam));
+
+    const hasSignedParams = Boolean(req.query.sig && req.query.expires);
+    if (hasSignedParams) {
+      const verified = storageService.verifySignedStorageRequest({
+        action: 'download',
+        key: cleanKey,
+        expires: req.query.expires as string | undefined,
+        sig: req.query.sig as string | undefined,
+      });
+      if (!verified.ok) {
+        const errRes = verified as { statusCode: number; error: string };
+        return res.status(errRes.statusCode).json({ error: errRes.error });
+      }
+    } else {
+      const queryToken = req.query.token ? `Bearer ${String(req.query.token)}` : undefined;
+      const hasJwt = Boolean(req.authUser || dbMod.verifyJwtToken(queryToken));
+      if (!hasJwt) {
+        return res.status(401).json({ error: 'Yêu cầu JWT hoặc Signed Download URL hợp lệ để truy cập tệp.' });
+      }
+    }
+
+    const filePath = storageService.resolveStorageFilePath(cleanKey);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return res.status(404).json({ error: 'Storage asset not found' });
+    }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.sendFile(filePath);
+  } catch (err: any) {
+    return sendErr(res, err);
+  }
+});
+
+app.post('/api/upload', (req: any, res) => {
+  uploadFieldsMiddleware(req, res, async (err: any) => {
+    if (err) {
+      const status = err?.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      return res.status(status).json({ error: err?.message || 'Lỗi tải tệp lên' });
+    }
+    const filesObj = (req.files || {}) as Record<string, Express.Multer.File[]>;
+    const uploadedFiles: Express.Multer.File[] = [
+      ...(filesObj.file || []),
+      ...(filesObj.image || []),
+      ...(filesObj.files || []),
+    ];
+    const primary = req.file || uploadedFiles[0];
+    if (!primary) {
+      return res.status(400).json({ error: 'Không có tệp được tải lên (hỗ trợ field: file, image, files)' });
+    }
+    try {
+      const batch = uploadedFiles.length > 0 ? uploadedFiles : [primary];
+      const storedList = await Promise.all(
+        batch.map(async (f) => {
+          const grant = storageService.createSignedUploadUrl({
+            filename: f.originalname,
+            contentType: f.mimetype,
+            entityType: String(req.body?.entityType || 'GENERAL'),
+            role: String(req.body?.role || ''),
+          });
+          return storageService.writeStorageBuffer(grant.storageKey, f.buffer);
+        })
+      );
+      return res.json({
+        url: storedList[0].accessUrl,
+        urls: storedList.map((s) => s.accessUrl),
+        storageKey: storedList[0].storageKey,
+        filename: primary.originalname,
+        mimetype: primary.mimetype,
+        size: primary.size,
+      });
+    } catch (writeErr: any) {
+      return sendErr(res, writeErr);
+    }
+  });
+});
+
+function normalizeGoogleDriveUrl(inputUrl: string): { primary: string; fallbacks: string[]; fileId?: string } {
+  try {
+    let fileId = '';
+    const cleanUrl = String(inputUrl || '').trim();
+    if (cleanUrl.includes('drive.google.com') || cleanUrl.includes('lh3.googleusercontent.com')) {
+      const fileMatch = cleanUrl.match(/\/file\/d\/([^/?]+)/);
+      const idMatch = cleanUrl.match(/[?&]id=([^&]+)/);
+      const dMatch = cleanUrl.match(/\/d\/([^/?]+)/);
+      fileId = fileMatch?.[1] || idMatch?.[1] || dMatch?.[1] || '';
+    } else if (cleanUrl.includes('/api/media/image/') || cleanUrl.includes('/api/image/') || cleanUrl.includes('/display-image/')) {
+      fileId = cleanUrl.split(/[/?]/).filter(Boolean).pop() || '';
+    } else if (/^[a-zA-Z0-9_-]{15,}$/.test(cleanUrl)) {
+      fileId = cleanUrl;
+    }
+
+    if (fileId && /^[a-zA-Z0-9_-]{15,}$/.test(fileId)) {
+      return {
+        fileId,
+        primary: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+        fallbacks: [
+          `https://lh3.googleusercontent.com/d/${fileId}`,
+          `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`,
+          `https://drive.google.com/uc?export=view&id=${fileId}`
+        ]
+      };
+    }
+  } catch {
+    // Ignore invalid URL parse
+  }
+  return { primary: inputUrl, fallbacks: [] };
+}
+
+async function fetchUpstreamImage(targetUrl: string, googleToken?: string): Promise<{ ok: boolean; status: number; contentType: string; buf?: Buffer; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+    };
+    if (googleToken) {
+      headers['Authorization'] = `Bearer ${googleToken}`;
+    }
+    const upstream = await fetch(targetUrl, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers,
+    });
+    if (!upstream.ok) {
+      return { ok: false, status: upstream.status, contentType: upstream.headers.get('content-type') || '', error: `Upstream returned ${upstream.status}` };
+    }
+    const contentType = (upstream.headers.get('content-type') || 'application/octet-stream').toLowerCase();
+    if (contentType.includes('text/html') || contentType.includes('application/xhtml+xml')) {
+      return { ok: false, status: 502, contentType, error: 'Upstream returned HTML page instead of image binary' };
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    return { ok: true, status: 200, contentType, buf };
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      return { ok: false, status: 504, contentType: '', error: 'Image upstream request timed out' };
+    }
+    return { ok: false, status: 502, contentType: '', error: err?.message || 'Failed to fetch upstream image' };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-const PORT = 3000;
-console.log(`🚀 Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
-console.log(`📡 Database Schema: ${process.env.DB_SCHEMA || 'appQAQC'}`);
-console.log(`🔧 PORT: ${PORT}`);
+const proxyImageHandler = async (req: any, res: any) => {
+  try {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
-  db.fixAllUserDefaultPasswords().catch((err: any) => {
-    console.error("Failed to run fixAllUserDefaultPasswords migration:", err);
-  });
-  db.syncUserDepartmentsAndTeams().catch((err: any) => {
-    console.error("Failed to run syncUserDepartmentsAndTeams migration:", err);
-  });
+    let rawUrl = String(req.query.url || req.query.id || req.query.fileId || '').trim();
+    if (!rawUrl) return res.status(400).json({ error: 'Missing url or id parameter' });
+
+    const googleToken = String(req.query.google_token || req.headers['x-google-token'] || req.headers['x-goog-token'] || '').trim();
+
+    // Handle local /uploads/ path or full URL pointing to local /uploads/
+    let localUploadsPath: string | null = null;
+    if (rawUrl.startsWith('/uploads/')) {
+      localUploadsPath = rawUrl;
+    } else if (/^https?:\/\//i.test(rawUrl)) {
+      try {
+        const parsed = new URL(rawUrl);
+        if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && parsed.pathname.startsWith('/uploads/')) {
+          localUploadsPath = parsed.pathname;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (localUploadsPath) {
+      const cleanRel = decodeURIComponent(localUploadsPath.split('?')[0]).replace(/^\/+uploads\/+/, '');
+      const resolvedPath = path.resolve(UPLOAD_DIR, cleanRel);
+      if (resolvedPath !== UPLOAD_DIR && !resolvedPath.startsWith(UPLOAD_DIR + path.sep)) {
+        return res.status(403).json({ error: 'Forbidden image path' });
+      }
+      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.sendFile(resolvedPath);
+      }
+      const placeholderSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f5f9"/><path d="M160 120h80v60h-80z" fill="none" stroke="#94a3b8" stroke-width="4" rx="6"/><circle cx="182" cy="140" r="6" fill="#94a3b8"/><path d="M166 172l24-22 18 16 14-12 12 18z" fill="#cbd5e1"/><text x="200" y="220" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Hình ảnh chưa sẵn sàng</text></svg>`
+      );
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(placeholderSvg);
+    }
+
+    // Google Drive normalization
+    const { primary, fallbacks, fileId } = normalizeGoogleDriveUrl(rawUrl);
+    const candidates: string[] = [];
+
+    // If Google Workspace OAuth token is provided and we have fileId, try Google Drive API direct download first
+    if (fileId && googleToken) {
+      candidates.push(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+    }
+
+    if (primary && (primary.startsWith('http://') || primary.startsWith('https://'))) {
+      candidates.push(primary);
+    }
+    for (const fb of fallbacks) {
+      if (!candidates.includes(fb)) candidates.push(fb);
+    }
+
+    let result: { ok: boolean; status: number; contentType: string; buf?: Buffer; error?: string } = {
+      ok: false,
+      status: 502,
+      contentType: '',
+      buf: undefined,
+      error: 'Failed to proxy external image'
+    };
+    
+    for (const candidate of candidates) {
+      result = await fetchUpstreamImage(candidate, googleToken);
+      if (result.ok && result.buf) {
+        break;
+      }
+    }
+
+    if (!result.ok || !result.buf) {
+      const placeholderSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f5f9"/><path d="M160 120h80v60h-80z" fill="none" stroke="#94a3b8" stroke-width="4" rx="6"/><circle cx="182" cy="140" r="6" fill="#94a3b8"/><path d="M166 172l24-22 18 16 14-12 12 18z" fill="#cbd5e1"/><text x="200" y="220" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Không thể tải ảnh từ nguồn</text></svg>`
+      );
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(placeholderSvg);
+    }
+    res.setHeader('Content-Type', result.contentType || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(result.buf);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+};
+app.get('/api/proxy-image', proxyImageHandler);
+app.get('/api/images/proxy', proxyImageHandler);
+
+// Guard legacy image paths and resolve Google Drive IDs against Vite SPA HTML fallback
+app.use(['/display-image', '/api/image', '/api/media/image', '/media/stream'], async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+  const filename = path.basename((req.path || '').split('?')[0]);
+  const candidateId = filename || String(req.query.id || req.query.url || '').trim();
+
+  if (candidateId) {
+    const resolved = path.resolve(UPLOAD_DIR, candidateId);
+    if (resolved.startsWith(UPLOAD_DIR + path.sep) && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(resolved);
+    }
+
+    // Check if candidateId matches Google Drive ID pattern or contains Drive URL
+    if (/^[a-zA-Z0-9_-]{15,}$/.test(candidateId) || candidateId.includes('drive.google.com') || candidateId.includes('lh3.googleusercontent.com')) {
+      const googleToken = String(req.query.google_token || req.headers['x-google-token'] || req.headers['x-goog-token'] || '').trim();
+      const { primary, fallbacks, fileId } = normalizeGoogleDriveUrl(candidateId);
+      const candidates: string[] = [];
+
+      if (fileId && googleToken) {
+        candidates.push(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+      }
+      if (primary && (primary.startsWith('http://') || primary.startsWith('https://'))) {
+        candidates.push(primary);
+      }
+      for (const fb of fallbacks) {
+        if (!candidates.includes(fb)) candidates.push(fb);
+      }
+
+      for (const candidate of candidates) {
+        const result = await fetchUpstreamImage(candidate, googleToken);
+        if (result.ok && result.buf) {
+          res.setHeader('Content-Type', result.contentType || 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.send(result.buf);
+        }
+      }
+
+      // Return placeholder SVG gracefully instead of 404
+      const placeholderSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f5f9"/><path d="M160 120h80v60h-80z" fill="none" stroke="#94a3b8" stroke-width="4" rx="6"/><circle cx="182" cy="140" r="6" fill="#94a3b8"/><path d="M166 172l24-22 18 16 14-12 12 18z" fill="#cbd5e1"/><text x="200" y="220" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Không thể tải ảnh từ nguồn</text></svg>`
+      );
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(placeholderSvg);
+    }
+  }
+  return res.status(404).json({ error: `Image asset not found: ${req.originalUrl}` });
 });
 
-export default app;
+// --- SYSTEM AUDIT & 12-MODULE DIAGNOSTIC ENDPOINTS ---
+app.get('/api/system/audit-errors', requireAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    const moduleId = String(req.query.moduleId || 'ALL');
+    const statusGroup = String(req.query.statusGroup || 'ALL');
+    const search = String(req.query.search || '');
+    const result = await dbMod.getApiErrorLogs({ limit, moduleId, statusGroup, search });
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
 
+app.post('/api/system/audit-errors', async (req: any, res) => {
+  try {
+    const reqPath = String(req.body?.path || '/api/unknown');
+    const mod = dbMod.resolveModuleFromPath(reqPath);
+    await dbMod.recordApiErrorLog({
+      moduleId: req.body?.moduleId || mod.moduleId,
+      moduleName: req.body?.moduleName || mod.moduleName,
+      method: String(req.body?.method || 'GET'),
+      path: reqPath,
+      statusCode: Number(req.body?.statusCode || 500),
+      errorMessage: String(req.body?.errorMessage || 'Client reported API failure'),
+      userId: getActorId(req),
+      durationMs: Number(req.body?.durationMs || 0),
+      details: req.body?.details || null,
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.post('/api/system/probe-modules', requireAdmin, async (_req, res) => {
+  try {
+    const result = await dbMod.probeAll12Modules();
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/system/audit-errors', requireAdmin, async (req: any, res) => {
+  try {
+    const result = await dbMod.clearApiErrorLogs(getActorId(req));
+    res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+// JSON fallback for missing API endpoints to avoid Vite HTML spa-fallback
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+});
+
+async function startServer() {
+  try {
+    await runMigrations();
+  } catch (migErr) {
+    console.warn('⚠️ Startup migration warning:', migErr);
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true, hmr: false, ws: false },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.join(__dirname, 'dist')));
+    app.use((_req, res) => {
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    });
+  }
+
+  const server = http.createServer(app);
+  server.listen(PORT, () => {
+    console.log(`🚀 QMS Server v3.1.0 running on http://localhost:${PORT}`);
+    dbService.syncSuppliersFromBookings().then((res) => {
+      console.log(`📦 Synced supplier contact details from bookings: ${res.updatedCount || 0} updated.`);
+    }).catch((err) => {
+      console.warn('Failed initial supplier sync:', err);
+    });
+    dbService.syncMissingInspectionsFromForms().then((res) => {
+      console.log(`📋 Synced missing forms -> inspections: ${res.inserted} inserted, ${res.updated} po_number updated.`);
+    }).catch((err) => {
+      console.warn('Failed initial forms->inspections sync:', err);
+    });
+    backfillTraceabilityIndex().then((count) => {
+      console.log(`🔎 Backfilled inspection_traceability_index: ${count} index entries ensured.`);
+    }).catch((err) => {
+      console.warn('Failed initial traceability index backfill:', err);
+    });
+  });
+}
+
+startServer();

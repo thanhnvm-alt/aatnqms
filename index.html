@@ -1,122 +1,270 @@
-
 <!DOCTYPE html>
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>AAG - Quality System</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    
-    <script>
-      window.global = window;
-      window.process = window.process || { env: {} };
-      // Minimal Buffer polyfill for browser compatibility
-      if (typeof window.Buffer === 'undefined') {
-        window.Buffer = {
-          isBuffer: () => false,
-          from: (data) => data,
-          alloc: (size) => new Uint8Array(size),
-          concat: (list) => {
-            let totalLength = list.reduce((acc, curr) => acc + curr.length, 0);
-            let result = new Uint8Array(totalLength);
-            let offset = 0;
-            for (let item of list) {
-              result.set(item, offset);
-              offset += item.length;
-            }
-            return result;
-          }
-        };
-      }
-    </script>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              brand: '#2563EB',
-              success: '#16A34A',
-              warning: '#F97316',
-              danger: '#DC2626',
-              info: '#0891B2',
-            }
-          }
-        }
-      }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Load PDF.js for Floor Plan rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-
-    <style>
-      :root {
-        --sat: env(safe-area-inset-top);
-        --sab: env(safe-area-inset-bottom);
-        --sal: env(safe-area-inset-left);
-        --sar: env(safe-area-inset-right);
-      }
-      
-      html {
-        height: 100%;
-        width: 100%;
-      }
-      body { 
-        font-family: 'Inter', sans-serif; 
-        overscroll-behavior-y: contain;
-        -webkit-tap-highlight-color: transparent;
-        width: 100%;
-        overflow-x: hidden;
-        font-size: 14px;
-        line-height: 1.5;
-        height: 100vh; /* Fallback for browsers that do not support dvh */
-        height: 100dvh;
-        margin: 0;
-        padding: 0;
-      }
-      
-      #root {
-        height: 100%;
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      
-      ::-webkit-scrollbar { width: 4px; height: 4px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-      
-      .safe-pb { padding-bottom: var(--sab); }
-      .safe-pt { padding-top: var(--sat); }
-      
-      @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-      .page-enter { animation: slideUp 0.3s ease-out forwards; }
-
-      .no-scroll-x { overflow-x: hidden; }
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      
-      svg { width: auto; height: auto; }
-      
-      /* Mobile optimization for long lists */
-      .inspection-item-card {
-        touch-action: pan-y;
-        -webkit-user-drag: none;
-      }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QMS - AA Corporation</title>
+    <meta name="description" content="Hệ thống quản lý chất lượng QA/QC cho nhà máy và xưởng vệ tinh" />
+    <meta property="og:title" content="QMS - AA Corporation" />
+    <meta property="og:description" content="Hệ thống quản lý chất lượng QA/QC cho nhà máy và xưởng vệ tinh" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="bg-slate-50 dark:bg-[#0b1120] text-slate-900 dark:text-slate-100 selection:bg-blue-100 dark:selection:bg-blue-900 no-scroll-x transition-colors duration-200">
-    <div id="root"></div>
+  <body>
+    <div id="root">
+      <div id="qms-boot-splash" class="qms-splash-wrap">
+        <div class="qms-splash-card">
+          <div id="qms-boot-spinner" class="qms-spinner" aria-hidden="true"></div>
+          <div id="qms-boot-badge" class="qms-badge" style="display: none;"></div>
+          <p id="qms-boot-title" class="qms-title">Đang khởi động QMS...</p>
+          <p id="qms-boot-desc" class="qms-desc" style="display: none;"></p>
+          <pre id="qms-boot-detail" class="qms-detail" style="display: none;"></pre>
+          <div id="qms-boot-actions" class="qms-actions" style="display: none;">
+            <button type="button" id="qms-btn-retry" class="qms-btn qms-btn-primary">Thử lại</button>
+            <button type="button" id="qms-btn-reset" class="qms-btn qms-btn-danger">Reset phiên</button>
+          </div>
+        </div>
+      </div>
+      <style>
+        .qms-splash-wrap {
+          display: flex;
+          min-height: 100vh;
+          width: 100%;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+          box-sizing: border-box;
+          background-color: #f8fafc;
+          color: #0f172a;
+          font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .dark .qms-splash-wrap {
+          background-color: #0b1120;
+          color: #f1f5f9;
+        }
+        .qms-splash-card {
+          width: 100%;
+          max-width: 420px;
+          text-align: center;
+          padding: 24px;
+          border-radius: 12px;
+          transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+        }
+        .qms-splash-card.is-recovery {
+          background-color: #ffffff;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+          text-align: left;
+        }
+        .dark .qms-splash-card.is-recovery {
+          background-color: #0f172a;
+          border-color: #1e293b;
+        }
+        .qms-spinner {
+          width: 36px;
+          height: 36px;
+          border: 3px solid #e2e8f0;
+          border-top-color: #2563eb;
+          border-radius: 50%;
+          animation: qms-spin 0.8s linear infinite;
+          margin: 0 auto 14px auto;
+        }
+        .dark .qms-spinner {
+          border-color: #1e293b;
+          border-top-color: #3b82f6;
+        }
+        .qms-badge {
+          display: inline-block;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          margin-bottom: 8px;
+        }
+        .qms-badge.is-timeout { color: #d97706; }
+        .qms-badge.is-error { color: #dc2626; }
+        .qms-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: #475569;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin: 0;
+        }
+        .dark .qms-title { color: #cbd5e1; }
+        .qms-splash-card.is-recovery .qms-title {
+          font-size: 16px;
+          text-transform: none;
+          letter-spacing: -0.01em;
+          color: #0f172a;
+        }
+        .dark .qms-splash-card.is-recovery .qms-title { color: #f8fafc; }
+        .qms-desc {
+          font-size: 14px;
+          line-height: 1.5;
+          color: #475569;
+          margin: 8px 0 0 0;
+        }
+        .dark .qms-desc { color: #94a3b8; }
+        .qms-detail {
+          margin: 12px 0 0 0;
+          padding: 10px 12px;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+          font-size: 11px;
+          line-height: 1.45;
+          color: #dc2626;
+          white-space: pre-wrap;
+          word-break: break-word;
+          max-height: 120px;
+          overflow: auto;
+        }
+        .dark .qms-detail {
+          background: #1e293b;
+          border-color: #334155;
+          color: #f87171;
+        }
+        .qms-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-top: 18px;
+        }
+        .qms-btn {
+          flex: 1 1 140px;
+          min-height: 44px;
+          padding: 10px 16px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          border: 1px solid transparent;
+          transition: background-color 150ms ease, transform 150ms ease;
+        }
+        .qms-btn:active { transform: scale(0.98); }
+        .qms-btn-primary { background-color: #2563eb; color: #ffffff; }
+        .qms-btn-primary:hover { background-color: #1d4ed8; }
+        .qms-btn-danger { background-color: #fef2f2; color: #dc2626; border-color: #fecaca; }
+        .qms-btn-danger:hover { background-color: #fee2e2; }
+        .dark .qms-btn-danger { background-color: rgba(220, 38, 38, 0.14); color: #f87171; border-color: rgba(220, 38, 38, 0.35); }
+        @keyframes qms-spin { to { transform: rotate(360deg); } }
+      </style>
+    </div>
+    <script>
+      (function () {
+        var MOUNT_TIMEOUT_MS = 10000;
+        var mounted = false;
+        var recoveryShown = false;
+        try {
+          if (localStorage.getItem('theme_mode') === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+
+        function showRecovery(kind, title, desc, detail) {
+          if (mounted || recoveryShown) return;
+          var splash = document.getElementById('qms-boot-splash');
+          if (!splash) return;
+          recoveryShown = true;
+
+          var card = splash.querySelector('.qms-splash-card');
+          var spinner = document.getElementById('qms-boot-spinner');
+          var badge = document.getElementById('qms-boot-badge');
+          var titleEl = document.getElementById('qms-boot-title');
+          var descEl = document.getElementById('qms-boot-desc');
+          var detailEl = document.getElementById('qms-boot-detail');
+          var actionsEl = document.getElementById('qms-boot-actions');
+
+          if (card) card.classList.add('is-recovery');
+          if (spinner) spinner.style.display = 'none';
+          if (badge) {
+            badge.style.display = 'inline-block';
+            badge.className = 'qms-badge ' + (kind === 'timeout' ? 'is-timeout' : 'is-error');
+            badge.textContent = kind === 'timeout' ? 'Quá thời gian chờ (10s)' : 'Lỗi khởi động hệ thống';
+          }
+          if (titleEl) titleEl.textContent = title;
+          if (descEl) {
+            descEl.style.display = 'block';
+            descEl.textContent = desc;
+          }
+          if (detailEl && detail) {
+            detailEl.style.display = 'block';
+            detailEl.textContent = String(detail).slice(0, 400);
+          }
+          if (actionsEl) actionsEl.style.display = 'flex';
+        }
+
+        function onPreMountError(event) {
+          if (mounted) return;
+          var msg = (event && (event.message || (event.reason && (event.reason.message || event.reason)))) || '';
+          var strMsg = String(msg || '');
+          // Ignore harmless Vite HMR websocket noises if any
+          if (strMsg.indexOf('[vite]') !== -1 || strMsg.indexOf('WebSocket') !== -1) return;
+          showRecovery(
+            'error',
+            'Không thể khởi động ứng dụng QMS',
+            'Phát hiện sự cố khi tải tài nguyên khởi động. Vui lòng thử lại hoặc Reset phiên làm việc cục bộ.',
+            strMsg || 'Lỗi nạp module trình duyệt'
+          );
+        }
+
+        var retryBtn = document.getElementById('qms-btn-retry');
+        var resetBtn = document.getElementById('qms-btn-reset');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', function () {
+            window.location.reload();
+          });
+        }
+        if (resetBtn) {
+          resetBtn.addEventListener('click', function () {
+            var keys = ['aatn_auth_storage', 'aatn_qms_token', 'aatn_saved_username', 'theme_mode', 'density_mode'];
+            for (var i = 0; i < keys.length; i++) {
+              try { localStorage.removeItem(keys[i]); } catch (e) {}
+              try { sessionStorage.removeItem(keys[i]); } catch (e) {}
+            }
+            window.location.href = window.location.pathname || '/';
+          });
+        }
+
+        window.addEventListener('error', onPreMountError);
+        window.addEventListener('unhandledrejection', onPreMountError);
+
+        var timer = setTimeout(function () {
+          if (!mounted) {
+            showRecovery(
+              'timeout',
+              'Khởi động mất nhiều thời gian hơn dự kiến',
+              'Hệ thống chưa phản hồi sau 10 giây. Bạn có thể tải lại trang hoặc Reset phiên đăng nhập cục bộ để khắc phục.',
+              'Boot timeout after 10000ms (check network or cached session)'
+            );
+          }
+        }, MOUNT_TIMEOUT_MS);
+
+        window.__QMS_MARK_MOUNTED__ = function () {
+          if (mounted) return;
+          mounted = true;
+          clearTimeout(timer);
+          window.removeEventListener('error', onPreMountError);
+          window.removeEventListener('unhandledrejection', onPreMountError);
+        };
+
+        window.__QMS_BOOT_FAIL__ = function (err) {
+          var msg = err && err.message ? err.message : String(err || 'Unknown bootstrap error');
+          showRecovery(
+            'error',
+            'Không thể khởi động ứng dụng QMS',
+            'Trình duyệt gặp lỗi khi gắn giao diện chính. Vui lòng thử lại hoặc Reset phiên.',
+            msg
+          );
+        };
+      })();
+    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

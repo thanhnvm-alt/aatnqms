@@ -1,8 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { getProxyImageUrl } from '../src/utils';
-import { fetchDefectLibrary } from '../services/apiService';
+import { fetchDefectLibrary, uploadQMSImage } from '../services/apiService';
 import { DefectLibraryItem } from '../types';
 import { 
   X, ChevronLeft, ChevronRight, PenTool, Undo2, 
@@ -11,6 +10,7 @@ import {
   RotateCcw, Sliders, Trash2, Type,
   Search, MessageSquare, History, Palette, Layers
 } from 'lucide-react';
+import { ConfirmDialog } from '../src/components/qms';
 
 interface ImageEditorModalProps {
   images: string[];
@@ -39,6 +39,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [initialDistance, setInitialDistance] = useState<number | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [initialZoom, setInitialZoom] = useState<number>(1);
   const startPan = useRef({ x: 0, y: 0 });
   
@@ -290,6 +291,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   useEffect(() => {
     setRotation(0);
+    setLoadError(null);
   }, [currentIndex]);
 
   const rotateCanvas90Deg = () => {
@@ -375,9 +377,10 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     if (canvasRef.current && onSave && isDirty && !loadError) {
       try {
           setIsProcessing(true);
-          // Do not compress the image aggressively, keep high quality
-          const updatedImage = canvasRef.current.toDataURL('image/jpeg', 0.95);
-          await onSave(currentIndex, updatedImage);
+          // Do not compress the image aggressively, keep high quality and upload to storage
+          const updatedDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
+          const uploadedUrl = await uploadQMSImage(updatedDataUrl, { role: 'EDITED_IMAGE' });
+          await onSave(currentIndex, uploadedUrl);
           setIsEditing(false);
           setIsDirty(false);
           setHistory([]);
@@ -480,7 +483,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const handleDownload = () => {
     const link = document.createElement('a');
     link.download = `AATN_HD_ISO_${Date.now()}.jpg`;
-    link.href = images[currentIndex];
+    link.href = getProxyImageUrl(images[currentIndex]);
     link.click();
   };
 
@@ -497,9 +500,9 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   return (
     <div className="fixed inset-0 h-[100dvh] w-screen z-[500] bg-[#0c1421] flex flex-col animate-in fade-in duration-300 overflow-hidden touch-none selection:bg-blue-500/30" style={{ fontFamily: 'Inter, sans-serif' }}>
       {/* HEADER: Clean & Professional Dark Style */}
-      <div className="h-14 pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 text-white bg-[#0f172a]/90 backdrop-blur-xl border-b border-white/5 shrink-0 z-[60]">
-        <div className="flex items-center gap-3">
-          <button onClick={() => { if (isDirty && window.confirm("Lưu thay đổi trước khi đóng?")) handleCommitEdit(); else onClose(); }} className="p-3 hover:bg-white/10 rounded-full transition-all active:scale-90"><X className="w-6 h-6" /></button>
+      <div className="min-h-14 pt-[env(safe-area-inset-top)] flex items-center justify-between px-3 sm:px-4 py-1 text-white bg-[#0f172a]/90 backdrop-blur-xl border-b border-white/5 shrink-0 z-[60]">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button onClick={() => { if (isDirty) setShowCloseConfirm(true); else onClose(); }} aria-label="Đóng" className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 hover:bg-white/10 rounded-full transition-all active:scale-90"><X className="w-6 h-6" /></button>
           <div className="h-6 w-px bg-white/10 mx-1"></div>
           <div>
             <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-white/90 leading-none">
@@ -511,18 +514,18 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
         <div className="flex items-center gap-2">
           
-          {!isEditing && <button onClick={handleDownload} className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all border border-white/5" title="Tải xuống HD"><Download className="w-4 h-4 opacity-70" /></button>}
+          {!isEditing && <button onClick={handleDownload} aria-label="Tải xuống HD" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all border border-white/5" title="Tải xuống HD"><Download className="w-4 h-4 opacity-80" /></button>}
           
           {!readOnly && !isEditing && (
-            <button onClick={() => setIsEditing(true)} disabled={!!loadError} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50 transition-all border border-blue-500">
+            <button onClick={() => setIsEditing(true)} disabled={!!loadError} className="min-h-[44px] lg:min-h-[38px] flex items-center gap-2 px-4 sm:px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50 transition-all border border-blue-500">
               <PenTool className="w-3.5 h-3.5" /> <span className="hidden sm:inline">CHỈNH SỬA ISO</span>
             </button>
           )}
           
           {isEditing && (
             <div className="flex items-center gap-2 animate-in slide-in-from-right-4">
-              <button onClick={handleUndo} disabled={history.length <= 1 || isLoadingImage} className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl active:scale-90 transition-all border border-white/10"><Undo2 className="w-4 h-4" /></button>
-              <button onClick={handleCommitEdit} disabled={isProcessing || isLoadingImage || !!loadError} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-emerald-500/20 active:scale-95 border border-emerald-500">
+              <button onClick={handleUndo} disabled={history.length <= 1 || isLoadingImage} aria-label="Hoàn tác" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl active:scale-90 transition-all border border-white/10"><Undo2 className="w-4 h-4" /></button>
+              <button onClick={handleCommitEdit} disabled={isProcessing || isLoadingImage || !!loadError} className="min-h-[44px] lg:min-h-[38px] flex items-center gap-2 px-4 sm:px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-emerald-500/20 active:scale-95 border border-emerald-500">
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4" />} <span className="hidden sm:inline">LƯU THAY ĐỔI</span>
               </button>
             </div>
@@ -558,9 +561,16 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 onError={() => setLoadError("Lỗi tải tệp tin HD.")}
               />
               {loadError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 bg-slate-900/80 rounded-xl border border-red-500/20">
-                      <AlertCircle className="w-12 h-12 mb-3 opacity-50" />
-                      <p className="font-black uppercase text-[10px] tracking-widest">{loadError}</p>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 bg-slate-900/90 rounded-xl border border-red-500/30 p-6 z-30">
+                      <AlertCircle className="w-12 h-12 mb-3 opacity-75" />
+                      <p className="font-black uppercase text-[10px] tracking-widest text-center mb-4">{loadError}</p>
+                      <button 
+                        type="button"
+                        onClick={() => setLoadError(null)}
+                        className="min-h-[44px] px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg active:scale-95"
+                      >
+                        Thử lại (Retry)
+                      </button>
                   </div>
               )}
             </div>
@@ -568,25 +578,25 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             {/* Floating Navigation Controls */}
             {images.length > 1 && (
               <>
-                <button onClick={handlePrev} className="absolute left-6 w-14 h-14 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-xl z-40 transition-all border border-white/10 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronLeft className="w-8 h-8 text-white/70 group-hover:text-white transition-colors" /></button>
-                <button onClick={handleNext} className="absolute right-6 w-14 h-14 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-xl z-40 transition-all border border-white/10 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronRight className="w-8 h-8 text-white/70 group-hover:text-white transition-colors" /></button>
+                <button onClick={handlePrev} aria-label="Ảnh trước" className="absolute left-3 sm:left-6 w-12 h-12 sm:w-14 sm:h-14 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-xl z-40 transition-all border border-white/10 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronLeft className="w-7 h-7 sm:w-8 sm:h-8 text-white/80 group-hover:text-white transition-colors" /></button>
+                <button onClick={handleNext} aria-label="Ảnh tiếp theo" className="absolute right-3 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-xl z-40 transition-all border border-white/10 active:scale-90 flex items-center justify-center shadow-2xl group"><ChevronRight className="w-7 h-7 sm:w-8 sm:h-8 text-white/80 group-hover:text-white transition-colors" /></button>
               </>
             )}
 
             {/* Bottom Floating Stats / Zoom */}
             {!loadError && (
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-[#0f172a]/95 backdrop-blur-2xl px-6 py-3 rounded-full border border-white/10 z-40 shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-4">
-                    <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-2 text-white/40 hover:text-white transition-colors active:scale-90" title="Thu nhỏ"><ZoomOut className="w-5 h-5"/></button>
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-4 bg-[#0f172a]/95 backdrop-blur-2xl px-4 py-2 rounded-full border border-white/10 z-40 shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-4">
+                    <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} aria-label="Thu nhỏ" className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white/60 hover:text-white transition-colors active:scale-90" title="Thu nhỏ"><ZoomOut className="w-5 h-5"/></button>
                     <button 
                         onClick={() => { setZoom(1); setPan({x:0,y:0}); }}
-                        className="flex flex-col items-center min-w-[60px] hover:bg-white/10 px-2 py-1 rounded-xl transition-colors"
+                        className="flex flex-col items-center justify-center min-w-[60px] min-h-[44px] hover:bg-white/10 px-2 py-1 rounded-xl transition-colors"
                     >
                         <span className="text-[12px] font-black text-white leading-none">{Math.round(zoom * 100)}%</span>
-                        <span className="text-[6px] font-black text-blue-400 uppercase tracking-widest mt-1">Reset</span>
+                        <span className="text-[7px] font-black text-blue-400 uppercase tracking-widest mt-1">Reset</span>
                     </button>
-                    <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-2 text-white/40 hover:text-white transition-colors active:scale-90" title="Phóng to"><ZoomIn className="w-5 h-5"/></button>
+                    <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} aria-label="Phóng to" className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white/60 hover:text-white transition-colors active:scale-90" title="Phóng to"><ZoomIn className="w-5 h-5"/></button>
                     <div className="w-px h-6 bg-white/10" />
-                    <button onClick={handleRotate} className="p-2 text-white/40 hover:text-white transition-colors active:scale-90" title="Xoay 90°"><RotateCw className="w-5 h-5" /></button>
+                    <button onClick={handleRotate} aria-label="Xoay 90 độ" className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white/60 hover:text-white transition-colors active:scale-90" title="Xoay 90°"><RotateCw className="w-5 h-5" /></button>
                 </div>
             )}
           </>
@@ -624,83 +634,79 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                       </div>
 
                       {/* Floating Text Input */}
-                      <AnimatePresence>
-                        {activeText && (
-                            <motion.div 
-                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                                className="fixed z-[200] pointer-events-auto"
-                                style={{ left: activeText.x, top: activeText.y }}
-                            >
-                                <div className="bg-[#0f172a] p-3 rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl flex flex-col gap-2 min-w-[220px] max-w-[90vw]">
-                                    <div className="flex items-center justify-between text-[10px] font-black uppercase text-blue-400 tracking-widest px-1">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                                            <span>Typing Annotation</span>
-                                        </div>
-                                        <button onClick={() => setActiveText(null)} className="hover:bg-white/10 p-1 rounded-lg transition-colors"><X className="w-4 h-4 text-white/40" /></button>
-                                    </div>
-                                    <input 
-                                        autoFocus
-                                        className="w-full bg-white/10 text-white px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold"
-                                        value={activeText.value}
-                                        onChange={e => setActiveText({ ...activeText, value: e.target.value })}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') commitTextToCanvas(activeText.value);
-                                            if (e.key === 'Escape') setActiveText(null);
-                                        }}
-                                        placeholder="Nhập nội dung..."
-                                    />
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => commitTextToCanvas(activeText.value)}
-                                            className="flex-1 py-2 bg-blue-600 text-white text-[9px] font-black uppercase rounded-lg shadow-lg"
-                                        >
-                                            Chèn
-                                        </button>
-                                        <button 
-                                            onClick={() => setShowQuickLibrary(!showQuickLibrary)}
-                                            className="p-2 bg-white/10 text-white/50 hover:text-white rounded-lg"
-                                            title="Thư viện chữ mẫu"
-                                        >
-                                            <MessageSquare className="w-4 h-4" />
-                                        </button>
-                                    </div>
+                      {activeText && (
+                          <div 
+                              className="fixed z-[200] pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
+                              style={{ left: activeText.x, top: activeText.y }}
+                          >
+                              <div className="bg-[#0f172a] p-3 rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl flex flex-col gap-2 min-w-[220px] max-w-[90vw]">
+                                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-blue-400 tracking-widest px-1">
+                                      <div className="flex items-center gap-2">
+                                          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                          <span>Typing Annotation</span>
+                                      </div>
+                                      <button onClick={() => setActiveText(null)} aria-label="Đóng" className="min-w-[40px] min-h-[40px] flex items-center justify-center hover:bg-white/10 p-1 rounded-lg transition-colors"><X className="w-4 h-4 text-white/60" /></button>
+                                  </div>
+                                  <input 
+                                      autoFocus
+                                      className="w-full min-h-[44px] bg-white/10 text-white px-3 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold"
+                                      value={activeText.value}
+                                      onChange={e => setActiveText({ ...activeText, value: e.target.value })}
+                                      onKeyDown={e => {
+                                          if (e.key === 'Enter') commitTextToCanvas(activeText.value);
+                                          if (e.key === 'Escape') setActiveText(null);
+                                      }}
+                                      placeholder="Nhập nội dung..."
+                                  />
+                                  <div className="flex gap-2">
+                                      <button 
+                                          onClick={() => commitTextToCanvas(activeText.value)}
+                                          className="flex-1 min-h-[44px] py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg shadow-lg"
+                                      >
+                                          Chèn
+                                      </button>
+                                      <button 
+                                          onClick={() => setShowQuickLibrary(!showQuickLibrary)}
+                                          aria-label="Thư viện chữ mẫu"
+                                          className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 bg-white/10 text-white/70 hover:text-white rounded-lg"
+                                          title="Thư viện chữ mẫu"
+                                      >
+                                          <MessageSquare className="w-4 h-4" />
+                                      </button>
+                                  </div>
 
-                                    {showQuickLibrary && (
-                                        <div className="mt-2 flex flex-col gap-1 max-h-[220px] overflow-y-auto no-scrollbar border-t border-white/5 pt-2">
-                                            <div className="relative mb-2 px-1">
-                                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
-                                                <input 
-                                                    type="text"
-                                                    className="w-full bg-white/10 text-white/70 pl-7 pr-2 py-1.5 rounded-lg text-[9px] font-bold outline-none border border-white/10 focus:border-blue-500/50 transition-all font-sans"
-                                                    placeholder="TÌM NHANH..."
-                                                    value={quickTextSearchInput}
-                                                    onChange={e => setQuickTextSearchInput(e.target.value.toUpperCase())}
-                                                    onBlur={handleCommitQuickSearch}
-                                                    onKeyDown={handleQuickSearchKeyDown}
-                                                    onClick={e => e.stopPropagation()}
-                                                />
-                                            </div>
-                                            {quickTexts.filter(t => !quickTextSearch || t.toLowerCase().includes(quickTextSearch.toLowerCase())).map((t, idx) => (
-                                                <button 
-                                                    key={`${t}-${idx}`}
-                                                    onClick={() => commitTextToCanvas(t)}
-                                                    className="text-left px-2.5 py-2 text-[8px] font-bold text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors uppercase truncate"
-                                                >
-                                                    {t}
-                                                </button>
-                                            ))}
-                                            {quickTexts.filter(t => !quickTextSearch || t.toLowerCase().includes(quickTextSearch.toLowerCase())).length === 0 && (
-                                                <div className="text-center py-4 text-[8px] font-black uppercase text-white/20 tracking-widest">Không tìm thấy</div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                      </AnimatePresence>
+                                  {showQuickLibrary && (
+                                      <div className="mt-2 flex flex-col gap-1 max-h-[220px] overflow-y-auto no-scrollbar border-t border-white/5 pt-2">
+                                          <div className="relative mb-2 px-1">
+                                              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
+                                              <input 
+                                                  type="text"
+                                                  className="w-full min-h-[40px] bg-white/10 text-white/80 pl-8 pr-2 py-1.5 rounded-lg text-[10px] font-bold outline-none border border-white/10 focus:border-blue-500/50 transition-all font-sans"
+                                                  placeholder="TÌM NHANH..."
+                                                  value={quickTextSearchInput}
+                                                  onChange={e => setQuickTextSearchInput(e.target.value.toUpperCase())}
+                                                  onBlur={handleCommitQuickSearch}
+                                                  onKeyDown={handleQuickSearchKeyDown}
+                                                  onClick={e => e.stopPropagation()}
+                                              />
+                                          </div>
+                                          {quickTexts.filter(t => !quickTextSearch || t.toLowerCase().includes(quickTextSearch.toLowerCase())).map((t, idx) => (
+                                              <button 
+                                                  key={`${t}-${idx}`}
+                                                  onClick={() => commitTextToCanvas(t)}
+                                                  className="min-h-[40px] text-left px-2.5 py-2 text-[10px] font-bold text-white/75 hover:text-white hover:bg-white/10 rounded-lg transition-colors uppercase truncate"
+                                              >
+                                                  {t}
+                                              </button>
+                                          ))}
+                                          {quickTexts.filter(t => !quickTextSearch || t.toLowerCase().includes(quickTextSearch.toLowerCase())).length === 0 && (
+                                              <div className="text-center py-4 text-[8px] font-black uppercase text-white/20 tracking-widest">Không tìm thấy</div>
+                                          )}
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+                      )}
                   </div>
               )}
           </div>
@@ -709,46 +715,47 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
       {/* FOOTER: Professional Editing Tools - Optimized for Mobile Interaction */}
       {isEditing && !loadError && (
-        <div className="p-4 md:p-8 bg-[#0f172a]/95 backdrop-blur-3xl border-t border-white/10 shrink-0 z-50 animate-in slide-in-from-bottom duration-300">
-          <div className="max-w-5xl mx-auto flex flex-col gap-6">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] bg-[#0f172a]/95 backdrop-blur-3xl border-t border-white/10 shrink-0 z-50 animate-in slide-in-from-bottom duration-300">
+          <div className="max-w-5xl mx-auto flex flex-col gap-3">
             
             {/* Tool Groups Bar: Scrollable on Small Screens */}
-            <div className="w-full overflow-x-auto no-scrollbar pb-1">
+            <div className="w-full overflow-x-auto no-scrollbar pb-0.5">
               <div className="flex items-center justify-start md:justify-between min-w-max md:min-w-0 gap-4 md:gap-8">
                 
                 {/* 1. Mode Selector */}
                 <div className="group/tools">
                   <div className="flex gap-1.5 bg-white/10 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
-                      <button onClick={() => setMode('draw')} className={`p-2.5 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-4.5 h-4.5" /></button>
-                      <button onClick={() => setMode('text')} className={`p-2.5 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-4.5 h-4.5" /></button>
-                      <button onClick={() => setMode('pan')} className={`p-2.5 rounded-xl transition-all ${mode === 'pan' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`} title="Di chuyển"><Move className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('draw')} aria-label="Vẽ tay" className={`min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 rounded-xl transition-all ${mode === 'draw' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/60 hover:bg-white/10 hover:text-white'}`} title="Vẽ tay"><PenTool className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('text')} aria-label="Chèn chữ" className={`min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 rounded-xl transition-all ${mode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/60 hover:bg-white/10 hover:text-white'}`} title="Chèn chữ"><Type className="w-4.5 h-4.5" /></button>
+                      <button onClick={() => setMode('pan')} aria-label="Di chuyển" className={`min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center p-2.5 rounded-xl transition-all ${mode === 'pan' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-white/60 hover:bg-white/10 hover:text-white'}`} title="Di chuyển"><Move className="w-4.5 h-4.5" /></button>
                   </div>
                 </div>
 
-                <div className="w-px h-8 bg-white dark:bg-slate-900/10"></div>
+                <div className="w-px h-8 bg-white/10"></div>
 
                 {/* 2. Color Palette */}
                 <div className="group/colors">
-                  <div className="flex gap-2.5 bg-white/10 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
+                  <div className="flex gap-2 bg-white/10 p-1.5 rounded-[1.25rem] border border-white/5 shadow-inner">
                       {['#ef4444', '#22c55e', '#3b82f6', '#fcd34d', '#ffffff', '#000000'].map(c => (
                           <button 
                               key={c} 
                               onClick={() => setColor(c)} 
-                              className={`w-7 h-7 rounded-lg border-2 transition-all active:scale-90 ${color === c ? 'scale-110 border-white shadow-lg' : 'border-transparent opacity-30 hover:opacity-100 hover:scale-105'}`} 
+                              aria-label={`Chọn màu ${c}`}
+                              className={`w-10 h-10 lg:w-8 lg:h-8 rounded-lg border-2 transition-all active:scale-90 ${color === c ? 'scale-105 border-white shadow-lg' : 'border-transparent opacity-50 hover:opacity-100 hover:scale-105'}`} 
                               style={{ backgroundColor: c }} 
                           />
                       ))}
                   </div>
                 </div>
 
-                <div className="w-px h-8 bg-white dark:bg-slate-900/10"></div>
+                <div className="w-px h-8 bg-white/10"></div>
 
                 {/* 3. Controls & Size */}
-                <div className="flex items-center gap-6 flex-1 bg-white/10 p-2 rounded-[1.25rem] border border-white/5 min-w-[240px]">
-                  <div className="flex items-center gap-2 px-1">
-                      <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="p-2 text-white/30 hover:text-blue-400 transition-colors"><ZoomOut className="w-4 h-4"/></button>
-                      <button onClick={() => { setZoom(1); setPan({x:0,y:0}); }} className="text-[10px] font-black text-white px-2 w-12 text-center bg-white/10 rounded-lg py-1">{Math.round(zoom * 100)}%</button>
-                      <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} className="p-2 text-white/30 hover:text-blue-400 transition-colors"><ZoomIn className="w-4 h-4"/></button>
+                <div className="flex items-center gap-4 flex-1 bg-white/10 p-2 rounded-[1.25rem] border border-white/5 min-w-[260px]">
+                  <div className="flex items-center gap-1 px-1">
+                      <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} aria-label="Thu nhỏ" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center p-2 text-white/60 hover:text-blue-400 transition-colors"><ZoomOut className="w-4 h-4"/></button>
+                      <button onClick={() => { setZoom(1); setPan({x:0,y:0}); }} className="min-h-[44px] lg:min-h-[34px] text-[10px] font-black text-white px-2.5 min-w-[48px] text-center bg-white/10 rounded-lg py-1">{Math.round(zoom * 100)}%</button>
+                      <button onClick={() => setZoom(z => Math.min(8, z + 0.5))} aria-label="Phóng to" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center p-2 text-white/60 hover:text-blue-400 transition-colors"><ZoomIn className="w-4 h-4"/></button>
                   </div>
                   
                   <div className="w-px h-6 bg-white dark:bg-slate-900/10"></div>
@@ -770,7 +777,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             </div>
             
             {/* Status Info */}
-            <div className="flex items-center justify-between text-white/30 text-[9px] font-black uppercase tracking-[0.3em] select-none border-t border-white/5 pt-4">
+            <div className="flex items-center justify-between text-white/30 text-[9px] font-black uppercase tracking-[0.3em] select-none border-t border-white/5 pt-2.5">
               <div className="flex gap-6">
                 <span className="flex items-center gap-2"><History className="w-3 h-3 text-blue-500 dark:text-blue-400/50" /> {history.length - 1} States Saved</span>
                 <span className="flex items-center gap-2"><Palette className="w-3 h-3 text-emerald-500/50" /> {color} Active</span>
@@ -783,6 +790,22 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={showCloseConfirm}
+        variant="warning"
+        title="Lưu thay đổi trước khi đóng?"
+        message="Ảnh đang có chỉnh sửa chưa lưu. Bạn có muốn lưu lại trước khi đóng trình chỉnh sửa?"
+        confirmLabel="Lưu & Đóng"
+        cancelLabel="Đóng không lưu"
+        onConfirm={() => {
+          setShowCloseConfirm(false);
+          handleCommitEdit();
+        }}
+        onCancel={() => {
+          setShowCloseConfirm(false);
+          onClose();
+        }}
+      />
     </div>
   );
 };

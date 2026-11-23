@@ -31,6 +31,7 @@ import { InspectionDetailSPR } from './inspectiondetailSPR';
 import { IPODetail } from './IPODetail';
 import { NCRDetail } from './NCRDetail';
 import { SITE_CHECKLIST_TEMPLATE } from '../constants';
+import { Combobox, ConfirmDialog } from '../src/components/qms';
 
 interface ProjectDetailProps {
   project: Project;
@@ -156,6 +157,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [docSearch, setDocSearch] = useState('');
   const [docFormOpen, setDocFormOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<ProjectDocument | null>(null);
+  const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [docFormData, setDocFormData] = useState<Partial<ProjectDocument>>({});
   const [uploadProgress, setUploadProgress] = useState(false);
   const [ipoSearch, setIpoSearch] = useState('');
@@ -300,10 +302,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       setDocFormOpen(true);
   };
 
-  const handleDeleteDoc = async (id: string) => {
-      if (!window.confirm("Bạn có chắc chắn muốn xóa tài liệu này không?")) return;
+  const handleDeleteDoc = (id: string) => {
+      setDeleteDocId(id);
+  };
+
+  const executeDeleteDoc = async () => {
+      if (!deleteDocId) return;
+      const targetId = deleteDocId;
+      setDeleteDocId(null);
       try {
-          await deleteProjectDocument(id);
+          await deleteProjectDocument(targetId);
           await loadProjectDocuments();
       } catch (err) {
           console.error("Failed to delete document:", err);
@@ -456,9 +464,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     });
 
     const total = projInspections.length;
-    const completed = projInspections.filter(i => i && (i.status === InspectionStatus.COMPLETED || i.status === InspectionStatus.APPROVED)).length;
-    const flagged = projInspections.filter(i => i && i.status === InspectionStatus.FLAGGED).length;
-    const drafts = projInspections.filter(i => i && i.status === InspectionStatus.DRAFT).length;
+    const completed = projInspections.filter(i => {
+      if (!i) return false;
+      const st = String(i.status || '').toUpperCase();
+      return st === 'COMPLETED' || st === 'APPROVED' || st === 'VERIFIED' || st === 'LOCKED';
+    }).length;
+    const flagged = projInspections.filter(i => {
+      if (!i) return false;
+      const st = String(i.status || '').toUpperCase();
+      return st === 'FLAGGED' || st === 'REJECTED';
+    }).length;
+    const drafts = projInspections.filter(i => i && String(i.status || '').toUpperCase() === 'DRAFT').length;
     return { 
         total, 
         completed, 
@@ -595,9 +611,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-3 md:p-4 sticky top-0 z-20 shadow-sm flex items-center justify-between shrink-0">
          <div className="flex items-center gap-2 md:gap-3">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors active:scale-90"><ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400 dark:text-slate-500" /></button>
+            <button onClick={onBack} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors active:scale-90 flex items-center justify-center"><ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" /></button>
             <div className="overflow-hidden">
-                <h2 className="text-sm md:text-lg font-black text-slate-900 dark:text-slate-100 leading-none truncate max-w-[160px] md:max-w-md uppercase tracking-tight">{project.name}</h2>
+                <h2 className="text-sm md:text-lg font-black text-slate-900 dark:text-slate-100 leading-none truncate max-w-[140px] sm:max-w-[200px] md:max-w-md uppercase tracking-tight">{project.name}</h2>
                 <div className="flex items-center gap-1.5 mt-1">
                     <p className="text-[9px] md:text-[10px] text-slate-400 dark:text-slate-500 font-mono font-bold tracking-widest">{project.ma_ct}</p>
                     <div className="h-0.5 w-0.5 rounded-full bg-slate-300 dark:bg-slate-600"></div>
@@ -607,13 +623,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </div>
             </div>
          </div>
-         <div className="flex items-center gap-1 md:gap-2">
+         <div className="flex items-center gap-1.5 md:gap-2">
              <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 md:p-1 rounded-lg md:rounded-xl border border-slate-200 dark:border-slate-700 mr-1 md:mr-2">
-                 <button onClick={() => setActiveTab('OVERVIEW')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'OVERVIEW' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>Overview</button>
-                 <button onClick={() => setActiveTab('LAYOUTS')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'LAYOUTS' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>Map</button>
-                 <button onClick={() => setActiveTab('DOCUMENTS')} className={`px-2 md:px-4 py-1.5 rounded-md md:rounded-lg text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'DOCUMENTS' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>Tài liệu ({documents.length})</button>
+                 <button onClick={() => setActiveTab('OVERVIEW')} className={`min-h-[44px] lg:min-h-[36px] px-2.5 md:px-4 py-1.5 rounded-md md:rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'OVERVIEW' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>Overview</button>
+                 <button onClick={() => setActiveTab('LAYOUTS')} className={`min-h-[44px] lg:min-h-[36px] px-2.5 md:px-4 py-1.5 rounded-md md:rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'LAYOUTS' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>Map</button>
+                 <button onClick={() => setActiveTab('DOCUMENTS')} className={`min-h-[44px] lg:min-h-[36px] px-2.5 md:px-4 py-1.5 rounded-md md:rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'DOCUMENTS' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>Tài liệu ({documents.length})</button>
              </div>
-             <button onClick={() => { setEditForm({ ...project }); setIsEditing(true); }} className="p-2 md:p-2.5 bg-blue-600 text-white rounded-lg md:rounded-2xl shadow-lg border border-blue-500 active:scale-90"><Edit3 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+             <button onClick={() => { setEditForm({ ...project }); setIsEditing(true); }} className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] p-2 md:p-2.5 bg-blue-600 text-white rounded-lg md:rounded-2xl shadow-lg border border-blue-500 active:scale-90 flex items-center justify-center"><Edit3 className="w-4 h-4" /></button>
          </div>
       </div>
 
@@ -766,7 +782,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         onChange={e => setIpoInput(e.target.value)}
                                         onBlur={() => setIpoSearch(ipoInput)}
                                         onKeyDown={e => e.key === 'Enter' && setIpoSearch(ipoInput)}
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-[10px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-blue-100 transition-all"
+                                        className="w-full pl-9 pr-4 py-2.5 min-h-[44px] lg:min-h-[38px] bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-xs lg:text-[11px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-blue-100 transition-all"
                                     />
                                 </div>
                             </div>
@@ -815,14 +831,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                                  e.stopPropagation();
                                                                  setSelectedIpoForDetail(ipo);
                                                              }}
-                                                             className={`w-full px-2 py-1.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1 ${
+                                                             className={`w-full min-h-[44px] lg:min-h-[34px] px-2.5 py-2 lg:py-1.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
                                                                  isSelected 
                                                                      ? (isCompleted ? 'bg-green-600 text-white shadow-sm' : 'bg-white text-blue-600 shadow-sm') 
                                                                      : 'bg-blue-600 text-white hover:bg-blue-700'
                                                              } hover:shadow-lg border border-transparent`}
                                                          >
-                                                             <Eye className="w-3.5 h-3.5"/>
-                                                             <span className="text-[9px] font-black uppercase tracking-wider">Chi tiết</span>
+                                                             <Eye className="w-4 h-4 lg:w-3.5 lg:h-3.5"/>
+                                                             <span className="text-[11px] lg:text-[9px] font-black uppercase tracking-wider">Chi tiết</span>
                                                          </button>
                                                          
                                                          <div className="flex items-center gap-1 text-[8px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded-md border border-slate-200/50 dark:border-slate-700/50">
@@ -880,7 +896,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         onChange={e => setInspectionInput(e.target.value)}
                                         onBlur={() => setInspectionSearch(inspectionInput)}
                                         onKeyDown={e => e.key === 'Enter' && setInspectionSearch(inspectionInput)}
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-[10px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-indigo-100 transition-all"
+                                        className="w-full pl-9 pr-4 py-2.5 min-h-[44px] lg:min-h-[38px] bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-xs lg:text-[11px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-indigo-100 transition-all"
                                     />
                                 </div>
                             </div>
@@ -965,7 +981,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         onChange={e => setNcrInput(e.target.value)}
                                         onBlur={() => setNcrSearch(ncrInput)}
                                         onKeyDown={e => e.key === 'Enter' && setNcrSearch(ncrInput)}
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-[10px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-red-100 transition-all"
+                                        className="w-full pl-9 pr-4 py-2.5 min-h-[44px] lg:min-h-[38px] bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-xs lg:text-[11px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-red-100 transition-all"
                                     />
                                 </div>
                             </div>
@@ -1015,7 +1031,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         {selectedIpoId && <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-tight">Lọc theo: {selectedIpoId}</span>}
                                     </div>
                                 </div>
-                                <button onClick={() => setIsUploadModalOpen(true)} className="p-1 bg-white dark:bg-slate-900 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"><Plus className="w-4 h-4"/></button>
+                                <button onClick={() => setIsUploadModalOpen(true)} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] p-1.5 bg-white dark:bg-slate-900 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center"><Plus className="w-4 h-4"/></button>
                             </div>
                             <div className="px-4 py-2 border-b border-slate-50 shrink-0">
                                 <div className="relative">
@@ -1027,7 +1043,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                         onChange={e => setLayoutInput(e.target.value)}
                                         onBlur={() => setLayoutSearch(layoutInput)}
                                         onKeyDown={e => e.key === 'Enter' && setLayoutSearch(layoutInput)}
-                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-[10px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-emerald-100 transition-all"
+                                        className="w-full pl-9 pr-4 py-2.5 min-h-[44px] lg:min-h-[38px] bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl text-xs lg:text-[11px] font-bold outline-none focus:bg-white dark:bg-slate-900 focus:ring-4 focus:ring-emerald-100 transition-all"
                                     />
                                 </div>
                             </div>
@@ -1061,26 +1077,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
          ) : activeTab === 'LAYOUTS' ? (
              <div className="h-full overflow-y-auto p-4 md:p-6 no-scrollbar bg-[#f8fafc]">
                  <div className="max-w-7xl mx-auto">
-                     <FloorPlanLibrary project={project} plans={floorPlans} isLoading={isLoadingPlans} onSelectPlan={handleSelectPlan} onUploadPlan={() => setIsUploadModalOpen(true)} onDeletePlan={async (id) => { if(window.confirm('Hành động này sẽ xóa vĩnh viễn layout. Xác nhận?')){ await deleteFloorPlan(id); loadFloorPlans(); } }} />
+                     <FloorPlanLibrary project={project} plans={floorPlans} isLoading={isLoadingPlans} onSelectPlan={handleSelectPlan} onUploadPlan={() => setIsUploadModalOpen(true)} onDeletePlan={async (id) => { await deleteFloorPlan(id); loadFloorPlans(); }} />
                  </div>
              </div>
           ) : (
              <div className="h-full flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-800/50">
                  {/* Toolbar */}
-                 <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+                 <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 shrink-0">
                      <div className="relative w-full sm:w-[320px]">
                          <input 
                              type="text" 
                              placeholder="Tìm kiếm tài liệu..." 
                              value={docSearch}
                              onChange={e => setDocSearch(e.target.value)}
-                             className="w-full pl-10 pr-4 py-2 bg-slate-55 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold font-sans outline-none focus:ring-2 focus:ring-blue-100"
+                             className="w-full min-h-[44px] lg:min-h-[40px] pl-10 pr-4 py-2.5 lg:py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm lg:text-xs font-bold font-sans outline-none focus:ring-2 focus:ring-blue-100 dark:text-slate-100"
                          />
-                         <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-2.5" />
+                         <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                      </div>
                      <button 
                          onClick={() => { setEditingDoc(null); setDocFormData({}); setDocFormOpen(true); }} 
-                         className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+                         className="w-full sm:w-auto min-h-[44px] lg:min-h-[40px] px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2"
                      >
                          <Plus className="w-4 h-4" /> THÊM TÀI LIỆU
                      </button>
@@ -1101,7 +1117,56 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 max-w-md mx-auto">Vui lòng ban hành các phiên bản hồ sơ thiết kế, bản vẽ kỹ thuật, quy trình hoặc biên bản nghiệm thu cho dự án này.</p>
                              </div>
                          ) : (
-                             <div className="overflow-x-auto">
+                             <>
+                             {/* Mobile Cards (< md) */}
+                             <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                                 {filteredDocs.map(doc => (
+                                     <div key={doc.id} className="p-4 space-y-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                         <div className="flex items-start justify-between gap-3">
+                                             <div className="flex items-start gap-3 min-w-0">
+                                                 <div className="p-2.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-2xl shrink-0">
+                                                     <FileText className="w-5 h-5" />
+                                                 </div>
+                                                 <div className="min-w-0">
+                                                     <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 break-words">{doc.name}</p>
+                                                     {doc.description && <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 line-clamp-2">{doc.description}</p>}
+                                                 </div>
+                                             </div>
+                                             <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[11px] font-mono font-bold shrink-0">
+                                                 {doc.version}
+                                             </span>
+                                         </div>
+                                         <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-800/60 rounded-xl p-2.5">
+                                             <div>
+                                                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Ban hành</span>
+                                                 <span className="font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums">{doc.issueDate}</span>
+                                             </div>
+                                             <div>
+                                                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Cập nhật</span>
+                                                 <span className="font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums">{doc.updateDate || doc.issueDate}</span>
+                                             </div>
+                                             <div className="col-span-2">
+                                                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Người ban hành</span>
+                                                 <span className="font-semibold text-slate-700 dark:text-slate-200">{doc.createdBy || 'Hệ thống'}</span>
+                                             </div>
+                                         </div>
+                                         <div className="flex items-center gap-2 pt-1">
+                                             {doc.fileUrl ? (
+                                                 <a href={getProxyImageUrl(doc.fileUrl)} referrerPolicy="no-referrer" target="_blank" rel="noopener noreferrer" className="flex-1 min-h-[44px] px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 rounded-xl transition-all border border-emerald-200 dark:border-emerald-800 uppercase tracking-wider text-xs font-black flex items-center justify-center gap-1.5" title="Tải file đính kèm">
+                                                     <Eye className="w-4 h-4" /> Mở bản vẽ
+                                                 </a>
+                                             ) : (
+                                                 <span className="flex-1 min-h-[44px] px-3 flex items-center justify-center text-xs text-slate-400 font-medium bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/70 dark:border-slate-700">Không đính kèm</span>
+                                             )}
+                                             <button onClick={() => handleEditDoc(doc)} className="min-w-[44px] min-h-[44px] px-3 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 rounded-xl transition-all flex items-center justify-center" title="Chỉnh sửa" aria-label="Chỉnh sửa tài liệu"><Edit3 className="w-4 h-4" /></button>
+                                             <button onClick={() => handleDeleteDoc(doc.id)} className="min-w-[44px] min-h-[44px] px-3 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 rounded-xl transition-all flex items-center justify-center" title="Xóa" aria-label="Xóa tài liệu"><X className="w-4 h-4" /></button>
+                                         </div>
+                                     </div>
+                                 ))}
+                             </div>
+
+                             {/* Tablet & Desktop Table (md+) */}
+                             <div className="hidden md:block overflow-x-auto">
                                  <table className="w-full border-collapse text-left">
                                      <thead>
                                          <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">
@@ -1133,12 +1198,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                          {doc.version}
                                                      </span>
                                                  </td>
-                                                 <td className="px-6 py-4 text-center font-mono text-slate-500 dark:text-slate-400 dark:text-slate-500">{doc.issueDate}</td>
-                                                 <td className="px-6 py-4 text-center font-mono text-slate-500 dark:text-slate-400 dark:text-slate-500">{doc.updateDate || doc.issueDate}</td>
-                                                 <td className="px-6 py-4 text-slate-500 dark:text-slate-400 dark:text-slate-500">{doc.createdBy || 'Hệ thống'}</td>
+                                                 <td className="px-6 py-4 text-center font-mono tabular-nums text-slate-500 dark:text-slate-400">{doc.issueDate}</td>
+                                                 <td className="px-6 py-4 text-center font-mono tabular-nums text-slate-500 dark:text-slate-400">{doc.updateDate || doc.issueDate}</td>
+                                                 <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{doc.createdBy || 'Hệ thống'}</td>
                                                  <td className="px-6 py-4 text-center">
                                                      {doc.fileUrl ? (
-                                                         <a href={getProxyImageUrl(doc.fileUrl)} referrerPolicy="no-referrer" target="_blank" rel="noopener noreferrer" className="inline-flex px-3.5 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-all border border-emerald-100 uppercase tracking-widest text-[9px] font-black" title="Tải file đính kèm">
+                                                         <a href={getProxyImageUrl(doc.fileUrl)} referrerPolicy="no-referrer" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center min-h-[44px] lg:min-h-[34px] px-3.5 py-2 lg:py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-all border border-emerald-100 uppercase tracking-widest text-[10px] lg:text-[9px] font-black whitespace-nowrap" title="Tải file đính kèm">
                                                              Mở bản vẽ
                                                          </a>
                                                      ) : (
@@ -1147,8 +1212,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                                  </td>
                                                  <td className="px-8 py-4 text-right">
                                                      <div className="flex items-center justify-end gap-2">
-                                                         <button onClick={() => handleEditDoc(doc)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-all" title="Chỉnh sửa"><Edit3 className="w-4 h-4" /></button>
-                                                         <button onClick={() => handleDeleteDoc(doc.id)} className="p-2 text-red-600 dark:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-all" title="Xóa"><X className="w-4 h-4" /></button>
+                                                         <button onClick={() => handleEditDoc(doc)} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] p-2 text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all flex items-center justify-center" title="Chỉnh sửa"><Edit3 className="w-4 h-4" /></button>
+                                                         <button onClick={() => handleDeleteDoc(doc.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] p-2 text-red-600 dark:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all flex items-center justify-center" title="Xóa"><X className="w-4 h-4" /></button>
                                                      </div>
                                                  </td>
                                              </tr>
@@ -1156,6 +1221,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                      </tbody>
                                  </table>
                              </div>
+                             </>
                          )}
                      </div>
                  </div>
@@ -1180,7 +1246,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {fullDetailId && (
           <div className="absolute inset-0 z-[150] bg-white dark:bg-slate-900 flex flex-col animate-in slide-in-from-bottom duration-300 shadow-2xl">
-              {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-800/50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-blue-400 mb-4"/><p className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (sig || extra.managerSignature) { updated.status = InspectionStatus.APPROVED; updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await saveInspectionToSheet(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await saveInspectionToSheet(updated); setFullDetailData(updated); }} onViewOnPlan={(insp: Inspection) => { setFullDetailId(null); setFullDetailData(null); setFocusedPinId(insp.id); if (insp.floor_plan_id) { const foundPlan = floorPlans.find(fp => fp.id === insp.floor_plan_id); if (foundPlan) { handleSelectPlan(foundPlan); } } }} />; })() : null}
+              {isLoadingFullDetail ? <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-800/50"><Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-blue-400 mb-4"/><p className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-[0.3em]">SYNCHRONIZING RECORD DATA...</p></div> : fullDetailData ? (() => { const DetailComponent = DETAIL_MAP[fullDetailData.type || 'PQC'] || InspectionDetailPQC; return <DetailComponent inspection={fullDetailData} user={user} onBack={() => { setFullDetailId(null); setFullDetailData(null); }} onEdit={() => { }} onDelete={() => { }} onApprove={async (id: string, sig: string, extra: any) => { const updated = { ...fullDetailData, ...extra }; if (extra?.status) { updated.status = extra.status; } else if (sig || extra?.managerSignature) { updated.status = InspectionStatus.APPROVED; } if (sig || extra?.managerSignature) { updated.managerSignature = sig || extra.managerSignature; updated.managerName = extra.managerName || user.name; } await saveInspectionToSheet(updated); setFullDetailData(updated); if (onUpdate) onUpdate(); }} onPostComment={async (id: string, cmt: any) => { const updated = { ...fullDetailData, comments: [...(fullDetailData.comments || []), cmt] }; await saveInspectionToSheet(updated); setFullDetailData(updated); }} onViewOnPlan={(insp: Inspection) => { setFullDetailId(null); setFullDetailData(null); setFocusedPinId(insp.id); if (insp.floor_plan_id) { const foundPlan = floorPlans.find(fp => fp.id === insp.floor_plan_id); if (foundPlan) { handleSelectPlan(foundPlan); } } }} />; })() : null}
           </div>
       )}
 
@@ -1208,7 +1274,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {isUploadModalOpen && <FloorPlanUploadModal projectId={project.ma_ct} onClose={() => setIsUploadModalOpen(false)} onSave={async (plan) => { await saveFloorPlan(plan); loadFloorPlans(); }} />}
 
       {selectedIpoForDetail && (
-          <div className="fixed inset-0 z-[100] bg-white dark:bg-slate-900 animate-in fade-in zoom-in duration-300">
+          <div className="fixed inset-0 z-[220] bg-white dark:bg-slate-900 animate-in fade-in zoom-in duration-300">
               <IPODetail 
                   item={selectedIpoForDetail} 
                   onBack={() => setSelectedIpoForDetail(null)}
@@ -1221,26 +1287,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {isInspectionFormOpen && pendingPinCoord && (
           <div className="absolute inset-0 z-[200] bg-white dark:bg-slate-900 flex flex-col animate-in slide-in-from-right duration-300 shadow-2xl">
-              <header className="h-14 border-b px-4 flex items-center justify-between bg-slate-900 text-white shrink-0 z-10"><div className="flex items-center gap-3"><button onClick={() => setIsInspectionFormOpen(false)} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-xl transition-all"><ArrowLeft className="w-4 h-4" /></button><div><h2 className="text-[9px] font-black uppercase tracking-[0.2em] leading-none">New Site Inspection</h2><p className="text-[8px] font-bold text-blue-400 uppercase mt-1">Point Sync: {pendingPinCoord.x.toFixed(1)}%, {pendingPinCoord.y.toFixed(1)}%</p></div></div><button onClick={() => setIsInspectionFormOpen(false)} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-xl transition-all"><X className="w-4 h-4" /></button></header>
+              <header className="h-14 border-b px-4 flex items-center justify-between bg-slate-900 text-white shrink-0 z-10"><div className="flex items-center gap-3"><button onClick={() => setIsInspectionFormOpen(false)} className="min-w-[44px] min-h-[44px] p-2 hover:bg-white/10 rounded-xl transition-all flex items-center justify-center"><ArrowLeft className="w-4 h-4" /></button><div><h2 className="text-[9px] font-black uppercase tracking-[0.2em] leading-none">New Site Inspection</h2><p className="text-[8px] font-bold text-blue-400 uppercase mt-1">Point Sync: {pendingPinCoord.x.toFixed(1)}%, {pendingPinCoord.y.toFixed(1)}%</p></div></div><button onClick={() => setIsInspectionFormOpen(false)} className="min-w-[44px] min-h-[44px] p-2 hover:bg-white/10 rounded-xl transition-all flex items-center justify-center"><X className="w-4 h-4" /></button></header>
               <div className="flex-1 overflow-hidden bg-slate-50 dark:bg-slate-800/50"><InspectionFormSITE onCancel={() => setIsInspectionFormOpen(false)} onSave={handleSaveInspectionFromLayout} workshops={[]} user={user} initialData={{ ma_ct: project.ma_ct, ten_ct: project.name, type: 'SITE' as ModuleId, floor_plan_id: selectedPlan?.id, coord_x: pendingPinCoord.x, coord_y: pendingPinCoord.y }} templates={{ 'SITE': SITE_CHECKLIST_TEMPLATE }} /></div>
           </div>
       )}
 
       {isEditing && (
-          <div className="fixed inset-0 z-[500] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-200">
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
-                      <div className="flex items-center gap-4">
-                          <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100"><Edit3 className="w-6 h-6" /></div>
-                          <div>
-                            <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tighter text-xl leading-none">Chỉnh sửa hồ sơ dự án</h3>
-                            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1.5">Administrative Controls</p>
+          <div className="fixed inset-0 z-[220] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+                  <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-2 bg-blue-600 text-white rounded-xl shadow-sm shrink-0"><Edit3 className="w-4 h-4 sm:w-5 sm:h-5" /></div>
+                          <div className="min-w-0">
+                            <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-sm sm:text-base leading-tight truncate">Chỉnh sửa hồ sơ dự án</h3>
+                            <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 truncate">Administrative Controls</p>
                           </div>
                       </div>
-                      <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:text-red-400 transition-colors active:scale-90"><X className="w-8 h-8"/></button>
+                      <button type="button" onClick={() => setIsEditing(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-90 flex items-center justify-center rounded-xl shrink-0 cursor-pointer"><X className="w-5 h-5"/></button>
                   </div>
 
-                  <div className="p-8 space-y-8 overflow-y-auto bg-slate-50 dark:bg-slate-800/30 flex-1 no-scrollbar">
+                  <div className="p-3.5 sm:p-5 space-y-5 overflow-y-auto bg-slate-50 dark:bg-slate-800/30 flex-1 min-h-0 no-scrollbar">
                       
                       {/* Thumbnail & Basic Identity */}
                       <div className="flex flex-col md:flex-row gap-8 items-start">
@@ -1254,7 +1320,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                           <span className="text-[9px] font-black uppercase">Chưa có ảnh</span>
                                       </div>
                                   )}
-                                  <button onClick={() => thumbnailInputRef.current?.click()} className="absolute inset-0 bg-black/40 md:opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2">
+                                  <button onClick={() => thumbnailInputRef.current?.click()} className="absolute inset-0 bg-black/40 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white gap-2">
                                       <Camera className="w-8 h-8" />
                                       <span className="text-[9px] font-black uppercase">Thay đổi ảnh</span>
                                   </button>
@@ -1274,15 +1340,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                   </div>
                                   <div className="space-y-1.5">
                                       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-3">Trạng thái vận hành</label>
-                                      <div className="relative">
-                                          <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value as any})} className="w-full px-6 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] font-black text-slate-800 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 appearance-none shadow-sm cursor-pointer">
-                                              <option value="Planning">PLANNING (CHUẨN BỊ)</option>
-                                              <option value="In Progress">IN PROGRESS (ĐANG THI CÔNG)</option>
-                                              <option value="On Hold">ON HOLD (TẠM DỪNG)</option>
-                                              <option value="Completed">COMPLETED (HOÀN TẤT)</option>
-                                          </select>
-                                          <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500 pointer-events-none" />
-                                      </div>
+                                      <Combobox
+                                          value={editForm.status || null}
+                                          onChange={(val) => setEditForm({...editForm, status: (val || 'Planning') as any})}
+                                          options={[
+                                              { value: 'Planning', label: 'PLANNING (CHUẨN BỊ)' },
+                                              { value: 'In Progress', label: 'IN PROGRESS (ĐANG THI CÔNG)' },
+                                              { value: 'On Hold', label: 'ON HOLD (TẠM DỪNG)' },
+                                              { value: 'Completed', label: 'COMPLETED (HOÀN TẤT)' },
+                                          ]}
+                                          placeholder="Chọn trạng thái"
+                                          allowClear={false}
+                                      />
                                   </div>
                                   <div className="space-y-1.5">
                                       <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-3">Tiến độ (%)</label>
@@ -1330,13 +1399,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                     <input 
                                         value={editForm.location || ''} 
                                         onChange={e => setEditForm({...editForm, location: e.target.value})} 
-                                        className="w-full pl-6 pr-12 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm" 
+                                        className="w-full pl-6 pr-14 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-100 text-xs shadow-sm" 
                                         placeholder="NHẬP VỊ TRÍ CHI TIẾT..." 
                                     />
                                     <button 
                                         onClick={handleGetLocation} 
                                         disabled={isGettingLocation} 
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 rounded-xl transition-all active:scale-90"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 rounded-xl transition-all active:scale-90 flex items-center justify-center"
                                         title="Lấy vị trí GPS"
                                     >
                                         {isGettingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Locate className="w-4 h-4" />}
@@ -1345,7 +1414,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                 <button 
                                     onClick={handleOpenInMaps}
                                     disabled={!editForm.location && !project.location}
-                                    className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] text-slate-400 dark:text-slate-500 hover:text-emerald-600 hover:border-emerald-200 transition-all active:scale-95 shadow-sm"
+                                    className="min-w-[44px] min-h-[44px] p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[1.5rem] text-slate-400 dark:text-slate-500 hover:text-emerald-600 hover:border-emerald-200 transition-all active:scale-95 shadow-sm flex items-center justify-center"
                                     title="Kiểm tra trên Google Maps"
                                 >
                                     <MapIcon className="w-5 h-5" />
@@ -1360,10 +1429,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                   </div>
 
-                  <div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row justify-end gap-3 shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.04)] z-10">
-                      <button onClick={() => setIsEditing(false)} className="order-2 md:order-1 px-8 py-4 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-600 dark:text-red-400 transition-colors">Hủy bỏ</button>
-                      <button onClick={handleSaveProject} disabled={isSaving} className="order-1 md:order-2 px-12 py-4 bg-blue-600 text-white rounded-[1.5rem] text-xs font-black uppercase tracking-[0.25em] shadow-2xl shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-                          {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  <div className="px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 flex flex-col md:flex-row justify-end gap-2 shrink-0 z-10">
+                      <button type="button" onClick={() => setIsEditing(false)} className="order-2 md:order-1 min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl hover:text-red-600 transition-colors whitespace-nowrap shrink-0">Hủy bỏ</button>
+                      <button type="button" onClick={handleSaveProject} disabled={isSaving} className="order-1 md:order-2 min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50">
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           CẬP NHẬT DỮ LIỆU
                       </button>
                   </div>
@@ -1372,26 +1441,27 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       )}
 
       {docFormOpen && (
-          <div className="fixed inset-0 z-[500] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-200">
+          <div className="fixed inset-0 z-[220] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
                   {/* Modal Header */}
-                  <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
-                      <div className="flex items-center gap-3">
-                          <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md">
-                              <FileText className="w-5 h-5" />
+                  <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-2 bg-blue-600 text-white rounded-xl shadow-sm shrink-0">
+                              <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
-                          <div>
-                            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base uppercase tracking-tight">
+                          <div className="min-w-0">
+                            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm sm:text-base uppercase tracking-tight truncate">
                                 {editingDoc ? 'Cập Nhật Phiên Bản Tài Liệu' : 'Ban Hành Tài Liệu Mới'}
                             </h3>
-                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Dự án: {project.name}</p>
+                            <p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 truncate">Dự án: {project.name}</p>
                           </div>
                       </div>
-                      <button onClick={() => setDocFormOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-550 transition-colors rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50"><X className="w-6 h-6"/></button>
+                      <button type="button" onClick={() => setDocFormOpen(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center shrink-0 cursor-pointer"><X className="w-5 h-5"/></button>
                   </div>
 
-                  {/* Modal Body */}
-                  <form onSubmit={handleSaveDoc} className="p-6 space-y-5 overflow-y-auto bg-slate-50 dark:bg-slate-800/50 flex-1 no-scrollbar-all">
+                  {/* Modal Form */}
+                  <form onSubmit={handleSaveDoc} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                      <div className="p-3.5 sm:p-5 space-y-4 overflow-y-auto bg-slate-50 dark:bg-slate-800/50 flex-1 min-h-0 no-scrollbar-all">
                       <div className="space-y-1.5">
                           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-3">Tên tài liệu / Bản vẽ *</label>
                           <input 
@@ -1453,14 +1523,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                                           <button 
                                               type="button"
                                               onClick={() => docFileInputRef.current?.click()} 
-                                              className="px-4 py-1.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:bg-blue-900/30 rounded-lg text-xs font-bold transition-all"
+                                              className="min-h-[44px] lg:min-h-[36px] px-4 py-2 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:bg-blue-900/30 rounded-xl text-xs font-bold transition-all"
                                           >
                                               Chọn file khác
                                           </button>
                                           <button 
                                               type="button"
                                               onClick={() => setDocFormData({...docFormData, fileUrl: ''})} 
-                                              className="px-4 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 rounded-lg text-xs font-bold transition-all"
+                                              className="min-h-[44px] lg:min-h-[36px] px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 rounded-xl text-xs font-bold transition-all"
                                           >
                                               Gỡ bỏ
                                           </button>
@@ -1490,18 +1560,19 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                           )}
                       </div>
 
+                      </div>
                       {/* Modal Footer */}
-                      <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
+                      <div className="px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0">
                           <button 
                               type="button" 
                               onClick={() => setDocFormOpen(false)} 
-                              className="px-6 py-3.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 dark:text-red-400 transition-colors"
+                              className="min-h-[44px] sm:min-h-[36px] w-full sm:w-auto px-4 py-2 sm:py-1.5 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:text-red-500 transition-colors rounded-xl whitespace-nowrap shrink-0"
                           >
                               HỦY BỎ
                           </button>
                           <button 
                               type="submit" 
-                              className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg hover:shadow-blue-200 transition-all flex items-center justify-center gap-2"
+                              className="min-h-[44px] sm:min-h-[36px] w-full sm:w-auto px-5 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
                           >
                               <Save className="w-4 h-4" /> BAN HÀNH BẢN VẼ
                           </button>
@@ -1510,6 +1581,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </div>
           </div>
       )}
+      <ConfirmDialog
+        open={deleteDocId !== null}
+        variant="danger"
+        title="Xác nhận xóa tài liệu"
+        message="Bạn có chắc chắn muốn xóa tài liệu này khỏi dự án?"
+        confirmLabel="Xóa tài liệu"
+        cancelLabel="Hủy"
+        onConfirm={executeDeleteDoc}
+        onCancel={() => setDeleteDocId(null)}
+      />
     </div>
   );
 };

@@ -1,30 +1,81 @@
 /**
  * Utility to convert Google Drive URLs to proxy URLs that don't require Google login.
  */
-export const getProxyImageUrl = (url: string | undefined | null): string => {
+export const getProxyImageUrl = (url: any): string => {
   if (!url) return '';
-  
-  // If it's already a data URL or blob, return as is
-  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  let rawStr = url;
+  if (typeof url === 'object') {
+    rawStr = url.url || url.url_hd || url.url_thumbnail || url.file_url || url.fileUrl || url.image_url || url.drive_url || url.thumbnail || url.id || url.fileId || '';
+  }
+  const trimmed = String(rawStr).trim();
+  if (!trimmed) return '';
 
-  // Retrieve auth token for restricted access
-  const token = localStorage.getItem('aatn_qms_token');
-  const tokenParam = token ? `token=${token}` : '';
-  
-  // If it's already using our proxy, we might need to append the token if it's missing
-  if (url.includes('/display-image/') || url.includes('/api/image/') || url.includes('/api/proxy-image') || url.includes('/api/media/image/') || url.includes('/media/stream/')) {
-      if (token && !url.includes('token=')) {
-          return url.includes('?') ? `${url}&${tokenParam}` : `${url}?${tokenParam}`;
-      }
-      return url;
+  // Data URLs & Blobs render directly without proxy
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+
+  // Normalize relative uploads/ path to /uploads/
+  let normalizedUrl = trimmed;
+  if (normalizedUrl.startsWith('uploads/')) {
+    normalizedUrl = '/' + normalizedUrl;
   }
 
-  // We should proxy ALL non-local images to avoid CORS and Auth issues on mobile
-  if (url.startsWith('http')) {
-      return `/api/proxy-image?url=${encodeURIComponent(url)}&${tokenParam}`;
+  // Same-origin local uploads render directly with CORS & Cache-Control headers
+  if (normalizedUrl.startsWith('/uploads/')) return normalizedUrl;
+
+  let token = '';
+  try {
+    token = localStorage.getItem('aatn_qms_token') || sessionStorage.getItem('aatn_qms_token') || '';
+  } catch {
+    token = '';
   }
 
-  return url;
+  // Signed Storage URLs or JWT-authenticated internal storage assets
+  if (normalizedUrl.startsWith('/api/storage/files/') || normalizedUrl.includes('/api/storage/files/')) {
+    if (normalizedUrl.includes('sig=') || normalizedUrl.includes('token=')) {
+      return normalizedUrl;
+    }
+    if (token) {
+      return normalizedUrl.includes('?')
+        ? `${normalizedUrl}&token=${encodeURIComponent(token)}`
+        : `${normalizedUrl}?token=${encodeURIComponent(token)}`;
+    }
+    return normalizedUrl;
+  }
+
+  // If already routed via /api/media/image/:id or legacy media paths
+  if (normalizedUrl.includes('/display-image/') || normalizedUrl.includes('/api/image/') || normalizedUrl.includes('/api/media/image/') || normalizedUrl.includes('/media/stream/')) {
+    return normalizedUrl;
+  }
+
+  // If already routed via our proxy endpoint, normalize
+  if (normalizedUrl.includes('/api/proxy-image') || normalizedUrl.includes('/api/images/proxy')) {
+    return normalizedUrl.replace('/api/images/proxy', '/api/proxy-image');
+  }
+
+  // Bare Google Drive file ID
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(normalizedUrl)) {
+    return `/api/media/image/${normalizedUrl}`;
+  }
+
+  // Normalize Google Drive share links into direct image URLs before proxying
+  let targetUrl = normalizedUrl;
+  if (targetUrl.includes('drive.google.com') || targetUrl.includes('lh3.googleusercontent.com')) {
+    const fileMatch = targetUrl.match(/\/file\/d\/([^/?]+)/);
+    const idMatch = targetUrl.match(/[?&]id=([^&]+)/);
+    const dMatch = targetUrl.match(/\/d\/([^/?]+)/);
+    const fileId = fileMatch?.[1] || idMatch?.[1] || dMatch?.[1];
+    if (fileId) {
+      return `/api/media/image/${fileId}`;
+    }
+  }
+
+  // Proxy external http(s) URLs to avoid CORS and Drive auth issues on mobile & canvas
+  if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+    const params = new URLSearchParams({ url: targetUrl });
+    return `/api/proxy-image?${params.toString()}`;
+  }
+
+  return targetUrl;
 };
 
 export const compressImage = (file: File, maxSizeKB: number = 500): Promise<string> => {

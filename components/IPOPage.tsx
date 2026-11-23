@@ -5,7 +5,7 @@ const _dummy = 0;
 import { IPOItem, User, hasPermission } from '../types';
 import { exportIpoData, importIpoFile, fetchIpoData } from '../services/apiService';
 
-export default function IPOPage({ user }: { user: User }) {
+export default function IPOPage({ user, onViewInspection }: { user: User; onViewInspection?: (id: string) => void }) {
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -127,7 +127,7 @@ export default function IPOPage({ user }: { user: User }) {
             item={selectedIpo}
             onBack={() => setSelectedIpo(null)}
             onCreateInspection={() => {}}
-            onViewInspection={() => {}}
+            onViewInspection={(inspectionId) => onViewInspection?.(inspectionId)}
             onUpdatePlan={async () => {}}
           />
       );
@@ -154,13 +154,13 @@ export default function IPOPage({ user }: { user: User }) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                         {hasPermission(user, [], 'IPO', 'EXPORT') && (
                             <>
                                 <button 
                                     onClick={() => handleExport('csv')}
                                     disabled={isExporting}
-                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-full text-xs flex items-center gap-1 shadow-md active:scale-95 transition-all disabled:opacity-50"
+                                    className="min-h-[44px] lg:min-h-[38px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-full text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all disabled:opacity-50"
                                     title="Xuất CSV Stream (Tốc độ cao)"
                                 >
                                     {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -169,7 +169,7 @@ export default function IPOPage({ user }: { user: User }) {
                                 <button 
                                     onClick={() => handleExport('xlsx')}
                                     disabled={isExporting}
-                                    className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-50"
+                                    className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center"
                                     title="Xuất Excel (.xlsx)"
                                 >
                                     {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -187,7 +187,7 @@ export default function IPOPage({ user }: { user: User }) {
                                 />
                                 <label 
                                     htmlFor="ipo-import"
-                                    className="p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+                                    className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
                                     title="Nhập Excel"
                                 >
                                     <Upload className="w-4 h-4" />
@@ -249,18 +249,18 @@ export default function IPOPage({ user }: { user: User }) {
                         <button 
                             disabled={page <= 1 || loading}
                             onClick={() => setPage(page - 1)}
-                            className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-600 dark:text-slate-300 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                            className="min-h-[44px] lg:min-h-[38px] px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-600 dark:text-slate-300 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
                         >
                             Trang trước
                         </button>
-                        <div className="flex flex-col items-center">
-                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Trang {page}</span>
-                            <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase">Hiển thị {data.length} / {total}</span>
+                        <div className="flex flex-col items-center tabular-nums">
+                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Trang {page}</span>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Hiển thị {data.length} / {total}</span>
                         </div>
                         <button 
                             disabled={page * limit >= total || loading}
                             onClick={() => setPage(page + 1)}
-                            className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-600 dark:text-slate-300 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
+                            className="min-h-[44px] lg:min-h-[38px] px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-600 dark:text-slate-300 disabled:opacity-30 active:scale-95 transition-all shadow-sm"
                         >
                             Trang sau
                         </button>

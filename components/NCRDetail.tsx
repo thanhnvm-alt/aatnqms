@@ -13,6 +13,7 @@ import { ImageEditorModal } from './ImageEditorModal';
 import { fetchDefectLibrary, saveNcrMapped, uploadQMSImage, createNotification, fetchUsers, fetchRoles } from '../services/apiService';
 import { generateNCRSuggestions } from '../services/geminiService';
 import { getProxyImageUrl } from '../src/utils';
+import { Combobox, ConfirmDialog } from '../src/components/qms';
 
 interface NCRDetailProps {
   ncr: NCR;
@@ -38,6 +39,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   const [showLibrary, setShowLibrary] = useState(false);
 
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number; context?: string } | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
@@ -61,12 +63,16 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
   }, []);
 
   // --- ISO RBAC (CRITICAL) ---
-  const isAdmin = user.role === 'ADMIN';
-  const isManager = user.role === 'MANAGER';
-  const isQA = user.role === 'QA';
+  const normalizedNcrStatus = String(formData.status || 'OPEN').trim().toUpperCase() === 'IN_PROGRESS'
+    ? 'CORRECTED'
+    : String(formData.status || 'OPEN').trim().toUpperCase();
+  const isAdmin = String(user.role || '').toUpperCase() === 'ADMIN';
+  const isManager = String(user.role || '').toUpperCase() === 'MANAGER';
+  const isQA = String(user.role || '').toUpperCase() === 'QA' || String(user.role || '').toUpperCase() === 'QC_LEAD';
   const isOwner = ncr.createdBy === user.name;
-  
-  const isClosed = formData.status === 'CLOSED';
+
+  const isClosed = normalizedNcrStatus === 'CLOSED';
+  const isVerified = normalizedNcrStatus === 'VERIFIED';
   const isLocked = isClosed;
 
   // Dynamic evaluation using role-permission matrix with static fallback and department restriction
@@ -79,8 +85,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
     )
   );
 
-  const canApprove = (
-    String(user.role).toUpperCase() === 'ADMIN' || 
+  const canApprove = !isClosed && (
+    isAdmin || 
     (
       isQAQCDept && (
         hasPermission(user, roles, 'NCR_LIST', 'SIGN2') || 
@@ -88,12 +94,12 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
         (roles.length === 0 && (isAdmin || isManager || isQA))
       )
     )
-  ) && !isClosed;
+  );
 
-  const canModify = (
-    String(user.role).toUpperCase() === 'ADMIN' || 
+  const canModify = !isClosed && (
+    isAdmin || 
     hasPermission(user, roles, 'NCR_LIST', 'EDIT') || 
-    (!isClosed && isOwner) ||
+    isOwner ||
     (roles.length === 0 && isAdmin)
   );
 
@@ -165,63 +171,129 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               });
           };
 
+          const nextBefore = [...(formData.imagesBefore || [])];
+          const nextAfter = [...(formData.imagesAfter || [])];
+
           if (totalTasks > 0) {
               await Promise.all(tasks.map(async (task) => {
                   const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'NCR', role: task.role });
-                  updateStateWithUrl(task, serverUrl);
+                  if (task.path === 'BEFORE') {
+                      nextBefore[task.originalIndex] = serverUrl;
+                  } else {
+                      nextAfter[task.originalIndex] = serverUrl;
+                  }
                   completedCount++;
                   setUploadProgress(Math.round((completedCount / totalTasks) * 100));
               }));
           }
 
-          // Use the latest state for final save
-          setFormData(finalForm => {
-              const oldStatus = ncr.status;
-              let finalStatus = finalForm.status;
-              if (finalStatus !== 'CLOSED') {
-                  finalStatus = (finalForm.imagesAfter && finalForm.imagesAfter.length > 0) ? 'IN_PROGRESS' : 'OPEN';
+          const oldStatus = String(ncr.status || 'OPEN').toUpperCase();
+          let finalStatus = String(formData.status || 'OPEN').toUpperCase();
+          if (finalStatus === 'IN_PROGRESS') finalStatus = 'CORRECTED';
+          if (finalStatus !== 'CLOSED' && finalStatus !== 'VERIFIED') {
+              if (nextAfter.length > 0) {
+                  finalStatus = 'CORRECTED';
+              } else if (formData.responsiblePerson?.trim()) {
+                  finalStatus = 'ASSIGNED';
+              } else {
+                  finalStatus = 'OPEN';
               }
-              
-              const dataToSave = { 
-                  ...finalForm, 
-                  status: finalStatus, 
-                  inspection_id: targetId,
-                  updatedAt: new Date().toISOString()
-              };
+          }
 
-              (async () => {
-                  try {
-                      await saveNcrMapped(targetId, dataToSave, ncr.createdBy || user.name);
-                      
-                      if (finalStatus === 'CLOSED' && oldStatus !== 'CLOSED') {
-                          const users = await fetchUsers();
-                          const creator = users.find((u: any) => u.name === ncr.createdBy);
-                          if (creator && creator.id !== user.id) {
-                            await createNotification({
-                              userId: creator.id,
-                              type: 'NCR',
-                              title: 'NCR đã đóng',
-                              message: `NCR ${ncr.id} đã được đóng bởi ${user.name}`,
-                              link: { view: 'NCR_LIST' as any, id: ncr.id }
-                            });
-                          }
-                      }
-                      setNcr(dataToSave);
-                      setIsEditing(false);
-                      if (onUpdate) onUpdate();
-                      alert("Đã lưu thay đổi thành công.");
-                  } catch (e: any) {
-                      alert("Lỗi khi lưu dữ liệu lên server: " + e.message);
-                  } finally {
-                      setIsSaving(false);
-                  }
-              })();
+          const dataToSave: NCR = {
+              ...formData,
+              imagesBefore: nextBefore,
+              imagesAfter: nextAfter,
+              status: finalStatus,
+              inspection_id: targetId,
+              createdBy: formData.createdBy || ncr.createdBy || user.name,
+              updatedAt: new Date().toISOString()
+          };
 
-              return finalForm;
-          });
+          const savedNcr = await saveNcrMapped(dataToSave);
+          const mergedNcr = savedNcr && savedNcr.id ? { ...dataToSave, ...savedNcr } : dataToSave;
+
+          if (finalStatus === 'CLOSED' && oldStatus !== 'CLOSED') {
+              const allUsers = await fetchUsers();
+              const creator = allUsers.find((u: any) => u.name === ncr.createdBy);
+              if (creator && creator.id !== user.id) {
+                await createNotification({
+                  userId: creator.id,
+                  type: 'NCR',
+                  title: 'NCR đã đóng',
+                  message: `NCR ${ncr.id} đã được đóng bởi ${user.name}`,
+                  link: { view: 'NCR_LIST' as any, id: ncr.id }
+                });
+              }
+          }
+          setFormData(mergedNcr);
+          setNcr(mergedNcr);
+          setIsEditing(false);
+          if (onUpdate) onUpdate();
+          alert("Đã lưu thay đổi thành công.");
       } catch (error: any) { 
           console.error("Save Error:", error);
-          alert("Lỗi khi tải ảnh hoặc lưu dữ liệu."); 
+          alert("Lỗi khi tải ảnh hoặc lưu dữ liệu: " + (error?.message || "Thất bại")); 
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
+  const handleVerify = async () => {
+      if (!formData.imagesAfter || formData.imagesAfter.length === 0) {
+          alert("THẨM TRA BỊ CHẶN: Hồ sơ thiếu Hình ảnh minh chứng xử lý (Images After).");
+          return;
+      }
+      const missingFields = [];
+      if (!formData.rootCause?.trim()) missingFields.push("Nguyên nhân (Root Cause)");
+      if (!formData.solution?.trim()) missingFields.push("Biện pháp (Action Plan)");
+      if (!formData.responsiblePerson?.trim()) missingFields.push("Người phụ trách");
+      if (missingFields.length > 0) {
+          alert(`YÊU CẦU BỔ SUNG: ${missingFields.join(', ')}.`);
+          return;
+      }
+      const targetId = formData.inspection_id || ncr.inspection_id;
+      if (!targetId) {
+          alert("Lỗi: Không tìm thấy liên kết tới Phiếu kiểm tra gốc.");
+          return;
+      }
+
+      setIsSaving(true);
+      try {
+          const entityId = formData.id || 'new';
+          const resolvedBefore = await Promise.all((formData.imagesBefore || []).map(async (img) => img.startsWith('data:') ? uploadQMSImage(img, { entityId, type: 'NCR', role: 'BEFORE' }) : img));
+          const resolvedAfter = await Promise.all((formData.imagesAfter || []).map(async (img) => img.startsWith('data:') ? uploadQMSImage(img, { entityId, type: 'NCR', role: 'AFTER' }) : img));
+          const curDbStatus = String(ncr.status || 'OPEN').trim().toUpperCase();
+          if (curDbStatus === 'OPEN' || curDbStatus === 'ASSIGNED' || curDbStatus === 'PENDING') {
+              await saveNcrMapped({
+                  ...formData,
+                  imagesBefore: resolvedBefore,
+                  imagesAfter: resolvedAfter,
+                  status: 'CORRECTED',
+                  inspection_id: targetId,
+                  createdBy: formData.createdBy || ncr.createdBy || user.name,
+                  updatedAt: new Date().toISOString()
+              });
+          }
+          const verifiedData: NCR = {
+              ...formData,
+              imagesBefore: resolvedBefore,
+              imagesAfter: resolvedAfter,
+              status: 'VERIFIED',
+              inspection_id: targetId,
+              createdBy: formData.createdBy || ncr.createdBy || user.name,
+              updatedAt: new Date().toISOString()
+          };
+          const saved = await saveNcrMapped(verifiedData);
+          const merged = saved && saved.id ? { ...verifiedData, ...saved } : verifiedData;
+          setNcr(merged);
+          setFormData(merged);
+          setIsEditing(false);
+          if (onUpdate) onUpdate();
+          alert("Đã thẩm tra đạt (VERIFIED). Có thể tiến hành Đóng NCR.");
+      } catch (error: any) {
+          alert("Lỗi khi thẩm tra NCR: " + (error?.message || "Thất bại"));
+      } finally {
           setIsSaving(false);
       }
   };
@@ -250,28 +322,41 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           return;
       }
 
-      if (!window.confirm("Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa.")) return;
+      setShowCloseConfirm(true);
+  };
+
+  const confirmCloseNcr = async () => {
+      const targetId = formData.inspection_id || ncr.inspection_id;
+      if (!targetId) return;
+      setShowCloseConfirm(false);
       
       setIsSaving(true);
       try {
-          const approvedData = { 
+          const entityId = formData.id || 'new';
+          const resolvedBefore = await Promise.all((formData.imagesBefore || []).map(async (img) => img.startsWith('data:') ? uploadQMSImage(img, { entityId, type: 'NCR', role: 'BEFORE' }) : img));
+          const resolvedAfter = await Promise.all((formData.imagesAfter || []).map(async (img) => img.startsWith('data:') ? uploadQMSImage(img, { entityId, type: 'NCR', role: 'AFTER' }) : img));
+          const approvedData: NCR = { 
               ...formData, 
+              imagesBefore: resolvedBefore,
+              imagesAfter: resolvedAfter,
               status: 'CLOSED',
               inspection_id: targetId,
+              createdBy: formData.createdBy || ncr.createdBy || user.name,
               closedBy: user.name,
               closedDate: new Date().toISOString()
           };
           
-          await saveNcrMapped(targetId, approvedData, ncr.createdBy || user.name);
+          const saved = await saveNcrMapped(approvedData);
+          const merged = saved && saved.id ? { ...approvedData, ...saved } : approvedData;
           
-          setNcr(approvedData);
-          setFormData(approvedData);
+          setNcr(merged);
+          setFormData(merged);
           setIsEditing(false);
           if (onUpdate) onUpdate();
           alert("NCR đã được phê duyệt và đóng thành công.");
       } catch (error: any) { 
           console.error("Approve Error:", error);
-          alert("Lỗi khi phê duyệt: Database từ chối yêu cầu. Hãy thử 'Lưu' trước khi 'Phê duyệt'."); 
+          alert("Lỗi khi phê duyệt: " + (error?.message || "Database từ chối yêu cầu.")); 
       } finally { setIsSaving(false); }
   };
 
@@ -291,9 +376,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               setFormData(prev => {
                   const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
                   const newImages = [...(prev[field] as string[] || []), ...base64Images];
-                  let newStatus = prev.status;
-                  if (newStatus !== 'CLOSED' && type === 'AFTER') {
-                      newStatus = newImages.length > 0 ? 'IN_PROGRESS' : 'OPEN';
+                  let newStatus = String(prev.status || 'OPEN').toUpperCase();
+                  if (newStatus !== 'CLOSED' && newStatus !== 'VERIFIED' && type === 'AFTER') {
+                      newStatus = newImages.length > 0 ? 'CORRECTED' : (prev.responsiblePerson?.trim() ? 'ASSIGNED' : 'OPEN');
                   }
                   return { ...prev, [field]: newImages, status: newStatus };
               });
@@ -312,9 +397,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       setFormData(prev => {
           const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
           const newList = (prev[field] || []).filter((_, i) => i !== index);
-          let newStatus = prev.status;
-          if (newStatus !== 'CLOSED' && type === 'AFTER') {
-              newStatus = newList.length > 0 ? 'IN_PROGRESS' : 'OPEN';
+          let newStatus = String(prev.status || 'OPEN').toUpperCase();
+          if (newStatus !== 'CLOSED' && newStatus !== 'VERIFIED' && type === 'AFTER') {
+              newStatus = newList.length > 0 ? 'CORRECTED' : (prev.responsiblePerson?.trim() ? 'ASSIGNED' : 'OPEN');
           }
           return { ...prev, [field]: newList, status: newStatus };
       });
@@ -352,9 +437,14 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
               attachments: processedAttachments.filter(Boolean)
           };
           const updatedComments = [...(formData.comments || []), newCommentObj];
-          const updatedNcr = { ...formData, comments: updatedComments, inspection_id: targetId };
+          const updatedNcr = {
+            ...formData,
+            comments: updatedComments,
+            inspection_id: targetId,
+            createdBy: formData.createdBy || ncr.createdBy || user.name,
+          };
           
-          await saveNcrMapped(targetId, updatedNcr, ncr.createdBy || user.name);
+          await saveNcrMapped(updatedNcr);
           
           // Notify participants
           const allUsers = await fetchUsers();
@@ -444,7 +534,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       {/* HEADER ACTION BAR */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex items-center gap-3 w-full">
           <div className="flex items-center gap-2 shrink-0">
-              <button onClick={onBack} className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold text-xs px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 transition-colors active:scale-95"><ArrowLeft className="w-4 h-4"/></button>
+              <button onClick={onBack} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 font-bold text-xs px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95"><ArrowLeft className="w-4 h-4"/></button>
               <div className="flex flex-col">
                   <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Báo cáo lỗi NCR</span>
                   <span className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase font-mono">#{ncr.id.split('-').pop()}</span>
@@ -453,34 +543,45 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
           <div className="flex-1 min-w-0 flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
               <button 
                 onClick={() => onViewInspection(ncr.inspection_id || '')}
-                className="shrink-0 flex items-center justify-center w-8 h-8 md:w-auto md:px-3 lg:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
+                className="shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] lg:min-w-0 lg:min-h-[38px] md:w-auto md:px-3 lg:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
                 title="Xem phiếu QC gốc"
               >
                   <FileText className="w-4 h-4" />
                   <span className="hidden md:inline ml-2">Phiếu QC</span>
               </button>
 
-              {canApprove && (
+              {canApprove && !isVerified && (
+                  <button 
+                    onClick={handleVerify} 
+                    disabled={isSaving} 
+                    className="shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] lg:min-w-0 lg:min-h-[38px] md:w-auto md:px-3 lg:px-4 py-2 bg-cyan-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 hover:bg-cyan-700 transition-all"
+                    title="Thẩm tra đạt (VERIFIED)"
+                  >
+                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <ShieldCheck className="w-4 h-4" />} 
+                      <span className="hidden md:inline ml-2">Thẩm tra</span>
+                  </button>
+              )}
+              {canApprove && isVerified && (
                   <button 
                     onClick={handleApprove} 
                     disabled={isSaving} 
-                    className="shrink-0 flex items-center justify-center w-8 h-8 md:w-auto md:px-3 lg:px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-emerald-900/10 active:scale-95 hover:bg-emerald-700 transition-all"
+                    className="shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] lg:min-w-0 lg:min-h-[38px] md:w-auto md:px-3 lg:px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-emerald-900/10 active:scale-95 hover:bg-emerald-700 transition-all"
                     title="Phê duyệt & Đóng NCR"
                   >
                       {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <ShieldCheck className="w-4 h-4" />} 
-                      <span className="hidden md:inline ml-2">Duyệt</span>
+                      <span className="hidden md:inline ml-2">Đóng NCR</span>
                   </button>
               )}
               {isEditing ? (
                   <>
-                    <button onClick={() => { setFormData(ncr); setIsEditing(false); }} className="shrink-0 px-3 py-1.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold text-[10px] hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-lg">Hủy</button>
-                    <button onClick={handleSaveChanges} disabled={isSaving} className="shrink-0 flex items-center justify-center w-8 h-8 md:w-auto md:px-3 lg:px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-900/10 active:scale-95 transition-all" title="Lưu cập nhật">
+                    <button onClick={() => { setFormData(ncr); setIsEditing(false); }} className="shrink-0 min-h-[44px] lg:min-h-[38px] px-3.5 py-2 text-slate-500 dark:text-slate-400 font-bold text-xs lg:text-[10px] hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">Hủy</button>
+                    <button onClick={handleSaveChanges} disabled={isSaving} className="shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] lg:min-w-0 lg:min-h-[38px] md:w-auto md:px-3 lg:px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-900/10 active:scale-95 transition-all" title="Lưu cập nhật">
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
                         <span className="hidden md:inline ml-2">Lưu</span>
                     </button>
                   </>
               ) : (
-                  canModify && <button onClick={() => setIsEditing(true)} className="shrink-0 flex items-center justify-center w-8 h-8 md:w-auto md:px-3 lg:px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all" title="Sửa hồ sơ">
+                  canModify && <button onClick={() => setIsEditing(true)} className="shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] lg:min-w-0 lg:min-h-[38px] md:w-auto md:px-3 lg:px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all" title="Sửa hồ sơ">
                       <Edit3 className="w-4 h-4"/>
                       <span className="hidden md:inline ml-2">Sửa</span>
                   </button>
@@ -502,7 +603,19 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                 <div className="space-y-4 relative z-10">
                     <div className="flex flex-wrap items-center gap-2">
                         {isEditing ? (
-                            <select value={formData.severity} onChange={e => setFormData({...formData, severity: e.target.value as any})} className="px-3 py-1 rounded-lg text-[9px] font-black uppercase border bg-white dark:bg-slate-900 outline-none focus:ring-2 ring-blue-100"><option value="MINOR">MINOR</option><option value="MAJOR">MAJOR</option><option value="CRITICAL">CRITICAL</option></select>
+                            <div className="w-40">
+                                <Combobox
+                                    value={formData.severity || 'MINOR'}
+                                    onChange={val => setFormData({...formData, severity: (val || 'MINOR') as any})}
+                                    allowClear={false}
+                                    ariaLabel="Mức độ NCR"
+                                    options={[
+                                        { value: 'MINOR', label: 'MINOR' },
+                                        { value: 'MAJOR', label: 'MAJOR' },
+                                        { value: 'CRITICAL', label: 'CRITICAL' },
+                                    ]}
+                                />
+                            </div>
                         ) : (
                             <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border tracking-widest shadow-sm ${formData.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : formData.severity === 'MAJOR' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 dark:bg-slate-800/80 text-blue-700 border-blue-100 dark:border-slate-700'}`}>{formData.severity}</span>
                         )}
@@ -536,11 +649,11 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
 
             {/* TECHNICAL ANALYSIS SECTION */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/50">
                     <div className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-purple-600" /><h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest">Phân tích Kỹ thuật & Hành động</h3></div>
                     {isEditing && (
-                        <button onClick={handleRunAI} disabled={isAiLoading || !formData.issueDescription} className="bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-30 transition-all">
-                            {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3 text-purple-400" />} 
+                        <button onClick={handleRunAI} disabled={isAiLoading || !formData.issueDescription} className="min-h-[44px] lg:min-h-[36px] bg-slate-900 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-30 transition-all">
+                            {isAiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Sparkles className="w-3.5 h-3.5 text-purple-400" />} 
                             AI PHÂN TÍCH FISHBONE
                         </button>
                     )}
@@ -578,8 +691,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         </label>
                         {isEditing && !isLocked && (
                             <div className="flex gap-2">
-                                <button onClick={() => beforeCameraRef.current?.click()} className="p-2 bg-white dark:bg-slate-900 text-red-600 dark:text-red-400 rounded-xl border border-red-100 shadow-sm active:scale-90 transition-all"><Camera className="w-4 h-4"/></button>
-                                <button onClick={() => beforeFileRef.current?.click()} className="p-2 bg-white dark:bg-slate-900 text-red-600 dark:text-red-400 rounded-xl border border-red-100 shadow-sm active:scale-90 transition-all"><Plus className="w-4 h-4"/></button>
+                                <button onClick={() => beforeCameraRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 bg-white dark:bg-slate-900 text-red-600 dark:text-red-400 rounded-xl border border-red-100 shadow-sm active:scale-90 transition-all flex items-center justify-center"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => beforeFileRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 bg-white dark:bg-slate-900 text-red-600 dark:text-red-400 rounded-xl border border-red-100 shadow-sm active:scale-90 transition-all flex items-center justify-center"><Plus className="w-4 h-4"/></button>
                             </div>
                         )}
                     </div>
@@ -587,8 +700,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         {formData.imagesBefore?.map((img, idx) => (
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 relative group cursor-zoom-in shadow-sm hover:border-red-400 transition-all" onClick={() => openGallery(formData.imagesBefore!, idx)}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                {isEditing && !isLocked && <button onClick={() => removeImage(idx, 'BEFORE')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
-                                <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
+                                {isEditing && !isLocked && <button onClick={(e) => { e.stopPropagation(); removeImage(idx, 'BEFORE'); }} className="absolute top-1.5 right-1.5 z-10 min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] bg-red-600 text-white p-1.5 rounded-full shadow-xl flex items-center justify-center"><X className="w-4 h-4"/></button>}
+                                <div className="absolute inset-0 bg-black/10 lg:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
                         ))}
                     </div>
@@ -601,8 +714,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         </label>
                         {!isLocked && (
                             <div className="flex gap-2">
-                                <button onClick={() => afterCameraRef.current?.click()} className="p-2 bg-white dark:bg-slate-900 text-green-600 dark:text-green-500 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><Camera className="w-4 h-4"/></button>
-                                <button onClick={() => afterFileRef.current?.click()} className="p-2 bg-white dark:bg-slate-900 text-green-600 dark:text-green-500 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all" type="button"><ImageIcon className="w-5 h-5"/></button>
+                                <button onClick={() => afterCameraRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 bg-white dark:bg-slate-900 text-green-600 dark:text-green-500 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all flex items-center justify-center" type="button"><Camera className="w-4 h-4"/></button>
+                                <button onClick={() => afterFileRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] p-2 bg-white dark:bg-slate-900 text-green-600 dark:text-green-500 rounded-xl border border-green-100 shadow-sm active:scale-90 transition-all flex items-center justify-center" type="button"><ImageIcon className="w-5 h-5"/></button>
                             </div>
                         )}
                     </div>
@@ -610,8 +723,8 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                         {formData.imagesAfter?.map((img, idx) => (
                             <div key={idx} className="aspect-square rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 relative group cursor-zoom-in shadow-sm hover:border-green-400 transition-all" onClick={() => openGallery(formData.imagesAfter!, idx)}>
                                 <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                {!isLocked && <button onClick={() => removeImage(idx, 'AFTER')} className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full shadow-xl"><X className="w-3.5 h-3.5"/></button>}
-                                <div className="absolute inset-0 bg-black/10 md:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
+                                {!isLocked && <button onClick={(e) => { e.stopPropagation(); removeImage(idx, 'AFTER'); }} className="absolute top-1.5 right-1.5 z-10 min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] bg-red-600 text-white p-1.5 rounded-full shadow-xl flex items-center justify-center"><X className="w-4 h-4"/></button>}
+                                <div className="absolute inset-0 bg-black/10 lg:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white w-6 h-6" /></div>
                             </div>
                         ))}
                     </div>
@@ -653,7 +766,7 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                 {commentAttachments.map((img, idx) => (
                                     <div key={idx} className="relative w-20 h-20 shrink-0 group">
                                         <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 dark:border-slate-700 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
-                                        <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                                        <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 min-w-[36px] min-h-[36px] bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all flex items-center justify-center"><X className="w-4 h-4"/></button>
                                     </div>
                                 ))}
                             </div>
@@ -679,9 +792,9 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
                                     placeholder="Nhập ý kiến phản hồi hoặc tiến độ xử lý..." 
                                     className="w-full pl-5 pr-28 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
                                 />
-                                <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                                    <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
-                                    <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
+                                <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+                                    <button onClick={() => commentCameraRef.current?.click()} className="min-w-[44px] min-h-[44px] p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90 flex items-center justify-center" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                                    <button onClick={() => commentFileRef.current?.click()} className="min-w-[44px] min-h-[44px] p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all border border-transparent hover:border-blue-100 dark:border-slate-700 active:scale-90 flex items-center justify-center" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
                                 </div>
                             </div>
                             <button onClick={handlePostComment} disabled={isSubmitting || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
@@ -707,6 +820,16 @@ export const NCRDetail: React.FC<NCRDetailProps> = ({ ncr: initialNcr, user, onB
       <input type="file" ref={beforeCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'BEFORE')} />
       <input type="file" ref={afterFileRef} className="hidden" multiple accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
       <input type="file" ref={afterCameraRef} className="hidden" capture="environment" accept="image/*" onChange={(e) => handleAddImage(e, 'AFTER')} />
+
+      <ConfirmDialog
+        open={showCloseConfirm}
+        variant="warning"
+        title="Phê duyệt và đóng NCR?"
+        message="Xác nhận phê duyệt và đóng báo cáo NCR này? Hồ sơ sẽ bị khóa vĩnh viễn theo chuẩn ISO."
+        confirmLabel="Đóng NCR"
+        onConfirm={confirmCloseNcr}
+        onCancel={() => setShowCloseConfirm(false)}
+      />
     </div>
   );
 };

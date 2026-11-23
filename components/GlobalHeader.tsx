@@ -1,19 +1,28 @@
 import { getProxyImageUrl } from '../src/utils';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User, ViewState, Inspection, Notification } from '../types';
+import { User, ViewState, Notification, Role, RoleObject, hasPermission } from '../types';
 import { 
-  ShieldCheck, UserCircle, Settings, LogOut, Search, 
-  RefreshCw, QrCode, Bell, ChevronDown, Menu, X,
-  LayoutDashboard, List, FileSpreadsheet, Briefcase, Box, Plus, Key, Monitor, Sun, Moon, FileSignature
+  ShieldCheck, UserCircle, Settings, LogOut,
+  RefreshCw, QrCode, Bell,
+  List, Plus, Key, Monitor, Sun, Moon, FileSignature, ShieldAlert,
+  Cloud, KeyRound, Shield
 } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
 import { ChangePasswordModal } from './ChangePasswordModal';
 import { fetchNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../services/apiService';
 import { useTheme } from '../src/context/ThemeContext';
+import { 
+  isGoogleDriveSignedIn, 
+  signInWithGoogleDrive, 
+  signOutGoogleDrive, 
+  getGoogleDriveUser, 
+  subscribeGoogleDriveAuth 
+} from '../src/services/googleDriveAuth';
 
 interface GlobalHeaderProps {
   user: User;
+  roles?: Array<Role | RoleObject>;
   view: ViewState;
   onNavigate: (view: ViewState) => void;
   onLogout: () => void;
@@ -22,15 +31,15 @@ interface GlobalHeaderProps {
   onSearchChange?: (term: string) => void;
   searchTerm?: string;
   onScanClick?: () => void;
-  onOpenSettingsTab?: (tab: 'PROFILE' | 'TEMPLATE' | 'USERS' | 'WORKSHOPS') => void;
+  onOpenSettingsTab?: (tab: 'PROFILE' | 'TEMPLATE' | 'USERS' | 'ROLES' | 'WORKSHOPS' | 'DEPARTMENTS' | 'SYSTEM_AUDIT') => void;
   activeFormType?: string;
   onNavigateToRecord?: (view: ViewState, id: string) => void;
   isPublicView?: boolean;
 }
 
 export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
-  user, view, onNavigate, onLogout, onRefresh, onCreate,
-  onSearchChange, searchTerm, onScanClick, onOpenSettingsTab,
+  user, roles = [], view, onNavigate, onLogout, onRefresh, onCreate,
+  onScanClick, onOpenSettingsTab,
   activeFormType, onNavigateToRecord, isPublicView
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -41,37 +50,51 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   const [hasMoreNotifs, setHasMoreNotifs] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { theme, setTheme, density, setDensity } = useTheme();
+  const [googleUser, setGoogleUser] = useState(getGoogleDriveUser());
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
   
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    return subscribeGoogleDriveAuth((gUser) => {
+      setGoogleUser(gUser);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id || isPublicView || user.role === 'GUEST' || user.id === 'guest') return;
     loadNotifications(true);
     const interval = setInterval(() => loadNotifications(true), 30000); // Polling every 30s
     return () => clearInterval(interval);
-  }, [user.id]);
+  }, [user?.id, user?.role, isPublicView]);
 
   const loadNotifications = async (isInitial = false) => {
+      if (!user?.id) return;
       try {
           const page = isInitial ? 1 : notifPage + 1;
           const data = await fetchNotifications(user.id, page, 50);
+          const safeData = Array.isArray(data) ? data : [];
           
           if (isInitial) {
-              setNotifications(data);
+              setNotifications(safeData);
               setNotifPage(1);
-              setHasMoreNotifs(data.length === 50);
-          } else if (data.length > 0) {
+              setHasMoreNotifs(safeData.length === 50);
+          } else if (safeData.length > 0) {
               setNotifications(prev => {
-                  const existingIds = new Set(prev.map(n => n.id));
-                  const newItems = data.filter((n: Notification) => !existingIds.has(n.id));
-                  return [...prev, ...newItems].sort((a, b) => b.createdAt - a.createdAt);
+                  const prevList = Array.isArray(prev) ? prev : [];
+                  const existingIds = new Set(prevList.map(n => n.id));
+                  const newItems = safeData.filter((n: Notification) => !existingIds.has(n.id));
+                  return [...prevList, ...newItems].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
               });
               setNotifPage(page);
-              setHasMoreNotifs(data.length === 50);
+              setHasMoreNotifs(safeData.length === 50);
           } else {
               setHasMoreNotifs(false);
           }
-      } catch (e) {}
+      } catch (e) {
+          if (isInitial) setNotifications([]);
+      }
   };
 
   useEffect(() => {
@@ -87,16 +110,19 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = safeNotifications.filter(n => !n.isRead).length;
 
   const handleMarkRead = async (id: string) => {
-      await markNotificationAsRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      await markNotificationAsRead(id, user?.id);
+      setNotifications(prev => (Array.isArray(prev) ? prev : []).map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const handleMarkAllRead = async () => {
-      await markAllNotificationsAsRead(user.id);
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      if (user?.id) {
+          await markAllNotificationsAsRead(user.id);
+      }
+      setNotifications(prev => (Array.isArray(prev) ? prev : []).map(n => ({ ...n, isRead: true })));
   };
 
   const getPageTitle = () => {
@@ -155,92 +181,170 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   };
 
   const renderMenuItems = () => {
-    const isAdminOrManager = user.role === 'ADMIN' || user.role === 'MANAGER';
+    const isAdmin = String(user?.role || '').toUpperCase().trim() === 'ADMIN';
+    const canOpenUsers = isAdmin || hasPermission(user, roles, 'SETTINGS_USERS', 'VIEW');
+    const canOpenRoles = isAdmin || hasPermission(user, roles, 'SETTINGS_ROLES', 'VIEW');
+    const canOpenTemplates = isAdmin || hasPermission(user, roles, 'SETTINGS_TEMPLATE', 'VIEW');
+    const canOpenProfile = isAdmin || hasPermission(user, roles, 'SETTINGS_PROFILE', 'VIEW');
+    const canOpenAudit = isAdmin;
     return (
-      <div className="p-1 space-y-0.5 dark:bg-slate-900 border-t dark:border-slate-800">
-        <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-          <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-            <UserCircle className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
-          </div>
-          <div className="text-left flex-1 min-w-0">
-            <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Hồ sơ của tôi</p>
-          </div>
-        </button>
+      <div className="p-1.5 space-y-1 dark:bg-slate-900 border-t dark:border-slate-800">
+        {canOpenProfile && (
+          <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+            <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:group-hover:bg-blue-900 transition-colors">
+              <UserCircle className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
+            </div>
+            <div className="text-left flex-1 min-w-0">
+              <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Hồ sơ của tôi</p>
+            </div>
+          </button>
+        )}
 
-        <button onClick={() => { setIsMenuOpen(false); setIsChangePasswordOpen(true); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-          <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
+        <button onClick={() => { setIsMenuOpen(false); setIsChangePasswordOpen(true); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+          <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:group-hover:bg-blue-900 transition-colors">
             <Key className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
           </div>
           <div className="text-left flex-1 min-w-0">
-            <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Đổi mật khẩu</p>
+            <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Đổi mật khẩu</p>
           </div>
         </button>
 
-        <div className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}>
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+        <button type="button" className="w-full min-h-[44px] lg:min-h-[38px] flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors cursor-pointer" onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}>
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
              <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md shrink-0">
                 <List className="w-4 h-4 text-slate-500 dark:text-slate-400" />
              </div>
-             <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Mật độ: {density === 'comfortable' ? 'Thoáng' : 'Gọn'}</p>
+             <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Mật độ: {density === 'comfortable' ? 'Thoáng' : 'Gọn'}</p>
           </div>
-          <div className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-[9px] font-black text-slate-600 dark:text-slate-300 uppercase shrink-0 ml-1">
+          <div className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded text-[9px] font-black text-slate-600 dark:text-slate-300 uppercase shrink-0 ml-1">
              {density === 'comfortable' ? 'THOÁNG' : 'GỌN'}
           </div>
-        </div>
+        </button>
 
-        <div className="px-2 pb-1.5 pt-1 border-b border-slate-50 dark:border-slate-800">
-           <div className="flex items-center gap-1.5 mb-1.5 text-slate-500">
-              <Moon className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-black uppercase tracking-tight">Giao diện</span>
-           </div>
-           <div className="bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg flex items-center text-[9px] font-black text-slate-500">
-              <button onClick={() => setTheme('light')} className={`flex-1 flex flex-col items-center py-1 rounded-md gap-0.5 transition-all ${theme === 'light' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
-                 <Sun className="w-3.5 h-3.5" /> Sáng
-              </button>
-              <button onClick={() => setTheme('dark')} className={`flex-1 flex flex-col items-center py-1 rounded-md gap-0.5 transition-all ${theme === 'dark' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
-                 <Moon className="w-3.5 h-3.5" /> Tối
-              </button>
-              <button onClick={() => setTheme('auto')} className={`flex-1 flex flex-col items-center py-1 rounded-md gap-0.5 transition-all ${theme === 'auto' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
-                 <Monitor className="w-3.5 h-3.5" /> Tự động
-              </button>
-           </div>
-        </div>
+         <div className="px-2 pb-2 pt-1.5 border-b border-slate-50 dark:border-slate-800">
+            <div className="flex items-center gap-1.5 mb-1.5 text-slate-500">
+               <Moon className="w-3.5 h-3.5" />
+               <span className="text-[10px] font-black uppercase tracking-tight">Giao diện</span>
+            </div>
+            <div className="bg-slate-100 dark:bg-slate-800/80 p-1 rounded-lg flex items-center gap-1 text-[10px] font-black text-slate-500">
+               <button onClick={() => setTheme('light')} className={`flex-1 min-h-[44px] lg:min-h-[36px] flex flex-col items-center justify-center py-1 rounded-md gap-0.5 transition-all ${theme === 'light' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+                  <Sun className="w-3.5 h-3.5" /> Sáng
+               </button>
+               <button onClick={() => setTheme('dark')} className={`flex-1 min-h-[44px] lg:min-h-[36px] flex flex-col items-center justify-center py-1 rounded-md gap-0.5 transition-all ${theme === 'dark' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+                  <Moon className="w-3.5 h-3.5" /> Tối
+               </button>
+               <button onClick={() => setTheme('auto')} className={`flex-1 min-h-[44px] lg:min-h-[36px] flex flex-col items-center justify-center py-1 rounded-md gap-0.5 transition-all ${theme === 'auto' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+                  <Monitor className="w-3.5 h-3.5" /> Tự động
+               </button>
+            </div>
+         </div>
+
+         <div className="px-2 pb-2 pt-1.5 border-b border-slate-50 dark:border-slate-800">
+            <div className="flex items-center justify-between mb-1.5 text-slate-500">
+               <div className="flex items-center gap-1.5">
+                  <Cloud className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-[10px] font-black uppercase tracking-tight">Google Drive Workspace</span>
+               </div>
+               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${googleUser ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
+                  {googleUser ? 'Đã kết nối' : 'Chưa kết nối'}
+               </span>
+            </div>
+            {googleUser ? (
+               <div className="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg">
+                  <span className="truncate text-slate-600 dark:text-slate-300 font-medium text-xs max-w-[150px]">{googleUser.email || googleUser.displayName}</span>
+                  <button 
+                    type="button"
+                    onClick={async () => {
+                      await signOutGoogleDrive();
+                    }} 
+                    className="text-red-500 hover:text-red-600 font-bold text-[10px] ml-2 shrink-0 cursor-pointer"
+                  >
+                    Ngắt kết nối
+                  </button>
+               </div>
+            ) : (
+               <button 
+                 type="button"
+                 disabled={isGoogleSigningIn}
+                 onClick={async () => {
+                   setIsGoogleSigningIn(true);
+                   try {
+                     await signInWithGoogleDrive();
+                   } catch (err) {
+                     console.error('Google Workspace sign in failed:', err);
+                   } finally {
+                     setIsGoogleSigningIn(false);
+                   }
+                 }} 
+                 className="w-full py-1.5 px-2 bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 font-bold text-[11px] rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+               >
+                 <KeyRound className="w-3 h-3 text-amber-500" />
+                 <span>{isGoogleSigningIn ? 'Đang kết nối...' : 'Kết nối Google Workspace'}</span>
+               </button>
+            )}
+         </div>
         
-        {isAdminOrManager && (
-          <div className="space-y-0.5">
-            <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('USERS'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-              <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-                <ShieldCheck className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
-              </div>
-              <div className="text-left flex-1 min-w-0">
-                <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Quản trị nhân sự</p>
-              </div>
-            </button>
-                <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                  <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-indigo-100 dark:bg-indigo-900/30 dark:group-hover:bg-indigo-900 transition-colors">
-                    <FileSignature className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
-                  </div>
-                  <div className="text-left flex-1 min-w-0">
-                    <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Chữ ký cá nhân</p>
-                  </div>
-                </button>
-                <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('TEMPLATE'); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800 transition-colors group">
-                  <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900 transition-colors">
-                    <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
-                  </div>
-                  <div className="text-left flex-1 min-w-0">
-                    <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Cấu hình biểu mẫu</p>
-                  </div>
-                </button>
+        {(canOpenUsers || canOpenRoles || canOpenProfile || canOpenTemplates || canOpenAudit) && (
+          <div className="space-y-1">
+            {canOpenUsers && (
+              <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('USERS'); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+                <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:group-hover:bg-blue-900 transition-colors">
+                  <ShieldCheck className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
+                </div>
+                <div className="text-left flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Quản trị nhân sự</p>
+                </div>
+              </button>
+            )}
+            {canOpenRoles && (
+              <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('ROLES'); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+                <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 transition-colors">
+                  <Shield className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                </div>
+                <div className="text-left flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Quản lý vai trò</p>
+                </div>
+              </button>
+            )}
+            {canOpenProfile && (
+              <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('PROFILE'); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+                <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 transition-colors">
+                  <FileSignature className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                </div>
+                <div className="text-left flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Chữ ký cá nhân</p>
+                </div>
+              </button>
+            )}
+            {canOpenTemplates && (
+              <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('TEMPLATE'); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+                <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-blue-100 dark:group-hover:bg-blue-900 transition-colors">
+                  <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
+                </div>
+                <div className="text-left flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Cấu hình biểu mẫu</p>
+                </div>
+              </button>
+            )}
+            {canOpenAudit && (
+              <button onClick={() => { setIsMenuOpen(false); onOpenSettingsTab?.('SYSTEM_AUDIT'); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
+                <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md group-hover:bg-red-100 dark:group-hover:bg-red-900/40 transition-colors">
+                  <ShieldAlert className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-red-600 dark:group-hover:text-red-400" />
+                </div>
+                <div className="text-left flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight truncate">Kiểm toán lỗi API</p>
+                </div>
+              </button>
+            )}
           </div>
         )}
         <div className="h-px bg-slate-100 dark:bg-slate-800 my-1 mx-1"></div>
-        <button onClick={() => { setIsMenuOpen(false); onLogout(); }} className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-red-50 dark:bg-red-900/20 dark:hover:bg-red-900/20 transition-colors group">
+        <button onClick={() => { setIsMenuOpen(false); onLogout(); }} className="w-full min-h-[44px] lg:min-h-[38px] flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group">
           <div className="p-1.5 bg-red-50 dark:bg-red-500/10 rounded-md group-hover:bg-red-100 dark:group-hover:bg-red-500/20 transition-colors">
             <LogOut className="w-4 h-4 text-red-500 dark:text-red-400 group-hover:text-red-600 dark:group-hover:text-red-300" />
           </div>
           <div className="text-left flex-1 min-w-0">
-             <p className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-tight">Đăng xuất</p>
+             <p className="text-[11px] font-black text-red-600 dark:text-red-400 uppercase tracking-tight">Đăng xuất</p>
           </div>
         </button>
       </div>
@@ -248,22 +352,22 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   };
 
   return (
-    <header className="h-16 md:h-20 shrink-0 bg-white dark:bg-[#0f172a] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-[100] flex items-center px-4 md:px-8 shadow-sm transition-colors duration-200">
-      <div className="flex-1 flex items-center gap-4 overflow-hidden">
+    <header className="h-14 md:h-20 shrink-0 bg-white dark:bg-[#0f172a] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-[100] flex items-center px-3 md:px-8 shadow-sm transition-colors duration-200">
+      <div className="flex-1 flex items-center gap-3 overflow-hidden min-w-0">
         <div className="flex flex-col md:flex-row md:items-baseline md:gap-3 min-w-0">
-          <h1 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+          <h1 className="text-base sm:text-lg md:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
             {getPageTitle()}
           </h1>
           {getPageSubtitle() && (
             <div className="flex items-center gap-2">
               {view !== 'FORM' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 hidden md:block"></div>}
-              <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400 dark:text-slate-500 truncate">{getPageSubtitle()}</span>
+              <span className="text-[11px] md:text-sm font-medium text-slate-500 dark:text-slate-400 truncate">{getPageSubtitle()}</span>
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3 ml-2 text-slate-100">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 ml-2 text-slate-100 shrink-0">
         {!isPublicView && onRefresh && (
           <button 
             onClick={() => {
@@ -271,7 +375,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               onRefresh();
               setTimeout(() => setIsRefreshing(false), 1000);
             }} 
-            className="p-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-xl transition-all active:scale-95" 
+            className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-xl transition-all active:scale-95" 
             title="Làm mới dữ liệu"
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -279,7 +383,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         )}
 
         {!isPublicView && onScanClick && (
-          <button onClick={onScanClick} className="p-2.5 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95" title="Quét mã QR">
+          <button onClick={onScanClick} className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center p-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95" title="Quét mã QR">
             <QrCode className="w-5 h-5" />
           </button>
         )}
@@ -288,7 +392,8 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
           <div className="relative" ref={notifRef}>
               <button 
                   onClick={() => setIsNotifOpen(!isNotifOpen)}
-                  className={`p-2.5 rounded-xl transition-all active:scale-95 relative ${isNotifOpen ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-800'}`}
+                  className={`min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center p-2 rounded-xl transition-all active:scale-95 relative ${isNotifOpen ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                  title="Thông báo"
               >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
@@ -296,7 +401,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                   )}
               </button>
               {isNotifOpen && (
-                  <div className="fixed md:absolute top-16 md:top-auto right-4 md:right-0 mt-2 w-44 md:w-[260px] z-[120]">
+                  <div className="fixed md:absolute top-14 md:top-auto right-3 md:right-0 mt-2 w-[calc(100vw-1.5rem)] max-w-[340px] md:w-[300px] z-[120]">
                       <NotificationCenter 
                           notifications={notifications}
                           onMarkRead={handleMarkRead}
@@ -317,26 +422,26 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         {!isPublicView && onCreate && (
           <button 
             onClick={onCreate}
-            className="h-8 px-3 bg-blue-600 text-white rounded-lg shadow-lg shadow-blue-500/10 flex items-center gap-1.5 hover:bg-blue-700 transition-all active:scale-95 font-black text-[10px] uppercase tracking-wider"
+            className="min-h-[44px] min-w-[44px] lg:min-h-[40px] px-2.5 sm:px-3.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-all active:scale-95 font-black text-xs uppercase tracking-wider"
             title="Tạo mới"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Tạo mới</span>
           </button>
         )}
 
-        {!isPublicView && <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-1 hidden sm:block"></div>}
+        {!isPublicView && <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-0.5 hidden sm:block"></div>}
 
         <div className="relative" ref={menuRef}>
           <button 
             onClick={() => !isPublicView && setIsMenuOpen(!isMenuOpen)} 
-            className={`flex items-center gap-2 p-1 pl-2 rounded-2xl transition-all active:scale-95 group border border-transparent ${isPublicView ? 'cursor-default' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 hover:border-slate-100 dark:border-slate-800'}`}
+            className={`min-h-[44px] min-w-[44px] lg:min-h-[40px] flex items-center justify-center gap-2 p-1 md:pl-2 rounded-2xl transition-all active:scale-95 group border border-transparent ${isPublicView ? 'cursor-default' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-100 dark:hover:border-slate-800'}`}
           >
             <div className="text-right hidden md:block">
                 <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{user.name}</p>
                 <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">{user.role}</p>
             </div>
-            <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden relative">
+            <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden relative shrink-0">
               <img src={getProxyImageUrl(user.avatar)} alt={user.name} className="w-full h-full object-cover bg-slate-100 dark:bg-slate-800" referrerPolicy="no-referrer" />
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
             </div>

@@ -8,6 +8,7 @@ import {
 import { User, Inspection, InspectionStatus, CheckStatus } from '../types';
 import { getProxyImageUrl } from '../src/utils';
 import { formatDisplayDate } from '../lib/utils';
+import { ConfirmDialog } from '../src/components/qms';
 import { 
     RefreshCw, 
     Trash2, 
@@ -65,6 +66,10 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
     const [reviewItem, setReviewItem] = useState<Inspection | null>(null);
     const [isReviewLoading, setIsReviewLoading] = useState(false);
     const [expandedMaterial, setExpandedMaterial] = useState<string | null>(null);
+    const [confirmState, setConfirmState] = useState<{
+        mode: 'RESTORE' | 'PERMANENT_DELETE' | 'BULK_RESTORE' | 'BULK_DELETE';
+        id?: string;
+    } | null>(null);
 
     const loadDeleted = async () => {
         setIsLoading(true);
@@ -83,65 +88,76 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
         loadDeleted();
     }, []);
 
-    const handleRestore = async (id: string) => {
-        if (!window.confirm("Bạn có chắc chắn muốn khôi phục phiếu này?")) return;
-        setIsActionLoading(id);
-        try {
-            await restoreInspection(id);
-            alert("Đã khôi phục thành công!");
-            loadDeleted();
-        } catch (error) {
-            alert("Lỗi khi khôi phục.");
-        } finally {
-            setIsActionLoading(null);
-        }
+    const handleRestore = (id: string) => {
+        setConfirmState({ mode: 'RESTORE', id });
     };
 
-    const handlePermanentDelete = async (id: string) => {
-        if (!window.confirm("CẢNH BÁO: Dữ liệu sẽ bị xóa VĨNH VIỄN khỏi database và không thể khôi phục. Bạn có chắc chắn?")) return;
-        setIsActionLoading(id);
-        try {
-            await permanentDeleteInspection(id);
-            alert("Đã xóa vĩnh viễn.");
-            loadDeleted();
-        } catch (error) {
-            alert("Lỗi khi xóa.");
-        } finally {
-            setIsActionLoading(null);
-        }
+    const handlePermanentDelete = (id: string) => {
+        setConfirmState({ mode: 'PERMANENT_DELETE', id });
     };
 
-    const handleBulkRestore = async () => {
+    const handleBulkRestore = () => {
         if (selectedIds.length === 0) return;
-        if (!window.confirm(`Bạn có chắc chắn muốn khôi phục ${selectedIds.length} phiếu đã chọn?`)) return;
-        setIsActionLoading(true);
-        try {
-            for (const id of selectedIds) {
-                await restoreInspection(id);
-            }
-            alert(`Đã khôi phục thành công ${selectedIds.length} phiếu!`);
-            loadDeleted();
-        } catch (error) {
-            alert("Lỗi trong quá trình khôi phục hàng loạt.");
-        } finally {
-            setIsActionLoading(null);
-        }
+        setConfirmState({ mode: 'BULK_RESTORE' });
     };
 
-    const handleBulkPermanentDelete = async () => {
+    const handleBulkPermanentDelete = () => {
         if (selectedIds.length === 0) return;
-        if (!window.confirm(`CẢNH BÁO CỰC NGUY HIỂM: Bạn đang chuẩn bị xóa VĨNH VIỄN ${selectedIds.length} phiếu đã chọn. Hành động này không thể hoàn tác. Bạn có chắc chắn?`)) return;
-        setIsActionLoading(true);
-        try {
-            for (const id of selectedIds) {
-                await permanentDeleteInspection(id);
+        setConfirmState({ mode: 'BULK_DELETE' });
+    };
+
+    const executeConfirmAction = async () => {
+        if (!confirmState) return;
+        const current = confirmState;
+        setConfirmState(null);
+        if (current.mode === 'RESTORE' && current.id) {
+            setIsActionLoading(current.id);
+            try {
+                await restoreInspection(current.id);
+                alert("Đã khôi phục thành công!");
+                loadDeleted();
+            } catch (error) {
+                alert("Lỗi khi khôi phục.");
+            } finally {
+                setIsActionLoading(null);
             }
-            alert(`Đã xóa vĩnh viễn ${selectedIds.length} phiếu.`);
-            loadDeleted();
-        } catch (error) {
-            alert("Lỗi trong quá trình xóa hàng loạt.");
-        } finally {
-            setIsActionLoading(null);
+        } else if (current.mode === 'PERMANENT_DELETE' && current.id) {
+            setIsActionLoading(current.id);
+            try {
+                await permanentDeleteInspection(current.id);
+                alert("Đã xóa vĩnh viễn.");
+                loadDeleted();
+            } catch (error) {
+                alert("Lỗi khi xóa.");
+            } finally {
+                setIsActionLoading(null);
+            }
+        } else if (current.mode === 'BULK_RESTORE') {
+            setIsActionLoading(true);
+            try {
+                for (const id of selectedIds) {
+                    await restoreInspection(id);
+                }
+                alert(`Đã khôi phục thành công ${selectedIds.length} phiếu!`);
+                loadDeleted();
+            } catch (error) {
+                alert("Lỗi trong quá trình khôi phục hàng loạt.");
+            } finally {
+                setIsActionLoading(null);
+            }
+        } else if (current.mode === 'BULK_DELETE') {
+            setIsActionLoading(true);
+            try {
+                for (const id of selectedIds) {
+                    await permanentDeleteInspection(id);
+                }
+                alert(`Đã xóa vĩnh viễn ${selectedIds.length} phiếu.`);
+                loadDeleted();
+            } catch (error) {
+                alert("Lỗi trong quá trình xóa hàng loạt.");
+            } finally {
+                setIsActionLoading(null);
+            }
         }
     };
 
@@ -188,27 +204,27 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50">
             <header className="px-4 py-4 md:px-6 md:py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-end gap-3 md:gap-6">
-                    <div className="flex flex-col md:flex-row items-center gap-3 md:gap-4 w-full md:w-auto">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4 w-full md:w-auto">
                         {selectedIds.length > 0 && (
-                            <div className="flex items-center gap-1.5 md:gap-2 animate-in slide-in-from-right duration-300">
+                            <div className="flex items-center gap-2 animate-in slide-in-from-right duration-300">
                                 <button 
                                     onClick={handleBulkRestore}
-                                    className="px-3 py-2 md:px-6 md:py-4 bg-emerald-600 text-white rounded-2xl md:rounded-3xl text-[8px] md:text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg flex items-center gap-1.5 md:gap-2 active:scale-95"
+                                    className="flex-1 md:flex-none min-h-[44px] lg:min-h-[40px] px-4 md:px-6 py-2.5 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
                                 >
-                                    <RefreshCw className="w-3 h-3 md:w-4 md:h-4" />
+                                    <RefreshCw className="w-4 h-4" />
                                     Khôi phục ({selectedIds.length})
                                 </button>
                                 <button 
                                     onClick={handleBulkPermanentDelete}
-                                    className="px-3 py-2 md:px-6 md:py-4 bg-rose-600 text-white rounded-2xl md:rounded-3xl text-[8px] md:text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg flex items-center gap-1.5 md:gap-2 active:scale-95"
+                                    className="flex-1 md:flex-none min-h-[44px] lg:min-h-[40px] px-4 md:px-6 py-2.5 bg-rose-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider hover:bg-rose-700 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
                                 >
-                                    <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
+                                    <Trash2 className="w-4 h-4" />
                                     Xóa ({selectedIds.length})
                                 </button>
                             </div>
                         )}
                         <div className="relative w-full md:w-96">
-                            <Search className="absolute left-3.5 md:left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-slate-400 dark:text-slate-500" />
+                            <Search className="absolute left-3.5 md:left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-slate-400 dark:text-slate-500 pointer-events-none" />
                             <input 
                                 type="text" 
                                 placeholder="Tìm kiếm phiếu đã xóa..." 
@@ -216,14 +232,14 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                                 onChange={e => setSearchInput(e.target.value)}
                                 onBlur={handleCommitSearch}
                                 onKeyDown={handleKeyDown}
-                                className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-4 bg-slate-100 dark:bg-slate-800 border-none rounded-2xl md:rounded-3xl text-[10px] md:text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600/20 transition-all placeholder:text-slate-400 dark:text-slate-500"
+                                className="w-full min-h-[44px] lg:min-h-[40px] pl-10 md:pl-12 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-600/20 transition-all placeholder:text-slate-400 dark:text-slate-500"
                             />
                         </div>
                     </div>
                 </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 lg:pb-8 no-scrollbar">
                 <div className="max-w-7xl mx-auto">
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center py-32 gap-4">
@@ -241,80 +257,149 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="bg-white dark:bg-slate-900 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
-                            <div className="overflow-x-auto no-scrollbar">
-                                <table className="w-full text-left border-collapse table-fixed md:table-auto min-w-[320px] md:min-w-full">
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl md:rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+                            {/* Mobile Cards (< md) */}
+                            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                                <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+                                    <button
+                                        onClick={toggleSelectAll}
+                                        className="min-h-[44px] px-2 -ml-2 flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300"
+                                    >
+                                        {selectedIds.length === filteredItems.length ? <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-5 h-5 text-slate-400" />}
+                                        <span>Chọn tất cả ({filteredItems.length})</span>
+                                    </button>
+                                </div>
+                                {filteredItems.map(item => (
+                                    <div
+                                        key={item.id}
+                                        className={`p-4 space-y-3 transition-colors ${selectedIds.includes(item.id) ? 'bg-blue-50/70 dark:bg-slate-800/50' : ''}`}
+                                    >
+                                        <div className="flex items-start gap-2.5">
+                                            <button
+                                                onClick={() => toggleSelect(item.id)}
+                                                className="min-w-[44px] min-h-[44px] -ml-2 -mt-1 flex items-center justify-center rounded-xl text-slate-400 hover:text-blue-600 shrink-0"
+                                                aria-label="Chọn phiếu"
+                                            >
+                                                {selectedIds.includes(item.id) ? <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-5 h-5" />}
+                                            </button>
+                                            <div className="flex-1 min-w-0" onClick={() => handleReview(item.id)}>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="font-mono text-xs font-black text-slate-900 dark:text-slate-100 truncate">{item.id}</span>
+                                                    <span className="inline-flex px-2 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-black uppercase shrink-0">
+                                                        {item.table_name?.replace('forms_', '').toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase mt-1 break-words">{item.ten_ct || 'N/A'}</p>
+                                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate mt-0.5">{item.ten_hang_muc || 'N/A'}</p>
+                                                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400 mt-1.5">
+                                                    <span>{item.inspectorName || 'Hệ thống'}</span>
+                                                    <span>{new Date(Number(item.deleted_at) * 1000).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 pt-1">
+                                            <button
+                                                onClick={() => handleReview(item.id)}
+                                                className="min-w-[44px] min-h-[44px] px-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                                <span>Xem</span>
+                                            </button>
+                                            <button
+                                                disabled={isActionLoading === item.id || isActionLoading === true}
+                                                onClick={() => handleRestore(item.id)}
+                                                className="flex-1 min-h-[44px] px-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-xl hover:bg-emerald-600 hover:text-white transition-all font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                            >
+                                                <RefreshCw className={`w-4 h-4 ${isActionLoading === item.id ? 'animate-spin' : ''}`} />
+                                                <span>Khôi phục</span>
+                                            </button>
+                                            <button
+                                                disabled={isActionLoading === item.id || isActionLoading === true}
+                                                onClick={() => handlePermanentDelete(item.id)}
+                                                className="min-w-[44px] min-h-[44px] px-3 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-600 hover:text-white transition-all font-black text-xs uppercase flex items-center justify-center disabled:opacity-50"
+                                                aria-label="Xóa vĩnh viễn"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Tablet & Desktop Table (md+) */}
+                            <div className="hidden md:block overflow-x-auto no-scrollbar">
+                                <table className="w-full min-w-[700px] text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                                            <th className="px-2 md:px-6 py-3 md:py-5 w-8 md:w-16">
-                                                <button onClick={toggleSelectAll} className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 transition-colors">
-                                                    {selectedIds.length === filteredItems.length ? <CheckSquare className="w-4 md:w-5 h-4 md:h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-4 md:w-5 h-4 md:h-5" />}
+                                            <th className="px-4 py-4 w-16">
+                                                <button onClick={toggleSelectAll} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                                    {selectedIds.length === filteredItems.length ? <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-5 h-5" />}
                                                 </button>
                                             </th>
-                                            <th className="px-2 md:px-6 py-1 md:py-5 text-[7px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight md:tracking-[0.2em] w-[35%] md:w-auto">Thông tin phiếu</th>
-                                            <th className="px-2 md:px-6 py-1 md:py-5 text-[7px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight md:tracking-[0.2em] w-[40%] md:w-auto">Dự án</th>
-                                            <th className="hidden lg:table-cell px-6 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Người lập</th>
-                                            <th className="px-2 md:px-6 py-1 md:py-5 text-[7px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight md:tracking-[0.2em] w-14 md:w-auto">Thời gian</th>
-                                            <th className="px-2 md:px-6 py-1 md:py-5 text-[7px] md:text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tight md:tracking-[0.2em] text-right text-red-500 dark:text-red-400 w-14 md:w-auto">Thao tác</th>
+                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">Thông tin phiếu</th>
+                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">Dự án</th>
+                                            <th className="hidden lg:table-cell px-4 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">Người lập</th>
+                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">Thời gian</th>
+                                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-right text-red-500 dark:text-red-400">Thao tác</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                         {filteredItems.map(item => (
-                                            <tr key={item.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-colors group cursor-pointer ${selectedIds.includes(item.id) ? 'bg-blue-50 dark:bg-slate-800/30' : ''}`} onClick={() => handleReview(item.id)}>
-                                                <td className="px-2 md:px-6 py-3 md:py-5" onClick={e => e.stopPropagation()}>
-                                                    <button onClick={() => toggleSelect(item.id)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 transition-colors">
-                                                        {selectedIds.includes(item.id) ? <CheckSquare className="w-4 md:w-5 h-4 md:h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-4 md:w-5 h-4 md:h-5" />}
+                                            <tr key={item.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer ${selectedIds.includes(item.id) ? 'bg-blue-50 dark:bg-slate-800/30' : ''}`} onClick={() => handleReview(item.id)}>
+                                                <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                                                    <button onClick={() => toggleSelect(item.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                                        {selectedIds.includes(item.id) ? <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <Square className="w-5 h-5" />}
                                                     </button>
                                                 </td>
-                                                <td className="px-2 md:px-6 py-3 md:py-5">
-                                                    <div className="flex flex-col gap-0.5 md:gap-1 overflow-hidden">
-                                                        <div className="flex items-center gap-1 md:gap-2">
-                                                            <span className="font-black text-slate-900 dark:text-slate-100 text-[9px] md:text-sm tracking-tight truncate">{item.id}</span>
-                                                            <Eye className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 text-slate-300 group-hover:text-blue-500 dark:text-blue-400 transition-colors shrink-0" />
+                                                <td className="px-4 py-4">
+                                                    <div className="flex flex-col gap-1 overflow-hidden">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono font-black text-slate-900 dark:text-slate-100 text-sm tracking-tight truncate">{item.id}</span>
+                                                            <Eye className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 dark:text-blue-400 transition-colors shrink-0" />
                                                         </div>
-                                                        <span className="inline-flex px-1 md:px-2 py-0.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-md text-[7px] md:text-[9px] font-black w-fit uppercase shrink-0">
+                                                        <span className="inline-flex px-2 py-0.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-black w-fit uppercase shrink-0">
                                                             {item.table_name?.replace('forms_', '').toUpperCase()}
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-2 md:px-6 py-3 md:py-5">
+                                                <td className="px-4 py-4">
                                                     <div className="flex flex-col gap-0.5 overflow-hidden">
-                                                        <p className="text-[9px] md:text-sm font-black text-slate-800 dark:text-slate-200 truncate uppercase">{item.ten_ct || 'N/A'}</p>
-                                                        <p className="text-[7px] md:text-[10px] font-bold text-slate-400 dark:text-slate-500 truncate">{item.ten_hang_muc || 'N/A'}</p>
+                                                        <p className="text-sm font-black text-slate-800 dark:text-slate-200 truncate uppercase">{item.ten_ct || 'N/A'}</p>
+                                                        <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 truncate">{item.ten_hang_muc || 'N/A'}</p>
                                                     </div>
                                                 </td>
-                                                <td className="hidden lg:table-cell px-6 py-5">
+                                                <td className="hidden lg:table-cell px-4 py-4">
                                                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{item.inspectorName || 'Sử dụng hệ thống'}</span>
                                                 </td>
-                                                <td className="px-2 md:px-6 py-3 md:py-5">
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <span className="text-[7px] md:text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                                <td className="px-4 py-4">
+                                                    <div className="flex flex-col gap-0.5 font-mono tabular-nums">
+                                                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                                                             {new Date(Number(item.deleted_at) * 1000).toLocaleDateString('vi-VN')}
                                                         </span>
-                                                        <span className="hidden md:block text-[8px] font-bold text-slate-400 italic">
+                                                        <span className="text-[10px] font-bold text-slate-400 italic">
                                                             {new Date(Number(item.deleted_at) * 1000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-2 md:px-6 py-3 md:py-5" onClick={e => e.stopPropagation()}>
-                                                    <div className="flex items-center justify-end gap-1 md:gap-2">
+                                                <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-end gap-2">
                                                         <button 
                                                             disabled={isActionLoading === item.id || isActionLoading === true}
                                                             onClick={() => handleRestore(item.id)}
-                                                            className="flex items-center justify-center p-1.5 md:px-4 md:py-2.5 bg-emerald-50 text-emerald-600 rounded-lg md:rounded-xl hover:bg-emerald-600 hover:text-white transition-all font-black text-[7px] md:text-[10px] uppercase tracking-widest disabled:opacity-50 shadow-sm"
+                                                            className="min-w-[44px] min-h-[44px] lg:min-h-[36px] flex items-center justify-center px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all font-black text-[10px] uppercase tracking-widest disabled:opacity-50 shadow-sm"
                                                             title="Khôi phục"
                                                         >
-                                                            <RefreshCw className={`w-3 h-3 md:w-3.5 md:h-3.5 ${isActionLoading === item.id ? 'animate-spin' : ''}`} />
-                                                            <span className="hidden md:inline ml-2">Khôi phục</span>
+                                                            <RefreshCw className={`w-4 h-4 ${isActionLoading === item.id ? 'animate-spin' : ''}`} />
+                                                            <span className="ml-2">Khôi phục</span>
                                                         </button>
                                                         <button 
                                                             disabled={isActionLoading === item.id || isActionLoading === true}
                                                             onClick={() => handlePermanentDelete(item.id)}
-                                                            className="flex items-center justify-center p-1.5 md:px-4 md:py-2.5 bg-rose-50 text-rose-600 rounded-lg md:rounded-xl hover:bg-rose-600 hover:text-white transition-all font-black text-[7px] md:text-[10px] uppercase tracking-widest disabled:opacity-50 shadow-sm"
+                                                            className="min-w-[44px] min-h-[44px] lg:min-h-[36px] flex items-center justify-center px-4 py-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all font-black text-[10px] uppercase tracking-widest disabled:opacity-50 shadow-sm"
                                                             title="Xóa vĩnh viễn"
                                                         >
-                                                            <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                                                            <span className="hidden md:inline ml-2">Xóa</span>
+                                                            <Trash2 className="w-4 h-4" />
+                                                            <span className="ml-2">Xóa</span>
                                                         </button>
                                                     </div>
                                                 </td>
@@ -330,25 +415,25 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
 
             {/* Quick Review Modal */}
             {reviewItem && (
-                <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 lg:p-8 animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-[3rem] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in duration-300 border border-white/20">
-                        <header className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 shrink-0">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-200">
-                                    <FileText className="w-6 h-6" />
+                <div className="fixed inset-0 z-[220] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-hidden animate-in zoom-in duration-300 border border-slate-200 dark:border-slate-800">
+                        <header className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-slate-50/80 dark:bg-slate-800/50 shrink-0">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="p-2 bg-blue-600 text-white rounded-xl shadow-sm shrink-0">
+                                    <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </div>
-                                <div>
-                                    <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase text-lg tracking-tight leading-none">{reviewItem.id}</h3>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <span className="px-2 py-0.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-lg text-[9px] font-black uppercase tracking-widest">{reviewItem.type}</span>
-                                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest italic">Review nhanh phiếu trước khi khôi phục</p>
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase text-sm sm:text-base tracking-tight leading-tight truncate">{reviewItem.id}</h3>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                        <span className="px-2 py-0.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded text-[9px] font-black uppercase tracking-widest">{reviewItem.type}</span>
+                                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest italic hidden sm:block">Review nhanh phiếu trước khi khôi phục</p>
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={() => setReviewItem(null)} className="p-3 hover:bg-slate-200 dark:bg-slate-700 rounded-2xl text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
+                            <button type="button" onClick={() => setReviewItem(null)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 dark:text-slate-300 active:scale-90 transition-all shrink-0 cursor-pointer"><X className="w-5 h-5"/></button>
                         </header>
 
-                        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 no-scrollbar bg-white dark:bg-slate-900">
+                        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-5 no-scrollbar bg-white dark:bg-slate-900">
                             {/* --- HEADER INFO CARDS --- */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-[2rem] border border-slate-100 dark:border-slate-800">
@@ -618,18 +703,18 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                             </div>
                         </div>
 
-                        <footer className="px-8 py-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
+                        <footer className="px-4 py-2 sm:py-2.5 bg-slate-50/80 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
+                            <div className="flex items-center gap-2">
                                 <button 
                                     onClick={() => handleRestore(reviewItem.id)}
-                                    className="px-8 py-4 bg-emerald-600 text-white rounded-[2rem] text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center gap-2 active:scale-95"
+                                    className="flex-1 sm:flex-none min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-emerald-700 transition-all shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95"
                                 >
                                     <RefreshCw className="w-4 h-4" />
                                     Khôi phục phiếu
                                 </button>
                                 <button 
                                     onClick={() => handlePermanentDelete(reviewItem.id)}
-                                    className="px-8 py-4 bg-rose-600 text-white rounded-[2rem] text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center gap-2 active:scale-95"
+                                    className="flex-1 sm:flex-none min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 bg-rose-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-rose-700 transition-all shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95"
                                 >
                                     <Trash2 className="w-4 h-4" />
                                     Xóa vĩnh viễn
@@ -637,7 +722,7 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                             </div>
                             <button 
                                 onClick={() => setReviewItem(null)}
-                                className="px-8 py-4 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-slate-900 dark:text-slate-100 transition-all flex items-center gap-2"
+                                className="min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider hover:text-slate-900 dark:hover:text-slate-100 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
                             >
                                 <X className="w-4 h-4" />
                                 Đóng xem nhanh
@@ -657,12 +742,32 @@ export const Trash: React.FC<TrashProps> = ({ user, onNavigate }) => {
                 </div>
             )}
             
-            <footer className="p-3 md:p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+            <footer className="p-3 pb-20 lg:p-6 lg:pb-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
                 <div className="max-w-7xl mx-auto flex items-center justify-between text-[7px] md:text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest italic">
                     <p>Hệ thống ISO QMS - Trash Control Module</p>
                     <p>Tổng cộng: {filteredItems.length} phiếu</p>
                 </div>
             </footer>
+            <ConfirmDialog
+                open={confirmState !== null}
+                variant={confirmState?.mode === 'PERMANENT_DELETE' || confirmState?.mode === 'BULK_DELETE' ? 'danger' : 'info'}
+                title={
+                    confirmState?.mode === 'RESTORE' ? 'Khôi phục phiếu kiểm tra' :
+                    confirmState?.mode === 'BULK_RESTORE' ? `Khôi phục ${selectedIds.length} phiếu` :
+                    confirmState?.mode === 'BULK_DELETE' ? `Xóa vĩnh viễn ${selectedIds.length} phiếu` :
+                    'Cảnh báo xóa vĩnh viễn'
+                }
+                message={
+                    confirmState?.mode === 'RESTORE' ? 'Bạn có chắc chắn muốn khôi phục phiếu này về danh sách hoạt động?' :
+                    confirmState?.mode === 'BULK_RESTORE' ? `Bạn có chắc chắn muốn khôi phục ${selectedIds.length} phiếu đã chọn?` :
+                    confirmState?.mode === 'BULK_DELETE' ? `CẢNH BÁO: Bạn đang chuẩn bị xóa VĨNH VIỄN ${selectedIds.length} phiếu đã chọn. Hành động này không thể hoàn tác!` :
+                    'CẢNH BÁO: Dữ liệu sẽ bị xóa VĨNH VIỄN khỏi database và không thể khôi phục. Bạn có chắc chắn?'
+                }
+                confirmLabel={confirmState?.mode === 'RESTORE' || confirmState?.mode === 'BULK_RESTORE' ? 'Khôi phục' : 'Xóa vĩnh viễn'}
+                cancelLabel="Hủy"
+                onConfirm={executeConfirmAction}
+                onCancel={() => setConfirmState(null)}
+            />
         </div>
     );
 };

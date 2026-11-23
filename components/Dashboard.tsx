@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { SearchableSelect } from './SearchableSelect';
 import { DateRangePicker } from './DateRangePicker';
+import { Combobox } from '../src/components/qms';
 
 interface DashboardProps {
   dashboardStats?: any;
@@ -271,67 +272,97 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     if (onFilterChange) onFilterChange({});
   };
 
+  const toSafeNumber = (val: unknown, fallback = 0): number => {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const clampRate = (val: number): number => {
+    if (!Number.isFinite(val)) return 0;
+    return Math.min(100, Math.max(0, val));
+  };
+
   const stats = useMemo(() => {
-    if (dashboardStats?.stats) {
-      return dashboardStats.stats;
+    const raw = dashboardStats?.stats;
+    if (raw) {
+      const avgSuccessRate = clampRate(toSafeNumber(raw.avgSuccessRate, 0));
+      const avgErrorRate = clampRate(toSafeNumber(raw.avgErrorRate, Number((100 - avgSuccessRate).toFixed(1))));
+      return {
+        total: toSafeNumber(raw.total, 0),
+        drafts: toSafeNumber(raw.drafts, 0),
+        highPriority: toSafeNumber(raw.highPriority, 0),
+        nonDraftCount: toSafeNumber(raw.nonDraftCount, 0),
+        avgSuccessRate,
+        avgErrorRate,
+      };
     }
-    return { total: 0, drafts: 0, highPriority: 0, avgSuccessRate: 0, avgErrorRate: 0, nonDraftCount: 0 };
+    return { total: 0, drafts: 0, highPriority: 0, nonDraftCount: 0, avgSuccessRate: 0, avgErrorRate: 0 };
   }, [dashboardStats]);
 
   const statusData = useMemo(() => {
     return [
-      { name: '% Đạt', value: stats.avgSuccessRate, color: COLORS.pass },
-      { name: '% Lỗi', value: stats.avgErrorRate, color: COLORS.fail },
-    ].filter(item => item.value > 0);
+      { name: '% Đạt', value: toSafeNumber(stats.avgSuccessRate, 0), color: COLORS.pass },
+      { name: '% Lỗi', value: toSafeNumber(stats.avgErrorRate, 0), color: COLORS.fail },
+    ].filter(item => Number.isFinite(item.value) && item.value > 0);
   }, [stats]);
 
   const monthlyData = useMemo(() => {
-    if (!dashboardStats?.monthlyData) return [];
-    
+    if (!Array.isArray(dashboardStats?.monthlyData)) return [];
+
     return dashboardStats.monthlyData.map((m: any) => {
-        let passRate = 0;
-        let failRate = 0;
-        
-        if (m.inspected > 0) {
-            passRate = Number(((m.passed / m.inspected) * 100).toFixed(1));
-            failRate = Number(((m.failed / m.inspected) * 100).toFixed(1));
-        } else if (m.count > 0) {
-            // fallback if no qty
-            passRate = Number(((m.fallbackScore / (m.count * 100)) * 100).toFixed(1));
-            failRate = Number((100 - passRate).toFixed(1));
-        }
-        
-        return {
-            name: m.month,
-            passRate,
-            failRate,
-            inspected: m.inspected,
-            count: m.count
-        };
+      const inspected = toSafeNumber(m.inspected, 0);
+      const passed = toSafeNumber(m.passed, 0);
+      const failed = toSafeNumber(m.failed, 0);
+      const count = toSafeNumber(m.count, 0);
+      const fallbackScore = toSafeNumber(m.fallbackScore, count * 100);
+
+      let passRate = 0;
+      let failRate = 0;
+
+      if (inspected > 0) {
+        passRate = clampRate(Number(((passed / inspected) * 100).toFixed(1)));
+        failRate = clampRate(Number(((failed / inspected) * 100).toFixed(1)));
+      } else if (count > 0) {
+        passRate = clampRate(Number(((fallbackScore / (count * 100)) * 100).toFixed(1)));
+        failRate = clampRate(Number((100 - passRate).toFixed(1)));
+      }
+
+      return {
+        name: String(m.month || '—'),
+        passRate,
+        failRate,
+        inspected,
+        count,
+      };
     });
   }, [dashboardStats]);
 
   const workshopData = useMemo(() => {
-    if (!dashboardStats?.workshopData) return [];
-    
+    if (!Array.isArray(dashboardStats?.workshopData)) return [];
+
     return dashboardStats.workshopData
       .map((item: any) => {
+        const inspected = toSafeNumber(item.inspected, 0);
+        const passed = toSafeNumber(item.passed, 0);
+        const count = toSafeNumber(item.count, 0);
+        const fallbackScore = toSafeNumber(item.fallbackScore, count * 100);
+
         let passRate = 0;
-        if (item.inspected > 0) {
-          passRate = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
-        } else if (item.count > 0) {
-          passRate = parseFloat((item.fallbackScore / item.count).toFixed(2));
+        if (inspected > 0) {
+          passRate = clampRate(parseFloat(((passed / inspected) * 100).toFixed(2)));
+        } else if (count > 0) {
+          passRate = clampRate(parseFloat((fallbackScore / count).toFixed(2)));
         }
-        
-        // Translate raw code/value to readable Name
-        const wsObj = workshops.find(w => w.code === item.code);
-        const displayName = wsObj ? wsObj.name : (workshopLabels[item.code] || item.code);
+
+        const code = String(item.code || 'XƯỞNG MẶC ĐỊNH');
+        const wsObj = workshops.find(w => w.code === code);
+        const displayName = wsObj ? wsObj.name : (workshopLabels[code] || code);
 
         return {
-          code: item.code,
+          code,
           name: displayName,
-          passRate: passRate,
-          failRate: parseFloat((100 - passRate).toFixed(2))
+          passRate,
+          failRate: clampRate(parseFloat((100 - passRate).toFixed(2))),
         };
       })
       .sort((a: any, b: any) => a.code.localeCompare(b.code, undefined, { numeric: true }))
@@ -339,15 +370,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
   }, [dashboardStats, workshops, workshopLabels]);
 
   const stageData = useMemo(() => {
-    if (!dashboardStats?.stageData) return [];
+    if (!Array.isArray(dashboardStats?.stageData)) return [];
 
     const stageMap: Record<string, { inspected: number; passed: number; count: number }> = {};
-    
+
     dashboardStats.stageData.forEach((item: any) => {
       let stageName = String(item.stageName || '').trim();
       if (!stageName) return;
 
-      // Ensure formatting as "Pxx"
       const numericMatches = stageName.match(/\d+/);
       if (numericMatches) {
         stageName = `P${numericMatches[0]}`;
@@ -356,10 +386,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       }
 
       if (!stageMap[stageName]) stageMap[stageName] = { inspected: 0, passed: 0, count: 0 };
-      
-      stageMap[stageName].inspected += Number(item.inspected || 0);
-      stageMap[stageName].passed += Number(item.passed || 0);
-      stageMap[stageName].count += Number(item.count || 0);
+
+      stageMap[stageName].inspected += toSafeNumber(item.inspected, 0);
+      stageMap[stageName].passed += toSafeNumber(item.passed, 0);
+      stageMap[stageName].count += toSafeNumber(item.count, 0);
     });
 
     return Object.keys(stageMap)
@@ -367,13 +397,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
         const item = stageMap[key];
         let passRate = 100;
         if (item.inspected > 0) {
-          passRate = parseFloat(((item.passed / item.inspected) * 100).toFixed(2));
+          passRate = clampRate(parseFloat(((item.passed / item.inspected) * 100).toFixed(2)));
         }
-        
+
         return {
           name: key,
-          passRate: passRate,
-          failRate: parseFloat((100 - passRate).toFixed(2))
+          passRate,
+          failRate: clampRate(parseFloat((100 - passRate).toFixed(2))),
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -402,21 +432,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
         
         {/* Filter Section */}
         <div className="bg-white dark:bg-slate-900 px-5 py-4 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-            <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+            <div className="flex items-center justify-between cursor-pointer select-none min-h-[44px]" onClick={() => setIsFilterOpen(!isFilterOpen)}>
                 <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <Filter className="w-4 h-4" /> BỘ LỌC DỮ LIỆU {isFilterActive && <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded text-[8px] animate-pulse">ĐANG TÁC DỤNG</span>}
                 </h3>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
                   {isFilterActive && (
                       <button 
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); clearFilters(); }}
-                          className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
+                          className="min-h-[44px] lg:min-h-[36px] px-3 py-2 text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
                       >
                           Xóa tất cả
                       </button>
                   )}
-                  <div className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-full">
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                  <div className="w-11 h-11 lg:w-9 lg:h-9 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-full">
+                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
             </div>
@@ -468,7 +499,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
         </div>
 
         {/* Top Stat Grid */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard title="TỔNG PHIẾU" value={stats.total} icon={ClipboardCheck} colorHex="#3b82f6" subtitle={`${stats.drafts} bản nháp`} />
             <StatCard title="TỶ LỆ ĐẠT AVG" value={`${stats.avgSuccessRate}%`} icon={CheckCircle2} colorHex="#10b981" subtitle="KPI: >90%" />
             <StatCard title="% LỖI AVG" value={`${stats.avgErrorRate}%`} icon={AlertTriangle} colorHex="#ef4444" subtitle="Trung bình/Phiếu" />
@@ -660,24 +691,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
 
             {/* NCR Quality Chart */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-               <div className="flex items-center justify-between mb-4 border-b border-slate-50 dark:border-slate-800 pb-2">
+               <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b border-slate-50 dark:border-slate-800 pb-2">
                  <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <AlertTriangle className="w-3 h-3 text-red-500" />
                     BIỂU ĐỒ LỖI (NCR)
                  </h3>
-                 <select
+                 <Combobox
                    value={ncrGroupRange}
-                   onChange={(e) => {
-                     setNcrGroupRange(e.target.value as any);
+                   onChange={(val) => {
+                     setNcrGroupRange((val as 'DAY' | 'WEEK' | 'MONTH' | 'YEAR') || 'DAY');
                      setSelectedNcrDateKey(null);
                    }}
-                   className="text-[10px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 outline-none text-slate-700 dark:text-slate-300"
-                 >
-                   <option value="DAY">Theo Ngày</option>
-                   <option value="WEEK">Theo Tuần</option>
-                   <option value="MONTH">Theo Tháng</option>
-                   <option value="YEAR">Theo Năm</option>
-                 </select>
+                   options={[
+                     { value: 'DAY', label: 'Theo Ngày' },
+                     { value: 'WEEK', label: 'Theo Tuần' },
+                     { value: 'MONTH', label: 'Theo Tháng' },
+                     { value: 'YEAR', label: 'Theo Năm' },
+                   ]}
+                   allowClear={false}
+                   ariaLabel="Phạm vi nhóm biểu đồ NCR"
+                   className="w-40"
+                 />
                </div>
                
                <div className="h-64 w-full min-h-[256px]">
@@ -739,25 +773,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
             {/* NCR List Details */}
             {ncrList.length > 0 && (
                 <div className="bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-                   <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-50 dark:border-slate-800 pb-2 flex items-center justify-between">
-                      DANH SÁCH PHIẾU KIỂM TRA CÓ LỖI (NCR)
+                   <h3 className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-50 dark:border-slate-800 pb-2 flex items-center justify-between gap-2">
+                      <span>DANH SÁCH PHIẾU KIỂM TRA CÓ LỖI (NCR)</span>
                       {selectedNcrDateKey && (
                         <button 
+                          type="button"
                           onClick={() => setSelectedNcrDateKey(null)}
-                          className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold lowercase"
+                          className="min-h-[44px] lg:min-h-[36px] px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 flex items-center gap-1.5 font-bold text-xs transition-colors"
                         >
-                          <X className="w-3 h-3" /> Bỏ lọc
+                          <X className="w-3.5 h-3.5" /> Bỏ lọc
                         </button>
                       )}
                    </h3>
-                   <div className="max-h-[440px] overflow-auto w-full no-scrollbar rounded-xl border border-slate-100 dark:border-slate-800">
-                      <table className="w-full text-left min-w-[600px] border-collapse">
+                   {/* Mobile Cards (< md) */}
+                   <div className="md:hidden space-y-2.5 max-h-[440px] overflow-y-auto no-scrollbar">
+                      {filteredInspectionNcrList.map(item => (
+                        <button
+                          key={item.inspection_id}
+                          type="button"
+                          onClick={() => onViewInspection && onViewInspection(item.inspection_id)}
+                          className="w-full text-left p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between gap-3 min-h-[60px]"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                                #{item.inspection_id.substring(0, 8).toUpperCase()}
+                              </span>
+                              <span className="text-[11px] font-mono text-slate-400 tabular-nums">
+                                {item.createdDate ? new Date(item.createdDate).toLocaleDateString('vi-VN') : (item.createdAt ? new Date(item.createdAt * 1000).toLocaleDateString('vi-VN') : '')}
+                              </span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                              {item.ten_hang_muc || '---'}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                              {item.ma_ct || '---'} {item.workshop ? ` - ${item.workshop}` : ''}
+                            </p>
+                          </div>
+                          <div className="shrink-0 flex flex-col items-end gap-1">
+                            <span className="px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black tabular-nums">
+                              {item.ncrCount} NCR
+                            </span>
+                            <ArrowRight className="w-4 h-4 text-slate-400" />
+                          </div>
+                        </button>
+                      ))}
+                      {filteredInspectionNcrList.length === 0 && (
+                        <div className="py-6 text-center text-xs font-medium text-slate-400">
+                          Không có dữ liệu phù hợp
+                        </div>
+                      )}
+                   </div>
+                   {/* Desktop & Tablet Table (>= md) */}
+                   <div className="hidden md:block max-h-[440px] overflow-auto w-full no-scrollbar rounded-xl border border-slate-100 dark:border-slate-800">
+                      <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 z-10">
                           <tr className="bg-slate-50 dark:bg-slate-800">
-                            <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase border-b border-slate-200 dark:border-slate-700">Mã phiếu</th>
-                            <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase border-b border-slate-200 dark:border-slate-700">Hạng mục / Công trình</th>
-                            <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase text-center border-b border-slate-200 dark:border-slate-700">Số lỗi (NCR)</th>
-                            <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase text-right border-b border-slate-200 dark:border-slate-700">Ngày tạo</th>
+                            <th className="px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase border-b border-slate-200 dark:border-slate-700">Mã phiếu</th>
+                            <th className="px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase border-b border-slate-200 dark:border-slate-700">Hạng mục / Công trình</th>
+                            <th className="px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase text-center border-b border-slate-200 dark:border-slate-700">Số lỗi (NCR)</th>
+                            <th className="px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right border-b border-slate-200 dark:border-slate-700">Ngày tạo</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -767,19 +842,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
                               onClick={() => onViewInspection && onViewInspection(item.inspection_id)}
                               className="hover:bg-blue-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer group"
                             >
-                              <td className="px-3 py-2 text-xs font-mono font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">
+                              <td className="px-3 py-3 text-xs font-mono font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors tabular-nums">
                                 #{item.inspection_id.substring(0, 8).toUpperCase()}
                               </td>
-                              <td className="px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+                              <td className="px-3 py-3 text-xs font-medium text-slate-600 dark:text-slate-400">
                                 {item.ten_hang_muc || '---'}
                                 <span className="block text-[10px] text-slate-400">
                                   {item.ma_ct || '---'} {item.workshop ? ` - ${item.workshop}` : ''}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-xs font-black text-red-500 text-center">
+                              <td className="px-3 py-3 text-xs font-black text-red-500 text-center tabular-nums">
                                 {item.ncrCount}
                               </td>
-                              <td className="px-3 py-2 text-xs font-medium text-slate-500 text-right">
+                              <td className="px-3 py-3 text-xs font-medium text-slate-500 text-right tabular-nums">
                                 {item.createdDate ? new Date(item.createdDate).toLocaleDateString('vi-VN') : (item.createdAt ? new Date(item.createdAt * 1000).toLocaleDateString('vi-VN') : '')}
                               </td>
                             </tr>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Inspection, InspectionStatus, User, Role, ModuleId, hasPermission } from '../types';
+import { Inspection, InspectionStatus, User, Role, RoleObject, ModuleId, hasPermission } from '../types';
 import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward, Lock, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { getProxyImageUrl } from '../src/utils';
-import { fetchRoles, fetchInspectionAuditLogs } from '../services/apiService';
+import { fetchRoles, fetchInspectionAuditLogs, fetchUsers, uploadQMSImage } from '../services/apiService';
+import { ConfirmDialog } from '../src/components/qms';
 
 interface TwoTierApprovalProps {
   inspection: Inspection;
@@ -12,7 +13,8 @@ interface TwoTierApprovalProps {
 }
 
 export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, user, onApprove }) => {
-  const [roles, setRoles] = useState<Role[]>([]);
+  const isGuest = String(user?.role || '').toUpperCase() === 'GUEST' || user?.id === 'guest';
+  const [roles, setRoles] = useState<RoleObject[]>([]);
   const [showModal, setShowModal] = useState<false | 'SIGN1' | 'SIGN2'>(false);
   const [signature, setSignature] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -20,9 +22,12 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [isAuditCollapsed, setIsAuditCollapsed] = useState(true);
+  const [showLockConfirm, setShowLockConfirm] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
-    if (!inspection.id) return;
+    if (!inspection.id || isGuest) return;
     let active = true;
     setIsAuditLoading(true);
     fetchInspectionAuditLogs(inspection.id)
@@ -36,7 +41,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         if (active) setIsAuditLoading(false);
       });
     return () => { active = false; };
-  }, [inspection.id]);
+  }, [inspection.id, isGuest]);
 
   const getChangedFields = (oldVal: any, newVal: any) => {
     if (!oldVal || !newVal) return null;
@@ -99,12 +104,13 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   };
 
   const renderAuditTrail = () => {
+    if (isGuest) return null;
     return (
       <div className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-4">
         <button
           type="button"
           onClick={() => setIsAuditCollapsed(!isAuditCollapsed)}
-          className="w-full flex items-center justify-between py-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors focus:outline-none"
+          className="w-full min-h-[44px] flex items-center justify-between py-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors focus:outline-none"
         >
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-slate-400" />
@@ -213,21 +219,22 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   };
 
   useEffect(() => {
+    if (isGuest) return;
     let active = true;
     fetchRoles()
       .then(data => {
         if (active && data) {
-          setRoles(data);
+          setRoles(Array.isArray(data) ? data.map((r: any) => typeof r === 'string' ? { id: r, name: r, permissions: [] } : r) : []);
         }
       })
       .catch(err => console.error('Failed to load roles in TwoTierApproval:', err));
     return () => { active = false; };
-  }, []);
+  }, [isGuest]);
 
   useEffect(() => {
+    if (isGuest) return;
     let active = true;
-    fetch('/api/users')
-      .then(res => res.ok ? res.json() : [])
+    fetchUsers()
       .then(data => {
         if (active && Array.isArray(data)) {
           setUsers(data);
@@ -235,14 +242,14 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           const selfInDb = data.find(u => u.id === user.id || u.username === user.username);
           if (selfInDb) {
             if (selfInDb.to_qc && !user.to_qc) user.to_qc = selfInDb.to_qc;
-            if (selfInDb.team_id && !user.team_id) user.team_id = selfInDb.team_id;
+            if ((selfInDb as any).team_id && !(user as any).team_id) (user as any).team_id = (selfInDb as any).team_id;
             if (selfInDb.la_to_truong !== undefined) user.la_to_truong = !!selfInDb.la_to_truong;
           }
         }
       })
       .catch(err => console.error('Failed to load users in TwoTierApproval:', err));
     return () => { active = false; };
-  }, [user]);
+  }, [user, isGuest]);
 
   const isAuthorizedTeam = useMemo(() => {
     console.log(`[TEAM_LEAD_AUTH] START verification check | inspId=${inspection.id} | inspectorName="${inspection.inspectorName}" | created_by="${(inspection as any).created_by}"`);
@@ -396,6 +403,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   }, [user, inspection, users]);
 
   const hasSignPermission = (action: 'SIGN1' | 'SIGN2'): boolean => {
+    if (isGuest) return false;
     const moduleId = (inspection.type || 'PQC') as ModuleId;
 
     if (user.role === 'ADMIN') {
@@ -474,6 +482,12 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
   };
 
+  const currentStatusUpper = String(inspection.status || 'SUBMITTED').trim().toUpperCase();
+  const is1Level = inspection.type === 'IQC' || inspection.type === 'SITE';
+  const isLockedFinal = currentStatusUpper === 'LOCKED';
+  const isVerifiedState = currentStatusUpper === 'VERIFIED' || currentStatusUpper === 'COMPLETED';
+  const isApprovedState = currentStatusUpper === 'APPROVED';
+
   const handleSigningSubmit = async () => {
     if (!signature) {
       alert("Vui lòng ký tên trước khi xác nhận.");
@@ -485,63 +499,30 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     }
     setIsProcessing(true);
     try {
+      let resolvedSig = signature;
+      if (resolvedSig.startsWith('data:')) {
+        resolvedSig = await uploadQMSImage(resolvedSig, {
+          entityType: 'INSPECTION',
+          entityId: inspection.id || 'new',
+          role: showModal === 'SIGN1' ? 'SIGNATURE_TEAMLEAD' : 'SIGNATURE_MANAGER',
+        });
+      }
       const nowISO = new Date().toISOString();
       if (showModal === 'SIGN1') {
-        const isBoss = 
-          user.role === 'ADMIN' || 
-          user.role === 'MANAGER' ||
-          (user.position && (
-            user.position.toUpperCase().includes('GIÁM ĐỐC') ||
-            user.position.toUpperCase().includes('GIÁM DOC') ||
-            user.position.toUpperCase().includes('TRƯỞNG PHÒNG') ||
-            user.position.toUpperCase().includes('TRUONG PHONG')
-          ));
-
-        if (isBoss) {
-          // Rule: If Director/Dept Head signs as L1 in a 2-tier approval, automatically fully approve and go straight to Approved!
-          await onApprove(inspection.id, signature, {
-            teamLeadSignature: signature,
-            teamLeadName: `${user.name} - Ký thay`,
-            teamLeadDate: nowISO,
-            managerSignature: signature,
-            managerName: `${user.name} - Ký thay`,
-            status: 'approved' as InspectionStatus,
-            updatedAt: nowISO
-          });
-        } else {
-          await onApprove(inspection.id, '', {
-            teamLeadSignature: signature,
-            teamLeadName: user.name,
-            teamLeadDate: nowISO,
-            status: 'verified' as InspectionStatus,
-            updatedAt: nowISO
-          });
-        }
+        await onApprove(inspection.id, '', {
+          teamLeadSignature: resolvedSig,
+          teamLeadName: user.name,
+          teamLeadDate: nowISO,
+          status: InspectionStatus.APPROVED,
+          updatedAt: nowISO
+        });
       } else if (showModal === 'SIGN2') {
-        const is1Level = inspection.type === 'IQC' || inspection.type === 'SITE';
-        const isBoss = 
-          user.role === 'ADMIN' || 
-          user.role === 'MANAGER' ||
-          (user.position && (
-            user.position.toUpperCase().includes('GIÁM ĐỐC') ||
-            user.position.toUpperCase().includes('GIÁM DOC') ||
-            user.position.toUpperCase().includes('TRƯỞNG PHÒNG') ||
-            user.position.toUpperCase().includes('TRUONG PHONG') ||
-            user.position.toUpperCase().includes('BỘ PHẬN') ||
-            user.position.toUpperCase().includes('BO PHAN')
-          ));
-
-        let mgrName = user.name;
-        if (is1Level && isBoss) {
-          const userPos = user.position || (user.role === 'ADMIN' ? 'Admin' : 'Giám đốc');
-          mgrName = `${userPos} ${user.name} - Ký thay`;
-        }
-
-        await onApprove(inspection.id, signature, {
-          managerSignature: signature,
-          managerName: mgrName,
+        const nextStatus = is1Level && !isApprovedState ? InspectionStatus.APPROVED : InspectionStatus.VERIFIED;
+        await onApprove(inspection.id, resolvedSig, {
+          managerSignature: resolvedSig,
+          managerName: user.name,
           managerDate: nowISO,
-          status: 'approved' as InspectionStatus,
+          status: nextStatus,
           updatedAt: nowISO
         });
       }
@@ -554,40 +535,76 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     }
   };
 
-  const handleReject = async () => {
-    if (!isAuthorizedTeam) {
-      alert("Không thuộc thẩm quyền quản lý: Bạn không thuộc Tổ QC quản lý của người lập phiếu này!");
-      return;
-    }
-    const reason = window.prompt("Nhập lý do từ chối hồ sơ này:");
-    if (reason === null) return;
-    if (!reason.trim()) {
-      alert("Vui lòng phục hồi và nhập lý do hợp lệ.");
-      return;
-    }
-
+  const handleVerifyStep = async () => {
     setIsProcessing(true);
     try {
-      await onApprove(inspection.id, "", {
-        status: 'rejected' as InspectionStatus,
-        summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + reason,
-        updatedAt: new Date().toISOString()
+      await onApprove(inspection.id, '', {
+        status: InspectionStatus.VERIFIED,
+        updatedAt: new Date().toISOString(),
       });
-      alert("Đã trả lại/từ chối phiếu thành công.");
     } catch (e) {
-      alert("Lỗi từ chối phiếu.");
+      alert("Lỗi khi thẩm tra phiếu: " + (e instanceof Error ? e.message : "Thất bại"));
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const showSign1Button = hasSignPermission('SIGN1') && !inspection.teamLeadSignature && !inspection.managerSignature;
-  const showSign2Button = hasSignPermission('SIGN2') && !inspection.managerSignature;
+  const handleLockFinal = () => {
+    setShowLockConfirm(true);
+  };
 
-  // ISO Immutability Lock
-  const isFullyApproved = inspection.status === InspectionStatus.APPROVED;
+  const confirmLockFinal = async () => {
+    setShowLockConfirm(false);
+    setIsProcessing(true);
+    try {
+      await onApprove(inspection.id, '', {
+        status: InspectionStatus.LOCKED,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      alert("Lỗi khi khóa hồ sơ: " + (e instanceof Error ? e.message : "Thất bại"));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-  if (isFullyApproved) {
+  const handleReject = () => {
+    if (!isAuthorizedTeam) {
+      alert("Không thuộc thẩm quyền quản lý: Bạn không thuộc Tổ QC quản lý của người lập phiếu này!");
+      return;
+    }
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const submitReject = async () => {
+    if (!rejectReason.trim()) {
+      alert("Vui lòng nhập lý do hợp lệ.");
+      return;
+    }
+    setShowRejectModal(false);
+    setIsProcessing(true);
+    try {
+      await onApprove(inspection.id, "", {
+        status: InspectionStatus.REJECTED,
+        summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + rejectReason.trim(),
+        updatedAt: new Date().toISOString()
+      });
+      setRejectReason('');
+    } catch (e) {
+      alert("Lỗi từ chối phiếu: " + (e instanceof Error ? e.message : "Thất bại"));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const showSign1Button = !is1Level && hasSignPermission('SIGN1') && !inspection.teamLeadSignature && !isApprovedState && !isVerifiedState && !isLockedFinal;
+  const showSign2Button = hasSignPermission('SIGN2') && !inspection.managerSignature && !isVerifiedState && !isLockedFinal && (is1Level || isApprovedState || Boolean(inspection.teamLeadSignature));
+  const showVerifyButton = isApprovedState && Boolean(inspection.managerSignature) && (hasSignPermission('SIGN2') || String(user.role || '').toUpperCase() === 'ADMIN');
+  const showLockButton = isVerifiedState && (hasSignPermission('SIGN2') || String(user.role || '').toUpperCase() === 'ADMIN');
+
+  // ISO Immutability Lock (Frozen only at final LOCKED state)
+  if (isLockedFinal) {
     return (
         <div className="bg-slate-50 dark:bg-[#0f172a] p-5 md:p-6 rounded-3xl border-2 border-emerald-500/20 dark:border-emerald-500/10 shadow-2xl space-y-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
@@ -687,26 +704,46 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
 
   return (
     <section className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
-      <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
         <h3 className="text-blue-700 dark:text-blue-400 font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-emerald-500" /> PHÊ DUYỆT ISO HAI TẦNG CHUẨN
+          <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" /> PHÊ DUYỆT ISO HAI TẦNG CHUẨN
         </h3>
         
-        {/* Rejected Button for managers / Leads */}
-        {(hasSignPermission('SIGN1') || hasSignPermission('SIGN2')) && inspection.status !== 'approved' && inspection.status !== 'rejected' && (
-          <button 
-            onClick={handleReject}
-            disabled={isProcessing || !isAuthorizedTeam}
-            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1 border ${
-              isAuthorizedTeam 
-                ? 'bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/20 dark:text-red-400 border-red-100 dark:border-red-900/50 cursor-pointer' 
-                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 border-slate-200 dark:border-slate-800 cursor-not-allowed'
-            }`}
-            title={!isAuthorizedTeam ? "Không thuộc thẩm quyền quản lý của Tổ QC" : ""}
-          >
-            <Ban className="w-3.5 h-3.5" /> Trả lại / Từ chối
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {showVerifyButton && (
+            <button
+              onClick={handleVerifyStep}
+              disabled={isProcessing}
+              className="min-h-[44px] lg:min-h-[36px] px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Thẩm tra đạt (VERIFIED)
+            </button>
+          )}
+          {showLockButton && (
+            <button
+              onClick={handleLockFinal}
+              disabled={isProcessing}
+              className="min-h-[44px] lg:min-h-[36px] px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+            >
+              <Lock className="w-3.5 h-3.5 text-emerald-400" /> Khóa hồ sơ ISO (LOCKED)
+            </button>
+          )}
+          {/* Rejected Button for managers / Leads */}
+          {(hasSignPermission('SIGN1') || hasSignPermission('SIGN2')) && !isVerifiedState && !isLockedFinal && currentStatusUpper !== 'REJECTED' && (
+            <button 
+              onClick={handleReject}
+              disabled={isProcessing || !isAuthorizedTeam}
+              className={`min-h-[44px] lg:min-h-[36px] px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 border ${
+                isAuthorizedTeam 
+                  ? 'bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/20 dark:text-red-400 border-red-100 dark:border-red-900/50 cursor-pointer' 
+                  : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+              }`}
+              title={!isAuthorizedTeam ? "Không thuộc thẩm quyền quản lý của Tổ QC" : ""}
+            >
+              <Ban className="w-3.5 h-3.5" /> Trả lại / Từ chối
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={`grid grid-cols-1 ${(inspection.type === 'IQC' || inspection.type === 'SITE') ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
@@ -793,7 +830,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                     isAuthorizedTeam ? (
                       <button 
                         onClick={() => { setSignature(user.signature_template || ''); setShowModal('SIGN1'); }}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
+                        className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
                       >
                         <CheckSquare className="w-3.5 h-3.5" /> Ký xác nhận L1
                       </button>
@@ -878,7 +915,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
 
                         setShowModal('SIGN2');
                       }}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
+                      className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
                     >
                       <ShieldCheck className="w-3.5 h-3.5" /> Ký phê duyệt L2
                     </button>
@@ -911,52 +948,58 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
 
       {/* Signature drawing Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[160] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-6 max-w-lg w-full scale-in duration-200 shadow-2xl border border-slate-100 dark:border-slate-800">
-            <header className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3.5 mb-4">
-              <div>
-                <h4 className="text-md font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-blue-500" />
-                  Ký xác nhận điện tử ({showModal === 'SIGN1' ? 'Cấp L1 - Tổ Trưởng' : 'Cấp L2 - Trưởng Phòng'})
+        <div className="fixed inset-0 z-[220] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden scale-in duration-200 shadow-2xl border border-slate-100 dark:border-slate-800">
+            <header className="flex justify-between items-center gap-2 px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+              <div className="min-w-0 pr-2">
+                <h4 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 shrink-0" />
+                  <span className="truncate">Ký xác nhận ({showModal === 'SIGN1' ? 'L1 - Tổ Trưởng' : 'L2 - Trưởng Phòng'})</span>
                 </h4>
-                <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-0.5">Xác nhận bằng chữ ký thực để ghi nhận bảo mật</p>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-0.5 truncate">Xác nhận bằng chữ ký thực để ghi nhận bảo mật</p>
               </div>
               <button 
+                type="button"
                 onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-slate-100 dark:bg-slate-800 rounded-xl"
+                aria-label="Đóng"
+                className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl shrink-0 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </header>
 
-            <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 p-2 shadow-inner">
-              <SignaturePad label="Chữ ký xác nhận" value={signature} onChange={setSignature} />
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-3.5 sm:p-5 space-y-3.5">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 p-2 shadow-inner">
+                <SignaturePad label="Chữ ký xác nhận" value={signature} onChange={setSignature} />
+              </div>
+
+              {user.signature_template && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setSignature(user.signature_template || '')}
+                    className="w-full min-h-[44px] sm:min-h-[38px] py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-100 transition-all active:scale-95"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    SỬ DỤNG CHỮ KÝ MẪU CỦA BẠN
+                  </button>
+                </div>
+              )}
             </div>
 
-            {user.signature_template && (
-              <div className="mt-4 px-2">
-                <button
-                  type="button"
-                  onClick={() => setSignature(user.signature_template || '')}
-                  className="w-full py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-100 transition-all active:scale-95"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  SỬ DỤNG CHỮ KÝ MẪU CỦA BẠN
-                </button>
-              </div>
-            )}
-
-            <footer className="flex justify-end gap-3 mt-6">
+            <footer className="flex flex-wrap justify-end gap-2 px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 shrink-0">
               <button 
+                type="button"
                 onClick={() => setShowModal(false)}
-                className="px-6 py-3 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 transition-colors"
+                className="min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 whitespace-nowrap shrink-0"
               >
                 Hủy bỏ
               </button>
               <button 
+                type="button"
                 onClick={handleSigningSubmit}
                 disabled={!signature || isProcessing}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-50 transition-all flex items-center gap-2"
+                className="min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-50 transition-all flex items-center gap-2 whitespace-nowrap shrink-0"
               >
                 {isProcessing ? <RefreshCw className="w-4 h-4 animate-spin"/> : <ShieldCheck className="w-4 h-4"/>}
                 <span>XÁC NHẬN CHỮ KÝ</span>
@@ -965,6 +1008,64 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           </div>
         </div>
       )}
+
+      {showRejectModal && (
+        <div className="fixed inset-0 z-[220] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
+            <header className="flex justify-between items-center gap-2 px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+              <h4 className="text-sm font-black text-red-600 dark:text-red-400 uppercase tracking-tight flex items-center gap-2 truncate">
+                <Ban className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> Trả lại / Từ chối hồ sơ
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                aria-label="Đóng"
+                className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+            <div className="space-y-2 p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Lý do từ chối *</label>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                rows={4}
+                placeholder="Nhập lý do yêu cầu chỉnh sửa / từ chối hồ sơ..."
+                className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium outline-none focus:ring-2 ring-red-200"
+              />
+            </div>
+            <footer className="flex justify-end gap-2 px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                className="min-h-[44px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold uppercase text-slate-600 dark:text-slate-300 whitespace-nowrap shrink-0"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={submitReject}
+                disabled={isProcessing}
+                className="min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 whitespace-nowrap shrink-0"
+              >
+                <Ban className="w-4 h-4" /> Xác nhận từ chối
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={showLockConfirm}
+        variant="warning"
+        title="Khóa hồ sơ ISO (LOCKED)?"
+        message="Sau khi khóa, hồ sơ sẽ đóng băng vĩnh viễn và không thể chỉnh sửa. Bạn có chắc chắn muốn tiếp tục?"
+        confirmLabel="Khóa hồ sơ"
+        onConfirm={confirmLockFinal}
+        onCancel={() => setShowLockConfirm(false)}
+      />
+
       {renderAuditTrail()}
     </section>
   );

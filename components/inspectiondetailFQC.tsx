@@ -51,7 +51,7 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
 
-  const isApproved = inspection.status === InspectionStatus.APPROVED;
+  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
 
   const handlePostComment = async () => {
@@ -153,24 +153,24 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-3 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center px-4 md:px-8">
-          <div className="flex items-center gap-2">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700">
-              <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400 dark:text-slate-500" />
+    <div className="flex flex-col h-full min-h-0 bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-3 py-2.5 sm:px-4 md:px-8 sticky top-0 z-30 shadow-sm shrink-0 flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button type="button" onClick={onBack} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 bg-slate-50 dark:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-700 shrink-0" aria-label="Quay lại">
+              <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-300" />
             </button>
-            <span className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight">Chi tiết hồ sơ FQC</span>
+            <span className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight truncate">Chi tiết hồ sơ FQC</span>
           </div>
-          <div className="flex gap-2">
-            <button onClick={handleExportPDF} className="p-2 text-slate-600 dark:text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"><Download className="w-4 h-4"/></button>
-            {canModify && <button onClick={() => onEdit(inspection.id)} className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-slate-800/80 rounded-lg"><Edit3 className="w-4 h-4"/></button>}
-            {canModify && <button onClick={() => onDelete(inspection.id)} className="p-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button type="button" onClick={handleExportPDF} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all" title="Xuất PDF" aria-label="Xuất PDF"><Download className="w-4 h-4"/></button>
+            {canModify && <button type="button" onClick={() => onEdit(inspection.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-blue-600 dark:text-blue-400 bg-blue-50/70 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 border border-blue-200/70 dark:border-slate-700 rounded-xl transition-all" title="Chỉnh sửa" aria-label="Chỉnh sửa"><Edit3 className="w-4 h-4"/></button>}
+            {canModify && <button type="button" onClick={() => onDelete(inspection.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-red-600 dark:text-red-400 bg-red-50/70 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200/70 dark:border-red-800/50 rounded-xl transition-all" title="Xóa" aria-label="Xóa"><Trash2 className="w-4 h-4"/></button>}
           </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800/50 pb-24 no-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800/50 pb-28 lg:pb-24 no-scrollbar">
         <div ref={pdfContainerRef} className="max-w-4xl mx-auto space-y-4">
-            <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
                 {/* QR Code for Public Verification */}
                 {qrCodeUrl && (
                   <div className="absolute left-6 top-6 w-16 h-16 border border-slate-100 p-1 bg-white shadow-sm z-10">
@@ -179,50 +179,50 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                   </div>
                 )}
                 
-                <div className="flex flex-col items-center mb-6 pt-8 md:pt-4">
+                <div className="flex flex-col items-center mb-6 pt-16 sm:pt-4">
                     <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{inspection.ten_ct}</p>
                     <h1 className="text-[14px] font-black text-blue-900 dark:text-blue-400 uppercase leading-tight tracking-tight text-center">{inspection.ten_hang_muc}</h1>
                 </div>
                 <div className="flex justify-between items-end">
-                    <div className="text-[10px] font-bold text-slate-600 dark:text-slate-400 dark:text-slate-500 space-y-1"><p>Dự án: {inspection.ma_ct}</p><p>SL Kiểm: {inspection.inspectedQuantity}</p></div>
-                    <div className="text-3xl font-black text-blue-200 absolute right-4 bottom-2 opacity-20">FINAL</div>
+                    <div className="text-xs font-bold text-slate-600 dark:text-slate-300 space-y-1 tabular-nums"><p>Dự án: {inspection.ma_ct}</p><p>SL Kiểm: {inspection.inspectedQuantity}</p></div>
+                    <div className="text-3xl font-black text-blue-200 dark:text-blue-800 absolute right-4 bottom-2 opacity-20 select-none">FINAL</div>
                 </div>
             </div>
 
         {/* Global Evidence */}
         {inspection.images && inspection.images.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <h3 className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5"><ImageIcon className="w-3 h-3"/> Ảnh hiện trường tổng quát</h3>
-                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5"/> Ảnh hiện trường tổng quát</h3>
+                <div className="flex gap-2.5 overflow-x-auto pb-1 no-scrollbar">
                     {inspection.images.map((img, idx) => (
-                        <div key={idx} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-100 dark:border-slate-800 shrink-0 cursor-zoom-in">
+                        <button type="button" key={idx} onClick={() => setLightboxState({ images: inspection.images!, index: idx })} className="w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 cursor-zoom-in active:scale-95 transition-transform">
                             <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-                        </div>
+                        </button>
                     ))}
                 </div>
             </div>
         )}
 
-        <div className="space-y-2">
-            <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1">Chi tiết hạng mục</h3>
+        <div className="space-y-2.5">
+            <h3 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest px-1">Chi tiết hạng mục</h3>
             {inspection.items.map((item, i) => (
-                <div key={i} className={`bg-white dark:bg-slate-900 p-3 rounded-xl border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                <div key={i} className={`bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
                     <div className="flex items-start gap-3">
-                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${item.status === CheckStatus.PASS ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${item.status === CheckStatus.PASS ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start gap-2">
-                                <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200 leading-tight uppercase">{item.label}</p>
-                                <span className={`shrink-0 px-2 py-0.5 rounded text-[8px] font-black uppercase border ${item.status === CheckStatus.PASS ? 'text-green-600 dark:text-green-500 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200'}`}>{item.status}</span>
+                                <p className="font-bold text-xs text-slate-800 dark:text-slate-200 leading-snug uppercase">{item.label}</p>
+                                <span className={`shrink-0 px-2 py-0.5 rounded text-[9px] font-black uppercase border ${item.status === CheckStatus.PASS ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>{item.status}</span>
                             </div>
-                            {item.notes && <p className="text-[10px] italic text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">"{item.notes}"</p>}
+                            {item.notes && <p className="text-xs italic text-slate-500 dark:text-slate-400 mt-1">"{item.notes}"</p>}
                             
                             {/* Item specific images */}
                             {item.images && item.images.length > 0 && (
                                 <div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">
                                     {item.images.map((img, imgIdx) => (
-                                        <div key={imgIdx} onClick={() => setLightboxState({ images: item.images!, index: imgIdx })} className="w-12 h-12 rounded-lg overflow-hidden border border-slate-100 dark:border-slate-800 shrink-0 cursor-zoom-in shadow-sm">
+                                        <button type="button" key={imgIdx} onClick={() => setLightboxState({ images: item.images!, index: imgIdx })} className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 cursor-zoom-in shadow-sm active:scale-95 transition-transform">
                                             <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             )}
@@ -253,9 +253,9 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
                             {comment.attachments && comment.attachments.length > 0 && (
                                 <div className="flex gap-3 flex-wrap pt-2">
                                     {comment.attachments.map((img, i) => (
-                                        <div key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
+                                        <button type="button" key={i} onClick={() => setLightboxState({ images: comment.attachments!, index: i })} className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm cursor-zoom-in transition-all hover:scale-105 shrink-0">
                                             <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" alt="" referrerPolicy="no-referrer" />
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             )}
@@ -265,29 +265,31 @@ export const InspectionDetailFQC: React.FC<InspectionDetailProps> = ({ inspectio
             </div>
             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 space-y-4">
                 {commentAttachments.length > 0 && (
-                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-1">
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar pt-2 pb-1 pr-2">
                         {commentAttachments.map((img, idx) => (
                             <div key={idx} className="relative w-20 h-20 shrink-0 group">
-                                <img src={getProxyImageUrl(img)} className="w-full h-full object-cover rounded-2xl border-2 border-blue-200 dark:border-slate-700 shadow-lg cursor-pointer" onClick={() => handleEditCommentImage(idx)} referrerPolicy="no-referrer" />
-                                <button onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 bg-red-600 text-white p-1 rounded-full shadow-xl active:scale-90 transition-all"><X className="w-4 h-4"/></button>
+                                <button type="button" onClick={() => handleEditCommentImage(idx)} className="w-full h-full rounded-2xl overflow-hidden border-2 border-blue-200 dark:border-slate-700 shadow-lg cursor-pointer block">
+                                    <img src={getProxyImageUrl(img)} className="w-full h-full object-cover" referrerPolicy="no-referrer" alt="Đính kèm" />
+                                </button>
+                                <button type="button" onClick={() => setCommentAttachments(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-red-600 text-white w-7 h-7 flex items-center justify-center rounded-full shadow-xl active:scale-90 transition-all border-2 border-white dark:border-slate-900" aria-label="Xóa ảnh"><X className="w-3.5 h-3.5"/></button>
                             </div>
                         ))}
                     </div>
                 )}
-                <div className="flex gap-3 items-end">
+                <div className="flex gap-2.5 sm:gap-3 items-end">
                     <div className="flex-1 relative">
                         <textarea 
                             value={newComment} 
                             onChange={(e) => setNewComment(e.target.value)} 
                             placeholder="Nhập ý kiến phản hồi về chất lượng sản phẩm..." 
-                            className="w-full pl-5 pr-28 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-[2rem] text-[12px] font-bold focus:ring-4 focus:ring-blue-100 outline-none resize-none min-h-[70px] shadow-inner transition-all" 
+                            className="w-full pl-4 sm:pl-5 pr-28 py-3.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 outline-none resize-none min-h-[76px] shadow-inner transition-all" 
                         />
-                        <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                            <button onClick={() => commentCameraRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all" title="Chụp ảnh"><Camera className="w-5 h-5"/></button>
-                            <button onClick={() => commentFileRef.current?.click()} className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-xl transition-all" title="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
+                        <div className="absolute right-2 bottom-2 flex items-center gap-1">
+                            <button type="button" onClick={() => commentCameraRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition-all" title="Chụp ảnh" aria-label="Chụp ảnh"><Camera className="w-5 h-5"/></button>
+                            <button type="button" onClick={() => commentFileRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition-all" title="Chọn ảnh" aria-label="Chọn ảnh"><ImageIcon className="w-5 h-5"/></button>
                         </div>
                     </div>
-                    <button onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700"><Send className="w-6 h-6" /></button>
+                    <button type="button" onClick={handlePostComment} disabled={isSubmittingComment || (!newComment.trim() && commentAttachments.length === 0)} className="min-w-[48px] min-h-[48px] w-14 h-14 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 disabled:opacity-30 transition-all shrink-0 hover:bg-blue-700" aria-label="Gửi bình luận"><Send className="w-6 h-6" /></button>
                 </div>
             </div>
         </section>

@@ -184,9 +184,9 @@ export const HomeMenu: React.FC<HomeMenuProps> = ({ onNavigate, currentUser, onL
                           <div className="px-2 space-y-1">
                               <button 
                                   onClick={() => { if(onOpenProfile) onOpenProfile(); else onOpenSettings(); setIsMenuOpen(false); }}
-                                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all group"
+                                  className="w-full min-h-[48px] flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group"
                               >
-                                  <UserCircle className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400" />
+                                  <UserCircle className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
                                   <div className="text-left">
                                       <span className="block font-bold text-sm">Tài khoản</span>
                                       <span className="block text-xs text-slate-400 dark:text-slate-500">Thông tin cá nhân</span>
@@ -195,20 +195,20 @@ export const HomeMenu: React.FC<HomeMenuProps> = ({ onNavigate, currentUser, onL
 
                               <button 
                                   onClick={() => { onOpenSettings(); setIsMenuOpen(false); }}
-                                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 transition-all group"
+                                  className="w-full min-h-[48px] flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group"
                               >
-                                  <Settings className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:text-blue-400" />
+                                  <Settings className="w-5 h-5 text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
                                   <div className="text-left">
                                       <span className="block font-bold text-sm">Cài đặt</span>
                                       <span className="block text-xs text-slate-400 dark:text-slate-500">Thiết lập hệ thống</span>
                                   </div>
                               </button>
                               
-                              <div className="h-px bg-slate-50 dark:bg-slate-800/50 my-1 mx-2"></div>
+                              <div className="h-px bg-slate-100 dark:bg-slate-800 my-1 mx-2"></div>
 
                               <button 
                                   onClick={onLogout}
-                                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-900/20 transition-all group"
+                                  className="w-full min-h-[48px] flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all group"
                               >
                                   <LogOut className="w-5 h-5" />
                                   <div className="text-left">
@@ -237,7 +237,7 @@ export const HomeMenu: React.FC<HomeMenuProps> = ({ onNavigate, currentUser, onL
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-               <button className="relative p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 rounded-xl hover:text-blue-600 dark:text-blue-400 hover:border-blue-200 dark:border-slate-700 hover:shadow-md transition-all active:scale-95 group">
+               <button aria-label="Thông báo" className="relative min-w-[44px] min-h-[44px] p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 rounded-xl hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 hover:shadow-md transition-all active:scale-95 group flex items-center justify-center">
                   <Bell className="w-6 h-6" />
                   <span className="absolute top-2.5 right-3 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
                </button>

@@ -8,6 +8,7 @@ import {
     LayoutGrid, List, Search, Filter, 
     RefreshCw, Loader2, Building2, Layers
 } from 'lucide-react';
+import { ConfirmDialog } from '../src/components/qms';
 
 interface FloorPlanLibraryProps {
     project: Project;
@@ -22,6 +23,7 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
     project, plans, onSelectPlan, onUploadPlan, onDeletePlan, isLoading = false
 }) => {
     const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
     return (
         <div className="space-y-4 md:space-y-6">
@@ -37,23 +39,28 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 w-full md:w-auto">
-                    <div className="hidden sm:flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div className="hidden sm:flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
                         <button 
+                            type="button"
                             onClick={() => setViewMode('GRID')}
-                            className={`p-2 rounded-lg transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+                            aria-label="Chế độ lưới"
+                            className={`min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
                         >
                             <LayoutGrid className="w-4 h-4" />
                         </button>
                         <button 
+                            type="button"
                             onClick={() => setViewMode('LIST')}
-                            className={`p-2 rounded-lg transition-all ${viewMode === 'LIST' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+                            aria-label="Chế độ danh sách"
+                            className={`min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg transition-all ${viewMode === 'LIST' ? 'bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
                         >
                             <List className="w-4 h-4" />
                         </button>
                     </div>
                     <button 
+                        type="button"
                         onClick={onUploadPlan}
-                        className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-3 md:py-2.5 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-2 transition-all"
+                        className="flex-1 md:flex-none min-h-[44px] lg:min-h-[40px] bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-2 transition-all"
                     >
                         <Upload className="w-3.5 h-3.5 md:w-4 md:h-4" />
                         <span>NEW LAYOUT</span>
@@ -114,8 +121,8 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete this layout?')) onDeletePlan(plan.id); }} className="p-2 text-slate-300 hover:text-red-500 dark:text-red-400 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
-                                        <button onClick={() => onSelectPlan(plan)} className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-slate-900 text-white flex items-center justify-center hover:bg-blue-600 transition-all shadow-lg active:scale-90"><ChevronRight className="w-5 h-5" /></button>
+                                        <button type="button" onClick={(e) => { e.stopPropagation(); setDeleteTargetId(plan.id); }} aria-label="Xóa bản vẽ" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
+                                        <button type="button" onClick={() => onSelectPlan(plan)} aria-label="Mở bản vẽ" className="w-11 h-11 lg:w-10 lg:h-10 rounded-full bg-slate-900 text-white flex items-center justify-center hover:bg-blue-600 transition-all shadow-lg active:scale-90"><ChevronRight className="w-5 h-5" /></button>
                                     </div>
                                 </div>
                             </div>
@@ -123,6 +130,19 @@ export const FloorPlanLibrary: React.FC<FloorPlanLibraryProps> = ({
                     ))}
                 </div>
             )}
+
+            <ConfirmDialog
+                open={deleteTargetId !== null}
+                variant="danger"
+                title="Xóa bản vẽ mặt bằng?"
+                message="Bạn có chắc chắn muốn xóa bản vẽ này khỏi thư viện dự án không?"
+                confirmLabel="Xóa bản vẽ"
+                onConfirm={() => {
+                    if (deleteTargetId) onDeletePlan(deleteTargetId);
+                    setDeleteTargetId(null);
+                }}
+                onCancel={() => setDeleteTargetId(null)}
+            />
         </div>
     );
 };

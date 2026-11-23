@@ -13,20 +13,43 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const safeGetStorage = (key: string): string | null => {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const safeSetStorage = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage restrictions in embedded iframes
+  }
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
-    return (localStorage.getItem('theme_mode') as ThemeMode) || 'auto';
+    const saved = safeGetStorage('theme_mode') as ThemeMode | null;
+    if (saved === 'light' || saved === 'dark' || saved === 'auto') {
+      return saved;
+    }
+    return 'light';
   });
   
   const [density, setDensityState] = useState<DensityMode>(() => {
-    return (localStorage.getItem('density_mode') as DensityMode) || 'comfortable';
+    return (safeGetStorage('density_mode') as DensityMode) || 'comfortable';
   });
 
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     const root = window.document.documentElement;
-    const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    let isSystemDark = false;
+    try {
+      isSystemDark = Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+    } catch {}
     
     const applyDark = theme === 'dark' || (theme === 'auto' && isSystemDark);
     setIsDark(applyDark);
@@ -37,11 +60,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.classList.remove('dark');
     }
 
-    localStorage.setItem('theme_mode', theme);
+    safeSetStorage('theme_mode', theme);
   }, [theme]);
 
   // Listen to system theme change if auto
   useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
       if (theme === 'auto') {
@@ -54,15 +78,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
     };
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    mediaQuery.addEventListener?.('change', handleChange);
+    return () => mediaQuery.removeEventListener?.('change', handleChange);
   }, [theme]);
 
   const setTheme = (newTheme: ThemeMode) => setThemeState(newTheme);
   
   const setDensity = (newDensity: DensityMode) => {
     setDensityState(newDensity);
-    localStorage.setItem('density_mode', newDensity);
+    safeSetStorage('density_mode', newDensity);
   };
 
   return (
@@ -75,7 +99,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+    return {
+      theme: 'auto' as const,
+      setTheme: () => {},
+      density: 'comfortable' as const,
+      setDensity: () => {},
+      isDark: false
+    };
   }
   return context;
 };
+

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { fetchInspectionById, saveInspectionToSheet, fetchUsers, saveLayoutPin } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
+import { ConfirmDialog } from '../src/components/qms';
 
 interface LayoutManagerProps {
     floorPlan: FloorPlan;
@@ -87,6 +88,11 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
     const [newComment, setNewComment] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+    const [confirmAction, setConfirmAction] = useState<
+        | { type: 'DELETE_IMAGE'; idx: number }
+        | { type: 'MOVE_PIN'; pin: LayoutPin; original: { x: number; y: number } }
+        | null
+    >(null);
 
     const [isUserSelectorOpen, setIsUserSelectorOpen] = useState(false);
     const [systemUsers, setSystemUsers] = useState<User[]>([]);
@@ -214,8 +220,13 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
         }
     };
 
-    const handleQuickDeleteImage = async (idx: number) => {
-        if (!quickDetail || !window.confirm("Xóa ảnh minh chứng này?")) return;
+    const handleQuickDeleteImage = (idx: number) => {
+        if (!quickDetail) return;
+        setConfirmAction({ type: 'DELETE_IMAGE', idx });
+    };
+
+    const executeQuickDeleteImage = async (idx: number) => {
+        if (!quickDetail) return;
         setIsUpdating(true);
         try {
             const updated: Inspection = {
@@ -373,13 +384,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                 // ISO: Nếu pin đã có hồ sơ, yêu cầu xác nhận trước khi lưu vị trí mới
                 if (pin.inspection_id) {
                     const hasMoved = originalPinPos && (Math.abs(originalPinPos.x - pin.x) > 0.1 || Math.abs(originalPinPos.y - pin.y) > 0.1);
-                    if (hasMoved) {
-                        if (window.confirm("Bạn có chắc chắn muốn thay đổi vị trí điểm kiểm tra này?")) {
-                            await saveLayoutPin(pin);
-                        } else {
-                            // Revert to original
-                            setPins(prev => prev.map(p => p.id === draggingPinId ? { ...p, x: originalPinPos!.x, y: originalPinPos!.y } : p));
-                        }
+                    if (hasMoved && originalPinPos) {
+                        setConfirmAction({ type: 'MOVE_PIN', pin, original: originalPinPos });
                     }
                 } else {
                     await saveLayoutPin(pin);
@@ -427,9 +433,9 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
 
     return (
         <div className="absolute inset-0 z-40 bg-[#f1f5f9] flex flex-col animate-in fade-in duration-300 overflow-hidden pb-[80px] lg:pb-0">
-            <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-3 md:px-4 flex items-center justify-between shrink-0 shadow-sm z-50">
+            <header className="min-h-[56px] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-3 md:px-4 py-1.5 flex items-center justify-between shrink-0 shadow-sm z-50">
                 <div className="flex items-center gap-2 md:gap-3">
-                    <button onClick={onBack} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-colors"><ArrowLeft className="w-4 h-4" /></button>
+                    <button type="button" onClick={onBack} aria-label="Quay lại" className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 dark:text-slate-400 transition-colors"><ArrowLeft className="w-5 h-5 lg:w-4 lg:h-4" /></button>
                     <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden md:block"></div>
                     <div className="overflow-hidden">
                         <h2 className="text-[10px] md:text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight truncate max-w-[140px] md:max-w-[200px]">{floorPlan.name}</h2>
@@ -437,17 +443,18 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 md:gap-2">
-                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <button onClick={() => handleZoom(0.5)} className="p-1.5 hover:bg-white dark:bg-slate-900 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500"><ZoomIn className="w-3.5 h-3.5" /></button>
-                        <span className="hidden sm:inline-block px-2 text-[9px] font-black text-slate-500 dark:text-slate-400 dark:text-slate-500 min-w-[30px] text-center">{Math.round(scale * 100)}%</span>
-                        <button onClick={() => handleZoom(-0.5)} className="p-1.5 hover:bg-white dark:bg-slate-900 rounded-md text-slate-600 dark:text-slate-400 dark:text-slate-500"><ZoomOut className="w-3.5 h-3.5" /></button>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
+                        <button type="button" onClick={() => handleZoom(0.5)} aria-label="Phóng to" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center hover:bg-white dark:hover:bg-slate-900 rounded-lg text-slate-600 dark:text-slate-400"><ZoomIn className="w-4 h-4 lg:w-3.5 lg:h-3.5" /></button>
+                        <span className="hidden sm:inline-block px-2 text-[9px] font-black text-slate-500 dark:text-slate-400 min-w-[30px] text-center tabular-nums">{Math.round(scale * 100)}%</span>
+                        <button type="button" onClick={() => handleZoom(-0.5)} aria-label="Thu nhỏ" className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center hover:bg-white dark:hover:bg-slate-900 rounded-lg text-slate-600 dark:text-slate-400"><ZoomOut className="w-4 h-4 lg:w-3.5 lg:h-3.5" /></button>
                     </div>
                     <button 
+                        type="button"
                         onClick={() => setIsAddingMode(!isAddingMode)}
-                        className={`px-2.5 py-1.5 rounded-lg border font-black text-[9px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${isAddingMode ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-100' : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-slate-700'}`}
+                        className={`min-w-[44px] min-h-[44px] lg:min-h-[36px] px-3 py-1.5 rounded-xl border font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-sm ${isAddingMode ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-100' : 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-slate-700'}`}
                     >
-                        {isAddingMode ? <Crosshair className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                        {isAddingMode ? <Crosshair className="w-4 h-4 lg:w-3 lg:h-3" /> : <Plus className="w-4 h-4 lg:w-3 lg:h-3" />}
                         <span className="hidden md:inline">{isAddingMode ? 'CANCEL' : 'DROP PIN'}</span>
                     </button>
                 </div>
@@ -598,7 +605,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                         <>
                             <header className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0 bg-white dark:bg-slate-900 shadow-sm z-10">
                                 <div className="flex items-center gap-3">
-                                    <button onClick={() => setSelectedPin(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl text-slate-500 dark:text-slate-400 dark:text-slate-500 active:scale-90 transition-all sm:hidden"><ArrowLeft className="w-5 h-5"/></button>
+                                    <button type="button" onClick={() => setSelectedPin(null)} aria-label="Quay lại" className="min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 dark:text-slate-400 active:scale-90 transition-all sm:hidden"><ArrowLeft className="w-5 h-5"/></button>
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <Flag className="w-3.5 h-3.5 text-orange-500 fill-current animate-bounce" />
@@ -609,7 +616,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                         </div>
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedPin(null)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-2xl text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
+                                <button type="button" onClick={() => setSelectedPin(null)} aria-label="Đóng xem nhanh" className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 dark:text-slate-500 active:scale-90 transition-all"><X className="w-6 h-6"/></button>
                             </header>
 
                             <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-6 bg-slate-50 dark:bg-slate-800/30">
@@ -627,11 +634,11 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                             <ImageIcon className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
                                             Minh chứng ({(quickDetail.images || []).length})
                                         </p>
-                                        <div className="flex gap-1.5">
-                                            <button onClick={() => quickCameraRef.current?.click()} className="p-1.5 bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:bg-blue-900/30 active:scale-90 transition-all border border-blue-100 dark:border-slate-700" title="Chụp ảnh nhanh">
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => quickCameraRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-blue-50 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-xl hover:bg-blue-100 dark:bg-blue-900/30 active:scale-90 transition-all border border-blue-100 dark:border-slate-700" title="Chụp ảnh nhanh" aria-label="Chụp ảnh nhanh">
                                                 <Camera className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => quickFileRef.current?.click()} className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-lg hover:bg-slate-200 dark:bg-slate-700 active:scale-90 transition-all border border-slate-200 dark:border-slate-700" title="Tải ảnh">
+                                            <button type="button" onClick={() => quickFileRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-200 dark:bg-slate-700 active:scale-90 transition-all border border-slate-200 dark:border-slate-700" title="Tải ảnh" aria-label="Tải ảnh">
                                                 <ImagePlus className="w-4 h-4" />
                                             </button>
                                         </div>
@@ -654,10 +661,12 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                                     </div>
                                                 </div>
                                                 <button 
+                                                    type="button"
                                                     onClick={(e) => { e.stopPropagation(); handleQuickDeleteImage(idx); }}
-                                                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg shadow-lg md:opacity-0 group-hover:opacity-100 transition-all active:scale-90"
+                                                    aria-label="Xóa ảnh"
+                                                    className="absolute top-2 right-2 min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center bg-red-500 text-white rounded-xl shadow-lg lg:opacity-0 group-hover:opacity-100 transition-all active:scale-90"
                                                 >
-                                                    <X className="w-3 h-3" />
+                                                    <X className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                                                 </button>
                                             </div>
                                         ))}
@@ -727,21 +736,23 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                             value={newComment} 
                                             onChange={e => setNewComment(e.target.value)} 
                                             onKeyDown={e => e.key === 'Enter' && handlePostQuickComment()} 
-                                            className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl pl-4 pr-[70px] py-3 text-[12px] font-medium outline-none focus:ring-4 focus:ring-blue-100 h-12 transition-all shadow-inner" 
+                                            className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl pl-4 pr-[96px] lg:pr-[76px] py-3 text-[12px] font-medium outline-none focus:ring-4 focus:ring-blue-100 h-12 transition-all shadow-inner" 
                                             placeholder="Phản hồi nhanh..." 
                                         />
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                                            <button onClick={() => quickCameraRef.current?.click()} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" title="Chụp ảnh">
+                                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                                            <button type="button" onClick={() => quickCameraRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors" title="Chụp ảnh" aria-label="Chụp ảnh">
                                                 <Camera className="w-4 h-4"/>
                                             </button>
-                                            <button onClick={() => quickFileRef.current?.click()} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" title="Chọn ảnh">
+                                            <button type="button" onClick={() => quickFileRef.current?.click()} className="min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors" title="Chọn ảnh" aria-label="Chọn ảnh">
                                                 <ImageIcon className="w-4 h-4"/>
                                             </button>
                                         </div>
                                     </div>
                                     <button 
+                                        type="button"
                                         onClick={handlePostQuickComment} 
                                         disabled={isUpdating || !newComment.trim()} 
+                                        aria-label="Gửi phản hồi"
                                         className="w-12 h-12 shrink-0 bg-blue-600/10 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center active:scale-90 transition-all disabled:opacity-30 hover:bg-blue-600 hover:text-white"
                                     >
                                         <Send className="w-5 h-5"/>
@@ -749,15 +760,17 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button 
+                                        type="button"
                                         onClick={() => handleQuickStatusUpdate(InspectionStatus.APPROVED)} 
                                         disabled={isUpdating || quickDetail.status === InspectionStatus.APPROVED} 
-                                        className="py-4 px-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 active:scale-95 disabled:opacity-50 transition-all"
+                                        className="min-h-[44px] py-3.5 px-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 active:scale-95 disabled:opacity-50 transition-all"
                                     >
                                         <CheckCircle2 className="w-4 h-4" /> XÁC NHẬN
                                     </button>
                                     <button 
+                                        type="button"
                                         onClick={() => onViewFullDetail(quickDetail.id)} 
-                                        className="py-4 px-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-slate-900/20 active:scale-95 transition-all"
+                                        className="min-h-[44px] py-3.5 px-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-slate-900/20 active:scale-95 transition-all"
                                     >
                                         <ExternalLink className="w-4 h-4" /> XEM CHI TIẾT
                                     </button>
@@ -773,19 +786,19 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
             <input type="file" ref={quickFileRef} accept="image/*" multiple className="hidden" onChange={handleQuickAddImage} />
 
             {isUserSelectorOpen && (
-                <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[85vh]">
-                        <header className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
-                            <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-xs tracking-widest">Phân công nhân sự</h3>
-                            <button onClick={() => setIsUserSelectorOpen(false)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-400 dark:text-slate-500 transition-colors"><X className="w-6 h-6"/></button>
+                <div className="fixed inset-0 z-[220] bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)]">
+                        <header className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                            <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-xs tracking-widest truncate">Phân công nhân sự</h3>
+                            <button type="button" onClick={() => setIsUserSelectorOpen(false)} aria-label="Đóng chọn nhân sự" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"><X className="w-5 h-5"/></button>
                         </header>
                         <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 shrink-0">
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
-                                <input value={userSearchInput} onChange={e => setUserSearchInput(e.target.value)} onBlur={handleCommitUserSearch} onKeyDown={handleUserKeyDown} className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />
+                                <input value={userSearchInput} onChange={e => setUserSearchInput(e.target.value)} onBlur={handleCommitUserSearch} onKeyDown={handleUserKeyDown} className="w-full min-h-[44px] pl-11 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold outline-none focus:ring-4 focus:ring-blue-100/50" placeholder="Tìm tên nhân viên..." />
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-3 no-scrollbar space-y-1">
+                        <div className="flex-1 min-h-0 overflow-y-auto p-3 no-scrollbar space-y-1">
                             {filteredUsers.map(u => (
                                 <button key={u.id} onClick={() => handleAssignUser(u)} className="w-full flex items-center gap-4 p-4 rounded-[1.5rem] hover:bg-blue-50 dark:bg-slate-800/80 transition-all border border-transparent active:scale-95 text-left group">
                                     <div className="relative">
@@ -820,6 +833,34 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({
                     readOnly={false} 
                 />
             )}
+
+            <ConfirmDialog
+                open={confirmAction !== null}
+                variant={confirmAction?.type === 'DELETE_IMAGE' ? 'danger' : 'warning'}
+                title={confirmAction?.type === 'DELETE_IMAGE' ? 'Xóa ảnh minh chứng?' : 'Thay đổi vị trí điểm kiểm tra?'}
+                message={
+                    confirmAction?.type === 'DELETE_IMAGE'
+                        ? 'Bạn có chắc chắn muốn xóa ảnh minh chứng này không?'
+                        : 'Bạn có chắc chắn muốn lưu vị trí mới cho điểm kiểm tra này không?'
+                }
+                confirmLabel={confirmAction?.type === 'DELETE_IMAGE' ? 'Xóa ảnh' : 'Lưu vị trí'}
+                onConfirm={async () => {
+                    const action = confirmAction;
+                    setConfirmAction(null);
+                    if (action?.type === 'DELETE_IMAGE') {
+                        await executeQuickDeleteImage(action.idx);
+                    } else if (action?.type === 'MOVE_PIN') {
+                        await saveLayoutPin(action.pin);
+                    }
+                }}
+                onCancel={() => {
+                    if (confirmAction?.type === 'MOVE_PIN') {
+                        const { pin, original } = confirmAction;
+                        setPins(prev => prev.map(p => p.id === pin.id ? { ...p, x: original.x, y: original.y } : p));
+                    }
+                    setConfirmAction(null);
+                }}
+            />
         </div>
     );
 };

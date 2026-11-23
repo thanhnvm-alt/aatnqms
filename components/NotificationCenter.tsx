@@ -20,7 +20,8 @@ interface NotificationCenterProps {
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ 
     notifications, onMarkRead, onMarkAllRead, onNavigate, onClose, onLoadMore, hasMore 
 }) => {
-    const unreadCount = notifications.filter(n => !n.isRead).length;
+    const list = Array.isArray(notifications) ? notifications : [];
+    const unreadCount = list.filter(n => !n.isRead).length;
 
     const getIcon = (type: Notification['type'], isRead: boolean) => {
         const baseClass = "w-5 h-5 transition-colors";
@@ -62,8 +63,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                         )}
                     </div>
                     <div className="flex flex-col">
-                        <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase tracking-tighter text-[7px] md:text-[11px] leading-none">THÔNG BÁO</h3>
-                        <p className="text-[6px] md:text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
+                        <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase tracking-tighter text-xs leading-none">THÔNG BÁO</h3>
+                        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
                             {unreadCount} TIN CHƯA ĐỌC
                         </p>
                     </div>
@@ -71,12 +72,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 <div className="flex items-center gap-1.5">
                     <button 
                         onClick={(e) => { e.stopPropagation(); onMarkAllRead(); }}
-                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-lg transition-all active:scale-90"
+                        className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800/80 rounded-lg transition-all active:scale-90"
                         title="Đánh dấu tất cả đã đọc"
                     >
                         <Check className="w-4 h-4" strokeWidth={3} />
                     </button>
-                    <button onClick={onClose} className="p-1.5 text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:bg-red-900/20 hover:text-red-500 dark:text-red-400 rounded-lg transition-all active:scale-90">
+                    <button onClick={onClose} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center p-2 text-slate-400 dark:text-slate-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-all active:scale-90" title="Đóng thông báo">
                         <X className="w-4 h-4" strokeWidth={3} />
                     </button>
                 </div>
@@ -84,14 +85,14 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
             {/* List: Tối ưu hiển thị mobile */}
             <div className="flex-1 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/30 no-scrollbar">
-                {notifications.length === 0 ? (
+                {list.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-24 text-slate-300">
                         <Bell className="w-16 h-16 opacity-10 mb-4" />
                         <p className="font-black uppercase tracking-[0.2em] text-[10px]">Hệ thống chưa có thông báo</p>
                     </div>
                 ) : (
                     <div className="space-y-1.5">
-                        {notifications.map((n) => (
+                        {list.map((n) => (
                             <div 
                                 key={n.id}
                                 onClick={() => {
@@ -115,7 +116,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                     }
                                     onClose();
                                 }}
-                                className={`p-1.5 flex gap-2 rounded-xl transition-all cursor-pointer group relative border ${
+                                className={`p-3 min-h-[52px] flex items-center gap-2.5 rounded-xl transition-all cursor-pointer group relative border ${
                                     n.isRead 
                                     ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-70' 
                                     : 'bg-white dark:bg-slate-900 border-blue-100 dark:border-slate-700 shadow-sm ring-1 ring-blue-50'
@@ -130,23 +131,23 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                                     {React.cloneElement(getIcon(n.type, n.isRead) as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                                 </div>
 
-                                <div className="flex-1 min-w-0 pr-1">
-                                    <div className="flex justify-between items-start mb-0">
-                                        <h4 className={`text-[7px] md:text-[10px] uppercase tracking-tight truncate pr-1 ${n.isRead ? 'font-bold text-slate-500 dark:text-slate-400' : 'font-black text-slate-900 dark:text-slate-100'}`}>
+                                <div className="flex-1 min-w-0 pr-3">
+                                    <div className="flex justify-between items-start mb-0.5">
+                                        <h4 className={`text-[11px] uppercase tracking-tight truncate pr-1 ${n.isRead ? 'font-bold text-slate-500 dark:text-slate-400' : 'font-black text-slate-900 dark:text-slate-100'}`}>
                                             {n.title}
                                         </h4>
-                                        <span className="text-[5.5px] md:text-[7.5px] font-black text-slate-400 dark:text-slate-500 whitespace-nowrap uppercase shrink-0 mt-0.5 ml-1">
+                                        <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 whitespace-nowrap uppercase shrink-0 mt-0.5 ml-1">
                                             {formatTime(n.createdAt)}
                                         </span>
                                     </div>
-                                    <p className={`text-[6.5px] md:text-[9px] leading-tight line-clamp-1 ${n.isRead ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-300 font-medium'}`}>
+                                    <p className={`text-[10px] leading-tight line-clamp-2 ${n.isRead ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-300 font-medium'}`}>
                                         {(n.message || '').replace('undefined', 'dự án')}
                                     </p>
                                 </div>
                                 
                                 {!n.isRead && (
-                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <ChevronRight className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
+                                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <ChevronRight className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                                     </div>
                                 )}
                             </div>
@@ -160,7 +161,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 <div className="p-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 text-center">
                     <button 
                         onClick={onLoadMore}
-                        className="w-full py-1 text-[7px] md:text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider hover:text-blue-800 transition-colors"
+                        className="w-full min-h-[44px] lg:min-h-[36px] py-2 text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider hover:text-blue-800 transition-colors rounded-lg hover:bg-blue-50 dark:hover:bg-slate-800"
                     >
                         TẢI THÊM THÔNG BÁO CŨ
                     </button>

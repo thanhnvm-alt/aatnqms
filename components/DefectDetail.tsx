@@ -25,13 +25,13 @@ export const DefectDetail: React.FC<DefectDetailProps> = ({ defect, user, onBack
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative">
       {/* Header Toolbar */}
       <div className="bg-white dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 z-40 shadow-sm shrink-0">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 dark:text-slate-500 font-bold text-sm px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 transition-colors active:scale-95">
+        <button onClick={onBack} className="min-h-[44px] lg:min-h-[38px] flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-bold text-sm px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors active:scale-95">
             <ArrowLeft className="w-5 h-5"/> Quay lại
         </button>
         <div className="flex items-center gap-2">
             <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${defect.status === 'CLOSED' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 border-red-200'}`}>{defect.status}</span>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-            <button onClick={() => onViewInspection(defect.inspectionId)} className="bg-blue-600 text-white px-4 py-1.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95">
+            <button onClick={() => onViewInspection(defect.inspectionId)} className="min-h-[44px] lg:min-h-[38px] bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95">
                 <FileText className="w-4 h-4" /> Phiếu QC Gốc
             </button>
         </div>

@@ -10,6 +10,7 @@ import {
     Image as ImageIcon, CheckCircle, XCircle, Camera,
     FileUp, FileDown, SlidersHorizontal, Package, LayoutGrid
 } from 'lucide-react';
+import { Combobox, ConfirmDialog } from '../src/components/qms';
 
 interface DefectLibraryProps {
   currentUser: User;
@@ -40,6 +41,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [deleteDefectId, setDeleteDefectId] = useState<string | null>(null);
 
   const correctImgRef = useRef<HTMLInputElement>(null);
   const incorrectImgRef = useRef<HTMLInputElement>(null);
@@ -209,11 +211,16 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
       }
   };
 
-  const handleDelete = async (id: string) => {
-      if (window.confirm("Xóa lỗi này khỏi thư viện?")) {
-          await deleteDefectLibraryItem(id);
-          await loadData();
-      }
+  const handleDelete = (id: string) => {
+      setDeleteDefectId(id);
+  };
+
+  const executeDeleteDefect = async () => {
+      if (!deleteDefectId) return;
+      const targetId = deleteDefectId;
+      setDeleteDefectId(null);
+      await deleteDefectLibraryItem(targetId);
+      await loadData();
   };
 
   const getSeverityStyle = (severity: string) => {
@@ -240,17 +247,17 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                         onChange={e => setSearchInput(e.target.value)}
                         onBlur={handleCommitSearch}
                         onKeyDown={handleKeyDown}
-                        className="pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold w-full focus:bg-white dark:bg-slate-900 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
+                        className="min-h-[44px] lg:min-h-[40px] pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm lg:text-xs font-bold w-full focus:bg-white dark:bg-slate-900 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all shadow-inner"
                       />
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                       {hasPermission(currentUser, [], 'DEFECT_LIBRARY', 'EXPORT') && (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                               <button 
                                   onClick={() => handleExport('csv')}
                                   disabled={isExporting}
-                                  className="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1 transition-all shadow-sm active:scale-95"
+                                  className="min-h-[44px] lg:min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
                                   title="Xuất CSV Stream"
                               >
                                   {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
@@ -259,7 +266,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                               <button 
                                   onClick={() => handleExport('xlsx')}
                                   disabled={isExporting}
-                                  className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all shadow-sm flex items-center justify-center"
+                                  className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all shadow-sm flex items-center justify-center"
                                   title="Xuất Excel (.xlsx)"
                               >
                                   {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
@@ -270,14 +277,14 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           <button 
                               onClick={() => fileInputRef.current?.click()}
                               disabled={isImporting}
-                              className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 active:scale-95 transition-all shadow-sm"
+                              className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-95 transition-all shadow-sm flex items-center justify-center"
                               title="Nhập từ Excel"
                           >
                               {isImporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
                           </button>
                       )}
                       {hasPermission(currentUser, [], 'DEFECT_LIBRARY', 'CREATE') && (
-                          <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
+                          <button onClick={() => handleOpenModal()} className="min-h-[44px] lg:min-h-[40px] px-4 sm:px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs lg:text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 transition-all">
                               <Plus className="w-4 h-4" /> Thêm lỗi mới
                           </button>
                       )}
@@ -323,69 +330,105 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                                   <ChevronDown className={`w-5 h-5 text-slate-300 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600 dark:text-blue-400' : ''}`} />
                               </div>
 
-                              {/* Defects Table within stage */}
+                              {/* Defects Mobile Cards + Tablet/Desktop Table */}
                               {isExpanded && (
-                                  <div className="overflow-x-auto bg-white dark:bg-slate-900 animate-in slide-in-from-top-2 duration-300">
-                                      <table className="w-full text-left border-collapse min-w-[800px]">
-                                          <thead className="bg-slate-50 dark:bg-slate-800/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[9px]">
-                                              <tr>
-                                                  <th className={`${paddingClass} w-64`}>Mã & Tên Lỗi</th>
-                                                  <th className={`${paddingClass} w-44`}>Phân loại</th>
-                                                  <th className={`${paddingClass}`}>Mô tả chi tiết</th>
-                                                  <th className={`${paddingClass} w-28 text-right`}>Thao tác</th>
-                                              </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
-                                              {/* Fix: explicit typing ensures items.map is accessible */}
-                                              {items.map((item) => (
-                                                  <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 dark:hover:bg-slate-800/50 transition-colors group">
-                                                      <td className={`${paddingClass}`}>
-                                                          <div className="flex items-center gap-4">
-                                                              <div className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 rounded-xl group-hover:bg-blue-50 dark:bg-slate-800/80 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:text-blue-400 dark:group-hover:text-blue-400 transition-all border border-slate-200 dark:border-slate-700">
-                                                                  <Tag className="w-4 h-4" />
-                                                              </div>
-                                                              <div>
-                                                                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-xs block uppercase tracking-tighter">{item.code}</span>
-                                                                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase truncate max-w-[180px] block">{item.name || '---'}</span>
-                                                              </div>
+                                  <>
+                                      {/* Mobile Cards */}
+                                      <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900 animate-in slide-in-from-top-2 duration-300">
+                                          {items.map((item) => (
+                                              <div key={item.id} className="p-4 space-y-2.5">
+                                                  <div className="flex items-start justify-between gap-2">
+                                                      <div className="flex items-center gap-3 min-w-0">
+                                                          <div className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                                                              <Tag className="w-4 h-4" />
                                                           </div>
-                                                      </td>
-                                                      <td className={`${paddingClass}`}>
-                                                          <div className="flex flex-col gap-1.5">
-                                                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{item.category}</span>
-                                                              <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase w-fit border shadow-sm ${getSeverityStyle(item.severity)}`}>
-                                                                  {item.severity}
-                                                              </span>
+                                                          <div className="min-w-0">
+                                                              <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-xs block uppercase">{item.code}</span>
+                                                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase truncate block">{item.name || '---'}</span>
                                                           </div>
-                                                      </td>
-                                                      <td className={`${paddingClass}`}>
-                                                          <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-2">"{item.description}"</p>
-                                                          {item.rootCause && (
-                                                            <div className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-tighter">
-                                                                <AlertTriangle className="w-3 h-3" /> Nguyên nhân: {item.rootCause}
-                                                            </div>
-                                                          )}
-                                                          {item.suggestedAction && (
-                                                              <div className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
-                                                                  <SlidersHorizontal className="w-3 h-3" /> Fix: {item.suggestedAction}
-                                                              </div>
-                                                          )}
-                                                      </td>
-                                                      <td className={`${paddingClass} text-right`}>
-                                                          {isQA ? (
-                                                              <div className="flex items-center justify-end gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                  <button onClick={() => handleOpenModal(item)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-white dark:bg-slate-900 dark:hover:bg-slate-700 rounded-xl shadow-sm border border-transparent hover:border-blue-100 dark:border-slate-700 dark:hover:border-slate-600 transition-all"><Edit2 className="w-4 h-4"/></button>
-                                                                  <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 dark:text-red-400 hover:bg-white dark:bg-slate-900 dark:hover:bg-slate-700 rounded-xl shadow-sm border border-transparent hover:border-red-100 dark:hover:border-slate-600 transition-all"><Trash2 className="w-4 h-4"/></button>
-                                                              </div>
-                                                          ) : (
-                                                              <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 dark:text-slate-400 dark:text-slate-500 ml-auto" />
-                                                          )}
-                                                      </td>
+                                                      </div>
+                                                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase border shadow-sm shrink-0 ${getSeverityStyle(item.severity)}`}>
+                                                          {item.severity}
+                                                      </span>
+                                                  </div>
+                                                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 leading-relaxed">"{item.description}"</p>
+                                                  {item.rootCause && (
+                                                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                                                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {item.rootCause}
+                                                      </div>
+                                                  )}
+                                                  {isQA && (
+                                                      <div className="flex items-center gap-2 pt-2">
+                                                          <button onClick={() => handleOpenModal(item)} className="flex-1 min-h-[44px] px-3 py-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-blue-100 dark:border-slate-700"><Edit2 className="w-4 h-4"/> Sửa</button>
+                                                          <button onClick={() => handleDelete(item.id)} className="min-w-[44px] min-h-[44px] px-3 py-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-red-100 dark:border-red-900/40"><Trash2 className="w-4 h-4"/></button>
+                                                      </div>
+                                                  )}
+                                              </div>
+                                          ))}
+                                      </div>
+
+                                      {/* Tablet/Desktop Table */}
+                                      <div className="hidden md:block overflow-x-auto bg-white dark:bg-slate-900 animate-in slide-in-from-top-2 duration-300">
+                                          <table className="w-full text-left border-collapse min-w-[720px]">
+                                              <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-[9px]">
+                                                  <tr>
+                                                      <th className={`${paddingClass} w-64`}>Mã & Tên Lỗi</th>
+                                                      <th className={`${paddingClass} w-44`}>Phân loại</th>
+                                                      <th className={`${paddingClass}`}>Mô tả chi tiết</th>
+                                                      <th className={`${paddingClass} w-32 text-right`}>Thao tác</th>
                                                   </tr>
-                                              ))}
-                                          </tbody>
-                                      </table>
-                                  </div>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
+                                                  {items.map((item) => (
+                                                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                                                          <td className={`${paddingClass}`}>
+                                                              <div className="flex items-center gap-4">
+                                                                  <div className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl group-hover:bg-blue-50 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all border border-slate-200 dark:border-slate-700">
+                                                                      <Tag className="w-4 h-4" />
+                                                                  </div>
+                                                                  <div>
+                                                                      <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-xs block uppercase tracking-tighter">{item.code}</span>
+                                                                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase truncate max-w-[180px] block">{item.name || '---'}</span>
+                                                                  </div>
+                                                              </div>
+                                                          </td>
+                                                          <td className={`${paddingClass}`}>
+                                                              <div className="flex flex-col gap-1.5">
+                                                                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{item.category}</span>
+                                                                  <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase w-fit border shadow-sm ${getSeverityStyle(item.severity)}`}>
+                                                                      {item.severity}
+                                                                  </span>
+                                                              </div>
+                                                          </td>
+                                                          <td className={`${paddingClass}`}>
+                                                              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-2">"{item.description}"</p>
+                                                              {item.rootCause && (
+                                                                <div className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-tighter">
+                                                                    <AlertTriangle className="w-3 h-3" /> Nguyên nhân: {item.rootCause}
+                                                                </div>
+                                                              )}
+                                                              {item.suggestedAction && (
+                                                                  <div className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-tighter">
+                                                                      <SlidersHorizontal className="w-3 h-3" /> Fix: {item.suggestedAction}
+                                                                  </div>
+                                                              )}
+                                                          </td>
+                                                          <td className={`${paddingClass} text-right`}>
+                                                              {isQA ? (
+                                                                  <div className="flex items-center justify-end gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                                                      <button onClick={() => handleOpenModal(item)} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] p-2 text-blue-600 dark:text-blue-400 hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm border border-transparent hover:border-blue-100 dark:hover:border-slate-600 transition-all flex items-center justify-center"><Edit2 className="w-4 h-4"/></button>
+                                                                      <button onClick={() => handleDelete(item.id)} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] p-2 text-red-600 dark:text-red-400 hover:bg-white dark:hover:bg-slate-700 rounded-xl shadow-sm border border-transparent hover:border-red-100 dark:hover:border-slate-600 transition-all flex items-center justify-center"><Trash2 className="w-4 h-4"/></button>
+                                                                  </div>
+                                                              ) : (
+                                                                  <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 ml-auto" />
+                                                              )}
+                                                          </td>
+                                                      </tr>
+                                                  ))}
+                                              </tbody>
+                                          </table>
+                                      </div>
+                                  </>
                               )}
                           </div>
                       );
@@ -396,22 +439,22 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
 
       {/* CRUD MODAL */}
       {isModalOpen && (
-          <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                  <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
-                      <div className="flex items-center gap-4">
-                          <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100">
-                              <Hammer className="w-6 h-6" />
+          <div className="fixed inset-0 z-[220] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+              <div className="bg-white dark:bg-slate-900 w-full max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+                  <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-white dark:bg-slate-900 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="p-2 bg-blue-600 text-white rounded-xl shadow-sm shrink-0">
+                              <Hammer className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
-                          <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tighter text-xl">
+                          <h3 className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-sm sm:text-base truncate">
                               {editingItem ? 'Chỉnh sửa lỗi chuẩn' : 'Thêm mới lỗi chuẩn'}
                           </h3>
                       </div>
-                      <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-full transition-colors"><X className="w-7 h-7 text-slate-300"/></button>
+                      <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center justify-center shrink-0 cursor-pointer"><X className="w-5 h-5 text-slate-400"/></button>
                   </div>
                   
-                  <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh] no-scrollbar bg-slate-50 dark:bg-slate-800/30">
-                      <div className="grid grid-cols-2 gap-6">
+                  <div className="p-3.5 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mã Lỗi Hệ Thống</label>
                               <input 
@@ -432,37 +475,46 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Công đoạn áp dụng *</label>
-                              <div className="relative">
-                                  <select 
-                                    value={formData.stage} 
-                                    onChange={e => setFormData({...formData, stage: e.target.value})} 
-                                    className="w-full px-5 py-3.5 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold appearance-none bg-white dark:bg-slate-900 outline-none focus:ring-4 focus:ring-blue-100 transition-all text-xs shadow-sm"
-                                  >
-                                      <option value="" disabled>Chọn stage</option>
-                                      {availableStages.map(s => <option key={s} value={s}>{s}</option>)}
-                                  </select>
-                                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
-                              </div>
+                              <Combobox
+                                value={formData.stage || null}
+                                onChange={(v) => setFormData({ ...formData, stage: v || '' })}
+                                options={availableStages.map(s => ({ value: s, label: s }))}
+                                placeholder="Chọn stage"
+                                allowClear={false}
+                                ariaLabel="Công đoạn áp dụng"
+                              />
                           </div>
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Phân loại kỹ thuật</label>
-                              <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-5 py-3.5 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs bg-white dark:bg-slate-900 shadow-sm outline-none focus:ring-4 focus:ring-blue-100">
-                                  <option value="Ngoại quan">Ngoại quan</option>
-                                  <option value="Kết cấu">Kết cấu</option>
-                                  <option value="Kích thước">Kích thước</option>
-                                  <option value="Phụ kiện">Phụ kiện</option>
-                              </select>
+                              <Combobox
+                                value={formData.category || 'Ngoại quan'}
+                                onChange={(v) => setFormData({ ...formData, category: v || 'Ngoại quan' })}
+                                options={[
+                                  { value: 'Ngoại quan', label: 'Ngoại quan' },
+                                  { value: 'Kết cấu', label: 'Kết cấu' },
+                                  { value: 'Kích thước', label: 'Kích thước' },
+                                  { value: 'Phụ kiện', label: 'Phụ kiện' },
+                                ]}
+                                allowClear={false}
+                                ariaLabel="Phân loại kỹ thuật"
+                              />
                           </div>
                           <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mức độ nghiêm trọng</label>
-                              <select value={formData.severity} onChange={e => setFormData({...formData, severity: e.target.value as any})} className="w-full px-5 py-3.5 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-xs bg-white dark:bg-slate-900 shadow-sm outline-none focus:ring-4 focus:ring-blue-100">
-                                  <option value="MINOR">MINOR (Nhẹ)</option>
-                                  <option value="MAJOR">MAJOR (Nặng)</option>
-                                  <option value="CRITICAL">CRITICAL (Nghiêm trọng)</option>
-                              </select>
+                              <Combobox
+                                value={formData.severity || 'MINOR'}
+                                onChange={(v) => setFormData({ ...formData, severity: (v as any) || 'MINOR' })}
+                                options={[
+                                  { value: 'MINOR', label: 'MINOR (Nhẹ)' },
+                                  { value: 'MAJOR', label: 'MAJOR (Nặng)' },
+                                  { value: 'CRITICAL', label: 'CRITICAL (Nghiêm trọng)' },
+                                ]}
+                                allowClear={false}
+                                ariaLabel="Mức độ nghiêm trọng"
+                              />
                           </div>
                       </div>
 
@@ -471,7 +523,7 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                           <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-5 py-4 border border-slate-200 dark:border-slate-700 rounded-3xl font-bold text-sm focus:ring-4 focus:ring-blue-100 outline-none resize-none shadow-inner" rows={3} placeholder="Nhập mô tả chuẩn để QC tra cứu..."/>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                           <div className="space-y-3">
                               <label className="text-[10px] font-black text-green-600 dark:text-green-500 uppercase flex items-center gap-1.5 ml-1"><CheckCircle className="w-3 h-3" /> Hình ảnh chuẩn (ĐÚNG)</label>
                               <div 
@@ -522,16 +574,26 @@ export const DefectLibrary: React.FC<DefectLibraryProps> = ({ currentUser }) => 
                       </div>
                   </div>
 
-                  <div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-end gap-3 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.04)]">
-                      <button onClick={() => setIsModalOpen(false)} className="px-10 py-4 text-xs font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest hover:text-red-600 dark:text-red-400 transition-colors">Hủy bỏ</button>
-                      <button onClick={handleSave} disabled={isSaving} className="bg-blue-600 text-white px-16 py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-500/30 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-                        {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5" />}
+                  <div className="px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0">
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="min-h-[44px] sm:min-h-[36px] w-full sm:w-auto px-4 py-2 sm:py-1.5 text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider hover:text-red-600 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-colors rounded-xl whitespace-nowrap shrink-0">Hủy bỏ</button>
+                      <button type="button" onClick={handleSave} disabled={isSaving} className="min-h-[44px] sm:min-h-[36px] w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 sm:py-1.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50">
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4" />}
                         Lưu vào thư viện
                       </button>
                   </div>
               </div>
           </div>
       )}
+      <ConfirmDialog
+        open={deleteDefectId !== null}
+        variant="danger"
+        title="Xóa mã lỗi khỏi thư viện"
+        message="Bạn có chắc chắn muốn xóa lỗi này khỏi thư viện chuẩn ISO?"
+        confirmLabel="Xóa"
+        cancelLabel="Hủy"
+        onConfirm={executeDeleteDefect}
+        onCancel={() => setDeleteDefectId(null)}
+      />
     </div>
   );
 };

@@ -38,6 +38,7 @@ const UNIT_OPTIONS = [
 
 import { SignaturePad } from './SignaturePad';
 import { getProxyImageUrl } from '../src/utils';
+import { Combobox, ConfirmDialog } from '../src/components/qms';
 
 export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, inspections, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({
@@ -73,6 +74,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [newDocName, setNewDocName] = useState('');
   const [matSearch, setMatSearch] = useState('');
   const [matSearchInput, setMatSearchInput] = useState('');
+  const [deleteMatIdx, setDeleteMatIdx] = useState<number | null>(null);
 
   const handleCommitMatSearch = () => {
       setMatSearch(matSearchInput);
@@ -236,7 +238,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setExpandedMaterial(newMaterial.id);
   };
 
-  const updateMaterial = (idx: number, field: keyof MaterialIQC, value: any) => {
+  const updateMaterial = (idx: number, field: string, value: any) => {
     if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
         value = value.replace(/,/g, '.');
     } 
@@ -518,7 +520,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             const totalFailed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
 
             await onSave({ ...finalForm,
-                status: InspectionStatus.PENDING,
+                status: InspectionStatus.SUBMITTED,
                 inspectedQuantity: totalInspected,
                 passedQuantity: totalPassed,
                 failedQuantity: totalFailed,
@@ -551,8 +553,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                       </div>
                   </div>
                   <div className="flex gap-2">
-                      <button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-red-500 dark:text-red-400">Xóa</button>
-                      <button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md shadow-amber-200 active:scale-95 transition-all">Khôi phục</button>
+                      <button type="button" onClick={clearDraft} className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest hover:text-red-500 rounded-xl">Xóa</button>
+                      <button type="button" onClick={recoverDraft} className="min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-amber-200 active:scale-95 transition-all">Khôi phục</button>
                   </div>
               </div>
           </div>
@@ -604,64 +606,85 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
         {/* I. General Information */}
         <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1">
-                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4"/> I. THÔNG TIN QUẢN LÝ IQC</h3>
-                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:bg-blue-900/30 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-lg font-bold uppercase text-[9px] flex items-center gap-1 shadow-sm" type="button"><History className="w-3 h-3" /> Lịch sử ({inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number).length})</button>
+            <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1 gap-2">
+                <h3 className="text-blue-800 dark:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4 shrink-0"/> I. THÔNG TIN QUẢN LÝ IQC</h3>
+                <button onClick={() => setShowHistory(true)} className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 rounded-lg font-bold uppercase text-[10px] flex items-center gap-1.5 shadow-sm shrink-0" type="button"><History className="w-3.5 h-3.5" /> Lịch sử ({inspections.filter(i => i.id !== formData.id && i.po_number === formData.po_number).length})</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label><div className="relative flex items-center"><input value={formData.po_number || ''} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-[11px] h-9" placeholder="Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400 dark:text-slate-500" type="button"><QrCode className="w-4 h-4"/></button></div></div>
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Nhà Cung Cấp *</label><div className="relative flex items-center"><input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 dark:border-slate-600 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-[11px] h-9 uppercase" placeholder="Tên NCC..."/><Building2 className="absolute left-2 w-4 h-4 text-slate-400 dark:text-slate-500" /></div></div>
-                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Ngày kiểm tra</label><div className="relative flex items-center"><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 pl-8 border border-slate-300 dark:border-slate-600 rounded-md font-bold outline-none text-[11px] h-9"/><Calendar className="absolute left-2 w-4 h-4 text-slate-400 dark:text-slate-500" /></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Mã PO / Chứng từ *</label><div className="relative flex items-center"><input value={formData.po_number || ''} onChange={e => handleInputChange('po_number', e.target.value.toUpperCase())} onBlur={handlePoBlur} className="w-full pl-3 pr-12 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:ring-1 ring-blue-500 outline-none font-bold text-xs min-h-[44px] lg:min-h-[38px] bg-white dark:bg-slate-900" placeholder="Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-0.5 min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-500 hover:text-blue-600 dark:text-slate-400 rounded-md" type="button" aria-label="Quét mã QR"><QrCode className="w-4 h-4"/></button></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Nhà Cung Cấp *</label><div className="relative flex items-center"><input value={formData.supplier || ''} onChange={e => handleInputChange('supplier', e.target.value)} className="w-full px-3 py-2 pl-9 border border-slate-300 dark:border-slate-600 rounded-md font-bold focus:ring-1 ring-blue-500 outline-none text-xs min-h-[44px] lg:min-h-[38px] uppercase bg-white dark:bg-slate-900" placeholder="Tên NCC..."/><Building2 className="absolute left-2.5 w-4 h-4 text-slate-400 dark:text-slate-500" /></div></div>
+                <div className="space-y-1"><label className="block text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Ngày kiểm tra</label><div className="relative flex items-center"><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-3 py-2 pl-9 border border-slate-300 dark:border-slate-600 rounded-md font-bold outline-none text-xs min-h-[44px] lg:min-h-[38px] bg-white dark:bg-slate-900"/><Calendar className="absolute left-2.5 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" /></div></div>
             </div>
 
             {/* Evidence Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-50">
-                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <label className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between">Ảnh Hiện Trường<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="p-1 hover:text-blue-600 dark:text-blue-400" type="button"><ImageIcon className="w-3 h-3"/></button></div></label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-50 dark:border-slate-800">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase flex items-center justify-between gap-2">
+                        <span>Ảnh Hiện Trường</span>
+                        <div className="flex gap-1">
+                            <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-blue-600 dark:text-blue-400" type="button" aria-label="Chụp ảnh hiện trường"><Camera className="w-4 h-4"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'MAIN' }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-blue-600 dark:text-blue-400" type="button" aria-label="Tải ảnh hiện trường"><ImageIcon className="w-4 h-4"/></button>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                         {formData.images?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.images!, index: i, context: { type: 'MAIN' } })} />
+                                <img src={getProxyImageUrl(img)} className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.images!, index: i, context: { type: 'MAIN' } })} />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, images: prev.images?.filter((_, idx) => idx !== i) }))}
-                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"
                                     type="button"
+                                    aria-label="Xóa ảnh"
                                 >
-                                    <X className="w-2 h-2" />
+                                    <X className="w-3 h-3" />
                                 </button>
                             </div>
                         ))}
                     </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <label className="text-[8px] font-black text-indigo-600 uppercase flex items-center justify-between">Phiếu Giao Hàng<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="p-1 hover:text-indigo-600" type="button"><ImageIcon className="w-3 h-3"/></button></div></label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase flex items-center justify-between gap-2">
+                        <span>Phiếu Giao Hàng</span>
+                        <div className="flex gap-1">
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-indigo-600" type="button" aria-label="Chụp phiếu giao hàng"><Camera className="w-4 h-4"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'DELIVERY' }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-indigo-600" type="button" aria-label="Tải phiếu giao hàng"><ImageIcon className="w-4 h-4"/></button>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                         {formData.deliveryNoteImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })} />
+                                <img src={getProxyImageUrl(img)} className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.deliveryNoteImages!, index: i, context: { type: 'DELIVERY' } })} />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, deliveryNoteImages: prev.deliveryNoteImages?.filter((_, idx) => idx !== i) }))}
-                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"
                                     type="button"
+                                    aria-label="Xóa ảnh"
                                 >
-                                    <X className="w-2 h-2" />
+                                    <X className="w-3 h-3" />
                                 </button>
                             </div>
                         ))}
                     </div>
                 </div>
-                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <label className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between">Báo cáo NCC<div className="flex gap-1"><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><Camera className="w-3.5 h-3.5"/></button><button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="p-1 hover:text-emerald-600" type="button"><ImageIcon className="w-3 h-3"/></button></div></label>
-                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[40px]">
+                <div className="space-y-1.5 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase flex items-center justify-between gap-2">
+                        <span>Báo cáo NCC</span>
+                        <div className="flex gap-1">
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-emerald-600" type="button" aria-label="Chụp báo cáo NCC"><Camera className="w-4 h-4"/></button>
+                            <button onClick={() => { setActiveUploadContext({ type: 'REPORT' }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:text-emerald-600" type="button" aria-label="Tải báo cáo NCC"><ImageIcon className="w-4 h-4"/></button>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                         {formData.reportImages?.map((img, i) => (
                             <div key={i} className="relative group shrink-0">
-                                <img src={getProxyImageUrl(img)} className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })} />
+                                <img src={getProxyImageUrl(img)} className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover cursor-zoom-in" onClick={() => setEditorState({ images: formData.reportImages!, index: i, context: { type: 'REPORT' } })} />
                                 <button
                                     onClick={() => setFormData(prev => ({ ...prev, reportImages: prev.reportImages?.filter((_, idx) => idx !== i) }))}
-                                    className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                                    className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"
                                     type="button"
+                                    aria-label="Xóa ảnh"
                                 >
-                                    <X className="w-2 h-2" />
+                                    <X className="w-3 h-3" />
                                 </button>
                             </div>
                         ))}
@@ -670,19 +693,19 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
 
             {/* Supporting Documents */}
-            <div className="pt-4 border-t border-slate-50 space-y-3">
-                <h3 className="text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest flex items-center gap-2 text-[10px] border-b border-slate-50 pb-2"><FileCheck className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400"/> DANH MỤC TÀI LIỆU HỖ TRỢ</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="pt-4 border-t border-slate-50 dark:border-slate-800 space-y-3">
+                <h3 className="text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest flex items-center gap-2 text-[10px] border-b border-slate-50 dark:border-slate-800 pb-2"><FileCheck className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400"/> DANH MỤC TÀI LIỆU HỖ TRỢ</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                     {(formData.supportingDocs || []).map(doc => (
-                        <button key={doc.id} onClick={() => toggleDoc(doc.id)} className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-left ${doc.verified ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-slate-700 text-blue-700 shadow-sm' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 opacity-60'}`} type="button">
+                        <button key={doc.id} onClick={() => toggleDoc(doc.id)} className={`min-h-[44px] flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left ${doc.verified ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 shadow-sm' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`} type="button">
                             {doc.verified ? <CheckSquare className="w-4 h-4 shrink-0" /> : <Square className="w-4 h-4 shrink-0" />}
-                            <span className="text-[9px] font-bold uppercase leading-tight">{doc.name}</span>
+                            <span className="text-[10px] font-bold uppercase leading-tight">{doc.name}</span>
                         </button>
                     ))}
                 </div>
                 <div className="flex gap-2 pt-2">
-                    <input value={newDocName || ''} onChange={e => setNewDocName(e.target.value)} className="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100" placeholder="Thêm tài liệu hỗ trợ khác..."/>
-                    <button onClick={addCustomDoc} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all">Thêm</button>
+                    <input value={newDocName || ''} onChange={e => setNewDocName(e.target.value)} className="flex-1 min-h-[44px] lg:min-h-[38px] px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100 bg-white dark:bg-slate-900" placeholder="Thêm tài liệu hỗ trợ khác..."/>
+                    <button type="button" onClick={addCustomDoc} className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-slate-800 text-white rounded-lg text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0">Thêm</button>
                 </div>
             </div>
         </section>
@@ -693,8 +716,8 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                 <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 text-xs">
                     <ClipboardList className="w-4 h-4 text-blue-600 dark:text-blue-400"/> II. DANH MỤC VẬT TƯ ({formData.materials?.length || 0})
                 </h3>
-                <div className="flex items-center gap-2">
-                    <div className="relative">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 sm:flex-initial">
                         <input 
                             type="text" 
                             placeholder="Tìm vật tư..." 
@@ -702,12 +725,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                             onChange={e => setMatSearchInput(e.target.value)}
                             onBlur={handleCommitMatSearch}
                             onKeyDown={handleKeyDownMatSearch}
-                            className="pl-8 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] w-48 outline-none focus:ring-1 ring-blue-100 shadow-sm"
+                            className="pl-8 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs w-full sm:w-52 min-h-[44px] lg:min-h-[38px] outline-none focus:ring-1 ring-blue-100 shadow-sm"
                         />
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     </div>
-                    <button onClick={handleAddMaterial} className="bg-blue-600 text-white p-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3 hover:bg-blue-700" type="button">
-                        <Plus className="w-3 h-3"/> <span className="text-[10px] font-bold uppercase">Thêm Vật Tư</span>
+                    <button onClick={handleAddMaterial} className="min-h-[44px] lg:min-h-[38px] bg-blue-600 text-white rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5 px-3.5 hover:bg-blue-700 shrink-0" type="button">
+                        <Plus className="w-4 h-4"/> <span className="text-[11px] font-bold uppercase">Thêm Vật Tư</span>
                     </button>
                 </div>
             </div>
@@ -737,7 +760,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     <div className="flex items-center gap-2 mt-0.5"><span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">{mat.scope === 'COMMON' ? 'Dùng chung' : mat.projectCode}</span><span className="px-1.5 py-0.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500 rounded text-[8px] font-bold uppercase border border-green-100">{passRate}% ĐẠT</span></div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); if(window.confirm("Xóa mục này?")) setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== matIdx) })); }} className="p-1.5 text-slate-300 hover:text-red-600 dark:text-red-400" type="button"><Trash2 className="w-4 h-4"/></button>{isExp ? <ChevronUp className="w-5 h-5 text-blue-500 dark:text-blue-400"/> : <ChevronDown className="w-5 h-5 text-slate-300"/>}</div>
+                            <div className="flex items-center gap-1.5"><button onClick={(e) => { e.stopPropagation(); setDeleteMatIdx(matIdx); }} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20" type="button" aria-label="Xóa vật tư"><Trash2 className="w-4 h-4"/></button>{isExp ? <ChevronUp className="w-5 h-5 text-blue-500 dark:text-blue-400"/> : <ChevronDown className="w-5 h-5 text-slate-400"/>}</div>
                         </div>
                         {isExp && (
                             <div className="p-4 space-y-4 bg-white dark:bg-slate-900 border-t border-slate-50">
@@ -747,17 +770,16 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                         <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                                             PHÂN LOẠI
                                         </label>
-                                        <div className="relative">
-                                            <select 
-                                                value={mat.scope || 'COMMON'} 
-                                                onChange={e => updateMaterial(matIdx, 'scope', e.target.value)}
-                                                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg font-black text-[11px] h-10 uppercase outline-none focus:ring-2 ring-blue-100 transition-all appearance-none"
-                                            >
-                                                <option value="COMMON">DÙNG CHUNG</option>
-                                                <option value="PROJECT">CÔNG TRÌNH</option>
-                                            </select>
-                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
-                                        </div>
+                                        <Combobox
+                                            value={mat.scope || 'COMMON'}
+                                            onChange={val => updateMaterial(matIdx, 'scope', val || 'COMMON')}
+                                            allowClear={false}
+                                            ariaLabel="Phân loại"
+                                            options={[
+                                                { value: 'COMMON', label: 'DÙNG CHUNG' },
+                                                { value: 'PROJECT', label: 'CÔNG TRÌNH' },
+                                            ]}
+                                        />
                                     </div>
                                     <div className="md:col-span-3 space-y-1.5">
                                         <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
@@ -769,7 +791,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                 onChange={e => updateMaterial(matIdx, 'projectCode', e.target.value.toUpperCase())} 
                                                 onBlur={() => mat.scope === 'PROJECT' && lookupMaterialProject(mat.projectCode || '', matIdx)}
                                                 disabled={mat.scope === 'COMMON'}
-                                                className={`w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-[11px] h-10 outline-none transition-all shadow-sm ${mat.scope === 'COMMON' ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : 'bg-white dark:bg-slate-900 focus:ring-2 ring-blue-100'}`} 
+                                                className={`w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-xs min-h-[44px] lg:min-h-[40px] outline-none transition-all shadow-sm ${mat.scope === 'COMMON' ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : 'bg-white dark:bg-slate-900 focus:ring-2 ring-blue-100'}`} 
                                                 placeholder="Mã CT..."
                                             />
                                         </div>
@@ -782,7 +804,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                             <input 
                                                 value={mat.projectName || ''} 
                                                 readOnly 
-                                                className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-[11px] h-10 text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase truncate" 
+                                                className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs min-h-[44px] lg:min-h-[40px] text-slate-500 dark:text-slate-400 uppercase truncate" 
                                                 placeholder="..."
                                             />
                                             {isLookupLoading && mat.scope === 'PROJECT' && <Loader2 className="absolute right-3 w-4 h-4 animate-spin text-blue-500 dark:text-blue-400" />}
@@ -790,9 +812,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-12 gap-3">
-                                  <div className="col-span-4">
-                                      <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Chủng loại</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                  <div className="sm:col-span-4">
+                                      <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-1">Chủng loại</label>
                                       <div className="relative">
                                           <input 
                                               value={mat.category || ''} 
@@ -801,38 +823,47 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                   updateMaterial(matIdx, 'category', val);
                                               }} 
                                               list={`category-list-${matIdx}`}
-                                              className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold outline-none text-[10px] h-9 bg-white dark:bg-slate-900 shadow-sm"
+                                              className="w-full pl-3 pr-8 py-2 border border-slate-300 dark:border-slate-600 rounded-md font-bold outline-none text-xs min-h-[44px] lg:min-h-[38px] bg-white dark:bg-slate-900 shadow-sm"
                                               placeholder="Tìm chủng loại..."
                                           />
                                           <datalist id={`category-list-${matIdx}`}>
                                               {iqcGroups.map(g => <option key={g} value={g} />)}
                                           </datalist>
-                                          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-30">
-                                              <Search className="w-3 h-3" />
+                                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
+                                              <Search className="w-3.5 h-3.5" />
                                           </div>
                                       </div>
                                   </div>
-                                  <div className="col-span-3">
+                                  <div className="sm:col-span-3">
                                       <label className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-1">Loại kiểm</label>
-                                      <select value={mat.inspectType || '100%'} onChange={e => updateMaterial(matIdx, 'inspectType', e.target.value as any)} className="w-full px-2 py-1.5 border border-blue-300 rounded-lg font-black text-[10px] h-9 bg-white dark:bg-slate-900 outline-none text-blue-700 shadow-sm"><option value="100%">100%</option><option value="AQL">AQL</option></select>
+                                      <Combobox
+                                          value={mat.inspectType || '100%'}
+                                          onChange={val => updateMaterial(matIdx, 'inspectType', (val || '100%') as any)}
+                                          allowClear={false}
+                                          ariaLabel="Loại kiểm"
+                                          options={[
+                                              { value: '100%', label: '100%' },
+                                              { value: 'AQL', label: 'AQL' },
+                                          ]}
+                                      />
                                   </div>
-                                  <div className="col-span-5">
-                                      <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-1">Tên Vật Tư *</label>
-                                      <input value={mat.name || ''} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg font-bold focus:ring-1 ring-blue-500 outline-none text-[10px] h-9 shadow-sm" placeholder="Tên sản phẩm..."/>
+                                  <div className="sm:col-span-5">
+                                      <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest block mb-1">Tên Vật Tư *</label>
+                                      <input value={mat.name || ''} onChange={e => updateMaterial(matIdx, 'name', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg font-bold focus:ring-1 ring-blue-500 outline-none text-xs min-h-[44px] lg:min-h-[38px] shadow-sm bg-white dark:bg-slate-900" placeholder="Tên sản phẩm..."/>
                                   </div>
                                 </div>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">Giao(DN)</label><input onKeyDown={(e) => { 
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block text-center">Giao(DN)</label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.deliveryQty ?? 0} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-1 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-7"/></div>
+}} type="text" inputMode="decimal" value={mat.deliveryQty ?? 0} onChange={e => updateMaterial(matIdx, 'deliveryQty', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-bold text-center bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] tabular-nums"/></div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase block text-center">DVT</label>
-                                        <input list="unit-list" value={mat.unit || ''} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-1 py-1 border border-slate-300 dark:border-slate-600 rounded-md font-black text-center bg-white dark:bg-slate-900 text-[11px] h-7 uppercase" placeholder="DVT..."/>
+                                        <label className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block text-center">DVT</label>
+                                        <input list="unit-list" value={mat.unit || ''} onChange={e => updateMaterial(matIdx, 'unit', e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md font-black text-center bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] uppercase" placeholder="DVT..."/>
                                         <datalist id="unit-list">{UNIT_OPTIONS.map(opt => <option key={opt} value={opt} />)}</datalist>
                                     </div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase block text-center">Kiểm tra</label><input onKeyDown={(e) => { 
@@ -841,21 +872,21 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.inspectQty ?? 0} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-1 py-1 border rounded-md font-bold text-center bg-white dark:bg-slate-900 text-[11px] h-7 ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-blue-300 text-blue-700'}`}/></div>
+}} type="text" inputMode="decimal" value={mat.inspectQty ?? 0} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-2 py-1.5 border rounded-md font-bold text-center bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] tabular-nums ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-blue-300 text-blue-700 dark:text-blue-300'}`}/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase block text-center">Đạt</label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.passQty ?? 0} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-1 py-1 border border-green-300 rounded-md font-bold text-center text-green-700 bg-white dark:bg-slate-900 text-[11px] h-7"/></div>
-                                    <div className="space-y-1"><label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase block text-center">Hỏng</label><input onKeyDown={(e) => { 
+}} type="text" inputMode="decimal" value={mat.passQty ?? 0} onChange={e => updateMaterial(matIdx, 'passQty', e.target.value)} className="w-full px-2 py-1.5 border border-green-300 rounded-md font-bold text-center text-green-700 dark:text-green-400 bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] tabular-nums"/></div>
+                                    <div className="space-y-1 col-span-2 sm:col-span-1"><label className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase block text-center">Hỏng</label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.failQty ?? 0} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-1 py-1 border border-red-300 rounded-md font-bold text-center text-red-700 bg-white dark:bg-slate-900 text-[11px] h-7"/></div>
+}} type="text" inputMode="decimal" value={mat.failQty ?? 0} onChange={e => updateMaterial(matIdx, 'failQty', e.target.value)} className="w-full px-2 py-1.5 border border-red-300 rounded-md font-bold text-center text-red-700 dark:text-red-400 bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] tabular-nums"/></div>
                                 </div>
 
                                 <div className="space-y-3 mt-4 border-t border-slate-100 dark:border-slate-800 pt-4">
@@ -877,8 +908,9 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                 nextMats[matIdx] = { ...nextMats[matIdx], items: [...(nextMats[matIdx].items || []), newItem] };
                                                 setFormData(prev => ({ ...prev, materials: nextMats }));
                                             }}
-                                            className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-slate-800/80 rounded-lg"
+                                            className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg border border-blue-200 dark:border-slate-700"
                                             type="button"
+                                            aria-label="Thêm hạng mục kiểm tra"
                                         >
                                             <Plus className="w-4 h-4" />
                                         </button>
@@ -886,12 +918,12 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
 
                                     {(mat.items || []).map((item, itemIdx) => (
                                         <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                                            <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2">
-                                                <div className="flex-1 pr-2">
+                                            <div className="flex justify-between items-center mb-2 border-b border-slate-50 dark:border-slate-800 pb-2 gap-2">
+                                                <div className="flex-1">
                                                     <input 
                                                         value={item.label || ''} 
-                                                        onChange={e => updateMaterialItem(matIdx, itemIdx, 'label', e.target.value)}
-                                                        className="w-full font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-[11px]" 
+                                                        onChange={e => updateMaterialItem(matIdx, itemIdx, 'label', e.target.value)} 
+                                                        className="w-full min-h-[44px] lg:min-h-[34px] font-bold bg-transparent outline-none text-slate-800 dark:text-slate-200 uppercase text-xs" 
                                                         placeholder="Tên hạng mục..." 
                                                     />
                                                 </div>
@@ -901,10 +933,11 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                         nextMats[matIdx].items = (nextMats[matIdx].items || []).filter((_, i) => i !== itemIdx);
                                                         setFormData(prev => ({ ...prev, materials: nextMats }));
                                                     }}
-                                                    className="p-1 text-slate-300 hover:text-red-500 dark:text-red-400 rounded-lg hover:bg-red-50 dark:bg-red-900/20"
+                                                    className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
                                                     type="button"
+                                                    aria-label="Xóa hạng mục"
                                                 >
-                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </div>
                                             
@@ -912,36 +945,36 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                 <textarea 
                                                     value={item.notes || ''}
                                                     onChange={e => updateMaterialItem(matIdx, itemIdx, 'notes', e.target.value)}
-                                                    className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] outline-none focus:ring-1 ring-blue-100"
+                                                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 ring-blue-100 bg-white dark:bg-slate-900"
                                                     placeholder="Ghi chú kết quả..."
                                                     rows={2}
                                                 />
                                                 
                                                 <div className="flex flex-wrap gap-2 items-center justify-between">
-                                                    <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 dark:border-slate-700 w-fit">
+                                                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg gap-1 border border-slate-200 dark:border-slate-700 w-fit">
                                                         {[CheckStatus.PASS, CheckStatus.FAIL, CheckStatus.CONDITIONAL].map(st => (
-                                                            <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm') : 'text-slate-400 dark:text-slate-500 hover:bg-white dark:bg-slate-900'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'CĐK'}</button>
+                                                            <button key={st} onClick={() => updateMaterialItem(matIdx, itemIdx, 'status', st)} className={`min-h-[44px] lg:min-h-[34px] px-3 py-1.5 rounded-md font-bold uppercase transition-all text-[10px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white shadow-sm' : st === CheckStatus.FAIL ? 'bg-red-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm') : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-900'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : st === CheckStatus.FAIL ? 'Hỏng' : 'CĐK'}</button>
                                                         ))}
                                                     </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400" type="button"><Camera className="w-4 h-4"/></button>
-                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:text-blue-400" type="button"><ImageIcon className="w-4 h-4"/></button>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); cameraInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600" type="button" aria-label="Chụp ảnh hạng mục"><Camera className="w-4 h-4"/></button>
+                                                        <button onClick={() => { setActiveUploadContext({ type: 'ITEM', matIdx, itemIdx }); fileInputRef.current?.click(); }} className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600" type="button" aria-label="Chọn ảnh hạng mục"><ImageIcon className="w-4 h-4"/></button>
                                                     </div>
                                                 </div>
                                                 
-                                                <div className="flex gap-1.5 overflow-x-auto no-scrollbar min-h-[30px]">
+                                                <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[48px] py-1">
                                                     {(item.images || []).map((img, i) => (
                                                         <div key={i} className="relative group shrink-0">
                                                             <div className="cursor-zoom-in" onClick={() => setEditorState({ images: item.images || [], index: i, context: { type: 'ITEM', matIdx, itemIdx } })}>
-                                                                <img src={getProxyImageUrl(img)} alt="Ảnh item" className="w-10 h-10 rounded border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
+                                                                <img src={getProxyImageUrl(img)} alt="Ảnh item" className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-700 object-cover shadow-sm" />
                                                             </div>
-                                                            <button onClick={() => {
+                                                            <button type="button" aria-label="Xóa ảnh" onClick={() => {
                                                                 const nextMats = [...(formData.materials || [])];
                                                                 const nextItems = [...(nextMats[matIdx].items || [])];
                                                                 nextItems[itemIdx].images = nextItems[itemIdx].images?.filter((_, idx) => idx !== i);
                                                                 nextMats[matIdx].items = nextItems;
                                                                 setFormData(prev => ({ ...prev, materials: nextMats }));
-                                                            }} className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-2.5 h-2.5"/></button>
+                                                            }} className="absolute -top-1 -right-1 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm"><X className="w-3 h-3"/></button>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -953,27 +986,29 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 {/* MATERIAL IMAGES SECTION */}
                                 <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
                                     <div className="flex justify-between items-center px-1">
-                                        <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
+                                        <label className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
                                             <ImageIcon className="w-4 h-4"/> HÌNH ẢNH SẢN PHẨM
                                         </label>
                                         <div className="flex gap-2">
                                             <button 
                                                 onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); cameraInputRef.current?.click(); }} 
-                                                className="p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
+                                                className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
                                                 type="button"
+                                                aria-label="Chụp ảnh sản phẩm"
                                             >
                                                 <Camera className="w-4 h-4" />
                                             </button>
                                             <button 
                                                 onClick={() => { setActiveUploadContext({ type: 'MATERIAL', matIdx }); fileInputRef.current?.click(); }} 
-                                                className="p-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
+                                                className="min-w-[44px] min-h-[44px] lg:min-w-[38px] lg:min-h-[38px] flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 hover:text-indigo-600 active:scale-95 transition-all shadow-sm" 
                                                 type="button"
+                                                aria-label="Chọn ảnh sản phẩm"
                                             >
                                                 <ImageIcon className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[50px] py-2 px-1">
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar min-h-[56px] py-2 px-1">
                                         {(mat.images || []).map((img, i) => (
                                             <div key={i} className="relative group shrink-0">
                                                 <img 
@@ -989,10 +1024,11 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
                                                         nextMats[matIdx].images = imgs;
                                                         setFormData(prev => ({ ...prev, materials: nextMats }));
                                                     }}
-                                                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                                    className="absolute -top-1.5 -right-1.5 bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-lg"
                                                     type="button"
+                                                    aria-label="Xóa ảnh sản phẩm"
                                                 >
-                                                    <X className="w-2.5 h-2.5" />
+                                                    <X className="w-3 h-3" />
                                                 </button>
                                             </div>
                                         ))}
@@ -1026,10 +1062,25 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
       </div>
 
-      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 shadow-sm pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-        <button onClick={onCancel} className="h-[44px] px-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 rounded-xl transition-all border border-slate-200 dark:border-slate-700 text-[10px]" type="button">HỦY BỎ</button>
-        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="h-[44px] flex-1 bg-blue-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT BÁO CÁO IQC</span></button>
+      <div className="px-4 py-3 lg:pr-24 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 shadow-sm pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <button onClick={onCancel} className="min-h-[44px] lg:min-h-[40px] px-6 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-all border border-slate-200 dark:border-slate-700 text-[10px]" type="button">HỦY BỎ</button>
+        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="min-h-[44px] lg:min-h-[40px] flex-1 bg-blue-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-[10px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT BÁO CÁO IQC</span></button>
       </div>
+
+      <ConfirmDialog
+        open={deleteMatIdx !== null}
+        variant="danger"
+        title="Xóa hạng mục vật tư?"
+        message="Bạn có chắc chắn muốn xóa mục vật tư này khỏi báo cáo IQC không?"
+        confirmLabel="Xóa mục"
+        onConfirm={() => {
+          if (deleteMatIdx !== null) {
+            setFormData(prev => ({ ...prev, materials: prev.materials?.filter((_, i) => i !== deleteMatIdx) }));
+          }
+          setDeleteMatIdx(null);
+        }}
+        onCancel={() => setDeleteMatIdx(null)}
+      />
 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => { handleInputChange('po_number', data); setShowScanner(false); }} />}
       {editorState && <ImageEditorModal images={editorState.images} initialIndex={editorState.index} onClose={() => setEditorState(null)} onSave={onImageSave} readOnly={false}/>}

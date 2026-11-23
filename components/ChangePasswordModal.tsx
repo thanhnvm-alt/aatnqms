@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Lock, Eye, EyeOff, Loader2, LogOut, Check, AlertCircle } from 'lucide-react';
 import { changePassword } from '../services/apiService';
 import { User } from '../types';
@@ -70,15 +71,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+  const modalNode = (
+    <div className="fixed inset-0 z-[240] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
-          <div className="flex items-center gap-2.5 text-blue-600 dark:text-blue-400">
-            <Lock className="w-5 h-5 text-blue-500" />
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
+        <div className="flex items-center justify-between gap-2 px-4 py-2 sm:py-2.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 shrink-0">
+          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 min-w-0">
+            <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 shrink-0" />
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200 truncate">
               {forcing ? 'Yêu cầu đổi mật khẩu' : 'Đổi mật khẩu'}
             </h2>
           </div>
@@ -86,7 +87,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             <button 
               onClick={onClose}
               disabled={isLoading}
-              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
+              aria-label="Đóng"
+              className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all shrink-0 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -94,7 +96,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 flex flex-col gap-3.5 sm:gap-4">
           {forcing && (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-800 dark:text-amber-300 font-medium">
               Đây là lần đầu bạn đăng nhập hoặc mật khẩu của bạn đã được Admin đặt lại. Để bảo mật thông tin nội bộ QMS, vui lòng thiết lập mật khẩu mới trước khi tiếp tục.
@@ -121,12 +124,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Nhập mật khẩu hiện tại"
-                className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                className="w-full min-h-[44px] pl-3 pr-12 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
               />
               <button 
                 type="button"
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                aria-label={showCurrentPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                 tabIndex={-1}
               >
                 {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -147,12 +151,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Nhập mật khẩu mới"
-                className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                className="w-full min-h-[44px] pl-3 pr-12 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
               />
               <button 
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                aria-label={showNewPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"}
+                className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                 tabIndex={-1}
               >
                 {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -200,12 +205,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Xác nhận mật khẩu mới"
-                className="w-full pl-3 pr-10 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                className="w-full min-h-[44px] pl-3 pr-12 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
               />
               <button 
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"}
+                className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                 tabIndex={-1}
               >
                 {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -213,15 +219,16 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             </div>
           </div>
 
+          </div>
           {/* Actions Bar */}
-          <div className="flex justify-between items-center gap-3 pt-4 border-t border-slate-200 dark:border-slate-800 mt-2">
+          <div className="flex flex-wrap justify-between items-center gap-2 px-4 py-2 sm:py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900 shrink-0">
             <div>
               {forcing && onLogout && (
                 <button 
                   type="button"
                   onClick={onLogout}
                   disabled={isLoading}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all"
+                  className="min-h-[44px] sm:min-h-[36px] flex items-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all whitespace-nowrap shrink-0"
                 >
                   <LogOut className="w-4 h-4" />
                   Đăng xuất
@@ -234,7 +241,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                   type="button" 
                   onClick={onClose}
                   disabled={isLoading}
-                  className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors"
+                  className="min-h-[44px] sm:min-h-[36px] px-3.5 sm:px-4 py-2 sm:py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
                 >
                   Hủy
                 </button>
@@ -242,7 +249,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               <button 
                 type="submit" 
                 disabled={isLoading || !isPasswordValid || (newPassword !== confirmPassword)}
-                className={`flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-sm ${
+                className={`min-h-[44px] sm:min-h-[36px] flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-sm whitespace-nowrap shrink-0 ${
                   isLoading || !isPasswordValid || (newPassword !== confirmPassword)
                     ? 'bg-slate-300 dark:bg-slate-800 cursor-not-allowed text-slate-400 dark:text-slate-600'
                     : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
@@ -257,4 +264,6 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : modalNode;
 };

@@ -19,6 +19,7 @@ import { PersistenceService } from '../services/persistenceService';
 import { FQC_CHECKLIST_TEMPLATE } from '../constants';
 
 import { SignaturePad } from './SignaturePad';
+import { Combobox } from '../src/components/qms';
 
 const PRESET_ADDITIONAL_CRITERIA = [
   { category: 'Ngoại quan', label: 'Bề mặt sơn phẳng mịn, không bọt khí, bụi sơn' },
@@ -295,8 +296,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
             headcode: formData.headcode || foCode
         };
         const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
-        const hasIssues = itemsToSave.some((it: any) => it.status === CheckStatus.FAIL || it.status === CheckStatus.CONDITIONAL);
-        const finalStatus = hasIssues ? InspectionStatus.FLAGGED : InspectionStatus.PENDING;
+        const finalStatus = InspectionStatus.SUBMITTED;
 
         await onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
         clearDraft();
@@ -398,7 +398,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
               <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md border border-amber-200 p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2"><div className="bg-amber-100 p-1.5 rounded-lg"><AlertCircle className="w-4 h-4 text-amber-600" /></div>
                   <div className="flex flex-col"><span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">Phát hiện bản nháp</span><span className="text-[8px] text-slate-500 dark:text-slate-400 font-bold">Dữ liệu FQC chưa được lưu.</span></div></div>
-                  <div className="flex gap-2"><button onClick={clearDraft} className="px-2 py-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">Xóa</button><button onClick={recoverDraft} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all">Khôi phục</button></div>
+                  <div className="flex gap-2"><button type="button" onClick={clearDraft} className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest hover:text-red-500 rounded-xl">Xóa</button><button type="button" onClick={recoverDraft} className="min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all">Khôi phục</button></div>
               </div>
           </div>
       )}
@@ -436,76 +436,91 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 dark:bg-slate-800/50 pb-28">
         <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <div className="flex justify-between items-center border-b border-blue-50 pb-2 mb-1">
-                <h3 className="text-blue-800 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><Box className="w-3.5 h-3.5"/> I. THÔNG TIN SẢN PHẨM</h3>
-                <button onClick={() => setShowHistory(true)} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-full font-bold uppercase tracking-widest flex items-center gap-1 text-[9px]" type="button"><History className="w-3 h-3" /> Lịch sử ({historicalRecords.length})</button>
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-blue-50 dark:border-slate-800 pb-2 mb-1">
+                <h3 className="text-blue-800 dark:text-blue-400 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4 shrink-0"/> I. THÔNG TIN SẢN PHẨM</h3>
+                <button onClick={() => setShowHistory(true)} className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full font-bold uppercase tracking-widest flex items-center gap-1.5 text-[10px] tabular-nums" type="button"><History className="w-3.5 h-3.5" /> Lịch sử ({historicalRecords.length})</button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã NM</label><div className="relative flex items-center"><input value={searchCode || ''} onChange={e => { setSearchCode(e.target.value); setFormData(prev => ({ ...prev, ma_nha_may: e.target.value, headcode: e.target.value })); }} onBlur={() => lookupPlanInfo(searchCode || '')} onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode || '')} className="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 ring-blue-100 outline-none font-bold text-[11px]" placeholder="Quét/Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 p-1 text-slate-400" type="button"><QrCode className="w-3.5 h-3.5"/></button></div></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-slate-600 font-bold shadow-inner text-[11px]"/></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mã NM</label><div className="relative flex items-center"><input value={searchCode || ''} onChange={e => { setSearchCode(e.target.value); setFormData(prev => ({ ...prev, ma_nha_may: e.target.value, headcode: e.target.value })); }} onBlur={() => lookupPlanInfo(searchCode || '')} onKeyDown={e => e.key === 'Enter' && lookupPlanInfo(searchCode || '')} className="w-full pl-3 pr-12 py-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-1 ring-blue-100 outline-none font-bold text-xs min-h-[44px] lg:min-h-[38px]" placeholder="Quét/Nhập mã..."/><button onClick={() => setShowScanner(true)} className="absolute right-1 min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center text-slate-400 hover:text-blue-600 rounded-lg" type="button" aria-label="Quét QR"><QrCode className="w-4 h-4"/></button></div></div>
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mã dự án</label><input value={formData.ma_ct || ''} readOnly className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-bold shadow-inner text-xs min-h-[44px] lg:min-h-[38px]"/></div>
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tên công trình</label><input value={formData.ten_ct || ''} readOnly className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-bold shadow-inner text-xs min-h-[44px] lg:min-h-[38px]"/></div>
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Hạng mục</label><input value={formData.ten_hang_muc || ''} readOnly className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-bold shadow-inner text-xs min-h-[44px] lg:min-h-[38px]"/></div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">SL IPO</label><input value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md font-black text-blue-600 shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold shadow-inner text-[11px]"/></div>
-                <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-slate-600 font-bold shadow-inner uppercase text-[11px]"/></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">SL IPO</label><input value={formData.so_luong_ipo ?? ''} readOnly className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-black text-blue-600 dark:text-blue-400 shadow-inner text-xs min-h-[44px] lg:min-h-[38px] tabular-nums"/></div>
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">ĐVT</label><input value={formData.dvt || 'PCS'} readOnly className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 font-bold shadow-inner uppercase text-xs min-h-[44px] lg:min-h-[38px]"/></div>
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ngày kiểm</label><input type="date" value={formData.date || ''} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600 rounded-lg font-bold shadow-inner text-xs min-h-[44px] lg:min-h-[38px] tabular-nums"/></div>
+                <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">QC/QA</label><input value={formData.inspectorName || user.name || ''} readOnly className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 font-bold shadow-inner uppercase text-xs min-h-[44px] lg:min-h-[38px]"/></div>
             </div>
         </section>
 
         <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><ImageIcon className="w-3.5 h-3.5"/> II. HÌNH ÁNH HIỆN TRƯỜNG</h3>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="w-16 h-16 bg-blue-50 border-blue-200 rounded-lg flex flex-col items-center justify-center text-blue-600 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Camera</span></button>
-                <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-0.5"/><span className="font-bold uppercase text-[8px]">Thiết bị</span></button>
+            <h3 className="text-blue-700 dark:text-blue-400 border-b border-blue-50 dark:border-slate-800 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><ImageIcon className="w-4 h-4"/> II. HÌNH ẢNH HIỆN TRƯỜNG</h3>
+            <div className="flex gap-2.5 overflow-x-auto py-1.5 pr-1.5 no-scrollbar">
+                <button onClick={() => { setActiveUploadId('MAIN'); cameraInputRef.current?.click(); }} className="min-w-[68px] min-h-[68px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 transition-all active:scale-95" type="button"><Camera className="w-5 h-5 mb-1"/><span className="font-bold uppercase text-[9px]">Camera</span></button>
+                <button onClick={() => { setActiveUploadId('MAIN'); fileInputRef.current?.click(); }} className="min-w-[68px] min-h-[68px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 shrink-0 transition-all active:scale-95" type="button"><ImageIcon className="w-5 h-5 mb-1"/><span className="font-bold uppercase text-[9px]">Thiết bị</span></button>
                 {formData.images?.map((img, idx) => (
-                    <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 group cursor-pointer" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
-                        <ProxyImage src={img} alt="Ảnh" className="w-full h-full object-cover" />
-                        <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-full md:opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+                    <div key={idx} className="relative w-16 h-16 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 group">
+                        <button type="button" className="w-full h-full rounded-xl overflow-hidden block cursor-zoom-in" onClick={() => handleEditImage('MAIN', formData.images || [], idx)}>
+                            <ProxyImage src={img} alt="Ảnh hiện trường" className="w-full h-full object-cover" />
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({...formData, images: formData.images?.filter((_, i) => i !== idx)}); }} className="absolute -top-1.5 -right-1.5 w-6 h-6 flex items-center justify-center bg-red-500 text-white rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm" aria-label="Xóa ảnh"><X className="w-3 h-3"/></button>
                     </div>
                 ))}
             </div>
         </section>
 
         <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-            <h3 className="text-blue-700 border-b border-blue-50 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-[11px]"><MapPin className="w-3.5 h-3.5"/> III. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
-            <div className="grid grid-cols-2 gap-2">
-                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Xưởng sản xuất</label><select value={formData.workshop || ''} onChange={e => handleInputChange('workshop', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn xưởng --</option>{workshops.map(ws => <option key={ws.code} value={ws.code}>{ws.name}</option>)}</select></div>
-                 <div className="space-y-0.5"><label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Công đoạn *</label><select value={formData.inspectionStage || ''} onChange={e => handleInputChange('inspectionStage', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md bg-white font-bold outline-none text-[11px]"><option value="">-- Chọn giai đoạn --</option>{availableStages.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            <h3 className="text-blue-700 dark:text-blue-400 border-b border-blue-50 dark:border-slate-800 pb-2 mb-1 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><MapPin className="w-4 h-4"/> III. ĐỊA ĐIỂM & SỐ LƯỢNG</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                 <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Xưởng sản xuất</label>
+                    <Combobox
+                        value={formData.workshop || null}
+                        onChange={val => handleInputChange('workshop', val || '')}
+                        placeholder="-- Chọn xưởng --"
+                        ariaLabel="Xưởng sản xuất"
+                        options={workshops.map(ws => ({ value: ws.code, label: ws.name }))}
+                    />
+                 </div>
+                 <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Công đoạn *</label>
+                    <Combobox
+                        value={formData.inspectionStage || null}
+                        onChange={val => handleInputChange('inspectionStage', val || '')}
+                        placeholder="-- Chọn giai đoạn --"
+                        disabled={!formData.workshop}
+                        ariaLabel="Công đoạn"
+                        options={availableStages.map(s => ({ value: s, label: s }))}
+                    />
+                 </div>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 space-y-3">
-                <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1"><label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center block">SL Kiểm tra</label><input onKeyDown={(e) => { 
-    
-    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center block">SL Kiểm tra</label><input onKeyDown={(e) => { 
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={formData.inspectedQuantity ?? ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-slate-200 rounded-md font-bold text-[11px] text-center bg-white shadow-sm" /></div>
-                    <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Đạt</label><span className="text-[8px] font-bold text-green-700">{rates.passRate}%</span></div><input onKeyDown={(e) => { 
-    
-    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+}} type="text" inputMode="decimal" value={formData.inspectedQuantity ?? ''} onChange={e => handleInputChange('inspectedQuantity', e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-xs min-h-[44px] lg:min-h-[38px] text-center bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm tabular-nums" /></div>
+                    <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Đạt</label><span className="text-[9px] font-bold text-green-700 dark:text-green-400 tabular-nums">{rates.passRate}%</span></div><input onKeyDown={(e) => { 
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={formData.passedQuantity ?? ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-green-200 rounded-md font-bold text-[11px] text-center bg-white" /></div>
-                    <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[9px] font-bold text-red-600 uppercase tracking-wider">Lỗi</label><span className="text-[8px] font-bold text-red-700">{rates.defectRate}%</span></div><input onKeyDown={(e) => { 
-    
-    // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers
+}} type="text" inputMode="decimal" value={formData.passedQuantity ?? ''} onChange={e => handleInputChange('passedQuantity', e.target.value)} className="w-full px-3 py-2 border border-green-300 dark:border-green-700 rounded-lg font-bold text-xs min-h-[44px] lg:min-h-[38px] text-center bg-white dark:bg-slate-900 text-green-700 dark:text-green-400 tabular-nums" /></div>
+                    <div className="space-y-1"><div className="flex justify-between items-center px-1"><label className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">Lỗi</label><span className="text-[9px] font-bold text-red-700 dark:text-red-400 tabular-nums">{rates.defectRate}%</span></div><input onKeyDown={(e) => { 
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={formData.failedQuantity ?? ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-2 py-1.5 border border-red-200 rounded-md font-bold text-[11px] text-center bg-white" /></div>
+}} type="text" inputMode="decimal" value={formData.failedQuantity ?? ''} onChange={e => handleInputChange('failedQuantity', e.target.value)} className="w-full px-3 py-2 border border-red-300 dark:border-red-700 rounded-lg font-bold text-xs min-h-[44px] lg:min-h-[38px] text-center bg-white dark:bg-slate-900 text-red-700 dark:text-red-400 tabular-nums" /></div>
                 </div>
             </div>
         </section>
 
         <div className="space-y-2">
-            <div className="flex justify-between items-center border-b border-slate-300 pb-2 px-1">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 text-[11px]"><LayoutList className="w-3.5 h-3.5 text-blue-600"/> IV. NỘI DUNG KIỂM TRA FQC ({visibleItems.length})</h3>
-                <button onClick={() => setShowAddCriteriaModal(true)} className="px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 border border-blue-200 transition-all duration-200 active:scale-95" type="button">
-                    <Plus className="w-3.5 h-3.5 text-blue-600" /> Thêm tiêu chí
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-300 dark:border-slate-700 pb-2 px-1">
+                <h3 className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2 text-xs"><LayoutList className="w-4 h-4 text-blue-600"/> IV. NỘI DUNG KIỂM TRA FQC ({visibleItems.length})</h3>
+                <button onClick={() => setShowAddCriteriaModal(true)} className="min-h-[44px] lg:min-h-[36px] px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 border border-blue-200 dark:border-blue-800 transition-all duration-200 active:scale-95" type="button">
+                    <Plus className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Thêm tiêu chí
                 </button>
             </div>
             {formData.inspectionStage ? (
@@ -514,11 +529,11 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                         visibleItems.map((item, originalIndex) => {
                             const actualIndex = formData.items?.findIndex(i => i.id === item.id) ?? -1;
                             return (
-                                <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50' : 'border-slate-200 dark:border-slate-700'}`}>
-                                    <div className="flex justify-between items-start mb-2 border-b border-slate-50 pb-2"><div className="flex-1"><span className="bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 tracking-widest">{item.category}</span><p className="w-full font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-tight mt-1">{item.label}</p></div><button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="p-1 text-slate-300 hover:text-red-500" type="button"><Trash2 className="w-3.5 h-3.5"/></button></div>
-                                    <div className="flex flex-wrap gap-2 items-center"><div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg gap-0.5 border border-slate-200 w-fit">{[CheckStatus.PASS, CheckStatus.FAIL].map(st => (<button key={st} onClick={() => handleItemChange(actualIndex, 'status', st)} className={`px-2 py-1.5 rounded-md font-bold uppercase transition-all text-[9px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-slate-400 hover:bg-white'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : 'Hỏng'}</button>))}</div><div className="flex items-center gap-1 ml-auto"><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }}><ImageIcon className="w-4 h-4"/></div><div className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-400 cursor-pointer" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }}><Camera className="w-4 h-4"/></div></div></div>
-                                    <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndex, 'notes', e.target.value)} className="w-full mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg font-medium outline-none h-12 shadow-inner text-[11px]" placeholder="Ghi chú kỹ thuật..."/>
-                                    {item.images && item.images.length > 0 && (<div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1">{item.images.map((im, i) => (<div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 rounded-lg overflow-hidden group cursor-pointer" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}><ProxyImage src={im} alt="Ảnh" className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndex, 'images', newImgs); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5" type="button"><X className="w-2.5 h-2.5"/></button></div>))}</div>)}
+                                <div key={item.id} className={`bg-white dark:bg-slate-900 rounded-xl p-3 border shadow-sm ${item.status === CheckStatus.FAIL ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    <div className="flex justify-between items-start mb-2 border-b border-slate-100 dark:border-slate-800 pb-2 gap-2"><div className="flex-1"><span className="bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 tracking-widest">{item.category}</span><p className="w-full font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-tight mt-1">{item.label}</p></div><button onClick={() => setFormData({...formData, items: formData.items?.filter(it => it.id !== item.id)})} className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center text-slate-400 hover:text-red-500 rounded-lg" type="button" aria-label="Xóa tiêu chí"><Trash2 className="w-4 h-4"/></button></div>
+                                    <div className="flex flex-wrap gap-2 items-center"><div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg gap-1 border border-slate-200 dark:border-slate-700 w-fit">{[CheckStatus.PASS, CheckStatus.FAIL].map(st => (<button key={st} onClick={() => handleItemChange(actualIndex, 'status', st)} className={`min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 rounded-md font-bold uppercase transition-all text-[10px] ${item.status === st ? (st === CheckStatus.PASS ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700'}`} type="button">{st === CheckStatus.PASS ? 'Đạt' : 'Hỏng'}</button>))}</div><div className="flex items-center gap-1.5 ml-auto"><button type="button" className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600" onClick={() => { setActiveUploadId(item.id); fileInputRef.current?.click(); }} aria-label="Chọn ảnh"><ImageIcon className="w-4 h-4"/></button><button type="button" className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600" onClick={() => { setActiveUploadId(item.id); cameraInputRef.current?.click(); }} aria-label="Chụp ảnh"><Camera className="w-4 h-4"/></button></div></div>
+                                    <textarea value={item.notes || ''} onChange={e => handleItemChange(actualIndex, 'notes', e.target.value)} className="w-full mt-2 p-2.5 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg font-medium outline-none min-h-[52px] shadow-inner text-xs" placeholder="Ghi chú kỹ thuật..."/>
+                                    {item.images && item.images.length > 0 && (<div className="flex gap-2 mt-2 overflow-x-auto no-scrollbar py-1.5 pr-1.5">{item.images.map((im, i) => (<div key={i} className="relative w-12 h-12 shrink-0 border border-slate-200 dark:border-slate-700 rounded-lg group"><button type="button" className="w-full h-full rounded-lg overflow-hidden block cursor-zoom-in" onClick={() => handleEditImage('ITEM', item.images || [], i, item.id)}><ProxyImage src={im} alt="Ảnh tiêu chí" className="w-full h-full object-cover" /></button><button onClick={(e) => { e.stopPropagation(); const newImgs = item.images?.filter((_, idx) => idx !== i); handleItemChange(actualIndex, 'images', newImgs); }} className="absolute -top-1.5 -right-1.5 w-6 h-6 flex items-center justify-center bg-red-500 text-white rounded-full opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shadow-sm" type="button" aria-label="Xóa ảnh"><X className="w-3 h-3"/></button></div>))}</div>)}
                                 </div>
                             );
                         })
@@ -541,9 +556,9 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
         </section>
       </div>
 
-      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-white flex items-center justify-between gap-4 sticky bottom-0 z-40 shadow-lg">
-        <button onClick={onCancel} className="px-6 py-2 text-slate-500 font-bold uppercase tracking-widest hover:bg-slate-50 rounded-xl transition-all border border-slate-200 text-[10px]" type="button">Hủy</button>
-        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="flex-1 bg-blue-700 text-white font-black uppercase tracking-[0.2em] rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[10px] py-3">
+      <div className="px-4 py-3 lg:pr-24 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 sticky bottom-0 z-40 shadow-lg pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+        <button onClick={onCancel} className="min-h-[44px] lg:min-h-[40px] px-5 py-2 text-slate-600 dark:text-slate-300 font-bold uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-700 text-[11px]" type="button">Hủy</button>
+        <button onClick={handleSubmit} disabled={isSaving || isProcessingImages} className="min-h-[44px] lg:min-h-[40px] flex-1 bg-blue-700 text-white font-black uppercase tracking-[0.15em] rounded-xl shadow-lg hover:bg-blue-800 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[11px] py-2.5">
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
             <span>GỬI DUYỆT FQC</span>
         </button>
@@ -552,13 +567,13 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
       {showScanner && <QRScannerModal onClose={() => setShowScanner(false)} onScan={data => lookupPlanInfo(data)} />}
 
       {showAddCriteriaModal && (
-        <div className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200" style={{ fontFamily: 'var(--font-sans)' }}>
+        <div className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200" style={{ fontFamily: 'var(--font-sans)' }}>
             {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/20">
-              <div className="flex items-center gap-2">
-                <LayoutList className="w-4 h-4 text-blue-600 animate-pulse" />
-                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">CHỌN TIÊU CHÍ CẦN KIỂM TRÊN FQC</h4>
+            <div className="px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center gap-2 bg-slate-50/70 dark:bg-slate-950/20 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <LayoutList className="w-4 h-4 text-blue-600 animate-pulse shrink-0" />
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider truncate">CHỌN TIÊU CHÍ CẦN KIỂM TRÊN FQC</h4>
               </div>
               <button 
                 onClick={() => {
@@ -566,33 +581,34 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                   setCriteriaSearch('');
                   setCustomLabel('');
                 }} 
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all shrink-0 cursor-pointer"
                 type="button"
+                aria-label="Đóng"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Content area */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-4 no-scrollbar">
               {/* Search preset criteria */}
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
-                  <Search className="w-3.5 h-3.5" />
+                  <Search className="w-4 h-4" />
                 </span>
                 <input
                   type="text"
                   placeholder="Tìm kiếm tiêu chuẩn có sẵn..."
                   value={criteriaSearch}
                   onChange={(e) => setCriteriaSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl font-medium outline-none text-xs focus:ring-1 ring-blue-100 bg-slate-50 dark:bg-slate-950 focus:bg-white"
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl font-medium outline-none text-xs min-h-[44px] lg:min-h-[38px] focus:ring-1 ring-blue-100 bg-slate-50 dark:bg-slate-950 focus:bg-white dark:text-slate-100"
                 />
               </div>
 
               {/* Preset checklist list */}
               <div className="space-y-2">
-                <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Tiêu chí khuyên dùng</p>
-                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 no-scrollbar border border-slate-100 dark:border-slate-800 rounded-xl p-2 bg-slate-50/30">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Tiêu chí khuyên dùng</p>
+                <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-1 no-scrollbar border border-slate-100 dark:border-slate-800 rounded-xl p-2 bg-slate-50/30">
                   {PRESET_ADDITIONAL_CRITERIA.filter(item => 
                     item.label.toLowerCase().includes(criteriaSearch.toLowerCase()) || 
                     item.category.toLowerCase().includes(criteriaSearch.toLowerCase())
@@ -601,14 +617,14 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                     return (
                       <div 
                         key={idx} 
-                        className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all ${
+                        className={`flex items-center justify-between gap-2 p-2.5 rounded-lg border text-xs transition-all ${
                           isAdded 
                             ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 opacity-75' 
                             : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
-                        <div className="flex-1 min-w-0 pr-3">
-                          <span className="inline-block bg-slate-100 dark:bg-slate-800 text-[8px] font-black uppercase text-slate-500 px-1.5 py-0.5 rounded mr-2 border border-slate-200/50 tracking-wider">
+                        <div className="flex-1 min-w-0 pr-2">
+                          <span className="inline-block bg-slate-100 dark:bg-slate-800 text-[9px] font-black uppercase text-slate-500 px-1.5 py-0.5 rounded mr-2 border border-slate-200/50 tracking-wider">
                             {item.category}
                           </span>
                           <span className="font-bold text-slate-700 dark:text-slate-300">
@@ -616,7 +632,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                           </span>
                         </div>
                         {isAdded ? (
-                          <span className="text-[8px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider bg-blue-100/50 px-2 py-0.5 rounded">Đã chọn</span>
+                          <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider bg-blue-100/50 px-2.5 py-1.5 rounded-lg shrink-0">Đã chọn</span>
                         ) : (
                           <button
                             onClick={() => {
@@ -634,10 +650,10 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                                 items: [...(prev.items || []), newItem]
                               }));
                             }}
-                            className="p-1 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all"
+                            className="min-h-[44px] lg:min-h-[32px] px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all shrink-0"
                             type="button"
                           >
-                            <Plus className="w-3 h-3" /> Thêm
+                            <Plus className="w-3.5 h-3.5" /> Thêm
                           </button>
                         )}
                       </div>
@@ -647,42 +663,44 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                     item.label.toLowerCase().includes(criteriaSearch.toLowerCase()) || 
                     item.category.toLowerCase().includes(criteriaSearch.toLowerCase())
                   ).length === 0 && (
-                    <p className="text-center py-4 text-slate-400 text-[11px] font-bold">Không tìm thấy tiêu chí phù hợp</p>
+                    <p className="text-center py-4 text-slate-400 text-xs font-bold">Không tìm thấy tiêu chí phù hợp</p>
                   )}
                 </div>
               </div>
 
               {/* Custom criteria input */}
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
-                <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-500" /> Tự nhập tiêu chí mới
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Tự nhập tiêu chí mới
                 </p>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-1 space-y-0.5">
-                    <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Phân loại</label>
-                    <select
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-1 space-y-1">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Phân loại</label>
+                    <Combobox
                       value={customCategory}
-                      onChange={(e) => setCustomCategory(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 font-bold outline-none text-[11px]"
-                    >
-                      <option value="Ngoại quan">Ngoại quan</option>
-                      <option value="Kích thước">Kích thước</option>
-                      <option value="Kết cấu">Kết cấu</option>
-                      <option value="Hoàn thiện">Hoàn thiện</option>
-                      <option value="Chức năng">Chức năng</option>
-                      <option value="Đóng gói">Đóng gói</option>
-                      <option value="Hồ sơ">Hồ sơ</option>
-                    </select>
+                      onChange={(val) => setCustomCategory(val || 'Ngoại quan')}
+                      allowClear={false}
+                      ariaLabel="Phân loại tiêu chí"
+                      options={[
+                        { value: 'Ngoại quan', label: 'Ngoại quan' },
+                        { value: 'Kích thước', label: 'Kích thước' },
+                        { value: 'Kết cấu', label: 'Kết cấu' },
+                        { value: 'Hoàn thiện', label: 'Hoàn thiện' },
+                        { value: 'Chức năng', label: 'Chức năng' },
+                        { value: 'Đóng gói', label: 'Đóng gói' },
+                        { value: 'Hồ sơ', label: 'Hồ sơ' }
+                      ]}
+                    />
                   </div>
-                  <div className="col-span-2 space-y-0.5">
-                    <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Nội dung tiêu chuẩn cần kiểm</label>
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Nội dung tiêu chuẩn cần kiểm</label>
                     <div className="flex gap-1.5">
                       <input
                         type="text"
                         placeholder="VD: Kiểm tra độ đồng màu chân bàn..."
                         value={customLabel}
                         onChange={(e) => setCustomLabel(e.target.value)}
-                        className="flex-1 px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg font-bold outline-none text-[11px]"
+                        className="flex-1 min-w-0 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 font-bold outline-none text-xs min-h-[44px] lg:min-h-[36px]"
                       />
                       <button
                         onClick={() => {
@@ -705,7 +723,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
                           }));
                           setCustomLabel('');
                         }}
-                        className="px-3 bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+                        className="min-h-[44px] lg:min-h-[36px] px-3.5 bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0"
                         type="button"
                       >
                         Thêm
@@ -717,14 +735,14 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 flex justify-end">
+            <div className="px-4 py-2 sm:py-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/20 flex justify-end shrink-0">
               <button
                 onClick={() => {
                   setShowAddCriteriaModal(false);
                   setCriteriaSearch('');
                   setCustomLabel('');
                 }}
-                className="px-5 py-2 bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                className="min-h-[44px] sm:min-h-[36px] px-5 py-2 sm:py-1.5 bg-slate-900 hover:bg-black text-white dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all whitespace-nowrap shrink-0"
                 type="button"
               >
                 Xong

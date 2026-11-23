@@ -955,10 +955,14 @@ export async function runMigrations() {
             "documents_json" TEXT DEFAULT '{}',
             "created_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
             "updated_at" BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
-            "version" INT DEFAULT 1
+            "version" INT DEFAULT 1,
+            "deleted_at" BIGINT
         );
       `);
+      await addColumn('subcontractor_bookings', 'deleted_at', 'BIGINT');
       await addColumn('subcontractor_bookings', 'documents_json', "TEXT DEFAULT '{}'");
+      await addColumn('subcontractor_bookings', 'sqc_type', "TEXT DEFAULT 'SQC_BTP'");
+      await addColumn('subcontractor_bookings', 'data', "JSONB DEFAULT '{}'::jsonb");
       await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."subcontractor_inspections" (
             "id" TEXT PRIMARY KEY,
@@ -997,6 +1001,95 @@ export async function runMigrations() {
     } catch (subErr: any) {
       console.warn(`⚠️ Could not create subcontractor booking tables:`, subErr.message);
       migrationLogs.push(`⚠️ Could not create subcontractor booking tables: ${subErr.message}`);
+    }
+
+    // --- PHASE 2 SOFT DELETE (deleted_at) & OPTIMISTIC LOCKING (version) COLUMNS ---
+    const softDeleteTables = [
+      'inspections',
+      'defect_library',
+      'floor_plans',
+      'workshops',
+      'qms_roles',
+      'ipo_sample_history',
+      'departments',
+      'divisions',
+      'teams',
+      'tool_catalogs',
+      'tool_assets',
+      'subcontractor_bookings',
+    ];
+    for (const tbl of softDeleteTables) {
+      await addColumn(tbl, 'deleted_at', 'BIGINT');
+    }
+
+    const FORM_TABLES = [
+      'forms_iqc',
+      'forms_sqc_vt',
+      'forms_sqc_btp',
+      'forms_sqc_tp',
+      'forms_sqc_mat',
+      'forms_fsr',
+      'forms_step',
+      'forms_fqc',
+      'forms_spr',
+      'forms_site',
+    ];
+    const versionedTables = [
+      'inspections',
+      'ncrs',
+      'projects',
+      'suppliers',
+      'users',
+      'tool_catalogs',
+      'tool_assets',
+      ...FORM_TABLES,
+    ];
+    for (const tbl of versionedTables) {
+      await addColumn(tbl, 'version', 'INT DEFAULT 1');
+    }
+
+    // --- PHASE 3: DEDICATED TRACEABILITY INDEX TABLE (Mã NM / PO / PR) ---
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."inspection_traceability_index" (
+          "id" TEXT PRIMARY KEY,
+          "inspection_id" TEXT NOT NULL,
+          "code_type" TEXT NOT NULL,
+          "code_value" TEXT NOT NULL,
+          "code_norm" TEXT NOT NULL,
+          "inspection_type" TEXT,
+          "status" TEXT,
+          "ma_ct" TEXT,
+          "ten_ct" TEXT,
+          "ma_nha_may" TEXT,
+          "headcode" TEXT,
+          "po_number" TEXT,
+          "pr_number" TEXT,
+          "ten_hang_muc" TEXT,
+          "workshop" TEXT,
+          "supplier" TEXT,
+          "inspector_name" TEXT,
+          "inspection_date" TEXT,
+          "score" NUMERIC,
+          "inspected_qty" NUMERIC,
+          "passed_qty" NUMERIC,
+          "failed_qty" NUMERIC,
+          "summary" TEXT,
+          "booking_id" TEXT,
+          "booking_code" TEXT,
+          "created_at" BIGINT,
+          "updated_at" BIGINT,
+          "deleted_at" BIGINT
+        );
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_trace_idx_code_norm" ON "${schema}"."inspection_traceability_index" ("code_norm", "deleted_at");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_trace_idx_insp_id" ON "${schema}"."inspection_traceability_index" ("inspection_id", "deleted_at");`);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_trace_idx_type_norm" ON "${schema}"."inspection_traceability_index" ("code_type", "code_norm");`);
+
+      migrationLogs.push(`✅ Ensured inspection_traceability_index & B-Tree indexes exist in ${schema}`);
+    } catch (traceErr: any) {
+      console.warn(`⚠️ Could not setup inspection_traceability_index:`, traceErr?.message);
+      migrationLogs.push(`⚠️ inspection_traceability_index setup warning: ${traceErr?.message}`);
     }
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);

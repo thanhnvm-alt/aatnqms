@@ -2,6 +2,7 @@ import { getProxyImageUrl } from '../src/utils';
 
 import React from 'react';
 import { ViewState, User, Role, ModuleId, hasPermission } from '../types';
+import { canViewM03 } from '../src/utils/m03Rbac';
 import { 
   Briefcase, 
   FileSpreadsheet, 
@@ -48,12 +49,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
     { id: 'SETTINGS', label: 'Cài Đặt', icon: Settings },
     { id: 'TRASH', label: 'Thùng Rác', icon: Trash2 },
   ].filter(item => {
-    if (user.role === 'ADMIN') return true;
     if (item.id === 'SUBCONTRACTOR_BOOKING') {
-      if (user.allowedModules && user.allowedModules.length > 0) {
-        return user.allowedModules.includes('SUBCONTRACTOR_BOOKING') || hasPermission(user, rolesList, 'SUBCONTRACTOR_BOOKING', 'VIEW');
-      }
-      return true;
+      return canViewM03(user, rolesList);
     }
     return hasPermission(user, rolesList, item.id as ModuleId, 'VIEW');
   });
@@ -87,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
                 <span className="text-slate-300 text-[10px] font-bold uppercase tracking-wider leading-none">AA Corporation</span>
               </div>
             </div>
-            <button onClick={() => setCollapsed(true)} className="absolute right-2 p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300">
+            <button onClick={() => setCollapsed(true)} className="absolute right-2 min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] flex items-center justify-center p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-slate-200" title="Thu gọn thanh bên">
               <PanelLeftClose className="w-4 h-4" />
             </button>
           </>
@@ -105,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
       </div>
 
       {collapsed && (
-        <button onClick={() => setCollapsed(false)} className="p-3 mx-auto mb-6 hover:bg-slate-800 rounded-xl transition-colors text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-300">
+        <button onClick={() => setCollapsed(false)} className="min-w-[44px] min-h-[44px] flex items-center justify-center p-3 mx-auto mb-6 hover:bg-slate-800 rounded-xl transition-colors text-slate-400 hover:text-slate-200" title="Mở rộng thanh bên">
           <PanelLeft className="w-5 h-5" />
         </button>
       )}
@@ -119,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all group relative font-medium text-[14px] ${
+              className={`w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group relative font-medium text-[14px] ${
                 isActive 
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30' 
                 : 'hover:bg-slate-800 hover:text-slate-200 text-slate-400 dark:text-slate-500'
@@ -150,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ view, currentModule, onNavigat
         
         <button 
             onClick={onLogout}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-red-500/10 text-slate-400 dark:text-slate-500 hover:text-red-400 transition-all group ${collapsed ? 'justify-center' : ''}`}
+            className={`w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-500/10 text-slate-400 dark:text-slate-500 hover:text-red-400 transition-all group ${collapsed ? 'justify-center' : ''}`}
         >
             <LogOut className="w-5 h-5 shrink-0 group-hover:stroke-red-400" />
             {!collapsed && <span className="text-[14px] font-medium whitespace-nowrap">Đăng xuất</span>}

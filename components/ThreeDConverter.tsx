@@ -181,21 +181,21 @@ export const ThreeDConverter: React.FC = () => {
                     <div className="grid grid-cols-3 gap-2">
                         <button 
                             onClick={() => setMode('STANDARD')}
-                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'STANDARD' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}
+                            className={`min-h-[56px] p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'STANDARD' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300'}`}
                         >
                             <Cuboid className="w-5 h-5"/>
                             <span>Mặc định</span>
                         </button>
                         <button 
                             onClick={() => setMode('ROTATION')}
-                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'ROTATION' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}
+                            className={`min-h-[56px] p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'ROTATION' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300'}`}
                         >
                             <Rotate3D className="w-5 h-5"/>
                             <span>Xoay 360°</span>
                         </button>
                         <button 
                             onClick={() => setMode('EXPLODED')}
-                            className={`p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'EXPLODED' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 dark:text-slate-500 hover:border-blue-300'}`}
+                            className={`min-h-[56px] p-3 rounded-lg border text-xs sm:text-sm font-medium flex flex-col items-center justify-center gap-2 transition-all ${mode === 'EXPLODED' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 ring-1 ring-blue-500' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300'}`}
                         >
                             <Layers className="w-5 h-5"/>
                             <span>Phân tách</span>
@@ -204,19 +204,19 @@ export const ThreeDConverter: React.FC = () => {
                 </div>
 
                 <div>
-                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase ml-1 block mb-1">Mô tả chi tiết (Optional)</label>
+                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase ml-1 block mb-1">Mô tả chi tiết (Optional)</label>
                    <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Ví dụ: Ghế gỗ sồi, nệm vải màu xám, chân kim loại đen..."
-                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20 bg-slate-50 dark:bg-slate-800/50"
+                    className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none min-h-[88px] bg-slate-50 dark:bg-slate-800/50"
                    />
                 </div>
                 
                 <Button 
                   onClick={handleGenerate} 
                   disabled={!inputData || isLoading}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
+                  className="w-full min-h-[44px] py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
                 >
                   {isLoading ? (
                     <>

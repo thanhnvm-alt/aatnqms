@@ -1,224 +1,95 @@
+export type Role = string;
+export type UserRole = Role;
 
-export enum CheckStatus {
-  PENDING = 'PENDING',
-  PASS = 'Đạt',
-  FAIL = 'Hỏng', 
-  CONDITIONAL = 'Có điều kiện'
-}
-
-export enum InspectionStatus {
-  DRAFT = 'draft',
-  SUBMITTED = 'submitted',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  VERIFIED = 'verified',
-  LOCKED = 'locked',
-  PENDING = 'pending',
-  COMPLETED = 'completed',
-  FLAGGED = 'flagged'
-}
-
-export enum Priority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH'
-}
-
-export type ViewState = 'DASHBOARD' | 'LIST' | 'FORM' | 'DETAIL' | 'PLAN' | 'PLAN_DETAIL' | 'SETTINGS' | 'PROJECTS' | 'PROJECT_DETAIL' | 'CONVERT_3D' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'DEFECT_DETAIL' | 'DEFECT_LIST' | 'SUPPLIERS' | 'SUPPLIER_DETAIL' | 'IPO' | 'MATERIALS' | 'TRASH' | 'TOOLS' | 'SUBCONTRACTOR_BOOKING';
-
-export type ModuleId = 
-  | 'IQC' | 'SQC_MAT' | 'SQC_VT' | 'SQC_BTP' | 'SQC_TP' | 'PQC' | 'FSR' | 'STEP' | 'FQC' | 'SPR' | 'SITE' | 'PROJECTS' | 'OEM' | 'SETTINGS' | 'CONVERT_3D' | 'DEFECTS' | 'SUPPLIERS' | 'TOOLS'
-  | 'DASHBOARD' | 'LIST' | 'NCR_LIST' | 'DEFECT_LIBRARY' | 'MATERIALS' | 'IPO' | 'TRASH' | 'SUBCONTRACTOR_BOOKING'
-  | 'SETTINGS_TEMPLATE' | 'SETTINGS_USERS' | 'SETTINGS_ROLES' | 'SETTINGS_WORKSHOPS' | 'SETTINGS_PROFILE' | 'SETTINGS_DEPARTMENTS' | 'SYSTEM_ADMIN';
-
-export interface SubcontractorBookingItem {
+export interface RoleObject {
   id: string;
-  itemName: string;
-  itemCode?: string;
-  quantity: number;
-  unit: string;
-  specifications?: string;
-  isInspected?: boolean;
-}
-
-export interface SubcontractorBookingDocuments {
-  materialSpecUrl?: string;     // Spec vật tư
-  approvedSampleUrl?: string;   // Mẫu duyệt
-  shopdrawingUrl?: string;      // Bản vẽ
-  qualityAgreementUrl?: string; // Biên bản thống nhất chất lượng
-}
-
-export type SQCType = 'SQC_VT' | 'SQC_BTP' | 'SQC_TP';
-
-export interface SQCTypeOption {
-  id: SQCType;
-  code: string;
-  title: string;
-  shortDesc: string;
-  fullDesc: string;
-  badgeBg: string;
-  badgeText: string;
-  badgeBorder: string;
-  accentColor: string;
-}
-
-export const SQC_TYPES_CONFIG: SQCTypeOption[] = [
-  {
-    id: 'SQC_VT',
-    code: 'SQC-VT',
-    title: 'SQC - Vật tư ngoài',
-    shortDesc: 'Vật tư / phụ kiện gia công ngoài',
-    fullDesc: 'Kiểm tra quy cách vật tư, chứng chỉ xuất xưởng, độ ẩm, độ dày, bề mặt nguyên vật liệu đầu vào.',
-    badgeBg: 'bg-emerald-50 dark:bg-emerald-950/40',
-    badgeText: 'text-emerald-700 dark:text-emerald-300',
-    badgeBorder: 'border-emerald-200 dark:border-emerald-800',
-    accentColor: 'emerald'
-  },
-  {
-    id: 'SQC_BTP',
-    code: 'SQC-BTP',
-    title: 'SQC - Bán Thành Phẩm',
-    shortDesc: 'Khung thô, phôi mộc, chi tiết gia công',
-    fullDesc: 'Kiểm tra mộng ghép, dán cạnh, chà nhám, kết cấu khung thô, kích thước hình học trước khi sơn/hoàn thiện.',
-    badgeBg: 'bg-blue-50 dark:bg-blue-950/40',
-    badgeText: 'text-blue-700 dark:text-blue-300',
-    badgeBorder: 'border-blue-200 dark:border-blue-800',
-    accentColor: 'blue'
-  },
-  {
-    id: 'SQC_TP',
-    code: 'SQC-TP',
-    title: 'SQC - Thành phẩm',
-    shortDesc: 'Sản phẩm hoàn thiện, đóng gói chuẩn bị giao',
-    fullDesc: 'Kiểm tra màng sơn, phụ kiện lắp đặt, độ bóng, màu sắc theo mẫu duyệt, bao che đóng gói giao hàng.',
-    badgeBg: 'bg-purple-50 dark:bg-purple-950/40',
-    badgeText: 'text-purple-700 dark:text-purple-300',
-    badgeBorder: 'border-purple-200 dark:border-purple-800',
-    accentColor: 'purple'
-  }
-];
-
-export interface SubcontractorBooking {
-  id: string;
-  bookingCode: string;
-  sqcType?: SQCType;
-  poId?: string;
-  poNumber: string;
-  supplierId?: string;
-  supplierName: string;
-  requesterId?: string;
-  requesterName: string;
-  locationAddress: string;
-  contactPerson: string;
-  contactPhone: string;
-  requestedDate: number;
-  assignedQcId?: string;
-  assignedQcName?: string;
-  status: 'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  notes?: string;
-  items: SubcontractorBookingItem[];
-  documents?: SubcontractorBookingDocuments;
-  isUrgent?: boolean;
-  createdAt: number;
-  updatedAt?: number;
-  version?: number;
-}
-
-export interface SubcontractorInspection {
-  id: string;
-  bookingId: string;
-  bookingCode: string;
-  qcUserId: string;
-  qcUserName: string;
-  inspectionResult: 'PASS' | 'REJECT' | 'CONDITIONAL_PASS';
-  vendorRepresentativeName: string;
-  vendorSignatureUrl?: string;
-  qcSignatureUrl?: string;
-  inspectionItems: any[];
-  defectSummary?: string;
-  images?: string[];
-  createdAt: number;
-  updatedAt?: number;
-}
-
-export interface SubcontractorReinspectionCost {
-  id: string;
-  ncrId?: string;
-  bookingId: string;
-  bookingCode?: string;
-  subcontractorName: string;
-  reinspectionCount: number;
-  travelCost: number;
-  qcLaborHours: number;
-  qcLaborRate: number;
-  totalPenaltyCost: number;
-  status: 'PENDING_DEDUCTION' | 'DEDUCTED_IN_ERP';
-  createdAt: number;
-}
-
-export interface IPOItem {
-  id: string;
-  ma_nha_may: string;
-  ma_ct: string;
-  ten_ct: string;
-  ten_hang_muc: string;
-  so_luong_ipo: number;
-  dvt: string;
-  drawing_url?: string;
-  description?: string;
-  materials_text?: string;
-  samples_json?: string;
-  simulations_json?: string;
-  created_at?: number;
-  headcode?: string;
-}
-
-export interface IPOResponse {
-  id: string;
-  headcode?: string;
-  maCongTrinh: string;
-  tenCongTrinh: string;
-  maNhaMay: string;
-  tenHangMuc: string;
-  dvt: string;
-  soLuongIpo: number;
-  ngayTao: string;
-}
-
-export interface FloorPlan {
-  id: string;
-  project_id: string;
   name: string;
-  image_url: string;
-  version: string;
-  status: 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
-  updated_at: number;
-  file_name?: string;
-  active_inspections?: number;
+  permissions?: any[];
+  isPosition?: boolean;
+  [key: string]: any;
 }
 
-export interface LayoutPin {
+export const CheckStatus = {
+  PASS: 'PASS',
+  FAIL: 'FAIL',
+  NA: 'NA',
+  PENDING: 'PENDING',
+  CONDITIONAL: 'CONDITIONAL'
+} as const;
+export type CheckStatus = typeof CheckStatus[keyof typeof CheckStatus];
+
+export const InspectionStatus = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  VERIFIED: 'VERIFIED',
+  LOCKED: 'LOCKED',
+  COMPLETED: 'COMPLETED',
+  FLAGGED: 'FLAGGED',
+  PENDING: 'PENDING'
+} as const;
+export type InspectionStatus = typeof InspectionStatus[keyof typeof InspectionStatus];
+
+export const Priority = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL'
+} as const;
+export type Priority = typeof Priority[keyof typeof Priority];
+
+export type ModuleId = string;
+export type ViewState = string;
+
+export interface SupportingDoc {
   id: string;
-  floor_plan_id: string;
-  inspection_id?: string;
-  x: number; // percentage 0-100
-  y: number; // percentage 0-100
-  label?: string;
-  status: InspectionStatus | 'NEW';
-  headcode?: string;
-  type?: string;
+  name: string;
+  url: string;
 }
 
-// Added Workshop interface to fix module export error
+export interface User {
+  id: string;
+  name: string;
+  username?: string;
+  password?: string;
+  email?: string;
+  msnv?: string;
+  position?: string;
+  role: Role;
+  avatar?: string;
+  allowedModules?: string[];
+  workLocation?: string;
+  work_location?: string;
+  phong_ban?: string;
+  phongBan?: string;
+  bo_phan?: string;
+  to_qc?: string;
+  la_to_truong?: boolean;
+  status?: string;
+  signature_template?: string;
+  signatureTemplate?: string;
+  joinDate?: string;
+  education?: string;
+  notes?: string;
+  department_id?: string;
+  division_id?: string;
+  team_id?: string;
+  user_permissions?: any[];
+  userPermissions?: any[];
+  [key: string]: any;
+}
+
 export interface Workshop {
   id: string;
-  code: string;
   name: string;
-  location: string;
-  manager: string;
-  phone: string;
+  code?: string;
+  address?: string;
+  location?: string;
+  stages?: string[];
+  manager?: string;
+  phone?: string;
   image?: string;
-  stages: string[];
 }
 
 export interface Supplier {
@@ -230,693 +101,742 @@ export interface Supplier {
   phone?: string;
   email?: string;
   category?: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  data?: string;
-  updated_at?: number;
-  stats?: {
-    total_pos: number;
-    pass_rate: number;
-    defect_rate: number;
-    total_inspected?: number;
-    total_passed?: number;
-    total_failed?: number;
-  };
-}
-
-export interface QMSImage {
-  id: string;
-  parent_entity_id: string;
-  related_item_id?: string;
-  entity_type: 'INSPECTION' | 'NCR' | 'DEFECT' | 'USER' | 'COMMENT';
-  image_role: 'EVIDENCE' | 'BEFORE' | 'AFTER' | 'PREVIEW';
-  url_hd: string;
-  url_thumbnail: string;
-  created_at: number;
-}
-
-export type UserRole = 'ADMIN' | 'MANAGER' | 'QC' | 'QA';
-
-export interface User {
-  id: string;
-  username: string;
-  password?: string;
-  name: string;
-  role: string | UserRole;
-  avatar: string;
-  allowedModules?: ModuleId[];
-  msnv?: string;
-  email?: string;
   status?: string;
-  position?: string;
-  workLocation?: string;
-  joinDate?: string;
-  education?: string;
-  endDate?: string;
-  notes?: string;
-  phong_ban?: string;
-  bo_phan?: string;
-  phongBan?: string;
-  boPhan?: string;
-  to_qc?: string;
-  toQC?: string;
-  la_to_truong?: boolean;
-  laToTruong?: boolean;
-  team_id?: string;
-  department_id?: string;
-  division_id?: string;
-  user_permissions?: any;
-  userPermissions?: any;
-  signatureTemplate?: string;
-  signature_template?: string;
-  requirePasswordChange?: boolean;
-  require_password_change?: boolean;
-}
-
-export interface NCRComment {
-  id: string;
-  userId: string;
-  userName: string;
-  content: string;
-  createdAt: string;
-  image_refs?: string[];
-  attachments?: string[];
-  userAvatar?: string;
-}
-
-export interface NCR {
-  id: string;
-  inspection_id?: string;
-  itemId?: string;
-  defect_code?: string;
-  createdDate: string;
-  issueDescription: string;
-  rootCause: string;
-  solution: string; 
-  preventiveAction: string;
-  responsiblePerson: string;
-  deadline?: string;
-  status: string;
-  severity?: 'MINOR' | 'MAJOR' | 'CRITICAL';
-  ma_ct?: string;
-  ten_ct?: string;
-  ten_hang_muc?: string;
-  workshop?: string;
-  inspectorName?: string;
-  image_refs_before: string[]; 
-  image_refs_after: string[];  
-  imagesBefore?: string[];
-  imagesAfter?: string[];
-  comments?: NCRComment[];
-  createdBy?: string;
-  closedBy?: string;
-  closedDate?: string;
-}
-
-export interface CheckItem {
-  id: string;
-  stage?: string;
-  subStage?: string;
-  category: string;
-  label: string;
-  method?: string;
-  standard?: string;
-  status: CheckStatus;
-  notes?: string;
-  image_refs?: string[]; 
-  images?: string[];
-  ncrId?: string;
-  ncr?: NCR;
-  frequency?: string;
-  defectIds?: string[];
-}
-
-export interface MaterialIQC {
-  id: string;
-  name: string;
-  category: string;
-  inspectType: '100%' | 'AQL';
-  scope: 'COMMON' | 'PROJECT';
-  projectCode?: string;
-  projectName?: string;
-  orderQty: number;
-  deliveryQty: number;
-  unit: string;
-  criteria: any[];
-  items: CheckItem[];
-  inspectQty: number;
-  passQty: number;
-  failQty: number;
-  images: string[];
-  status?: 'pass' | 'fail' | 'pending';
-  type: string;
-  date: string;
-}
-
-export interface Material {
-  id: string;
-  material: string;
-  shortText: string;
-  orderUnit: string;
-  orderQuantity: number;
-  supplierName?: string;
-  projectName?: string;
-  purchaseDocument?: string;
-  deliveryDate?: string;
-  Ma_Tender?: string;
-  Factory_Order?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface SupportingDoc {
-    id: string;
-    name: string;
-    verified: boolean;
-    notes?: string;
-}
-
-export interface Inspection {
-  id: string;
-  type?: ModuleId;
-  ma_ct: string;
-  po_number?: string;
-  pr_number?: string;
-  poNumber?: string;
-  prNumber?: string;
-  ten_ct: string;
-  ma_nha_may?: string;
-  ten_hang_muc?: string;
-  inspectorName: string;
-  date: string;
-  status: InspectionStatus;
-  score: number;
-  items: CheckItem[]; 
-  image_refs?: string[]; 
-  images?: string[];
-  summary?: string;
-  created_by?: string;
-  workshop?: string;
-  ma_xuong?: string;
-  inspectionStage?: string;
-  stage?: string;
-  subStage?: string;
-  dvt?: string;
-  so_luong_ipo: number;
-  inspectedQuantity?: number;
-  splitRequired?: boolean;
-  passedQuantity?: number;
-  failedQuantity?: number;
-  signature_ref?: string; 
-  signature?: string;
-  qcDate?: string | number;
-  manager_signature_ref?: string;
-  managerSignature?: string;
-  managerName?: string;
-  managerDate?: string | number;
-  teamLeadSignature?: string;
-  teamLeadName?: string;
-  teamLeadDate?: string | number;
-  productionSignature?: string;
-  productionName?: string;
-  productionConfirmedDate?: string | number;
-  pmSignature?: string;
-  pmComment?: string;
-  pmName?: string;
-  confirmedDate?: string | number;
-  supplier?: string;
-  location?: string;
-  updatedAt?: string;
-  createdAt?: string;
-  headcode?: string;
-  materials?: MaterialIQC[];
-  supportingDocs?: SupportingDoc[];
-  referenceDocs?: string[];
-  supplierAddress?: string;
-  reportImage?: string;
-  reportImages?: string[];
-  deliveryNoteImage?: string;
-  deliveryNoteImages?: string[];
-  drawingImages?: string[];
-  comments?: NCRComment[];
-  priority?: Priority;
-  floor_plan_id?: string;
-  coord_x?: number;
-  coord_y?: number;
-  responsiblePerson?: string;
-  productionComment?: string;
-  materials_json?: string;
-  items_json?: string;
-  booking_id?: string;
-  booking_code?: string;
-}
-
-export interface SmartGoal {
-  id: string;
-  title: string;
-  specific: string;
-  measurable: string;
-  achievable: string;
-  relevant: string;
-  timeBound: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
-  createdAt: number;
+  updated_at?: number;
+  deleted_at?: number;
+  version?: number;
+  total_reports?: number;
+  stats?: any;
 }
 
 export interface Project {
   id: string;
-  code: string;
-  name: string;
+  name?: string;
+  code?: string;
   ma_ct: string;
   ten_ct: string;
-  status: 'In Progress' | 'Completed' | 'On Hold' | 'Planning';
-  startDate: string;
-  endDate: string;
+  customer?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  start_date?: string;
+  end_date?: string;
   pm?: string;
   pc?: string;
   qa?: string;
-  progress: number;
+  progress?: number;
   thumbnail?: string;
   description?: string;
   location?: string;
-  images?: string[];
-  smartGoals?: SmartGoal[];
+  version?: number;
 }
 
-export interface ProjectDocument {
+export interface IPOItem {
   id: string;
-  projectId: string;
-  ma_ct: string;
-  name: string;
-  version: string;
-  issueDate: string;
-  updateDate: string;
-  fileUrl?: string;
-  description?: string;
-  createdBy: string;
-  createdAt?: number;
-  updatedAt?: number;
-  deletedAt?: number | null;
+  item_code?: string;
+  item_name?: string;
+  quantity?: number;
+  unit?: string;
+  ma_ct?: string;
+  ten_ct?: string;
+  po_number?: string;
+  so_luong_ipo?: number;
+  dvt?: string;
+  ma_nha_may?: string;
+  ten_hang_muc?: string;
+  headcode?: string;
+  [key: string]: any;
+}
+
+export interface CheckItem {
+  id?: string;
+  name?: string;
+  label?: string;
+  category?: string;
+  stage?: string;
+  status: CheckStatus;
+  notes?: string;
+  images?: any[];
+  frequency?: string;
+  standard?: string;
+  defectIds?: string[];
+  method?: string;
+}
+
+export interface QMSImage {
+  id: string;
+  url: string;
+  caption?: string;
 }
 
 export interface Defect {
   id: string;
-  inspectionId: string;
-  defectCode: string;
+  code: string;
   description: string;
-  severity: 'MINOR' | 'MAJOR' | 'CRITICAL';
-  status: 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
-  date: string;
-  inspectorName: string;
-  ma_ct: string;
-  images?: string[];
-  rootCause?: string;
+  severity?: string;
   solution?: string;
   responsiblePerson?: string;
   deadline?: string;
-}
-
-export interface Notification {
-  id: string;
-  userId: string;
-  type: 'INSPECTION' | 'NCR' | 'COMMENT' | 'DEADLINE' | 'INFO' | 'SUCCESS' | 'MESSAGE' | 'ASSIGNMENT';
-  title: string;
-  message: string;
-  isRead: boolean;
-  createdAt: number;
-  link?: { view: ViewState, id: string };
-}
-
-export type PermissionAction = 'VIEW' | 'VIEW_ALL' | 'CREATE' | 'EDIT' | 'DELETE' | 'IMPORT' | 'EXPORT' | 'SIGN1' | 'SIGN2' | 'EDIT_OWN' | 'EDIT_ALL' | 'DELETE_OWN' | 'DELETE_ALL';
-
-export interface ModulePermission {
-  moduleId: ModuleId;
-  actions: PermissionAction[];
-}
-
-export interface Role {
-  id: string;
-  name: string;
-  description?: string;
-  permissions: ModulePermission[];
-  allowedModules: ModuleId[];
-  isSystem?: boolean;
-  isPosition?: boolean;
+  status?: string;
+  defectCode?: string;
+  ma_ct?: string;
+  images?: any[];
+  date?: string;
+  inspectionId?: string;
+  [key: string]: any;
 }
 
 export interface DefectLibraryItem {
   id: string;
-  code: string;
   name: string;
-  description: string;
-  stage: string;
-  category: string;
-  severity: string;
-  rootCause?: string; // Add root cause
+  category?: string;
+  code?: string;
+  defect_code?: string;
+  defect_name?: string;
+  process_stage?: string;
+  stage?: string;
+  severity?: string;
+  status?: string;
+  description?: string;
+  suggested_action?: string;
   suggestedAction?: string;
+  correct_image?: string;
+  incorrect_image?: string;
+  rootCause?: string;
+  createdAt?: string | number;
   correctImage?: string;
   incorrectImage?: string;
-  createdAt?: number;
+  [key: string]: any;
+}
+
+export interface NCR {
+  id: string;
+  ncr_number?: string;
+  title?: string;
+  status: string;
+  severity?: string;
+  created_at?: number;
+  description?: string;
+  issueDescription?: string;
+  root_cause?: string;
+  rootCause?: string;
+  corrective_action?: string;
+  preventive_action?: string;
+  solution?: string;
+  responsible_person?: string;
+  responsiblePerson?: string;
+  deadline?: string;
+  images_before_json?: string;
+  images_after_json?: string;
+  imagesBefore?: any[];
+  imagesAfter?: any[];
+  defect_code?: string;
+  inspection_id?: string;
+  item_id?: string;
+  comments?: any[];
+  created_by?: string;
   createdBy?: string;
+  closed_by?: string;
+  closedBy?: string;
+  closed_at?: number;
+  closed_date?: string;
+  closedDate?: string;
+  updated_at?: number;
+  updatedAt?: string | number;
+  createdDate?: string;
+  ma_ct?: string;
+  ten_ct?: string;
+  ten_hang_muc?: string;
+  workshop?: string;
+  po_number?: string;
+  inspectorName?: string;
+  version?: number;
+}
+
+export interface NCRComment {
+  id: string;
+  comment?: string;
+  content?: string;
+  created_at?: number;
+  createdAt?: string | number;
+  userId?: string;
+  user_id?: string;
+  userName?: string;
+  user_name?: string;
+  userAvatar?: string;
+  attachments?: string[];
+  [key: string]: any;
+}
+
+export interface Notification {
+  id: string;
+  userId?: string;
+  user_id?: string;
+  type?: string;
+  title: string;
+  message: string;
+  isRead?: boolean;
+  read?: boolean;
+  createdAt?: number;
+  created_at?: number;
+  link?: any;
+  data?: any;
 }
 
 export interface ToolCatalog {
   id: string;
   code: string;
   name: string;
-  type?: string;
-  specifications?: string;
-  manual_markdown?: string;
-  manual_pdf_url?: string;
-  created_at: number;
-  updated_at: number;
-  created_by: string;
+  spec?: string;
+  unit?: string;
+  interval_months?: number;
+  [key: string]: any;
 }
 
 export interface ToolAsset {
   id: string;
-  catalog_id: string;
-  asset_code: string;
+  catalog_id?: string;
   serial_number?: string;
-  current_user_id?: string;
-  next_calibration_date?: number | null;
-  status: 'AVAILABLE' | 'IN_USE' | 'MAINTENANCE' | 'BROKEN' | 'LOST';
-  created_at: number;
-  updated_at: number;
-  created_by: string;
+  status?: string;
+  location?: string;
+  last_calibration_date?: number;
+  next_calibration_date?: number;
+  [key: string]: any;
 }
 
 export interface ToolTransfer {
   id: string;
-  tool_asset_id: string;
-  from_user_id?: string;
-  to_user_id: string;
-  status: 'PENDING' | 'CONFIRMED' | 'APPROVED' | 'REJECTED';
-  request_date: number;
-  receiver_confirm_date?: number | null;
-  receiver_signature?: string;
-  receiver_image?: string;
-  manager_approve_date?: number | null;
-  manager_signature?: string;
-  notes?: string;
+  asset_id?: string;
+  from_location?: string;
+  to_location?: string;
+  date?: number;
+  [key: string]: any;
 }
 
 export interface ToolCalibration {
   id: string;
-  tool_asset_id: string;
-  request_date: number;
-  requested_by: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
-  calibration_date?: number | null;
-  next_calibration_date?: number | null;
-  certificate_url?: string;
-  approved_by?: string;
-  notes?: string;
+  asset_id?: string;
+  calibration_date?: number;
+  result?: string;
+  [key: string]: any;
 }
 
-export const canUserModifyInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
-  if (!user) {
-    console.log('[PERM_CHECK] canUserModifyInspection -> FALSE (No user provided)');
-    return false;
-  }
-  
-  const inspId = inspection?.id || inspection?._id || 'unknown';
-  console.log(`[PERM_CHECK] canUserModifyInspection START | inspId=${inspId} | user=${user.username || user.name} | role=${user.role} | la_to_truong=${user.la_to_truong} | to_qc="${user.to_qc}" | phong_ban="${user.phong_ban}"`);
 
-  // Immutable Locked State:
-  // If the coupon has been closed (APPROVED) or verified (team lead signed L1), it is locked immutable.
-  const isLockedStatus = 
-    inspection.status === 'approved' || 
-    inspection.status === 'verified' || 
-    inspection.status === 'completed' || 
-    !!inspection.teamLeadSignature || 
-    !!inspection.managerSignature;
-    
-  if (isLockedStatus) {
-    console.log(`[PERM_CHECK] canUserModifyInspection FALSE | Locked status: status=${inspection.status}, teamLeadSignature=${!!inspection.teamLeadSignature}, managerSignature=${!!inspection.managerSignature}`);
-    return false;
-  }
+export interface MaterialIQC {
+  id: string;
+  material_name?: string;
+  po_number?: string;
+  status?: string;
+  scope?: string;
+  projectCode?: string;
+  projectName?: string;
+  category?: string;
+  inspectType?: string;
+  name?: string;
+  deliveryQty?: number;
+  unit?: string;
+  inspectQty?: number;
+  passQty?: number;
+  failQty?: number;
+  items?: any[];
+  date?: any;
+  orderQty?: number;
+  criteria?: any;
+  [key: string]: any;
+}
 
-  // Helper for Unicode NFC & department tag normalization
-  const normalize = (str: any) => {
-    if (!str) return '';
-    return String(str)
-      .normalize('NFC')
-      .replace(/\s*\([^)]*\)\s*/g, ' ') // Strip parenthetical department tags e.g. ( SCM )
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
+export interface FloorPlan {
+  id: string;
+  name: string;
+  image_url: string;
+  version?: string | number;
+  status?: string;
+  [key: string]: any;
+}
+
+export interface LayoutPin {
+  id: string;
+  x: number;
+  y: number;
+  floor_plan_id?: string;
+  [key: string]: any;
+}
+
+export interface Material {
+  id: string;
+  name?: string;
+  code?: string;
+  Ma_Tender?: string;
+  projectName?: string;
+  shortText?: string;
+  material?: string;
+  orderQuantity?: number;
+  orderUnit?: string;
+  supplierName?: string;
+  purchaseDocument?: string;
+  deliveryDate?: string;
+  Factory_Order?: string;
+  [key: string]: any;
+}
+
+export interface ProjectDocument {
+  id: string;
+  title?: string;
+  url?: string;
+  name?: string;
+  description?: string;
+  version?: string;
+  issueDate?: string;
+  updateDate?: string;
+  createdBy?: string;
+  fileUrl?: string;
+  [key: string]: any;
+}
+
+export type SQCType = 'SQC_BTP' | 'SQC_TP' | 'SQC_VT';
+
+export interface SubcontractorBookingItem {
+  id: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  specifications?: string;
+  isInspected?: boolean;
+  poNumber?: string;
+  prNumber?: string;
+  supplierName?: string;
+}
+
+export interface BookingSupplierMismatchWarning {
+  poNumber: string;
+  expectedSupplier: string;
+  currentSupplier: string;
+}
+
+export type BookingDocumentCategory =
+  | 'PR_PO'
+  | 'QUALITY_AGREEMENT'
+  | 'SAMPLE_IMAGE'
+  | 'SPEC_DRAWING';
+
+export interface BookingAttachmentItem {
+  id: string;
+  name: string;
+  url: string;
+  category: BookingDocumentCategory;
+  sourceType: 'UPLOAD' | 'LINK';
+  mimeType?: string;
+  size?: number;
+  uploadedAt?: number;
+  uploadedBy?: string;
+}
+
+export interface SubcontractorBookingDocuments {
+  materialSpecUrl?: string;
+  approvedSampleUrl?: string;
+  shopdrawingUrl?: string;
+  qualityAgreementUrl?: string;
+  prPoFiles?: BookingAttachmentItem[];
+  qualityAgreementFiles?: BookingAttachmentItem[];
+  sampleImages?: BookingAttachmentItem[];
+  specDrawings?: BookingAttachmentItem[];
+}
+
+export interface RelatedSqcSummary {
+  totalCount: number;
+  approvedCount: number;
+  pendingCount: number;
+  rejectedCount: number;
+  latestReportId?: string;
+  latestStatus?: string;
+  latestResult?: 'PASS' | 'FAIL' | 'PENDING';
+  reportsPreview: Array<{
+    id: string;
+    type: string;
+    status: string;
+    date?: string;
+    matchReasons: RelatedSqcMatchReason[];
+  }>;
+}
+
+export interface SubcontractorBooking {
+  id: string;
+  bookingCode: string;
+  poId?: string;
+  poNumber: string;
+  poNumbers?: string[];
+  supplierMismatchWarnings?: BookingSupplierMismatchWarning[];
+  supplierId?: string;
+  supplierName: string;
+  requesterId?: string;
+  requesterName?: string;
+  locationAddress: string;
+  contactPerson: string;
+  contactPhone: string;
+  requestedDate: number;
+  assignedQcId?: string;
+  assignedQcName?: string;
+  status: 'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RETURNED_FOR_SUPPLEMENT';
+  notes?: string;
+  sqcType: SQCType;
+  commodityLine?: string;
+  rejectionReason?: string;
+  suggestedDate?: number;
+  rejectedAt?: number;
+  rejectedByName?: string;
+  sqcResult?: 'PASS' | 'FAIL';
+  lastSqcId?: string;
+  lastSqcStatus?: string;
+  manualStatusOverride?: boolean;
+  manualOverrideResult?: 'PASS' | 'FAIL';
+  manualOverrideReason?: string;
+  manualOverrideById?: string;
+  manualOverrideByName?: string;
+  manualOverrideAt?: number;
+  manualOverrideSqcRef?: string;
+  items?: SubcontractorBookingItem[];
+  documents?: SubcontractorBookingDocuments;
+  createdAt: number;
+  updatedAt: number;
+  version?: number;
+  batchNumber?: number;
+  totalBatchesForPo?: number;
+  relatedSqcSummary?: RelatedSqcSummary;
+}
+
+export interface Inspection {
+  id: string;
+  type: string;
+  po_number?: string;
+  poNumber?: string;
+  pr_number?: string;
+  prNumber?: string;
+  ma_ct?: string;
+  ten_ct?: string;
+  supplier?: string;
+  supplierName?: string;
+  supplierAddress?: string;
+  dia_chi_xuong?: string;
+  nguoi_lien_he?: string;
+  so_dien_thoai?: string;
+  workshop?: string;
+  location?: string;
+  status: string;
+  date?: string;
+  qcDate?: string | number;
+  score?: number;
+  booking_id?: string;
+  booking_code?: string;
+  created_at?: number;
+  createdAt?: string | number;
+  updatedAt?: string | number;
+  ma_nha_may?: string;
+  ten_hang_muc?: string;
+  so_luong_ipo?: number;
+  dvt?: string;
+  inspectorName?: string;
+  inspectionStage?: string;
+  subStage?: string;
+  inspectedQuantity?: number;
+  passedQuantity?: number;
+  failedQuantity?: number;
+  summary?: string;
+  signature?: string;
+  managerSignature?: string;
+  managerName?: string;
+  managerDate?: string | number;
+  teamLeadSignature?: string;
+  teamLeadName?: string;
+  teamLeadDate?: string | number;
+  productionName?: string;
+  productionComment?: string;
+  productionConfirmedDate?: string | number;
+  pmSignature?: string;
+  pmName?: string;
+  pmComment?: string;
+  headcode?: string;
+  stage?: string;
+  floor_plan_id?: string;
+  coord_x?: number;
+  coord_y?: number;
+  responsiblePerson?: string;
+  date_manager?: number;
+  date_qc?: number;
+  images?: any[];
+  items?: any[];
+  deliveryNoteImages?: any[];
+  reportImages?: any[];
+  supportingDocs?: any[];
+  materials?: any[];
+  reportImage?: string;
+  deliveryNoteImage?: string;
+  drawingImages?: any[];
+  referenceDocs?: any[];
+  comments?: any[];
+  productionSignature?: string;
+  production_signature?: string;
+  created_by?: string;
+  priority?: string;
+  version?: number;
+}
+
+export type RelatedSqcMatchReason = 'PO' | 'PR' | 'BOOKING' | 'MATERIAL';
+
+export interface RelatedSqcReport {
+  id: string;
+  type: string;
+  poNumber?: string;
+  prNumber?: string;
+  maCt?: string;
+  tenCt?: string;
+  supplier?: string;
+  workshop?: string;
+  inspectorName?: string;
+  date?: string;
+  createdAt?: number;
+  status: string;
+  score?: number;
+  inspectedQuantity?: number;
+  passedQuantity?: number;
+  failedQuantity?: number;
+  summary?: string;
+  bookingId?: string;
+  bookingCode?: string;
+  matchReasons: RelatedSqcMatchReason[];
+  sourceTable?: string;
+}
+
+export interface RelatedSqcResponse {
+  bookingId: string;
+  bookingCode: string;
+  poNumber: string;
+  searchContext: {
+    poTerms: string[];
+    prTerms: string[];
+    materialTerms: string[];
   };
+  reports: RelatedSqcReport[];
+}
 
-  const userIdentifiers = [user.name, user.username, user.id, user.msnv].filter(Boolean);
-  const inspectionCreators = [
-    inspection.inspectorName,
-    inspection.inspector_name,
-    inspection.created_by,
-    inspection.createdBy
-  ].filter(Boolean);
+export interface RelatedBookingSummary {
+  id: string;
+  bookingCode: string;
+  poNumber: string;
+  supplierName: string;
+  requestedDate: number;
+  assignedQcName?: string;
+  status: SubcontractorBooking['status'];
+  sqcType: SQCType;
+  batchNumber?: number;
+  totalBatchesForPo?: number;
+  matchReasons: RelatedSqcMatchReason[];
+}
 
-  let isCreator = false;
-  for (const uId of userIdentifiers) {
-    for (const cField of inspectionCreators) {
-      if (String(uId).trim() === String(cField).trim()) {
-        isCreator = true;
-        break;
-      }
-    }
-    if (isCreator) break;
-  }
+export interface RelatedBookingsResponse {
+  inspectionId: string;
+  poNumber?: string;
+  prNumber?: string;
+  bookings: RelatedBookingSummary[];
+}
 
-  const normCreators = inspectionCreators.map(field => normalize(field)).filter(Boolean);
+export type TraceabilityMatchReason = 'CURRENT' | 'IPO' | 'PO' | 'PR' | 'ERP_BRIDGE' | 'BOOKING';
 
-  if (!isCreator) {
-    const normUserIds = userIdentifiers.map(id => normalize(id)).filter(Boolean);
-    for (const uId of normUserIds) {
-      for (const cField of normCreators) {
-        if (uId === cField || (uId.length > 2 && cField.length > 2 && (uId.includes(cField) || cField.includes(uId)))) {
-          isCreator = true;
-          break;
-        }
-      }
-      if (isCreator) break;
-    }
-  }
+export interface TraceabilityInspectionItem {
+  id: string;
+  type: string;
+  status: string;
+  maCt?: string;
+  tenCt?: string;
+  maNhaMay?: string;
+  headcode?: string;
+  poNumber?: string;
+  prNumber?: string;
+  tenHangMuc?: string;
+  workshop?: string;
+  supplier?: string;
+  inspectorName?: string;
+  date?: string;
+  createdAt?: number;
+  score?: number;
+  inspectedQuantity?: number;
+  passedQuantity?: number;
+  failedQuantity?: number;
+  summary?: string;
+  matchReasons: TraceabilityMatchReason[];
+  isCurrent?: boolean;
+}
 
-  console.log(`[PERM_CHECK] canUserModifyInspection | isCreator=${isCreator} | userIdentifiers=[${userIdentifiers.join(', ')}] | inspectionCreators=[${inspectionCreators.join(', ')}]`);
+export interface TraceabilityNcrItem {
+  id: string;
+  ncrNumber?: string;
+  inspectionId?: string;
+  defectCode?: string;
+  severity?: string;
+  status: string;
+  title?: string;
+  description?: string;
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+  responsiblePerson?: string;
+  deadline?: string;
+  createdDate?: string;
+  createdAt?: number;
+  maCt?: string;
+  tenCt?: string;
+  maNhaMay?: string;
+  poNumber?: string;
+  imagesBefore?: any[];
+  imagesAfter?: any[];
+  matchReasons: TraceabilityMatchReason[];
+}
 
-  // Creator Rule: The creator is always allowed to modify their own unapproved inspection report before L1/L2 signatures
-  if (isCreator) {
-    console.log(`[PERM_CHECK] canUserModifyInspection TRUE | Creator editing unapproved report: user=${user.username || user.name}`);
-    return true;
-  }
-  
-  // Non-creator path: Department-Lock Check (Rule 1.2)
-  // "chỉ hạn chế quyền Sửa/Ký đối với người phòng ban khác"
-  const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
-  if (cache && Array.isArray(cache)) {
-    const creatorUser = cache.find(u => {
-      const uIdentifiers = [u.name, u.username, u.id, u.msnv].filter(Boolean);
-      return uIdentifiers.some(id => inspectionCreators.includes(id)) ||
-             normCreators.some(cField => uIdentifiers.map(id => normalize(id)).includes(cField));
-    });
-    if (creatorUser) {
-      const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
-      const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
-      if (creatorDept && userDept && creatorDept !== userDept) {
-        console.log(`[PERM_CHECK] canUserModifyInspection FALSE | Department mismatch: creatorDept="${creatorDept}" vs userDept="${userDept}"`);
-        return false; // restricted for other department
-      }
-    }
-  }
-  
-  // Non-creator path: Matrix / Module Permission Check
-  const moduleId = (inspection.type || 'PQC') as ModuleId;
-  const globalRoles = typeof window !== 'undefined' ? (window as any).__rolesCache : [];
+export interface TraceabilityBookingItem {
+  id: string;
+  bookingCode: string;
+  poNumber: string;
+  supplierName: string;
+  requestedDate: number;
+  assignedQcName?: string;
+  status: SubcontractorBooking['status'];
+  sqcType: SQCType;
+  matchReasons: TraceabilityMatchReason[];
+}
 
-  const userPerms = user.userPermissions || user.user_permissions;
-  const hasCustomMatrix = userPerms && Array.isArray(userPerms) && userPerms.length > 0;
+export interface TraceabilityBundle {
+  queryContext: {
+    inspectionId?: string;
+    ipoTerms: string[];
+    poTerms: string[];
+    prTerms: string[];
+    erpLinkedIpoTerms: string[];
+    erpLinkedPoTerms: string[];
+    erpLinkedPrTerms: string[];
+  };
+  summary: {
+    totalInspections: number;
+    passedInspections: number;
+    failedInspections: number;
+    pendingInspections: number;
+    totalNcrs: number;
+    openNcrs: number;
+    closedNcrs: number;
+    totalBookings: number;
+  };
+  inspections: TraceabilityInspectionItem[];
+  ncrs: TraceabilityNcrItem[];
+  bookings: TraceabilityBookingItem[];
+  isPublic?: boolean;
+}
 
-  if (!hasCustomMatrix && user.allowedModules?.includes(moduleId)) {
-    console.log(`[PERM_CHECK] canUserModifyInspection TRUE | Fallback allowedModules includes "${moduleId}"`);
-    return true;
-  }
+export interface SubcontractorInspection {
+  id: string;
+  bookingId?: string;
+  bookingCode?: string;
+  poNumber?: string;
+  inspectionResult: 'PASS' | 'REJECT' | 'CONDITIONAL_PASS';
+  notes?: string;
+  createdAt: number;
+}
 
-  const canEditAll = hasPermission(user, globalRoles, moduleId, 'EDIT_ALL') || 
-                     hasPermission(user, globalRoles, moduleId, 'EDIT');
-  console.log(`[PERM_CHECK] canUserModifyInspection Non-Creator -> canEditAll=${canEditAll}`);
-  if (canEditAll) return true;
-  
-  console.log(`[PERM_CHECK] canUserModifyInspection FALSE | No matching permission rule for user=${user.username || user.name}`);
+export interface SubcontractorReinspectionCost {
+  id: string;
+  bookingId: string;
+  supplierName: string;
+  amount: number;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'PAID';
+  createdAt: number;
+}
+
+const matchRoleAction = (actions: any[], action: string): boolean => {
+  const req = String(action || 'VIEW').toUpperCase().trim();
+  const upperActions = actions.map((a: any) => String(a || '').toUpperCase().trim());
+  if (upperActions.includes(req)) return true;
+  if (req === 'VIEW' && upperActions.includes('VIEW_ALL')) return true;
+  if (req === 'EDIT' && (upperActions.includes('EDIT_OWN') || upperActions.includes('EDIT_ALL'))) return true;
+  if (req === 'EDIT_OWN' && (upperActions.includes('EDIT_ALL') || upperActions.includes('EDIT'))) return true;
+  if (req === 'DELETE' && (upperActions.includes('DELETE_OWN') || upperActions.includes('DELETE_ALL'))) return true;
+  if (req === 'DELETE_OWN' && (upperActions.includes('DELETE_ALL') || upperActions.includes('DELETE'))) return true;
   return false;
 };
 
-export const canUserDeleteInspection = (inspection: any, user: any, usersList?: any[]): boolean => {
+export const hasPermission = (user: User | null | undefined, rolesList: any[] = [], moduleId: string, action: string = 'VIEW'): boolean => {
   if (!user) return false;
-  
-  // Immutable Locked State:
-  const isLockedStatus = 
-    inspection.status === 'approved' || 
-    inspection.status === 'verified' || 
-    inspection.status === 'completed' || 
-    !!inspection.teamLeadSignature || 
-    !!inspection.managerSignature;
-    
-  if (isLockedStatus) return false;
+  const roleUpper = String(user.role || '').toUpperCase().trim();
+  if (roleUpper === 'ADMIN') return true;
+  if (roleUpper === 'GUEST') return false;
 
-  const normalize = (str: any) => {
-    if (!str) return '';
-    return String(str)
-      .normalize('NFC')
-      .replace(/\s*\([^)]*\)\s*/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-  };
+  const act = String(action || 'VIEW').toUpperCase().trim();
+  const mod = String(moduleId || '').toUpperCase().trim();
 
-  const userIdentifiers = [user.name, user.username, user.id, user.msnv].filter(Boolean);
-  const inspectionCreators = [
-    inspection.inspectorName,
-    inspection.inspector_name,
-    inspection.created_by,
-    inspection.createdBy
-  ].filter(Boolean);
-
-  let isCreator = false;
-  for (const uId of userIdentifiers) {
-    for (const cField of inspectionCreators) {
-      if (String(uId).trim() === String(cField).trim()) {
-        isCreator = true;
-        break;
-      }
-    }
-    if (isCreator) break;
-  }
-
-  const normCreators = inspectionCreators.map(field => normalize(field)).filter(Boolean);
-
-  if (!isCreator) {
-    const normUserIds = userIdentifiers.map(id => normalize(id)).filter(Boolean);
-    for (const uId of normUserIds) {
-      for (const cField of normCreators) {
-        if (uId === cField || (uId.length > 2 && cField.length > 2 && (uId.includes(cField) || cField.includes(uId)))) {
-          isCreator = true;
-          break;
-        }
-      }
-      if (isCreator) break;
-    }
-  }
-
-  // Department check - only members of the same department (or ADMIN) can delete
-  if (!isCreator) {
-    const cache = usersList || (typeof window !== 'undefined' ? (window as any).__usersCache : null);
-    if (cache && Array.isArray(cache)) {
-      const creatorUser = cache.find(u => {
-        const uIdentifiers = [u.name, u.username, u.id, u.msnv].filter(Boolean);
-        return uIdentifiers.some(id => inspectionCreators.includes(id)) ||
-               normCreators.some(cField => uIdentifiers.map(id => normalize(id)).includes(cField));
-      });
-      if (creatorUser) {
-        const creatorDept = (creatorUser.phong_ban || creatorUser.phongBan || '').trim().toLowerCase();
-        const userDept = (user.phong_ban || user.phongBan || '').trim().toLowerCase();
-        if (creatorDept && userDept && creatorDept !== userDept) {
-          return false;
-        }
-      }
-    }
-  }
-  
-  const moduleId = (inspection.type || 'PQC') as ModuleId;
-  const globalRoles = typeof window !== 'undefined' ? (window as any).__rolesCache : [];
-
-  const userPerms = user.userPermissions || user.user_permissions;
-  const hasCustomMatrix = userPerms && Array.isArray(userPerms) && userPerms.length > 0;
-
-  if (!hasCustomMatrix && user.allowedModules?.includes(moduleId)) {
-    return true;
-  }
-
-  if (isCreator) {
-    if (hasPermission(user, globalRoles, moduleId, 'DELETE_OWN') || 
-        hasPermission(user, globalRoles, moduleId, 'DELETE_ALL') || 
-        hasPermission(user, globalRoles, moduleId, 'DELETE')) {
-      return true;
-    }
-  } else {
-    if (hasPermission(user, globalRoles, moduleId, 'DELETE_ALL') || 
-        hasPermission(user, globalRoles, moduleId, 'DELETE')) {
-      return true;
-    }
-  }
-  
-  return false;
-};
-
-export const hasPermission = (
-  user: any,
-  rolesList: Role[],
-  moduleId: ModuleId,
-  action: PermissionAction = 'VIEW'
-): boolean => {
-  if (!user) return false;
-  
-  // Let's gather all merged/inherited permissions for this user
-  const matchedPermissions: ModulePermission[] = [];
-
-  // A. Add user-specific custom matrix permissions if available
-  let rawPerms = user.userPermissions || user.user_permissions || user.permissions;
+  const matchedPermissions: any[] = [];
+  const rawPerms = (user as any).userPermissions || (user as any).user_permissions || (user as any).permissions;
   let userPerms: any[] = [];
+
   if (typeof rawPerms === 'string') {
-      try {
-          userPerms = JSON.parse(rawPerms);
-      } catch (e) {
-          userPerms = [];
-      }
+    try {
+      userPerms = JSON.parse(rawPerms);
+    } catch {
+      userPerms = [];
+    }
   } else if (Array.isArray(rawPerms)) {
-      userPerms = rawPerms;
+    userPerms = rawPerms;
   }
 
-  if (userPerms && Array.isArray(userPerms)) {
+  if (Array.isArray(userPerms) && userPerms.length > 0) {
     matchedPermissions.push(...userPerms);
+  } else if (roleUpper && Array.isArray(rolesList) && rolesList.length > 0) {
+    const matchedRole = rolesList.find(
+      (r: any) => r && typeof r === 'object' && (String(r.id || '').toUpperCase() === roleUpper || String(r.name || '').toUpperCase() === roleUpper)
+    );
+    if (matchedRole && Array.isArray(matchedRole.permissions)) {
+      matchedPermissions.push(...matchedRole.permissions);
+    }
   }
 
-  // B. SUPREME CHECK: If user has this action on 'SYSTEM_ADMIN' module, they have it on EVERYTHING.
-  // This fulfills "Option B": SYSTEM_ADMIN acts as a master permission matrix.
-  const systemAdminMatrix = matchedPermissions.find(p => p.moduleId === 'SYSTEM_ADMIN');
-  if (systemAdminMatrix && systemAdminMatrix.actions && systemAdminMatrix.actions.includes(action)) {
-      console.log(`[PERM_CHECK] hasPermission TRUE | SYSTEM_ADMIN action matched: "${action}"`);
-      return true;
+  const systemAdminMatrix = matchedPermissions.find((p) => String(p?.moduleId || '').toUpperCase() === 'SYSTEM_ADMIN');
+  if (systemAdminMatrix && Array.isArray(systemAdminMatrix.actions) && matchRoleAction(systemAdminMatrix.actions, act)) {
+    return true;
   }
 
-  // Evaluate matrix specifically for this module
   const moduleMatrix = matchedPermissions.filter(
-    p => String(p.moduleId).toLowerCase() === String(moduleId).toLowerCase()
+    (p) => String(p?.moduleId || '').toUpperCase() === mod
   );
-
   if (moduleMatrix.length > 0) {
-    // If matrix entry exists for this module, it is the SOURCE OF TRUTH for actions
-    const hasAction = moduleMatrix.some(p => p.actions && p.actions.includes(action));
-    console.log(`[PERM_CHECK] hasPermission moduleMatrix check | module="${moduleId}" action="${action}" -> ${hasAction}`);
-    return hasAction;
+    return moduleMatrix.some((p) => Array.isArray(p?.actions) && matchRoleAction(p.actions, act));
   }
 
-  // If no matrix entry exists for THIS module, fall back to simple allowedModules list
-  const list = user.allowedModules || [];
-  if (list.includes(moduleId)) {
-    if (action === 'VIEW' || action === 'CREATE' || action === 'EDIT') {
-      console.log(`[PERM_CHECK] hasPermission allowedModules fallback TRUE | module="${moduleId}" action="${action}"`);
+  const list = (user.allowedModules || (user as any).allowed_modules || []).map((m: any) => String(m || '').toUpperCase().trim());
+  if (list.includes(mod)) {
+    if (act === 'VIEW' || act === 'CREATE' || act === 'EDIT' || act === 'EDIT_OWN') {
       return true;
     }
-    if ((user.la_to_truong || user.role === 'MANAGER') && action === 'SIGN1') {
-      console.log(`[PERM_CHECK] hasPermission allowedModules SIGN1 fallback TRUE | user.la_to_truong=${user.la_to_truong} user.role=${user.role}`);
+    if ((Boolean((user as any).la_to_truong) || roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN1') {
       return true;
     }
-    if (user.role === 'MANAGER' && action === 'SIGN2') {
-      console.log(`[PERM_CHECK] hasPermission allowedModules SIGN2 fallback TRUE | user.role=${user.role}`);
+    if ((roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN2') {
       return true;
     }
   }
-  
-  console.log(`[PERM_CHECK] hasPermission FALSE | module="${moduleId}" action="${action}" for user="${user.username || user.name}"`);
+
   return false;
+};
+
+export const canUserModifyInspection = (inspection: any, user: User | null | undefined): boolean => {
+  if (!user) return false;
+  const st = String(inspection?.status || '').trim().toUpperCase();
+  if (st === 'LOCKED' || st === 'COMPLETED' || st === 'VERIFIED' || st === 'APPROVED') return false;
+  if (String(user.role || '').toUpperCase() === 'ADMIN') return true;
+  if (inspection?.inspectorName === user.name) return true;
+  return hasPermission(user, [], 'INSPECTIONS', 'EDIT');
+};
+
+export const canUserDeleteInspection = (inspection: any, user: User | null | undefined): boolean => {
+  if (!user) return false;
+  const st = String(inspection?.status || '').trim().toUpperCase();
+  if (st === 'LOCKED' || st === 'COMPLETED' || st === 'VERIFIED') return false;
+  if (String(user.role || '').toUpperCase() === 'ADMIN') return true;
+  return hasPermission(user, [], 'INSPECTIONS', 'DELETE');
 };
 

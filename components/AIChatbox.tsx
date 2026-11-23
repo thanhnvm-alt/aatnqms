@@ -239,8 +239,8 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
                 </div>
             </div>
             <div className="flex items-center gap-1">
-                <button onClick={() => setMessages([messages[0]])} className="p-2 hover:bg-white dark:bg-slate-900/10 rounded-xl text-slate-400 dark:text-slate-500 hover:text-white transition-colors" title="Xóa lịch sử"><Eraser className="w-4 h-4"/></button>
-                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-red-500/20 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-400 transition-colors"><X className="w-5 h-5"/></button>
+                <button onClick={() => setMessages([messages[0]])} aria-label="Xóa lịch sử" className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors" title="Xóa lịch sử"><Eraser className="w-4 h-4"/></button>
+                <button onClick={() => setIsOpen(false)} aria-label="Đóng" className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center p-2 hover:bg-red-500/20 rounded-xl text-slate-400 hover:text-red-400 transition-colors"><X className="w-5 h-5"/></button>
             </div>
           </div>
 
@@ -279,7 +279,8 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf" className="hidden" />
                 <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-3.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500 rounded-2xl shadow-inner hover:bg-slate-200 dark:bg-slate-700 transition-all active:scale-90 shrink-0"
+                    aria-label="Tải lên quy trình PDF"
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl shadow-inner hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-90 shrink-0"
                     title="Tải lên quy trình PDF"
                 >
                     <Upload className="w-5 h-5" />
@@ -288,14 +289,15 @@ ${finalInspections.map(i => `QC|${i.ma_ct}|${i.ma_nha_may}|${i.ten_hang_muc}|${i
                     value={input} 
                     onChange={e => setInput(e.target.value)} 
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                    className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-inner max-h-24 font-medium transition-all" 
+                    className="flex-1 min-h-[44px] px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-inner max-h-24 font-medium transition-all" 
                     placeholder="Hỏi về mã CT, mã NM, số lượng..." 
                     rows={1}
                 />
                 <button 
                     onClick={handleSendMessage} 
                     disabled={isLoading || !input.trim()}
-                    className="p-3.5 bg-blue-600 text-white rounded-2xl shadow-xl hover:bg-blue-700 disabled:opacity-30 transition-all active:scale-90 shrink-0"
+                    aria-label="Gửi tin nhắn"
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center p-3 bg-blue-600 text-white rounded-2xl shadow-xl hover:bg-blue-700 disabled:opacity-30 transition-all active:scale-90 shrink-0"
                 >
                     <Send className="w-5 h-5" />
                 </button>

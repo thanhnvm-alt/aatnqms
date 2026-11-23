@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 text-sm font-normal;
+  }
+
+  @media (max-width: 1023px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]),
+    select,
+    textarea {
+      min-height: 44px;
+    }
+
+    input[type="checkbox"],
+    input[type="radio"] {
+      min-width: 20px;
+      min-height: 20px;
+    }
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] lg:min-h-[40px] lg:min-w-[40px];
+  }
+  .touch-target-row {
+    @apply min-h-[44px] lg:min-h-[38px];
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .booking-print-area,
+  .booking-print-area * {
+    visibility: visible;
+  }
+
+  .booking-print-area {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: auto;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 16px !important;
+    box-shadow: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

@@ -49,16 +49,20 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
   }, [inspections, materials]);
 
   const historyData = useMemo(() => {
-      return inspections.slice(0, 7).reverse().map(i => ({
-          date: i.date.split('-').slice(1).join('/'),
-          score: i.score || 0
-      }));
+      return inspections.slice(0, 7).reverse().map(i => {
+          const parsedScore = Number(i.score);
+          const formattedDate = String(i.date || '').split('-').slice(1).join('/');
+          return {
+              date: formattedDate || '—',
+              score: Number.isFinite(parsedScore) ? parsedScore : 0
+          };
+      });
   }, [inspections]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-40 shadow-sm flex items-center justify-between">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 dark:bg-slate-800 rounded-xl transition-colors active:scale-90 border border-slate-100 dark:border-slate-800 shadow-sm"><ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400 dark:text-slate-500" /></button>
+          <button type="button" onClick={onBack} aria-label="Quay lại" className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors active:scale-90 border border-slate-100 dark:border-slate-800 shadow-sm"><ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" /></button>
           <div className="text-center">
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight">Hồ sơ năng lực Nhà Cung Cấp</h2>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono font-bold tracking-tight">#{supplier.code}</p>
@@ -151,7 +155,7 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
                 </div>
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {inspections.map(i => (
-                    <div key={i.id} onClick={() => onViewInspection(i.id)} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50 cursor-pointer group transition-all">
+                    <div key={i.id} onClick={() => onViewInspection(i.id)} className="min-h-[56px] p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer group transition-all">
                       <div className="flex items-center gap-4">
                         <div className={`p-2 rounded-xl ${i.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500' : 'bg-orange-100 text-orange-600'}`}><FileText className="w-5 h-5" /></div>
                         <div>
@@ -173,3 +177,5 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
     </div>
   );
 };
+
+export default SupplierDetail;

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, BookOpen, Clock, ShieldCheck, CheckCircle2, FileText, Users, AlertTriangle } from 'lucide-react';
 
 interface SubcontractorSlideGuideModalProps {
@@ -159,56 +160,60 @@ export function SubcontractorSlideGuideModal({ isOpen, onClose }: SubcontractorS
   const slide = slides[currentSlide];
   const IconComponent = slide.icon;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+  const modalNode = (
+    <div className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)]">
         
         {/* Header */}
-        <div className={`${slide.color} p-6 text-white flex items-center justify-between transition-colors duration-300`}>
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-              <IconComponent className="w-6 h-6 text-white" />
+        <div className={`${slide.color} px-4 py-2.5 sm:py-3 text-white flex items-center justify-between gap-2 transition-colors duration-300 shrink-0`}>
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+              <IconComponent className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <span className="text-[10px] uppercase font-black tracking-widest bg-white/20 px-2 py-0.5 rounded">
+            <div className="min-w-0">
+              <span className="text-[10px] uppercase font-black tracking-widest bg-white/20 px-2 py-0.5 rounded inline-block">
                 Slide {currentSlide + 1} / {slides.length}
               </span>
-              <h3 className="text-lg font-bold mt-1">{slide.title}</h3>
+              <h3 className="text-sm sm:text-base font-bold mt-0.5 truncate">{slide.title}</h3>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            aria-label="Đóng"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1 -mr-1.5 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Subtitle / Progress */}
-        <div className="bg-slate-100 dark:bg-slate-800 px-6 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
+        <div className="bg-slate-100 dark:bg-slate-800 px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 shrink-0">
           <span>{slide.subtitle}</span>
-          <div className="flex space-x-1">
+          <div className="flex items-center gap-1">
             {slides.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setCurrentSlide(idx)}
-                className={`w-2 h-2 rounded-full transition-all ${idx === currentSlide ? 'w-6 bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-              />
+                aria-label={`Slide ${idx + 1}`}
+                className="min-w-[28px] min-h-[28px] flex items-center justify-center"
+              >
+                <span className={`block h-2 rounded-full transition-all ${idx === currentSlide ? 'w-6 bg-blue-600' : 'w-2 bg-slate-300 dark:bg-slate-600'}`} />
+              </button>
             ))}
           </div>
         </div>
 
         {/* Slide Content Body */}
-        <div className="p-6 flex-1 overflow-y-auto">
+        <div className="p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto">
           {slide.content}
         </div>
 
         {/* Footer controls */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div className="px-4 py-2 sm:py-2.5 bg-slate-50/80 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 shrink-0">
           <button
             onClick={() => setCurrentSlide((prev) => Math.max(0, prev - 1))}
             disabled={currentSlide === 0}
-            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center transition-all"
+            className="min-h-[44px] sm:min-h-[36px] px-3.5 sm:px-4 py-2 sm:py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center whitespace-nowrap shrink-0 transition-all"
           >
             <ChevronLeft className="w-4 h-4 mr-1" /> Trước
           </button>
@@ -225,7 +230,7 @@ export function SubcontractorSlideGuideModal({ isOpen, onClose }: SubcontractorS
                 onClose();
               }
             }}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-md shadow-blue-600/30 flex items-center transition-all"
+            className="min-h-[44px] sm:min-h-[36px] px-4 sm:px-5 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-md shadow-blue-600/30 flex items-center whitespace-nowrap shrink-0 transition-all"
           >
             {currentSlide === slides.length - 1 ? 'Hoàn thành' : 'Tiếp theo'} <ChevronRight className="w-4 h-4 ml-1" />
           </button>
@@ -234,4 +239,6 @@ export function SubcontractorSlideGuideModal({ isOpen, onClose }: SubcontractorS
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : modalNode;
 }
