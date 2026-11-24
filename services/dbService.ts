@@ -3332,7 +3332,10 @@ export async function upsertSupplier(data: {
 
 // --- PO / PR & MATERIAL AUTO-LOOKUP (Read-only tables: material & ipo) ---
 
-export async function lookupPoMaterials(queryStr: string) {
+export async function lookupPoMaterials(
+  queryStr: string,
+  options?: { exact?: boolean }
+) {
   if (!queryStr || queryStr.trim().length === 0) {
     return { items: [] };
   }
@@ -3342,83 +3345,283 @@ export async function lookupPoMaterials(queryStr: string) {
     .filter(Boolean);
   const clean = rawSegments.length > 1 ? rawSegments[rawSegments.length - 1] : queryStr.trim();
   if (!clean) return { items: [] };
+
+  const cleanLower = clean.toLowerCase();
   const searchPattern = `%${clean}%`;
+  const prefixPattern = `${clean}%`;
+  const isExactOnly = Boolean(options?.exact);
+
+  const resolveMatchedCode = (
+    candidates: Array<[string, any]>
+  ): { poNumber: string; matchedBy: string } => {
+    const normalized = candidates
+      .map(([k, v]) => [k, String(v ?? '').trim()] as [string, string])
+      .filter(([, v]) => v.length > 0);
+    const exactMatch = normalized.find(([, v]) => v.toLowerCase() === cleanLower);
+    if (exactMatch) return { poNumber: exactMatch[1], matchedBy: exactMatch[0] };
+    const partialMatch = normalized.find(([, v]) => v.toLowerCase().includes(cleanLower));
+    if (partialMatch) return { poNumber: partialMatch[1], matchedBy: partialMatch[0] };
+    if (normalized.length > 0) return { poNumber: normalized[0][1], matchedBy: normalized[0][0] };
+    return { poNumber: '', matchedBy: '' };
+  };
 
   let matItems: any[] = [];
   try {
-    const matRes = await query(`
-      SELECT 
-        m."purchaseDocument", 
-        m."supplierName", 
-        m."material", 
-        m."shortText", 
-        m."orderQuantity", 
-        m."orderUnit", 
-        m."projectName", 
-        m."Factory_Order", 
-        m."Ma_Tender",
-        s."address" as "supplierAddress",
-        s."contact_person" as "supplierContactPerson",
-        s."phone" as "supplierPhone"
-      FROM ${SCHEMA}.material m
-      LEFT JOIN ${SCHEMA}.suppliers s 
-        ON LOWER(TRIM(m."supplierName")) = LOWER(TRIM(s."name")) 
-        AND s.deleted_at IS NULL
-      WHERE m."purchaseDocument" ILIKE $1 
-         OR m."material" ILIKE $1 
-         OR m."shortText" ILIKE $1 
-         OR m."supplierName" ILIKE $1
-         OR m."projectName" ILIKE $1
-         OR m."Factory_Order" ILIKE $1
-         OR m."Ma_Tender" ILIKE $1
-      ORDER BY m."createdAt" DESC NULLS LAST
-      LIMIT 30
-    `, [searchPattern]);
+    const matSql = isExactOnly
+      ? `
+        SELECT
+          m."purchaseDocument",
+          m."order",
+          m."supplierName",
+          m."material",
+          m."shortText",
+          m."orderQuantity",
+          m."orderUnit",
+          m."projectName",
+          m."projectDefine",
+          m."Factory_Order",
+          m."Ma_Tender",
+          m."item",
+          m."materialGroupDesc",
+          COALESCE(NULLIF(TRIM(s."address"), ''), NULLIF(TRIM(m."street"), ''), '') as "supplierAddress",
+          COALESCE(s."contact_person", '') as "supplierContactPerson",
+          COALESCE(s."phone", '') as "supplierPhone"
+        FROM ${SCHEMA}.material m
+        LEFT JOIN ${SCHEMA}.suppliers s
+          ON LOWER(TRIM(m."supplierName")) = LOWER(TRIM(s."name"))
+          AND s.deleted_at IS NULL
+        WHERE LOWER(TRIM(COALESCE(m."purchaseDocument"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE(m."order"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE(m."Factory_Order"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE(m."Ma_Tender"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE(m."projectDefine"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE(m."material"::text, ''))) = $1
+        ORDER BY
+          CASE
+            WHEN LOWER(TRIM(COALESCE(m."purchaseDocument"::text, ''))) = $1 THEN 0
+            WHEN LOWER(TRIM(COALESCE(m."order"::text, ''))) = $1 THEN 1
+            WHEN LOWER(TRIM(COALESCE(m."Factory_Order"::text, ''))) = $1 THEN 2
+            WHEN LOWER(TRIM(COALESCE(m."Ma_Tender"::text, ''))) = $1 THEN 3
+            WHEN LOWER(TRIM(COALESCE(m."projectDefine"::text, ''))) = $1 THEN 4
+            ELSE 5
+          END ASC,
+          m."item" ASC NULLS LAST,
+          m."createdAt" DESC NULLS LAST
+        LIMIT 100
+      `
+      : `
+        SELECT
+          m."purchaseDocument",
+          m."order",
+          m."supplierName",
+          m."material",
+          m."shortText",
+          m."orderQuantity",
+          m."orderUnit",
+          m."projectName",
+          m."projectDefine",
+          m."Factory_Order",
+          m."Ma_Tender",
+          m."item",
+          m."materialGroupDesc",
+          COALESCE(NULLIF(TRIM(s."address"), ''), NULLIF(TRIM(m."street"), ''), '') as "supplierAddress",
+          COALESCE(s."contact_person", '') as "supplierContactPerson",
+          COALESCE(s."phone", '') as "supplierPhone"
+        FROM ${SCHEMA}.material m
+        LEFT JOIN ${SCHEMA}.suppliers s
+          ON LOWER(TRIM(m."supplierName")) = LOWER(TRIM(s."name"))
+          AND s.deleted_at IS NULL
+        WHERE COALESCE(m."purchaseDocument"::text, '') ILIKE $1
+           OR COALESCE(m."order"::text, '') ILIKE $1
+           OR COALESCE(m."material"::text, '') ILIKE $1
+           OR COALESCE(m."shortText"::text, '') ILIKE $1
+           OR COALESCE(m."supplierName"::text, '') ILIKE $1
+           OR COALESCE(m."projectName"::text, '') ILIKE $1
+           OR COALESCE(m."projectDefine"::text, '') ILIKE $1
+           OR COALESCE(m."Factory_Order"::text, '') ILIKE $1
+           OR COALESCE(m."Ma_Tender"::text, '') ILIKE $1
+        ORDER BY
+          CASE
+            WHEN LOWER(TRIM(COALESCE(m."purchaseDocument"::text, ''))) = $2 THEN 0
+            WHEN LOWER(TRIM(COALESCE(m."order"::text, ''))) = $2 THEN 1
+            WHEN LOWER(TRIM(COALESCE(m."Factory_Order"::text, ''))) = $2 THEN 2
+            WHEN LOWER(TRIM(COALESCE(m."Ma_Tender"::text, ''))) = $2 THEN 3
+            WHEN LOWER(TRIM(COALESCE(m."projectDefine"::text, ''))) = $2 THEN 4
+            WHEN COALESCE(m."purchaseDocument"::text, '') ILIKE $3 THEN 5
+            WHEN COALESCE(m."order"::text, '') ILIKE $3 THEN 6
+            WHEN COALESCE(m."Factory_Order"::text, '') ILIKE $3 THEN 7
+            ELSE 8
+          END ASC,
+          m."item" ASC NULLS LAST,
+          m."createdAt" DESC NULLS LAST
+        LIMIT 50
+      `;
 
-    matItems = matRes.rows.map((r: any) => ({
-      poNumber: r.purchaseDocument || r.Factory_Order || r.Ma_Tender || '',
-      supplierName: r.supplierName || '',
-      projectName: r.projectName || '',
-      itemCode: r.material || '',
-      itemName: r.shortText || r.material || '',
-      quantity: r.orderQuantity ? parseFloat(r.orderQuantity) : 1,
-      unit: r.orderUnit || 'Bộ',
-      specifications: r.shortText || '',
-      supplierAddress: r.supplierAddress || '',
-      supplierContactPerson: r.supplierContactPerson || '',
-      supplierPhone: r.supplierPhone || '',
-      source: 'material'
-    }));
+    const matParams = isExactOnly ? [cleanLower] : [searchPattern, cleanLower, prefixPattern];
+    const matRes = await query(matSql, matParams);
+
+    matItems = matRes.rows.map((r: any) => {
+      const resolved = resolveMatchedCode([
+        ['purchaseDocument', r.purchaseDocument],
+        ['order', r.order],
+        ['Factory_Order', r.Factory_Order],
+        ['Ma_Tender', r.Ma_Tender],
+        ['projectDefine', r.projectDefine],
+        ['material', r.material],
+      ]);
+      const parsedQty = parseFloat(r.orderQuantity);
+      const quantity = Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : 1;
+      const itemCode = String(r.material || '').trim();
+      const shortText = String(r.shortText || '').trim();
+      return {
+        poNumber: resolved.poNumber,
+        matchedBy: resolved.matchedBy,
+        purchaseDocument: String(r.purchaseDocument || '').trim(),
+        orderNumber: String(r.order || '').trim(),
+        lineItemNo: String(r.item || '').trim(),
+        supplierName: String(r.supplierName || '').trim(),
+        projectName: String(r.projectName || r.projectDefine || '').trim(),
+        itemCode,
+        itemName: shortText || itemCode,
+        quantity,
+        unit: String(r.orderUnit || '').trim() || 'Bộ',
+        specifications: shortText || String(r.materialGroupDesc || '').trim(),
+        supplierAddress: String(r.supplierAddress || '').trim(),
+        supplierContactPerson: String(r.supplierContactPerson || '').trim(),
+        supplierPhone: String(r.supplierPhone || '').trim(),
+        source: 'material'
+      };
+    });
   } catch (e) {
     console.warn("lookupPoMaterials material query warning:", e);
   }
 
   let ipoItems: any[] = [];
   try {
-    const ipoRes = await query(`
-      SELECT "ID_Factory_Order", "Ma_Tender", "Project_name", "Material_description", "Quantity_IPO", "Base_Unit"
-      FROM ${SCHEMA}.ipo
-      WHERE "ID_Factory_Order" ILIKE $1 
-         OR "Ma_Tender" ILIKE $1 
-         OR "Project_name" ILIKE $1
-         OR "Material_description" ILIKE $1
-      LIMIT 20
-    `, [searchPattern]);
+    const ipoSql = isExactOnly
+      ? `
+        SELECT
+          "ID_Factory_Order",
+          "IPO_Number",
+          "salesOrder",
+          "Ma_Tender",
+          "ID_Material",
+          "ID_Project",
+          "pmOrderID",
+          "Project_name",
+          "Material_description",
+          "Quantity_IPO",
+          "Quantity",
+          "Base_Unit",
+          "IPO_Line",
+          "lineNumber"
+        FROM ${SCHEMA}.ipo
+        WHERE LOWER(TRIM(COALESCE("IPO_Number"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE("ID_Factory_Order"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE("salesOrder"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE("Ma_Tender"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE("ID_Project"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE("pmOrderID"::text, ''))) = $1
+           OR LOWER(TRIM(COALESCE("ID_Material"::text, ''))) = $1
+        ORDER BY
+          CASE
+            WHEN LOWER(TRIM(COALESCE("IPO_Number"::text, ''))) = $1 THEN 0
+            WHEN LOWER(TRIM(COALESCE("ID_Factory_Order"::text, ''))) = $1 THEN 1
+            WHEN LOWER(TRIM(COALESCE("salesOrder"::text, ''))) = $1 THEN 2
+            WHEN LOWER(TRIM(COALESCE("Ma_Tender"::text, ''))) = $1 THEN 3
+            WHEN LOWER(TRIM(COALESCE("ID_Project"::text, ''))) = $1 THEN 4
+            ELSE 5
+          END ASC,
+          "IPO_Line" ASC NULLS LAST,
+          "lineNumber" ASC NULLS LAST
+        LIMIT 100
+      `
+      : `
+        SELECT
+          "ID_Factory_Order",
+          "IPO_Number",
+          "salesOrder",
+          "Ma_Tender",
+          "ID_Material",
+          "ID_Project",
+          "pmOrderID",
+          "Project_name",
+          "Material_description",
+          "Quantity_IPO",
+          "Quantity",
+          "Base_Unit",
+          "IPO_Line",
+          "lineNumber"
+        FROM ${SCHEMA}.ipo
+        WHERE COALESCE("IPO_Number"::text, '') ILIKE $1
+           OR COALESCE("ID_Factory_Order"::text, '') ILIKE $1
+           OR COALESCE("salesOrder"::text, '') ILIKE $1
+           OR COALESCE("Ma_Tender"::text, '') ILIKE $1
+           OR COALESCE("ID_Material"::text, '') ILIKE $1
+           OR COALESCE("ID_Project"::text, '') ILIKE $1
+           OR COALESCE("pmOrderID"::text, '') ILIKE $1
+           OR COALESCE("Project_name"::text, '') ILIKE $1
+           OR COALESCE("Material_description"::text, '') ILIKE $1
+        ORDER BY
+          CASE
+            WHEN LOWER(TRIM(COALESCE("IPO_Number"::text, ''))) = $2 THEN 0
+            WHEN LOWER(TRIM(COALESCE("ID_Factory_Order"::text, ''))) = $2 THEN 1
+            WHEN LOWER(TRIM(COALESCE("salesOrder"::text, ''))) = $2 THEN 2
+            WHEN LOWER(TRIM(COALESCE("Ma_Tender"::text, ''))) = $2 THEN 3
+            WHEN COALESCE("IPO_Number"::text, '') ILIKE $3 THEN 4
+            WHEN COALESCE("ID_Factory_Order"::text, '') ILIKE $3 THEN 5
+            ELSE 6
+          END ASC,
+          "IPO_Line" ASC NULLS LAST,
+          "lineNumber" ASC NULLS LAST
+        LIMIT 30
+      `;
 
-    ipoItems = ipoRes.rows.map((r: any) => ({
-      poNumber: r.ID_Factory_Order || r.Ma_Tender || '',
-      supplierName: '',
-      projectName: r.Project_name || '',
-      itemCode: r.Ma_Tender || '',
-      itemName: r.Material_description || '',
-      quantity: r.Quantity_IPO ? parseFloat(r.Quantity_IPO) : 1,
-      unit: r.Base_Unit || 'Bộ',
-      specifications: r.Material_description || '',
-      supplierAddress: '',
-      supplierContactPerson: '',
-      supplierPhone: '',
-      source: 'ipo'
-    }));
+    const ipoParams = isExactOnly ? [cleanLower] : [searchPattern, cleanLower, prefixPattern];
+    const ipoRes = await query(ipoSql, ipoParams);
+
+    const seenIpo = new Set<string>();
+    for (const r of ipoRes.rows) {
+      const resolved = resolveMatchedCode([
+        ['IPO_Number', r.IPO_Number],
+        ['ID_Factory_Order', r.ID_Factory_Order],
+        ['salesOrder', r.salesOrder],
+        ['Ma_Tender', r.Ma_Tender],
+        ['ID_Project', r.ID_Project],
+        ['pmOrderID', r.pmOrderID],
+        ['ID_Material', r.ID_Material],
+      ]);
+      const qIpo = parseFloat(r.Quantity_IPO);
+      const qAlt = parseFloat(r.Quantity);
+      const quantity = Number.isFinite(qIpo) && qIpo > 0
+        ? qIpo
+        : (Number.isFinite(qAlt) && qAlt > 0 ? qAlt : 1);
+      const itemCode = String(r.ID_Material || r.Ma_Tender || '').trim();
+      const itemName = String(r.Material_description || itemCode || r.Project_name || '').trim();
+      const unit = String(r.Base_Unit || '').trim() || 'Bộ';
+      const dedupKey = `${resolved.poNumber.toLowerCase()}|${itemCode.toLowerCase()}|${itemName.toLowerCase()}|${unit.toLowerCase()}|${quantity}`;
+      if (seenIpo.has(dedupKey)) continue;
+      seenIpo.add(dedupKey);
+
+      ipoItems.push({
+        poNumber: resolved.poNumber,
+        matchedBy: resolved.matchedBy,
+        ipoNumber: String(r.IPO_Number || '').trim(),
+        factoryOrder: String(r.ID_Factory_Order || '').trim(),
+        lineItemNo: String(r.IPO_Line || r.lineNumber || '').trim(),
+        supplierName: '',
+        projectName: String(r.Project_name || r.ID_Project || '').trim(),
+        itemCode,
+        itemName,
+        quantity,
+        unit,
+        specifications: String(r.Material_description || '').trim(),
+        supplierAddress: '',
+        supplierContactPerson: '',
+        supplierPhone: '',
+        source: 'ipo'
+      });
+    }
   } catch (e) {
     console.warn("lookupPoMaterials ipo query warning:", e);
   }
@@ -4308,119 +4511,343 @@ export async function deleteTeam(id: string, actorId?: string | null) {
 }
 
 // --- TOOL MANAGEMENT (M09) ---
+let toolTablesEnsured = false;
+
 async function ensureToolTables() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_catalogs (
-      id VARCHAR(64) PRIMARY KEY,
-      code VARCHAR(64),
-      name VARCHAR(255),
-      type VARCHAR(64),
-      specification TEXT,
-      unit VARCHAR(32),
-      min_stock INT DEFAULT 0,
-      created_at BIGINT,
-      updated_at BIGINT,
-      deleted_at BIGINT,
-      version INT DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_assets (
-      id VARCHAR(64) PRIMARY KEY,
-      catalog_id VARCHAR(64),
-      asset_code VARCHAR(64),
-      serial_number VARCHAR(128),
-      status VARCHAR(32) DEFAULT 'AVAILABLE',
-      location VARCHAR(255),
-      current_user_id VARCHAR(64),
-      purchase_date BIGINT,
-      calibration_due_date BIGINT,
-      notes TEXT,
-      created_at BIGINT,
-      updated_at BIGINT,
-      deleted_at BIGINT,
-      version INT DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_transfers (
-      id VARCHAR(64) PRIMARY KEY,
-      asset_id VARCHAR(64),
-      from_user_id VARCHAR(64),
-      to_user_id VARCHAR(64),
-      transfer_date BIGINT,
-      purpose TEXT,
-      status VARCHAR(32),
-      created_at BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_calibrations (
-      id VARCHAR(64) PRIMARY KEY,
-      asset_id VARCHAR(64),
-      calibration_date BIGINT,
-      next_due_date BIGINT,
-      result VARCHAR(64),
-      certificate_url TEXT,
-      notes TEXT,
-      created_at BIGINT
-    );
-    ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS deleted_at BIGINT;
-    ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
-    ALTER TABLE ${SCHEMA}.tool_assets ADD COLUMN IF NOT EXISTS deleted_at BIGINT;
-    ALTER TABLE ${SCHEMA}.tool_assets ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
-  `).catch(() => {});
+  if (toolTablesEnsured) return;
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_catalogs (
+        id TEXT PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT,
+        specifications TEXT,
+        manual_markdown TEXT,
+        manual_pdf_url TEXT,
+        created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+        updated_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+        created_by TEXT,
+        deleted_at BIGINT,
+        version INT DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_assets (
+        id TEXT PRIMARY KEY,
+        catalog_id TEXT NOT NULL,
+        asset_code TEXT UNIQUE NOT NULL,
+        serial_number TEXT,
+        current_user_id TEXT,
+        next_calibration_date BIGINT,
+        status TEXT NOT NULL DEFAULT 'AVAILABLE',
+        created_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+        updated_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+        created_by TEXT,
+        deleted_at BIGINT,
+        version INT DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_transfers (
+        id TEXT PRIMARY KEY,
+        tool_asset_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        from_user_id TEXT,
+        to_user_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        request_date BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+        receiver_confirm_date BIGINT,
+        receiver_signature TEXT,
+        receiver_image TEXT,
+        manager_approve_date BIGINT,
+        manager_signature TEXT,
+        notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS ${SCHEMA}.tool_calibrations (
+        id TEXT PRIMARY KEY,
+        tool_asset_id TEXT NOT NULL,
+        request_date BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+        requested_by TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        calibration_date BIGINT,
+        next_calibration_date BIGINT,
+        certificate_url TEXT,
+        approved_by TEXT,
+        notes TEXT
+      );
+      ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS specifications TEXT;
+      ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS manual_markdown TEXT;
+      ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS manual_pdf_url TEXT;
+      ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS created_by TEXT;
+      ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS deleted_at BIGINT;
+      ALTER TABLE ${SCHEMA}.tool_catalogs ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
+      ALTER TABLE ${SCHEMA}.tool_assets ADD COLUMN IF NOT EXISTS next_calibration_date BIGINT;
+      ALTER TABLE ${SCHEMA}.tool_assets ADD COLUMN IF NOT EXISTS created_by TEXT;
+      ALTER TABLE ${SCHEMA}.tool_assets ADD COLUMN IF NOT EXISTS deleted_at BIGINT;
+      ALTER TABLE ${SCHEMA}.tool_assets ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
+    `);
+    toolTablesEnsured = true;
+  } catch (err: any) {
+    console.warn('[M09] ensureToolTables warning:', err?.message || err);
+  }
+}
+
+function toNumOrNull(val: any): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseJsonStringArray(raw: any): string[] {
+  if (Array.isArray(raw)) {
+    return Array.from(new Set(raw.map((x) => String(x || '').trim()).filter(Boolean)));
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return Array.from(new Set(parsed.map((x) => String(x || '').trim()).filter(Boolean)));
+      }
+    } catch {
+      return [raw.trim()];
+    }
+  }
+  return [];
+}
+
+function mapToolCatalogRow(r: any) {
+  return {
+    id: r.id,
+    code: r.code || '',
+    name: r.name || '',
+    type: r.type || '',
+    specifications: r.specifications || '',
+    manual_markdown: r.manual_markdown || '',
+    manualMarkdown: r.manual_markdown || '',
+    manual_pdf_url: r.manual_pdf_url || '',
+    manualPdfUrl: r.manual_pdf_url || '',
+    created_by: r.created_by || null,
+    createdBy: r.created_by || null,
+    created_at: toNumOrNull(r.created_at),
+    createdAt: toNumOrNull(r.created_at),
+    updated_at: toNumOrNull(r.updated_at),
+    updatedAt: toNumOrNull(r.updated_at),
+    asset_count: r.asset_count !== undefined ? Number(r.asset_count) : undefined,
+    assetCount: r.asset_count !== undefined ? Number(r.asset_count) : undefined,
+    version: r.version !== undefined && r.version !== null ? Number(r.version) : 1,
+  };
+}
+
+function mapToolAssetRow(r: any) {
+  return {
+    id: r.id,
+    catalog_id: r.catalog_id,
+    catalogId: r.catalog_id,
+    asset_code: r.asset_code || '',
+    assetCode: r.asset_code || '',
+    serial_number: r.serial_number || '',
+    serialNumber: r.serial_number || '',
+    status: r.status || 'AVAILABLE',
+    current_user_id: r.current_user_id || null,
+    currentUserId: r.current_user_id || null,
+    next_calibration_date: toNumOrNull(r.next_calibration_date),
+    nextCalibrationDate: toNumOrNull(r.next_calibration_date),
+    created_by: r.created_by || null,
+    createdBy: r.created_by || null,
+    created_at: toNumOrNull(r.created_at),
+    createdAt: toNumOrNull(r.created_at),
+    updated_at: toNumOrNull(r.updated_at),
+    updatedAt: toNumOrNull(r.updated_at),
+    catalog_name: r.catalog_name || '',
+    catalogName: r.catalog_name || '',
+    catalog_code: r.catalog_code || '',
+    catalogCode: r.catalog_code || '',
+    catalog_type: r.catalog_type || '',
+    catalogType: r.catalog_type || '',
+    version: r.version !== undefined && r.version !== null ? Number(r.version) : 1,
+  };
+}
+
+function mapToolTransferRow(r: any) {
+  const assetIds = parseJsonStringArray(r.tool_asset_ids);
+  return {
+    id: r.id,
+    tool_asset_ids: assetIds,
+    toolAssetIds: assetIds,
+    tool_asset_id: assetIds[0] || null,
+    from_user_id: r.from_user_id || null,
+    fromUserId: r.from_user_id || null,
+    to_user_id: r.to_user_id || '',
+    toUserId: r.to_user_id || '',
+    status: r.status || 'PENDING',
+    request_date: toNumOrNull(r.request_date),
+    requestDate: toNumOrNull(r.request_date),
+    receiver_confirm_date: toNumOrNull(r.receiver_confirm_date),
+    receiverConfirmDate: toNumOrNull(r.receiver_confirm_date),
+    receiver_signature: r.receiver_signature || null,
+    receiverSignature: r.receiver_signature || null,
+    receiver_image: r.receiver_image || null,
+    receiverImage: r.receiver_image || null,
+    manager_approve_date: toNumOrNull(r.manager_approve_date),
+    managerApproveDate: toNumOrNull(r.manager_approve_date),
+    manager_signature: r.manager_signature || null,
+    managerSignature: r.manager_signature || null,
+    notes: r.notes || '',
+  };
+}
+
+function mapToolCalibrationRow(r: any) {
+  return {
+    id: r.id,
+    tool_asset_id: r.tool_asset_id,
+    toolAssetId: r.tool_asset_id,
+    assetId: r.tool_asset_id,
+    request_date: toNumOrNull(r.request_date),
+    requestDate: toNumOrNull(r.request_date),
+    requested_by: r.requested_by || '',
+    requestedBy: r.requested_by || '',
+    status: r.status || 'PENDING',
+    calibration_date: toNumOrNull(r.calibration_date),
+    calibrationDate: toNumOrNull(r.calibration_date),
+    next_calibration_date: toNumOrNull(r.next_calibration_date),
+    nextCalibrationDate: toNumOrNull(r.next_calibration_date),
+    certificate_url: r.certificate_url || '',
+    certificateUrl: r.certificate_url || '',
+    approved_by: r.approved_by || null,
+    approvedBy: r.approved_by || null,
+    notes: r.notes || '',
+  };
 }
 
 export async function getToolCatalogs() {
   await ensureToolTables();
-  const res = await query(`SELECT id, code, name, type, specification, unit, min_stock, created_at, updated_at, version FROM ${SCHEMA}.tool_catalogs WHERE deleted_at IS NULL ORDER BY name`).catch(() => ({ rows: [] }));
-  return res.rows.map((r: any) => ({
-    id: r.id,
-    code: r.code,
-    name: r.name,
-    type: r.type,
-    specification: r.specification,
-    unit: r.unit,
-    minStock: r.min_stock,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    version: r.version !== undefined && r.version !== null ? Number(r.version) : 1,
-  }));
+  const res = await query(`
+    SELECT c.id, c.code, c.name, c.type, c.specifications, c.manual_markdown, c.manual_pdf_url,
+           c.created_by, c.created_at, c.updated_at, c.version,
+           COUNT(a.id) FILTER (WHERE a.deleted_at IS NULL)::int AS asset_count
+    FROM ${SCHEMA}.tool_catalogs c
+    LEFT JOIN ${SCHEMA}.tool_assets a ON a.catalog_id = c.id AND a.deleted_at IS NULL
+    WHERE c.deleted_at IS NULL
+    GROUP BY c.id
+    ORDER BY c.name ASC, c.code ASC
+  `);
+  return res.rows.map(mapToolCatalogRow);
 }
 
 export async function saveToolCatalog(catalog: any, actorId?: string | null) {
   await ensureToolTables();
-  const id = catalog.id || crypto.randomUUID();
+  const id = String(catalog.id || crypto.randomUUID()).trim();
+  const code = String(catalog.code || '').trim().toUpperCase();
+  const name = String(catalog.name || '').trim();
+  if (!code || !name) {
+    throw Object.assign(new Error('Vui lòng nhập đầy đủ Mã loại và Tên danh mục CCDC.'), { statusCode: 400 });
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_catalogs WHERE id = $1 LIMIT 1`, [id]).catch(() => ({ rows: [] }));
+  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_catalogs WHERE id = $1 LIMIT 1`, [id]);
   const existing = existingRes.rows[0] || null;
   if (existing && existing.deleted_at != null) {
     throw Object.assign(new Error('Danh mục CCDC đã bị xóa mềm.'), { statusCode: 404 });
   }
+
   assertNoNewBase64DataUri(catalog, existing, 'Danh mục CCDC');
+
   if (existing && catalog.version !== undefined && existing.version !== undefined && Number(catalog.version) !== Number(existing.version)) {
     throw Object.assign(new Error('Danh mục CCDC đã được người khác cập nhật trước đó. Vui lòng tải lại.'), { statusCode: 409 });
   }
-  const savedRes = await query(
-    `INSERT INTO ${SCHEMA}.tool_catalogs (id, code, name, type, specification, unit, min_stock, created_at, updated_at, deleted_at, version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, 1)
-     ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, type = EXCLUDED.type, specification = EXCLUDED.specification, unit = EXCLUDED.unit, min_stock = EXCLUDED.min_stock, updated_at = EXCLUDED.updated_at, deleted_at = NULL, version = COALESCE(${SCHEMA}.tool_catalogs.version, 1) + 1
-     RETURNING *`,
-    [id, catalog.code || '', catalog.name || '', catalog.type || '', catalog.specification || '', catalog.unit || '', catalog.minStock || catalog.min_stock || 0, existing?.created_at || catalog.createdAt || now, now]
+
+  const dupRes = await query(
+    `SELECT id, deleted_at FROM ${SCHEMA}.tool_catalogs WHERE UPPER(TRIM(code)) = UPPER($1) AND id <> $2 LIMIT 1`,
+    [code, id]
   );
-  const saved = savedRes.rows[0];
-  await writeAuditLog({
-    userId: actorId || null,
-    action: existing ? 'UPDATE_TOOL_CATALOG' : 'CREATE_TOOL_CATALOG',
-    entityType: 'tool_catalog',
-    entityId: id,
-    oldValue: existing,
-    newValue: saved || catalog,
-  });
-  return { ...catalog, id, version: saved?.version || 1 };
+  if (dupRes.rows.length > 0) {
+    const dupRow = dupRes.rows[0];
+    throw Object.assign(
+      new Error(
+        dupRow.deleted_at != null
+          ? `Mã loại "${code}" đã từng tồn tại trong dữ liệu đã xóa. Vui lòng dùng mã khác.`
+          : `Mã loại "${code}" đã tồn tại trong Kho Tổng.`
+      ),
+      { statusCode: 409 }
+    );
+  }
+
+  const specifications = catalog.specifications ?? catalog.specification ?? existing?.specifications ?? '';
+  const manualMarkdown = catalog.manual_markdown ?? catalog.manualMarkdown ?? existing?.manual_markdown ?? null;
+  const manualPdfUrl = catalog.manual_pdf_url ?? catalog.manualPdfUrl ?? existing?.manual_pdf_url ?? null;
+  const createdBy = existing?.created_by || catalog.created_by || catalog.createdBy || actorId || null;
+
+  try {
+    const savedRes = await query(
+      `INSERT INTO ${SCHEMA}.tool_catalogs
+         (id, code, name, type, specifications, manual_markdown, manual_pdf_url, created_by, created_at, updated_at, deleted_at, version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, 1)
+       ON CONFLICT (id) DO UPDATE SET
+         code = EXCLUDED.code,
+         name = EXCLUDED.name,
+         type = EXCLUDED.type,
+         specifications = EXCLUDED.specifications,
+         manual_markdown = EXCLUDED.manual_markdown,
+         manual_pdf_url = EXCLUDED.manual_pdf_url,
+         updated_at = EXCLUDED.updated_at,
+         deleted_at = NULL,
+         version = COALESCE(${SCHEMA}.tool_catalogs.version, 1) + 1
+       RETURNING *`,
+      [
+        id,
+        code,
+        name,
+        String(catalog.type || '').trim() || 'Chung',
+        specifications,
+        manualMarkdown,
+        manualPdfUrl,
+        createdBy,
+        existing?.created_at || toNumOrNull(catalog.created_at ?? catalog.createdAt) || now,
+        now,
+      ]
+    );
+    const saved = savedRes.rows[0];
+    await writeAuditLog({
+      userId: actorId || null,
+      action: existing ? 'UPDATE_TOOL_CATALOG' : 'CREATE_TOOL_CATALOG',
+      entityType: 'tool_catalog',
+      entityId: id,
+      oldValue: existing,
+      newValue: saved || catalog,
+    });
+    return mapToolCatalogRow(saved);
+  } catch (err: any) {
+    if (err?.code === '23505') {
+      throw Object.assign(new Error(`Mã loại "${code}" đã tồn tại.`), { statusCode: 409 });
+    }
+    throw err;
+  }
 }
 
 export async function deleteToolCatalog(id: string, actorId?: string | null) {
   await ensureToolTables();
-  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_catalogs WHERE id = $1 AND deleted_at IS NULL LIMIT 1`, [id]);
-  const existing = existingRes.rows[0] || null;
+  const existingRes = await query(
+    `SELECT * FROM ${SCHEMA}.tool_catalogs WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    [id]
+  );
+  if (existingRes.rows.length === 0) {
+    throw Object.assign(new Error('Không tìm thấy danh mục CCDC cần xóa.'), { statusCode: 404 });
+  }
+  const existing = existingRes.rows[0];
+
+  const assetsCheck = await query(
+    `SELECT COUNT(*)::int AS cnt FROM ${SCHEMA}.tool_assets WHERE catalog_id = $1 AND deleted_at IS NULL`,
+    [id]
+  );
+  const activeCount = Number(assetsCheck.rows[0]?.cnt || 0);
+  if (activeCount > 0) {
+    throw Object.assign(
+      new Error(`Không thể xóa danh mục đang có ${activeCount} tài sản vật lý hoạt động.`),
+      { statusCode: 409 }
+    );
+  }
+
   const nowTs = Math.floor(Date.now() / 1000);
-  await query(`UPDATE ${SCHEMA}.tool_catalogs SET deleted_at = $1, updated_at = $1, version = COALESCE(version, 1) + 1 WHERE id = $2 AND deleted_at IS NULL`, [nowTs, id]);
+  await query(
+    `UPDATE ${SCHEMA}.tool_catalogs SET deleted_at = $1, updated_at = $1, version = COALESCE(version, 1) + 1 WHERE id = $2 AND deleted_at IS NULL`,
+    [nowTs, id]
+  );
   await writeAuditLog({
     userId: actorId || null,
     action: 'SOFT_DELETE_TOOL_CATALOG',
@@ -4435,109 +4862,161 @@ export async function deleteToolCatalog(id: string, actorId?: string | null) {
 export async function getToolAssets() {
   await ensureToolTables();
   const res = await query(`
-    SELECT a.id, a.catalog_id, a.asset_code, a.serial_number, a.status, a.location, a.current_user_id, a.purchase_date, a.calibration_due_date, a.notes, a.created_at, a.updated_at, a.version,
-           c.name as catalog_name, c.code as catalog_code, c.type as catalog_type
+    SELECT a.id, a.catalog_id, a.asset_code, a.serial_number, a.current_user_id, a.next_calibration_date,
+           a.status, a.created_at, a.updated_at, a.created_by, a.version,
+           c.name AS catalog_name, c.code AS catalog_code, c.type AS catalog_type
     FROM ${SCHEMA}.tool_assets a
-    LEFT JOIN ${SCHEMA}.tool_catalogs c ON a.catalog_id = c.id
+    LEFT JOIN ${SCHEMA}.tool_catalogs c ON a.catalog_id = c.id AND c.deleted_at IS NULL
     WHERE a.deleted_at IS NULL
-    ORDER BY a.created_at DESC
-  `).catch(() => ({ rows: [] }));
-  return res.rows.map((r: any) => ({
-    id: r.id,
-    catalog_id: r.catalog_id,
-    catalogId: r.catalog_id,
-    asset_code: r.asset_code,
-    assetCode: r.asset_code,
-    serial_number: r.serial_number,
-    serialNumber: r.serial_number,
-    status: r.status || 'AVAILABLE',
-    location: r.location,
-    current_user_id: r.current_user_id,
-    currentUserId: r.current_user_id,
-    purchase_date: r.purchase_date,
-    calibration_due_date: r.calibration_due_date,
-    notes: r.notes,
-    catalog_name: r.catalog_name,
-    catalog_code: r.catalog_code,
-    catalog_type: r.catalog_type,
-    version: r.version !== undefined && r.version !== null ? Number(r.version) : 1,
-  }));
+    ORDER BY a.created_at DESC NULLS LAST, a.asset_code ASC
+  `);
+  return res.rows.map(mapToolAssetRow);
 }
 
 export async function getToolAssetsByCatalog(catalogId: string) {
   await ensureToolTables();
-  const res = await query(`
-    SELECT id, catalog_id, asset_code, serial_number, status, location, current_user_id, purchase_date, calibration_due_date, notes, created_at, updated_at, version
-    FROM ${SCHEMA}.tool_assets
-    WHERE catalog_id = $1 AND deleted_at IS NULL
-    ORDER BY created_at DESC
-  `, [catalogId]).catch(() => ({ rows: [] }));
-  return res.rows.map((r: any) => ({
-    id: r.id,
-    catalogId: r.catalog_id,
-    assetCode: r.asset_code,
-    serialNumber: r.serial_number,
-    status: r.status || 'AVAILABLE',
-    location: r.location,
-    currentUserId: r.current_user_id,
-    purchaseDate: r.purchase_date,
-    calibrationDueDate: r.calibration_due_date,
-    notes: r.notes,
-    version: r.version !== undefined && r.version !== null ? Number(r.version) : 1,
-  }));
+  const res = await query(
+    `SELECT a.id, a.catalog_id, a.asset_code, a.serial_number, a.current_user_id, a.next_calibration_date,
+            a.status, a.created_at, a.updated_at, a.created_by, a.version,
+            c.name AS catalog_name, c.code AS catalog_code, c.type AS catalog_type
+     FROM ${SCHEMA}.tool_assets a
+     LEFT JOIN ${SCHEMA}.tool_catalogs c ON a.catalog_id = c.id AND c.deleted_at IS NULL
+     WHERE a.catalog_id = $1 AND a.deleted_at IS NULL
+     ORDER BY a.created_at DESC NULLS LAST, a.asset_code ASC`,
+    [catalogId]
+  );
+  return res.rows.map(mapToolAssetRow);
 }
 
 export async function saveToolAsset(asset: any, actorId?: string | null) {
   await ensureToolTables();
-  const id = asset.id || crypto.randomUUID();
+  const id = String(asset.id || crypto.randomUUID()).trim();
+  const catalogId = String(asset.catalog_id || asset.catalogId || '').trim();
+  const assetCode = String(asset.asset_code || asset.assetCode || '').trim().toUpperCase();
+  if (!catalogId || !assetCode) {
+    throw Object.assign(new Error('Vui lòng cung cấp Danh mục và Mã tài sản (Asset Tag).'), { statusCode: 400 });
+  }
+
+  const catalogRes = await query(
+    `SELECT id, code, name, type FROM ${SCHEMA}.tool_catalogs WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    [catalogId]
+  );
+  if (catalogRes.rows.length === 0) {
+    throw Object.assign(new Error('Danh mục CCDC gốc không tồn tại hoặc đã bị xóa.'), { statusCode: 404 });
+  }
+  const catRow = catalogRes.rows[0];
+
   const now = Math.floor(Date.now() / 1000);
-  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_assets WHERE id = $1 LIMIT 1`, [id]).catch(() => ({ rows: [] }));
+  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_assets WHERE id = $1 LIMIT 1`, [id]);
   const existing = existingRes.rows[0] || null;
   if (existing && existing.deleted_at != null) {
     throw Object.assign(new Error('Thiết bị CCDC đã bị xóa mềm.'), { statusCode: 404 });
   }
+
   assertNoNewBase64DataUri(asset, existing, 'Thiết bị CCDC');
+
   if (existing && asset.version !== undefined && existing.version !== undefined && Number(asset.version) !== Number(existing.version)) {
     throw Object.assign(new Error('Thiết bị CCDC đã được người khác cập nhật trước đó. Vui lòng tải lại.'), { statusCode: 409 });
   }
-  const savedRes = await query(
-    `INSERT INTO ${SCHEMA}.tool_assets (id, catalog_id, asset_code, serial_number, status, location, current_user_id, purchase_date, calibration_due_date, notes, created_at, updated_at, deleted_at, version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, 1)
-     ON CONFLICT (id) DO UPDATE SET catalog_id = EXCLUDED.catalog_id, asset_code = EXCLUDED.asset_code, serial_number = EXCLUDED.serial_number, status = EXCLUDED.status, location = EXCLUDED.location, current_user_id = EXCLUDED.current_user_id, purchase_date = EXCLUDED.purchase_date, calibration_due_date = EXCLUDED.calibration_due_date, notes = EXCLUDED.notes, updated_at = EXCLUDED.updated_at, deleted_at = NULL, version = COALESCE(${SCHEMA}.tool_assets.version, 1) + 1
-     RETURNING *`,
-    [
-      id,
-      asset.catalogId || asset.catalog_id || '',
-      asset.assetCode || asset.asset_code || '',
-      asset.serialNumber || asset.serial_number || '',
-      asset.status || 'AVAILABLE',
-      asset.location || '',
-      asset.currentUserId || asset.current_user_id || null,
-      asset.purchaseDate || asset.purchase_date || null,
-      asset.calibrationDueDate || asset.calibration_due_date || null,
-      asset.notes || '',
-      existing?.created_at || asset.createdAt || now,
-      now
-    ]
+
+  const dupRes = await query(
+    `SELECT id, deleted_at FROM ${SCHEMA}.tool_assets WHERE UPPER(TRIM(asset_code)) = UPPER($1) AND id <> $2 LIMIT 1`,
+    [assetCode, id]
   );
-  const saved = savedRes.rows[0];
-  await writeAuditLog({
-    userId: actorId || null,
-    action: existing ? 'UPDATE_TOOL_ASSET' : 'CREATE_TOOL_ASSET',
-    entityType: 'tool_asset',
-    entityId: id,
-    oldValue: existing,
-    newValue: saved || asset,
-  });
-  return { ...asset, id, version: saved?.version || 1 };
+  if (dupRes.rows.length > 0) {
+    const dupRow = dupRes.rows[0];
+    throw Object.assign(
+      new Error(
+        dupRow.deleted_at != null
+          ? `Mã tài sản "${assetCode}" đã từng tồn tại trong dữ liệu đã xóa. Vui lòng dùng mã khác.`
+          : `Mã tài sản "${assetCode}" đã tồn tại.`
+      ),
+      { statusCode: 409 }
+    );
+  }
+
+  const rawOwner = asset.current_user_id !== undefined ? asset.current_user_id : asset.currentUserId;
+  const normalizedOwner =
+    rawOwner === undefined
+      ? existing?.current_user_id || null
+      : !rawOwner || String(rawOwner).toUpperCase().trim() === 'KHO_TONG'
+        ? null
+        : String(rawOwner).trim();
+  const nextCalibDate =
+    asset.next_calibration_date !== undefined || asset.nextCalibrationDate !== undefined
+      ? toNumOrNull(asset.next_calibration_date ?? asset.nextCalibrationDate)
+      : toNumOrNull(existing?.next_calibration_date);
+  const status = String(asset.status || existing?.status || (normalizedOwner ? 'IN_USE' : 'AVAILABLE')).trim().toUpperCase();
+  const serialNumber = asset.serial_number ?? asset.serialNumber ?? existing?.serial_number ?? null;
+  const createdBy = existing?.created_by || asset.created_by || asset.createdBy || actorId || null;
+
+  try {
+    const savedRes = await query(
+      `INSERT INTO ${SCHEMA}.tool_assets
+         (id, catalog_id, asset_code, serial_number, current_user_id, next_calibration_date, status, created_at, updated_at, created_by, deleted_at, version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, 1)
+       ON CONFLICT (id) DO UPDATE SET
+         catalog_id = EXCLUDED.catalog_id,
+         asset_code = EXCLUDED.asset_code,
+         serial_number = EXCLUDED.serial_number,
+         current_user_id = EXCLUDED.current_user_id,
+         next_calibration_date = EXCLUDED.next_calibration_date,
+         status = EXCLUDED.status,
+         updated_at = EXCLUDED.updated_at,
+         deleted_at = NULL,
+         version = COALESCE(${SCHEMA}.tool_assets.version, 1) + 1
+       RETURNING *`,
+      [
+        id,
+        catalogId,
+        assetCode,
+        serialNumber ? String(serialNumber).trim() : null,
+        normalizedOwner,
+        nextCalibDate,
+        status,
+        existing?.created_at || toNumOrNull(asset.created_at ?? asset.createdAt) || now,
+        now,
+        createdBy,
+      ]
+    );
+    const saved = savedRes.rows[0];
+    await writeAuditLog({
+      userId: actorId || null,
+      action: existing ? 'UPDATE_TOOL_ASSET' : 'CREATE_TOOL_ASSET',
+      entityType: 'tool_asset',
+      entityId: id,
+      oldValue: existing,
+      newValue: saved || asset,
+    });
+    return mapToolAssetRow({
+      ...saved,
+      catalog_code: catRow.code,
+      catalog_name: catRow.name,
+      catalog_type: catRow.type,
+    });
+  } catch (err: any) {
+    if (err?.code === '23505') {
+      throw Object.assign(new Error(`Mã tài sản "${assetCode}" đã tồn tại.`), { statusCode: 409 });
+    }
+    throw err;
+  }
 }
 
 export async function deleteToolAsset(id: string, actorId?: string | null) {
   await ensureToolTables();
-  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_assets WHERE id = $1 AND deleted_at IS NULL LIMIT 1`, [id]);
-  const existing = existingRes.rows[0] || null;
+  const existingRes = await query(
+    `SELECT * FROM ${SCHEMA}.tool_assets WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    [id]
+  );
+  if (existingRes.rows.length === 0) {
+    throw Object.assign(new Error('Không tìm thấy tài sản CCDC cần xóa.'), { statusCode: 404 });
+  }
+  const existing = existingRes.rows[0];
   const nowTs = Math.floor(Date.now() / 1000);
-  await query(`UPDATE ${SCHEMA}.tool_assets SET deleted_at = $1, updated_at = $1, version = COALESCE(version, 1) + 1 WHERE id = $2 AND deleted_at IS NULL`, [nowTs, id]);
+  await query(
+    `UPDATE ${SCHEMA}.tool_assets SET deleted_at = $1, updated_at = $1, version = COALESCE(version, 1) + 1 WHERE id = $2 AND deleted_at IS NULL`,
+    [nowTs, id]
+  );
   await writeAuditLog({
     userId: actorId || null,
     action: 'SOFT_DELETE_TOOL_ASSET',
@@ -4551,101 +5030,342 @@ export async function deleteToolAsset(id: string, actorId?: string | null) {
 
 export async function getToolTransfers(assetId: string) {
   await ensureToolTables();
-  const res = await query(`
-    SELECT id, asset_id, from_user_id, to_user_id, transfer_date, purpose, status, created_at
-    FROM ${SCHEMA}.tool_transfers
-    WHERE asset_id = $1
-    ORDER BY created_at DESC
-  `, [assetId]).catch(() => ({ rows: [] }));
-  return res.rows.map((r: any) => ({
-    id: r.id,
-    assetId: r.asset_id,
-    fromUserId: r.from_user_id,
-    toUserId: r.to_user_id,
-    transferDate: r.transfer_date,
-    purpose: r.purpose,
-    status: r.status,
-    createdAt: r.created_at
-  }));
+  const res = await query(
+    `SELECT id, tool_asset_ids, from_user_id, to_user_id, status, request_date,
+            receiver_confirm_date, receiver_signature, receiver_image,
+            manager_approve_date, manager_signature, notes
+     FROM ${SCHEMA}.tool_transfers
+     WHERE tool_asset_ids ? $1
+     ORDER BY request_date DESC NULLS LAST, id DESC`,
+    [assetId]
+  );
+  return res.rows.map(mapToolTransferRow);
 }
 
-export async function saveToolTransfer(transfer: any, actorId?: string | null) {
+function actorMatchesTargetUser(actorUser: any, actorId: string | null | undefined, targetUserId: string | null | undefined): boolean {
+  const cleanTarget = String(targetUserId || '').trim().toLowerCase();
+  if (!cleanTarget || cleanTarget === 'kho_tong') return false;
+  const candidates = [
+    actorId,
+    actorUser?.id,
+    actorUser?.username,
+    actorUser?.msnv,
+    actorUser?.email,
+  ]
+    .map((v) => String(v || '').trim().toLowerCase())
+    .filter(Boolean);
+  return candidates.includes(cleanTarget);
+}
+
+export async function saveToolTransfer(
+  transfer: any,
+  actorId?: string | null,
+  options?: { actorCanManage?: boolean; actorUser?: any }
+) {
   await ensureToolTables();
-  assertNoNewBase64DataUri(transfer, null, 'Luân chuyển CCDC');
-  const id = transfer.id || crypto.randomUUID();
+  const actorCanManage = Boolean(options?.actorCanManage);
+  const actorUser = options?.actorUser || null;
+  const id = String(transfer.id || `TRF_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`).trim();
   const now = Math.floor(Date.now() / 1000);
-  await query(
-    `INSERT INTO ${SCHEMA}.tool_transfers (id, asset_id, from_user_id, to_user_id, transfer_date, purpose, status, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [id, transfer.assetId || transfer.asset_id, transfer.fromUserId || transfer.from_user_id || null, transfer.toUserId || transfer.to_user_id || null, transfer.transferDate || now, transfer.purpose || '', transfer.status || 'COMPLETED', now]
-  );
-  const targetUser = transfer.toUserId || transfer.to_user_id;
-  const assetId = transfer.assetId || transfer.asset_id;
-  if (assetId) {
-    await query(`UPDATE ${SCHEMA}.tool_assets SET current_user_id = $1, status = $2, updated_at = $3, version = COALESCE(version, 1) + 1 WHERE id = $4`, [
-      targetUser || null,
-      targetUser ? 'IN_USE' : 'AVAILABLE',
-      now,
-      assetId
-    ]);
+
+  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_transfers WHERE id = $1 LIMIT 1`, [id]);
+  const existing = existingRes.rows[0] || null;
+
+  // Tolerate pre-existing legacy signatures while strictly blocking any newly submitted Base64 payloads
+  assertNoNewBase64DataUri(transfer, existing, 'Luân chuyển CCDC');
+
+  if (!existing) {
+    // STEP 1: Create PENDING transfer request WITHOUT transferring ownership yet
+    const assetIds = parseJsonStringArray(
+      transfer.tool_asset_ids ?? transfer.toolAssetIds ?? (transfer.tool_asset_id || transfer.assetId ? [transfer.tool_asset_id || transfer.assetId] : [])
+    );
+    if (assetIds.length === 0) {
+      throw Object.assign(new Error('Vui lòng chọn ít nhất một thiết bị CCDC để tạo phiếu luân chuyển.'), { statusCode: 400 });
+    }
+
+    const rawToUser = String(transfer.to_user_id ?? transfer.toUserId ?? '').trim();
+    if (!rawToUser) {
+      throw Object.assign(new Error('Vui lòng chọn Người nhận hoặc Thu hồi về Kho Tổng.'), { statusCode: 400 });
+    }
+    const toUserId = rawToUser.toUpperCase() === 'KHO' || rawToUser.toUpperCase() === 'KHO_TONG' ? 'KHO_TONG' : rawToUser;
+    const fromUserId = String(transfer.from_user_id ?? transfer.fromUserId ?? actorId ?? '').trim() || null;
+
+    const validAssetsRes = await query(
+      `SELECT id FROM ${SCHEMA}.tool_assets WHERE id = ANY($1::text[]) AND deleted_at IS NULL`,
+      [assetIds]
+    );
+    if (validAssetsRes.rows.length !== assetIds.length) {
+      throw Object.assign(new Error('Một hoặc nhiều thiết bị được chọn không tồn tại hoặc đã bị xóa.'), { statusCode: 404 });
+    }
+
+    const reqDate = toNumOrNull(transfer.request_date ?? transfer.requestDate) || now;
+    const savedRes = await query(
+      `INSERT INTO ${SCHEMA}.tool_transfers
+         (id, tool_asset_ids, from_user_id, to_user_id, status, request_date,
+          receiver_confirm_date, receiver_signature, receiver_image,
+          manager_approve_date, manager_signature, notes)
+       VALUES ($1, $2::jsonb, $3, $4, 'PENDING', $5, NULL, NULL, NULL, NULL, NULL, $6)
+       RETURNING *`,
+      [id, JSON.stringify(assetIds), fromUserId, toUserId, reqDate, transfer.notes || null]
+    );
+    const saved = savedRes.rows[0];
+    await writeAuditLog({
+      userId: actorId || null,
+      action: 'CREATE_TOOL_TRANSFER',
+      entityType: 'tool_transfer',
+      entityId: id,
+      newValue: saved,
+    });
+    return mapToolTransferRow(saved);
   }
+
+  // Existing transfer state transitions
+  const currentStatus = String(existing.status || 'PENDING').toUpperCase().trim();
+  if (currentStatus === 'APPROVED') {
+    throw Object.assign(new Error('Phiếu luân chuyển đã hoàn tất phê duyệt (APPROVED), không thể chỉnh sửa.'), { statusCode: 403 });
+  }
+
+  const existingAssetIds = parseJsonStringArray(existing.tool_asset_ids);
+  const incomingStatus = String(transfer.status || currentStatus).toUpperCase().trim();
+  const isManagerApprovalAttempt =
+    incomingStatus === 'APPROVED' ||
+    Boolean(transfer.manager_approve_date ?? transfer.managerApproveDate) ||
+    Boolean(transfer.manager_signature ?? transfer.managerSignature);
+
+  if (isManagerApprovalAttempt) {
+    // STEP 2B: Manager approves -> commit ownership change on all assets
+    if (!actorCanManage) {
+      throw Object.assign(new Error('Từ chối truy cập: Chỉ Quản lý CCDC mới có quyền phê duyệt quyết định luân chuyển.'), { statusCode: 403 });
+    }
+    const receiverConfirmedAt =
+      toNumOrNull(existing.receiver_confirm_date) ||
+      toNumOrNull(transfer.receiver_confirm_date ?? transfer.receiverConfirmDate);
+    const receiverSignature =
+      existing.receiver_signature || transfer.receiver_signature || transfer.receiverSignature || null;
+    if (!receiverConfirmedAt || !receiverSignature) {
+      throw Object.assign(new Error('Phiếu luân chuyển phải có xác nhận ký nhận của người nhận trước khi Quản lý phê duyệt.'), { statusCode: 400 });
+    }
+    const managerSignature = String(transfer.manager_signature ?? transfer.managerSignature ?? '').trim();
+    if (!managerSignature) {
+      throw Object.assign(new Error('Vui lòng ký tên quản lý để phê duyệt luân chuyển.'), { statusCode: 400 });
+    }
+    const managerApproveDate = toNumOrNull(transfer.manager_approve_date ?? transfer.managerApproveDate) || now;
+
+    const savedRes = await query(
+      `UPDATE ${SCHEMA}.tool_transfers
+       SET status = 'APPROVED',
+           manager_approve_date = $1,
+           manager_signature = $2,
+           notes = COALESCE($3, notes)
+       WHERE id = $4
+       RETURNING *`,
+      [managerApproveDate, managerSignature, transfer.notes ?? null, id]
+    );
+    const saved = savedRes.rows[0];
+
+    const isReturnToWarehouse = String(existing.to_user_id || '').toUpperCase().trim() === 'KHO_TONG';
+    const nextOwner = isReturnToWarehouse ? null : existing.to_user_id;
+    const nextAssetStatus = isReturnToWarehouse ? 'AVAILABLE' : 'IN_USE';
+
+    if (existingAssetIds.length > 0) {
+      await query(
+        `UPDATE ${SCHEMA}.tool_assets
+         SET current_user_id = $1,
+             status = $2,
+             updated_at = $3,
+             version = COALESCE(version, 1) + 1
+         WHERE id = ANY($4::text[]) AND deleted_at IS NULL`,
+        [nextOwner, nextAssetStatus, now, existingAssetIds]
+      );
+    }
+
+    await writeAuditLog({
+      userId: actorId || null,
+      action: 'APPROVE_TOOL_TRANSFER',
+      entityType: 'tool_transfer',
+      entityId: id,
+      oldValue: existing,
+      newValue: { ...saved, updatedAssetIds: existingAssetIds, nextOwner, nextAssetStatus },
+    });
+    return mapToolTransferRow(saved);
+  }
+
+  // STEP 2A: Receiver signs confirmation -> remains PENDING until Manager approves
+  const isWarehouseReturn = String(existing.to_user_id || '').toUpperCase().trim() === 'KHO_TONG';
+  const isRecipient = actorMatchesTargetUser(actorUser, actorId, existing.to_user_id);
+  if (!isRecipient && !(isWarehouseReturn && actorCanManage)) {
+    throw Object.assign(
+      new Error('Từ chối truy cập: Chỉ người nhận được chỉ định (hoặc Quản lý khi thu hồi về Kho Tổng) mới có thể ký xác nhận.'),
+      { statusCode: 403 }
+    );
+  }
+
+  const receiverSignature = String(transfer.receiver_signature ?? transfer.receiverSignature ?? '').trim();
+  if (!receiverSignature) {
+    throw Object.assign(new Error('Bắt buộc phải ký tên xác nhận đã nhận đủ thiết bị!'), { statusCode: 400 });
+  }
+  const receiverImage = transfer.receiver_image ?? transfer.receiverImage ?? existing.receiver_image ?? null;
+  const receiverConfirmDate = toNumOrNull(transfer.receiver_confirm_date ?? transfer.receiverConfirmDate) || now;
+
+  const savedRes = await query(
+    `UPDATE ${SCHEMA}.tool_transfers
+     SET receiver_confirm_date = $1,
+         receiver_signature = $2,
+         receiver_image = $3,
+         notes = COALESCE($4, notes),
+         status = 'PENDING'
+     WHERE id = $5
+     RETURNING *`,
+    [receiverConfirmDate, receiverSignature, receiverImage, transfer.notes ?? null, id]
+  );
+  const saved = savedRes.rows[0];
+
   await writeAuditLog({
     userId: actorId || null,
-    action: 'TRANSFER_TOOL_ASSET',
+    action: 'CONFIRM_TOOL_TRANSFER_RECEIPT',
     entityType: 'tool_transfer',
     entityId: id,
-    newValue: { id, assetId, fromUserId: transfer.fromUserId || transfer.from_user_id || null, toUserId: targetUser || null, purpose: transfer.purpose || '' },
+    oldValue: existing,
+    newValue: saved,
   });
-  return { ...transfer, id };
+  return mapToolTransferRow(saved);
 }
 
 export async function getToolCalibrations(assetId: string) {
   await ensureToolTables();
-  const res = await query(`
-    SELECT id, asset_id, calibration_date, next_due_date, result, certificate_url, notes, created_at
-    FROM ${SCHEMA}.tool_calibrations
-    WHERE asset_id = $1
-    ORDER BY created_at DESC
-  `, [assetId]).catch(() => ({ rows: [] }));
-  return res.rows.map((r: any) => ({
-    id: r.id,
-    assetId: r.asset_id,
-    calibrationDate: r.calibration_date,
-    nextDueDate: r.next_due_date,
-    result: r.result,
-    certificateUrl: r.certificate_url,
-    notes: r.notes,
-    createdAt: r.created_at
-  }));
+  const res = await query(
+    `SELECT id, tool_asset_id, request_date, requested_by, status,
+            calibration_date, next_calibration_date, certificate_url, approved_by, notes
+     FROM ${SCHEMA}.tool_calibrations
+     WHERE tool_asset_id = $1
+     ORDER BY request_date DESC NULLS LAST, id DESC`,
+    [assetId]
+  );
+  return res.rows.map(mapToolCalibrationRow);
 }
 
-export async function saveToolCalibration(calib: any, actorId?: string | null) {
+export async function saveToolCalibration(
+  calib: any,
+  actorId?: string | null,
+  options?: { actorCanManage?: boolean }
+) {
   await ensureToolTables();
-  assertNoNewBase64DataUri(calib, null, 'Hiệu chuẩn CCDC');
-  const id = calib.id || crypto.randomUUID();
+  const actorCanManage = Boolean(options?.actorCanManage);
+  const id = String(calib.id || `CAL_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`).trim();
   const now = Math.floor(Date.now() / 1000);
-  await query(
-    `INSERT INTO ${SCHEMA}.tool_calibrations (id, asset_id, calibration_date, next_due_date, result, certificate_url, notes, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [id, calib.assetId || calib.asset_id, calib.calibrationDate || calib.calibration_date || now, calib.nextDueDate || calib.next_due_date || null, calib.result || 'PASS', calib.certificateUrl || calib.certificate_url || '', calib.notes || '', now]
-  );
-  const assetId = calib.assetId || calib.asset_id;
-  if ((calib.nextDueDate || calib.next_due_date) && assetId) {
-    await query(`UPDATE ${SCHEMA}.tool_assets SET calibration_due_date = $1, updated_at = $2, version = COALESCE(version, 1) + 1 WHERE id = $3`, [
-      calib.nextDueDate || calib.next_due_date,
-      now,
-      assetId
-    ]);
+  const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_calibrations WHERE id = $1 LIMIT 1`, [id]);
+  const existing = existingRes.rows[0] || null;
+
+  const toolAssetId = String(calib.tool_asset_id || calib.toolAssetId || calib.assetId || existing?.tool_asset_id || '').trim();
+  if (!toolAssetId) {
+    throw Object.assign(new Error('Thiếu mã định danh tài sản cần hiệu chuẩn.'), { statusCode: 400 });
   }
+
+  const assetCheck = await query(
+    `SELECT id FROM ${SCHEMA}.tool_assets WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    [toolAssetId]
+  );
+  if (assetCheck.rows.length === 0) {
+    throw Object.assign(new Error('Thiết bị CCDC cần hiệu chuẩn không tồn tại hoặc đã bị xóa.'), { statusCode: 404 });
+  }
+
+  assertNoNewBase64DataUri(calib, existing, 'Hiệu chuẩn CCDC');
+
+  if (!existing) {
+    const requestedBy = String(calib.requested_by || calib.requestedBy || actorId || '').trim();
+    if (!requestedBy) {
+      throw Object.assign(new Error('Thiếu thông tin người yêu cầu hiệu chuẩn.'), { statusCode: 400 });
+    }
+    const requestDate = toNumOrNull(calib.request_date ?? calib.requestDate) || now;
+    const savedRes = await query(
+      `INSERT INTO ${SCHEMA}.tool_calibrations
+         (id, tool_asset_id, request_date, requested_by, status, calibration_date, next_calibration_date, certificate_url, approved_by, notes)
+       VALUES ($1, $2, $3, $4, 'PENDING', NULL, NULL, $5, NULL, $6)
+       RETURNING *`,
+      [id, toolAssetId, requestDate, requestedBy, calib.certificate_url ?? calib.certificateUrl ?? null, calib.notes || '']
+    );
+    const saved = savedRes.rows[0];
+    await writeAuditLog({
+      userId: actorId || null,
+      action: 'REQUEST_TOOL_CALIBRATION',
+      entityType: 'tool_calibration',
+      entityId: id,
+      newValue: saved,
+    });
+    return mapToolCalibrationRow(saved);
+  }
+
+  if (String(existing.status || '').toUpperCase().trim() === 'COMPLETED') {
+    throw Object.assign(new Error('Phiếu hiệu chuẩn đã hoàn tất (COMPLETED), không thể chỉnh sửa.'), { statusCode: 403 });
+  }
+
+  const nextStatus = String(calib.status || existing.status || 'PENDING').toUpperCase().trim();
+  if (nextStatus === 'COMPLETED') {
+    if (!actorCanManage) {
+      throw Object.assign(new Error('Từ chối truy cập: Chỉ Quản lý CCDC mới có quyền duyệt hoàn tất hiệu chuẩn.'), { statusCode: 403 });
+    }
+    const nextCalibDate = toNumOrNull(calib.next_calibration_date ?? calib.nextCalibrationDate ?? calib.nextDueDate);
+    if (!nextCalibDate) {
+      throw Object.assign(new Error('Vui lòng thiết lập ngày hiệu chuẩn tiếp theo.'), { statusCode: 400 });
+    }
+    const calibDate = toNumOrNull(calib.calibration_date ?? calib.calibrationDate) || now;
+    const approvedBy = actorId || calib.approved_by || calib.approvedBy || null;
+    const certUrl = calib.certificate_url ?? calib.certificateUrl ?? existing.certificate_url ?? null;
+
+    const savedRes = await query(
+      `UPDATE ${SCHEMA}.tool_calibrations
+       SET status = 'COMPLETED',
+           calibration_date = $1,
+           next_calibration_date = $2,
+           certificate_url = $3,
+           approved_by = $4,
+           notes = $5
+       WHERE id = $6
+       RETURNING *`,
+      [calibDate, nextCalibDate, certUrl, approvedBy, calib.notes ?? existing.notes ?? '', id]
+    );
+    const saved = savedRes.rows[0];
+
+    await query(
+      `UPDATE ${SCHEMA}.tool_assets
+       SET next_calibration_date = $1,
+           updated_at = $2,
+           version = COALESCE(version, 1) + 1
+       WHERE id = $3 AND deleted_at IS NULL`,
+      [nextCalibDate, now, toolAssetId]
+    );
+
+    await writeAuditLog({
+      userId: actorId || null,
+      action: 'COMPLETE_TOOL_CALIBRATION',
+      entityType: 'tool_calibration',
+      entityId: id,
+      oldValue: existing,
+      newValue: saved,
+    });
+    return mapToolCalibrationRow(saved);
+  }
+
+  const savedRes = await query(
+    `UPDATE ${SCHEMA}.tool_calibrations
+     SET certificate_url = COALESCE($1, certificate_url),
+         notes = COALESCE($2, notes)
+     WHERE id = $3
+     RETURNING *`,
+    [calib.certificate_url ?? calib.certificateUrl ?? null, calib.notes ?? null, id]
+  );
+  const saved = savedRes.rows[0];
   await writeAuditLog({
     userId: actorId || null,
-    action: 'CALIBRATE_TOOL_ASSET',
+    action: 'UPDATE_TOOL_CALIBRATION',
     entityType: 'tool_calibration',
     entityId: id,
-    newValue: { id, assetId, result: calib.result || 'PASS', certificateUrl: calib.certificateUrl || calib.certificate_url || '' },
+    oldValue: existing,
+    newValue: saved,
   });
-  return { ...calib, id };
+  return mapToolCalibrationRow(saved);
 }
+
 
 // --- SUPPLIER STATS & DETAILS API ---
 export async function getSupplierStats(name: string) {

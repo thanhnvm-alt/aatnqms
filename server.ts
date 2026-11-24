@@ -640,7 +640,9 @@ app.get('/api/po-materials/lookup', async (req: any, res) => {
       });
     }
     const q = String(req.query.q || '');
-    const result = await dbService.lookupPoMaterials(q);
+    const exactFlag = String(req.query.exact || '').trim().toLowerCase();
+    const exact = exactFlag === '1' || exactFlag === 'true';
+    const result = await dbService.lookupPoMaterials(q, { exact });
     res.json(result);
   } catch (err: any) {
     sendErr(res, err);
@@ -1012,8 +1014,71 @@ app.delete('/api/materials/:id', readOnlyMaterialGuard);
 app.post('/api/import/materials', readOnlyMaterialGuard);
 
 // --- M09: TOOL MANAGEMENT ---
-app.get('/api/tool-catalogs', async (_req, res) => {
+const getToolsExplicitActions = (userCtx: any): string[] | null => {
+  const perms: any[] = Array.isArray(userCtx?.userPermissions) ? userCtx.userPermissions : [];
+  const matched = perms.filter((p) => String(p?.moduleId || '').toUpperCase().trim() === 'TOOLS');
+  if (matched.length === 0) return null;
+  const actions: string[] = [];
+  for (const m of matched) {
+    if (Array.isArray(m?.actions)) {
+      for (const a of m.actions) actions.push(String(a || '').toUpperCase().trim());
+    }
+  }
+  return actions;
+};
+
+const canManageTools = (userCtx: any): boolean => {
+  if (!userCtx) return false;
+  const roleUpper = String(userCtx.role || userCtx.roleUpper || '').toUpperCase().trim();
+  if (roleUpper === 'GUEST') return false;
+  if (dbMod.isServerAdmin(userCtx)) return true;
+  if (
+    dbMod.hasServerPermission(userCtx, 'SYSTEM_ADMIN', 'CREATE') ||
+    dbMod.hasServerPermission(userCtx, 'SYSTEM_ADMIN', 'EDIT')
+  ) {
+    return true;
+  }
+  if (['MANAGER', 'QA', 'QC_LEAD', 'LEAD_QC'].includes(roleUpper) || Boolean(userCtx.la_to_truong)) {
+    return true;
+  }
+  const explicitTools = getToolsExplicitActions(userCtx);
+  if (explicitTools !== null) {
+    return explicitTools.some((a) =>
+      ['CREATE', 'EDIT', 'EDIT_ALL', 'DELETE', 'DELETE_ALL', 'SIGN1', 'SIGN2'].includes(a)
+    );
+  }
+  return false;
+};
+
+const canViewTools = (userCtx: any): boolean => {
+  if (!userCtx) return false;
+  const roleUpper = String(userCtx.role || userCtx.roleUpper || '').toUpperCase().trim();
+  if (roleUpper === 'GUEST') return false;
+  if (canManageTools(userCtx)) return true;
+  const explicitTools = getToolsExplicitActions(userCtx);
+  if (explicitTools !== null) {
+    return explicitTools.some((a) => ['VIEW', 'VIEW_ALL'].includes(a));
+  }
+  if (['PURCHASING', 'VENDOR'].includes(roleUpper)) return false;
+  return dbMod.hasServerPermission(userCtx, 'TOOLS', 'VIEW');
+};
+
+const canDeleteTools = (userCtx: any): boolean => {
+  if (!userCtx) return false;
+  if (dbMod.isServerAdmin(userCtx)) return true;
+  if (dbMod.hasServerPermission(userCtx, 'SYSTEM_ADMIN', 'DELETE')) return true;
+  const explicitTools = getToolsExplicitActions(userCtx);
+  if (explicitTools !== null) {
+    return explicitTools.some((a) => ['DELETE', 'DELETE_ALL'].includes(a));
+  }
+  return false;
+};
+
+app.get('/api/tool-catalogs', async (req: any, res) => {
   try {
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền xem dữ liệu Công cụ dụng cụ (M09).' });
+    }
     res.json(await dbService.getToolCatalogs());
   } catch (err: any) {
     sendErr(res, err);
@@ -1021,6 +1086,9 @@ app.get('/api/tool-catalogs', async (_req, res) => {
 });
 app.post('/api/tool-catalogs', async (req: any, res) => {
   try {
+    if (!canManageTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Chỉ Quản lý CCDC mới có quyền tạo hoặc chỉnh sửa danh mục kho tổng.' });
+    }
     res.json(await dbService.saveToolCatalog(req.body, getActorId(req)));
   } catch (err: any) {
     sendErr(res, err);
@@ -1028,21 +1096,30 @@ app.post('/api/tool-catalogs', async (req: any, res) => {
 });
 app.delete('/api/tool-catalogs/:id', async (req: any, res) => {
   try {
+    if (!canDeleteTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Chỉ Admin hoặc tài khoản được cấp quyền xóa CCDC mới có thể xóa danh mục.' });
+    }
     res.json(await dbService.deleteToolCatalog(req.params.id, getActorId(req)));
   } catch (err: any) {
     sendErr(res, err);
   }
 });
 
-app.get('/api/tool-assets', async (_req, res) => {
+app.get('/api/tool-assets', async (req: any, res) => {
   try {
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền xem danh sách thiết bị CCDC.' });
+    }
     res.json(await dbService.getToolAssets());
   } catch (err: any) {
     sendErr(res, err);
   }
 });
-app.get('/api/tool-catalogs/:catalogId/assets', async (req, res) => {
+app.get('/api/tool-catalogs/:catalogId/assets', async (req: any, res) => {
   try {
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền xem thiết bị thuộc danh mục này.' });
+    }
     res.json(await dbService.getToolAssetsByCatalog(req.params.catalogId));
   } catch (err: any) {
     sendErr(res, err);
@@ -1050,6 +1127,9 @@ app.get('/api/tool-catalogs/:catalogId/assets', async (req, res) => {
 });
 app.post('/api/tool-assets', async (req: any, res) => {
   try {
+    if (!canManageTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Chỉ Quản lý CCDC mới có quyền tạo hoặc sửa tài sản vật lý.' });
+    }
     res.json(await dbService.saveToolAsset(req.body, getActorId(req)));
   } catch (err: any) {
     sendErr(res, err);
@@ -1057,14 +1137,20 @@ app.post('/api/tool-assets', async (req: any, res) => {
 });
 app.delete('/api/tool-assets/:id', async (req: any, res) => {
   try {
+    if (!canDeleteTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Chỉ Admin hoặc tài khoản được cấp quyền xóa CCDC mới có thể xóa tài sản.' });
+    }
     res.json(await dbService.deleteToolAsset(req.params.id, getActorId(req)));
   } catch (err: any) {
     sendErr(res, err);
   }
 });
 
-app.get('/api/tool-assets/:assetId/transfers', async (req, res) => {
+app.get('/api/tool-assets/:assetId/transfers', async (req: any, res) => {
   try {
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền xem lịch sử luân chuyển CCDC.' });
+    }
     res.json(await dbService.getToolTransfers(req.params.assetId));
   } catch (err: any) {
     sendErr(res, err);
@@ -1072,14 +1158,25 @@ app.get('/api/tool-assets/:assetId/transfers', async (req, res) => {
 });
 app.post('/api/tool-transfers', async (req: any, res) => {
   try {
-    res.json(await dbService.saveToolTransfer(req.body, getActorId(req)));
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền thao tác luân chuyển CCDC.' });
+    }
+    res.json(
+      await dbService.saveToolTransfer(req.body, getActorId(req), {
+        actorCanManage: canManageTools(req.authUser),
+        actorUser: req.authUser,
+      })
+    );
   } catch (err: any) {
     sendErr(res, err);
   }
 });
 
-app.get('/api/tool-assets/:assetId/calibrations', async (req, res) => {
+app.get('/api/tool-assets/:assetId/calibrations', async (req: any, res) => {
   try {
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền xem lịch sử hiệu chuẩn CCDC.' });
+    }
     res.json(await dbService.getToolCalibrations(req.params.assetId));
   } catch (err: any) {
     sendErr(res, err);
@@ -1087,7 +1184,14 @@ app.get('/api/tool-assets/:assetId/calibrations', async (req, res) => {
 });
 app.post('/api/tool-calibrations', async (req: any, res) => {
   try {
-    res.json(await dbService.saveToolCalibration(req.body, getActorId(req)));
+    if (!canViewTools(req.authUser)) {
+      return res.status(403).json({ error: 'Từ chối truy cập: Bạn không có quyền thao tác hiệu chuẩn CCDC.' });
+    }
+    res.json(
+      await dbService.saveToolCalibration(req.body, getActorId(req), {
+        actorCanManage: canManageTools(req.authUser),
+      })
+    );
   } catch (err: any) {
     sendErr(res, err);
   }

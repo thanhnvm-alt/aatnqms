@@ -220,7 +220,32 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
   const [isSearchingPo, setIsSearchingPo] = useState(false);
   const [showPoDropdown, setShowPoDropdown] = useState(false);
   const [poSupplierMap, setPoSupplierMap] = useState<Record<string, string>>({});
+  const [poLookupStatus, setPoLookupStatus] = useState<{
+    type: 'success' | 'info' | 'warning';
+    text: string;
+  } | null>(null);
   const poInputRef = useRef<HTMLInputElement>(null);
+  const poSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestBookingRef = useRef(newBooking);
+  latestBookingRef.current = newBooking;
+  const recentHeaderCommitRef = useRef<{ codes: string[]; ts: number } | null>(null);
+
+  // Per-row inline PO/PR lookup & autofill state
+  const [activeRowLookupIdx, setActiveRowLookupIdx] = useState<number | null>(null);
+  const [rowPoSuggestions, setRowPoSuggestions] = useState<any[]>([]);
+  const [isSearchingRowPo, setIsSearchingRowPo] = useState(false);
+  const [rowItemOptions, setRowItemOptions] = useState<Record<string, any[]>>({});
+  const [rowLookupFeedback, setRowLookupFeedback] = useState<
+    Record<string, { type: 'success' | 'info'; text: string }>
+  >({});
+  const rowSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (poSearchDebounceRef.current) clearTimeout(poSearchDebounceRef.current);
+      if (rowSearchDebounceRef.current) clearTimeout(rowSearchDebounceRef.current);
+    };
+  }, []);
 
   const allFormPoTokens = useMemo(() => {
     return splitPoTokens([
@@ -376,84 +401,270 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
       let changed = false;
       const next = { ...prev };
       for (const r of results) {
-        const code = String(r?.poNumber || r?.itemCode || '').trim();
+        const candidateCodes = [r?.poNumber, r?.purchaseDocument, r?.orderNumber, r?.ipoNumber, r?.factoryOrder, r?.itemCode]
+          .map((c) => String(c || '').trim())
+          .filter(Boolean);
         const sup = String(r?.supplierName || '').trim();
-        if (code && sup && next[code.toLowerCase()] !== sup) {
-          next[code.toLowerCase()] = sup;
-          changed = true;
+        if (sup) {
+          for (const code of candidateCodes) {
+            if (next[code.toLowerCase()] !== sup) {
+              next[code.toLowerCase()] = sup;
+              changed = true;
+            }
+          }
         }
       }
       return changed ? next : prev;
     });
   };
 
-  // Tra cứu PO khi gõ
-  const handlePoSearch = async (queryVal: string) => {
+  const isPlaceholderBookingItem = (it: SubcontractorBookingItem): boolean => {
+    const name = String(it.itemName || '').trim();
+    const po = String(it.poNumber || '').trim();
+    if (!name && !po) return true;
+    return (
+      name === 'Tủ âm tường MFC Phủ Melamine' &&
+      String(it.specifications || '').trim() === 'Theo shopdrawing SD-01' &&
+      Number(it.quantity) === 10 &&
+      !po
+    );
+  };
+
+  const mapLookupRecordToBookingItem = (
+    rec: any,
+    poCode: string,
+    indexOffset: number
+  ): SubcontractorBookingItem => {
+    const itemName = String(rec?.itemName || rec?.itemCode || 'Sản phẩm / Vật tư gia công').trim();
+    const rawSpecs = String(rec?.specifications || '').trim();
+    const specsParts: string[] = [];
+    if (rawSpecs && rawSpecs.toLowerCase() !== itemName.toLowerCase()) {
+      specsParts.push(rawSpecs);
+    }
+    if (rec?.itemCode && !itemName.toLowerCase().includes(String(rec.itemCode).trim().toLowerCase())) {
+      specsParts.push(`Mã VT: ${String(rec.itemCode).trim()}`);
+    }
+    if (rec?.projectName) {
+      specsParts.push(`DA: ${String(rec.projectName).trim()}`);
+    }
+    const parsedQty = Number(rec?.quantity);
+    return {
+      id: `po-${Date.now()}-${indexOffset}-${Math.random().toString(36).slice(2, 6)}`,
+      itemName,
+      quantity: Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : 1,
+      unit: String(rec?.unit || '').trim() || 'Bộ',
+      specifications: specsParts.join(' · ') || rawSpecs,
+      poNumber: poCode,
+      supplierName: String(rec?.supplierName || '').trim() || undefined,
+      isInspected: true,
+    };
+  };
+
+  const getBookingItemDedupKey = (it: Partial<SubcontractorBookingItem>): string =>
+    [
+      String(it.poNumber || '').trim().toLowerCase(),
+      String(it.itemName || '').trim().toLowerCase(),
+      String(it.unit || '').trim().toLowerCase(),
+      String(it.specifications || '').trim().toLowerCase(),
+    ].join('||');
+
+  const mergePoItemsIntoList = (
+    existingItems: SubcontractorBookingItem[],
+    poCode: string,
+    records: any[]
+  ): { nextItems: SubcontractorBookingItem[]; addedCount: number } => {
+    if (!Array.isArray(records) || records.length === 0) {
+      return { nextItems: existingItems, addedCount: 0 };
+    }
+    const baseItems =
+      existingItems.length > 0 && existingItems.every(isPlaceholderBookingItem)
+        ? []
+        : existingItems;
+    const seenKeys = new Set(baseItems.map(getBookingItemDedupKey));
+    const appended: SubcontractorBookingItem[] = [];
+    records.forEach((rec, idx) => {
+      const mapped = mapLookupRecordToBookingItem(rec, poCode, idx);
+      const key = getBookingItemDedupKey(mapped);
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        appended.push(mapped);
+      }
+    });
+    if (appended.length === 0) {
+      return { nextItems: existingItems, addedCount: 0 };
+    }
+    return {
+      nextItems: [...baseItems, ...appended],
+      addedCount: appended.length,
+    };
+  };
+
+  const fetchExactOrFallbackPoItems = async (rawCode: string) => {
+    const clean = String(rawCode || '').trim();
+    if (!clean) {
+      return {
+        items: [] as any[],
+        resolvedMode: 'none' as 'exact' | 'unique_fuzzy' | 'ambiguous_fuzzy' | 'none',
+      };
+    }
+    const exactRes = await lookupPoMaterials(clean, { exact: true });
+    const exactItems = Array.isArray(exactRes?.items) ? exactRes.items : [];
+    if (exactItems.length > 0) {
+      cachePoSuppliersFromResults(exactItems);
+      return { items: exactItems, resolvedMode: 'exact' as const };
+    }
+    const fuzzyRes = await lookupPoMaterials(clean, { exact: false });
+    const fuzzyItems = Array.isArray(fuzzyRes?.items) ? fuzzyRes.items : [];
+    cachePoSuppliersFromResults(fuzzyItems);
+    if (fuzzyItems.length === 0) {
+      return { items: [] as any[], resolvedMode: 'none' as const };
+    }
+    const uniquePoSet = new Set(
+      fuzzyItems
+        .map((it: any) => String(it?.poNumber || it?.itemCode || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    if (uniquePoSet.size <= 1) {
+      return { items: fuzzyItems, resolvedMode: 'unique_fuzzy' as const };
+    }
+    return { items: fuzzyItems, resolvedMode: 'ambiguous_fuzzy' as const };
+  };
+
+  const hydrateSupplierFromPoRecord = async (rec: any): Promise<string> => {
+    const matchedSupplier = String(rec?.supplierName || '').trim();
+    if (!matchedSupplier) return '';
+    if (latestBookingRef.current.supplierName.trim()) {
+      return '';
+    }
+    setNewBooking(prev => ({
+      ...prev,
+      supplierName: prev.supplierName || matchedSupplier,
+      locationAddress: prev.locationAddress || String(rec?.supplierAddress || '').trim(),
+      contactPerson: prev.contactPerson || String(rec?.supplierContactPerson || '').trim(),
+      contactPhone: prev.contactPhone || String(rec?.supplierPhone || '').trim(),
+    }));
+    await lookupAndApplySupplier(matchedSupplier);
+    return matchedSupplier;
+  };
+
+  // Tra cứu PO khi gõ (có debounce để giảm trễ khi gõ nhanh)
+  const handlePoSearch = (queryVal: string) => {
     setNewBooking(prev => ({ ...prev, poNumber: queryVal }));
+    setPoLookupStatus(null);
+    if (poSearchDebounceRef.current) {
+      clearTimeout(poSearchDebounceRef.current);
+    }
+
     const segments = queryVal.split(/[,;\n|]+/);
     const activeSegment = (segments[segments.length - 1] || '').trim();
     if (!activeSegment || activeSegment.length < 2) {
       setPoSearchResults([]);
       setShowPoDropdown(false);
+      setIsSearchingPo(false);
       return;
     }
+
     setIsSearchingPo(true);
     setShowPoDropdown(true);
-    try {
-      const res = await lookupPoMaterials(activeSegment);
-      const foundItems = res.items || [];
-      setPoSearchResults(foundItems);
-      cachePoSuppliersFromResults(foundItems);
-    } catch (err) {
-      console.error("Lỗi khi tra cứu PO/Material:", err);
-    } finally {
-      setIsSearchingPo(false);
-    }
+    poSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await lookupPoMaterials(activeSegment);
+        const currentSegs = String(latestBookingRef.current.poNumber || '').split(/[,;\n|]+/);
+        const currentActive = (currentSegs[currentSegs.length - 1] || '').trim();
+        if (currentActive.toLowerCase() !== activeSegment.toLowerCase()) return;
+        const foundItems = res.items || [];
+        setPoSearchResults(foundItems);
+        cachePoSuppliersFromResults(foundItems);
+      } catch (err) {
+        console.error("Lỗi khi tra cứu PO/Material:", err);
+      } finally {
+        setIsSearchingPo(false);
+      }
+    }, 180);
   };
 
+  // Thống nhất nạp NCC + nối thêm hạng mục từ ô nhập PO/PR chính (Enter, Thêm mã, onBlur)
   const handleCommitHeaderPoTokens = async (rawInput?: string) => {
-    const tokensToAdd = splitPoTokens(rawInput ?? newBooking.poNumber);
+    if (poSearchDebounceRef.current) {
+      clearTimeout(poSearchDebounceRef.current);
+    }
+    const tokensToAdd = splitPoTokens(rawInput ?? latestBookingRef.current.poNumber);
     if (tokensToAdd.length === 0) return;
+
+    recentHeaderCommitRef.current = {
+      codes: tokensToAdd.map((t) => t.toLowerCase()),
+      ts: Date.now(),
+    };
 
     setNewBooking(prev => {
       const mergedChips = splitPoTokens([...(prev.poNumbers || []), ...tokensToAdd]).slice(0, MAX_BOOKING_PO_TOKENS);
-      const nextItems = prev.items.length === 1 && !String(prev.items[0].poNumber || '').trim() && mergedChips.length === 1
-        ? [{ ...prev.items[0], poNumber: mergedChips[0] }]
-        : prev.items;
       return {
         ...prev,
         poNumbers: mergedChips,
         poNumber: '',
-        items: nextItems,
       };
     });
     setShowPoDropdown(false);
+    setIsSearchingPo(true);
 
-    // Dò nền thông tin NCC cho các mã mới thêm để cảnh báo nếu khác NCC (không tự thêm hạng mục)
-    for (const tok of tokensToAdd.slice(0, 3)) {
-      if (!poSupplierMap[tok.toLowerCase()]) {
-        try {
-          const res = await lookupPoMaterials(tok);
-          const list = res.items || [];
-          cachePoSuppliersFromResults(list);
-          const exact = list.find((i: any) =>
-            String(i?.poNumber || '').toLowerCase() === tok.toLowerCase() ||
-            String(i?.itemCode || '').toLowerCase() === tok.toLowerCase()
-          ) || list[0];
-          if (exact?.supplierName && !newBooking.supplierName.trim()) {
+    let totalAdded = 0;
+    let filledSupplierName = '';
+    let workingItems = latestBookingRef.current.items;
+    let notFoundTokens: string[] = [];
+    let ambiguousResult: { tok: string; items: any[] } | null = null;
+
+    try {
+      for (const tok of tokensToAdd.slice(0, MAX_BOOKING_PO_TOKENS)) {
+        const { items: matchedItems, resolvedMode } = await fetchExactOrFallbackPoItems(tok);
+        if (resolvedMode === 'exact' || resolvedMode === 'unique_fuzzy') {
+          const supplierRec = matchedItems.find((r: any) => String(r?.supplierName || '').trim()) || matchedItems[0];
+          const appliedSup = await hydrateSupplierFromPoRecord(supplierRec);
+          if (appliedSup && !filledSupplierName) {
+            filledSupplierName = appliedSup;
+          }
+          const mergedResult = mergePoItemsIntoList(workingItems, tok, matchedItems);
+          if (mergedResult.addedCount > 0) {
+            totalAdded += mergedResult.addedCount;
+            workingItems = mergedResult.nextItems;
             setNewBooking(prev => ({
               ...prev,
-              supplierName: prev.supplierName || exact.supplierName,
-              locationAddress: prev.locationAddress || exact.supplierAddress || '',
-              contactPerson: prev.contactPerson || exact.supplierContactPerson || '',
-              contactPhone: prev.contactPhone || exact.supplierPhone || '',
+              items: mergePoItemsIntoList(prev.items, tok, matchedItems).nextItems,
             }));
-            await lookupAndApplySupplier(exact.supplierName);
           }
-        } catch {
-          // Ignore background lookup failure
+        } else if (resolvedMode === 'ambiguous_fuzzy') {
+          ambiguousResult = { tok, items: matchedItems };
+        } else {
+          notFoundTokens.push(tok);
         }
       }
+
+      if (totalAdded > 0) {
+        setPoLookupStatus({
+          type: 'success',
+          text: `Đã nối thêm ${totalAdded} hạng mục từ ERP${filledSupplierName ? ` · Tự điền NCC: ${filledSupplierName}` : ''}`,
+        });
+      } else if (ambiguousResult) {
+        setPoSearchResults(ambiguousResult.items);
+        setShowPoDropdown(true);
+        setPoLookupStatus({
+          type: 'info',
+          text: `Mã "${ambiguousResult.tok}" khớp nhiều chứng từ khác nhau — chọn 1 dòng trong danh sách gợi ý để nạp đúng hạng mục.`,
+        });
+      } else if (notFoundTokens.length > 0) {
+        setPoLookupStatus({
+          type: 'info',
+          text: `Không thấy dữ liệu ERP cho ${notFoundTokens.join(', ')} trong material/IPO — bạn có thể nhập tay thông tin NCC & hạng mục bên dưới.`,
+        });
+      } else {
+        setPoLookupStatus({
+          type: 'info',
+          text: `Các hạng mục của mã ${tokensToAdd.join(', ')} đã có sẵn trong bảng.`,
+        });
+      }
+    } catch (err) {
+      console.error('Lỗi nạp hạng mục theo PO/PR:', err);
+    } finally {
+      setIsSearchingPo(false);
     }
   };
 
@@ -470,146 +681,286 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
     }));
   };
 
-  // Khi chọn một mục từ kết quả gợi ý PO/PR
-  // Quy tắc đã chốt: Từ PO/PR thứ 2 trở đi (hoặc forceCodeOnly) CHỈ thêm mã PO/PR, KHÔNG tự thêm hạng mục.
-  const handleSelectPoItem = (item: any, forceCodeOnly = false) => {
-    const matchedPo = String(item.poNumber || item.itemCode || '').trim();
-    const matchedSupplier = String(item.supplierName || '').trim();
+  // Khi chọn một mục từ danh sách gợi ý PO/PR chính -> Tự điền NCC (nếu trống) & Nối thêm toàn bộ hạng mục của mã đó
+  const handleSelectPoItem = async (item: any) => {
+    if (poSearchDebounceRef.current) {
+      clearTimeout(poSearchDebounceRef.current);
+    }
+    const matchedPo = String(item?.poNumber || item?.itemCode || '').trim();
     if (!matchedPo) return;
 
-    if (matchedSupplier) {
-      setPoSupplierMap(prev => ({ ...prev, [matchedPo.toLowerCase()]: matchedSupplier }));
-    }
+    recentHeaderCommitRef.current = {
+      codes: [matchedPo.toLowerCase()],
+      ts: Date.now(),
+    };
 
-    const existingCommittedCount = splitPoTokens([
-      ...(newBooking.poNumbers || []),
-      ...newBooking.items.map(i => i.poNumber),
-    ]).length;
+    cachePoSuppliersFromResults([item]);
+    setShowPoDropdown(false);
+    setNewBooking(prev => ({
+      ...prev,
+      poNumber: '',
+      poNumbers: splitPoTokens([...(prev.poNumbers || []), matchedPo]).slice(0, MAX_BOOKING_PO_TOKENS),
+    }));
 
-    const hasCustomItems = newBooking.items.some(it => {
-      const nameTrim = String(it.itemName || '').trim();
-      const poTrim = String(it.poNumber || '').trim();
-      return Boolean(poTrim) || (nameTrim.length > 0 && nameTrim !== 'Tủ âm tường MFC Phủ Melamine');
-    });
+    setIsSearchingPo(true);
+    try {
+      let fullItems: any[] = [];
+      try {
+        const exactRes = await lookupPoMaterials(matchedPo, { exact: true });
+        if (Array.isArray(exactRes?.items) && exactRes.items.length > 0) {
+          fullItems = exactRes.items;
+        }
+      } catch {
+        // Fallback to currently loaded dropdown results below
+      }
+      if (fullItems.length === 0) {
+        const matchingFromDropdown = poSearchResults.filter(
+          (r) => String(r?.poNumber || r?.itemCode || '').trim().toLowerCase() === matchedPo.toLowerCase()
+        );
+        fullItems = matchingFromDropdown.length > 0 ? matchingFromDropdown : [item];
+      }
 
-    const shouldPopulateItems = !forceCodeOnly && existingCommittedCount === 0 && !hasCustomItems;
+      cachePoSuppliersFromResults(fullItems);
+      const supplierRec = fullItems.find((r: any) => String(r?.supplierName || '').trim()) || item;
+      const appliedSup = await hydrateSupplierFromPoRecord(supplierRec);
 
-    if (shouldPopulateItems) {
-      const matchingItems = poSearchResults.filter(r => (r.poNumber || r.itemCode) === matchedPo);
-      const itemsToUse = matchingItems.length > 0 ? matchingItems : [item];
-      const newItems: SubcontractorBookingItem[] = itemsToUse.map((it, idx) => ({
-        id: String(idx + 1),
-        itemName: it.itemName || 'Sản phẩm / Vật tư gia công',
-        quantity: it.quantity || 1,
-        unit: it.unit || 'Bộ',
-        specifications: it.specifications || (it.projectName ? `Dự án: ${it.projectName}` : ''),
-        poNumber: matchedPo,
-        supplierName: it.supplierName || matchedSupplier || undefined,
-        isInspected: true,
-      }));
-
+      const mergedPreview = mergePoItemsIntoList(latestBookingRef.current.items, matchedPo, fullItems);
       setNewBooking(prev => ({
         ...prev,
-        poNumber: '',
-        poNumbers: splitPoTokens([...(prev.poNumbers || []), matchedPo]),
-        supplierName: prev.supplierName || matchedSupplier,
-        locationAddress: prev.locationAddress || item.supplierAddress || '',
-        contactPerson: prev.contactPerson || item.supplierContactPerson || '',
-        contactPhone: prev.contactPhone || item.supplierPhone || '',
-        items: newItems.length > 0 ? newItems : prev.items,
+        items: mergePoItemsIntoList(prev.items, matchedPo, fullItems).nextItems,
       }));
 
-      if (!newBooking.supplierName && matchedSupplier) {
-        lookupAndApplySupplier(matchedSupplier);
-      }
-    } else {
-      // Từ mã thứ 2 trở đi hoặc đã có hạng mục: CHỈ thêm mã PO/PR, KHÔNG tự thêm/ghi đè danh sách hạng mục
-      setNewBooking(prev => {
-        const mergedChips = splitPoTokens([...(prev.poNumbers || []), matchedPo]).slice(0, MAX_BOOKING_PO_TOKENS);
-        return {
-          ...prev,
-          poNumber: '',
-          poNumbers: mergedChips,
-          supplierName: prev.supplierName || matchedSupplier,
-          locationAddress: prev.locationAddress || item.supplierAddress || '',
-          contactPerson: prev.contactPerson || item.supplierContactPerson || '',
-          contactPhone: prev.contactPhone || item.supplierPhone || '',
-        };
+      setPoLookupStatus({
+        type: 'success',
+        text:
+          mergedPreview.addedCount > 0
+            ? `Đã nạp ${mergedPreview.addedCount} hạng mục từ mã ${matchedPo}${appliedSup ? ` · NCC: ${appliedSup}` : ''}`
+            : `Mã ${matchedPo} đã được gắn (hạng mục đã tồn tại trong bảng).`,
       });
-
-      if (!newBooking.supplierName && matchedSupplier) {
-        lookupAndApplySupplier(matchedSupplier);
-      }
+    } finally {
+      setIsSearchingPo(false);
     }
-
-    setShowPoDropdown(false);
   };
 
-  // Khi người dùng hoàn thành nhập ô PO/PR rồi rời ô (onBlur)
-  const handlePoInputBlur = async () => {
+  // Khi người dùng hoàn thành nhập ô PO/PR chính rồi rời ô (onBlur)
+  const handlePoInputBlur = () => {
     setTimeout(async () => {
       setShowPoDropdown(false);
-      const poVal = newBooking.poNumber.trim();
-      if (!poVal) return;
+      const rawVal = String(latestBookingRef.current.poNumber || '').trim();
+      if (!rawVal) return;
 
-      const lastSeg = splitPoTokens(poVal).slice(-1)[0] || poVal;
-      try {
-        const res = await lookupPoMaterials(lastSeg);
-        const items = res.items || [];
-        cachePoSuppliersFromResults(items);
-        if (items.length > 0 && !newBooking.supplierName.trim()) {
-          const exactMatch = items.find((i: any) =>
-            (i.poNumber && i.poNumber.toLowerCase() === lastSeg.toLowerCase()) ||
-            (i.itemCode && i.itemCode.toLowerCase() === lastSeg.toLowerCase())
-          ) || items[0];
+      const tokens = splitPoTokens(rawVal).filter((t) => t.length >= 2);
+      if (tokens.length === 0) return;
 
-          if (exactMatch && exactMatch.supplierName) {
-            setNewBooking(prev => ({
-              ...prev,
-              supplierName: prev.supplierName || exactMatch.supplierName,
-              locationAddress: prev.locationAddress || exactMatch.supplierAddress || '',
-              contactPerson: prev.contactPerson || exactMatch.supplierContactPerson || '',
-              contactPhone: prev.contactPhone || exactMatch.supplierPhone || '',
-            }));
-            await lookupAndApplySupplier(exactMatch.supplierName);
-          }
+      const recent = recentHeaderCommitRef.current;
+      if (recent && Date.now() - recent.ts < 600) {
+        const lowerTokens = tokens.map((t) => t.toLowerCase());
+        if (lowerTokens.every((lt) => recent.codes.includes(lt))) {
+          return;
         }
-      } catch (e) {
-        console.warn("Lookup on blur error:", e);
       }
-    }, 250);
+
+      await handleCommitHeaderPoTokens(rawVal);
+    }, 180);
   };
 
-  const handleLookupItemPoSupplier = async (itemIdx: number, rawPoVal: string) => {
-    const clean = String(rawPoVal || '').trim();
-    if (clean.length < 2) return;
-    if (poSupplierMap[clean.toLowerCase()]) {
-      const cached = poSupplierMap[clean.toLowerCase()];
-      setNewBooking(prev => {
-        const updated = [...prev.items];
-        if (updated[itemIdx]) {
-          updated[itemIdx] = { ...updated[itemIdx], supplierName: cached };
-        }
-        return { ...prev, items: updated };
+  // --- PER-ROW INLINE PO/PR AUTO-LOOKUP & AUTOFILL ---
+  const applyLookupRecordToRow = async (itemIdx: number, rec: any, overridePo?: string) => {
+    const chosenPo = String(overridePo || rec?.poNumber || rec?.itemCode || '').trim();
+    const mapped = mapLookupRecordToBookingItem(rec, chosenPo, itemIdx);
+    const targetItemId = latestBookingRef.current.items[itemIdx]?.id;
+
+    setNewBooking(prev => {
+      const updated = [...prev.items];
+      const existing = updated[itemIdx];
+      if (!existing) return prev;
+      updated[itemIdx] = {
+        ...existing,
+        poNumber: chosenPo || existing.poNumber,
+        itemName: mapped.itemName,
+        quantity: mapped.quantity,
+        unit: mapped.unit,
+        specifications: mapped.specifications || existing.specifications,
+        supplierName: mapped.supplierName || existing.supplierName,
+      };
+      return { ...prev, items: updated };
+    });
+
+    if (targetItemId) {
+      setRowLookupFeedback(prev => ({
+        ...prev,
+        [targetItemId]: {
+          type: 'success',
+          text: `Đã điền từ ERP (${mapped.quantity} ${mapped.unit})`,
+        },
+      }));
+    }
+
+    if (rec?.supplierName && !latestBookingRef.current.supplierName.trim()) {
+      await hydrateSupplierFromPoRecord(rec);
+    }
+  };
+
+  const handleSelectRowPoSuggestion = async (itemIdx: number, rec: any) => {
+    if (rowSearchDebounceRef.current) {
+      clearTimeout(rowSearchDebounceRef.current);
+    }
+    setActiveRowLookupIdx(null);
+    setRowPoSuggestions([]);
+    await applyLookupRecordToRow(itemIdx, rec);
+  };
+
+  const handleRowPoChange = (itemIdx: number, val: string) => {
+    const itemId = latestBookingRef.current.items[itemIdx]?.id;
+    setNewBooking(prev => {
+      const updated = [...prev.items];
+      if (updated[itemIdx]) {
+        updated[itemIdx] = { ...updated[itemIdx], poNumber: val };
+      }
+      return { ...prev, items: updated };
+    });
+    if (itemId) {
+      setRowLookupFeedback(prev => {
+        if (!prev[itemId]) return prev;
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
       });
+    }
+
+    if (rowSearchDebounceRef.current) {
+      clearTimeout(rowSearchDebounceRef.current);
+    }
+    const clean = val.trim();
+    setActiveRowLookupIdx(itemIdx);
+    if (clean.length < 2) {
+      setRowPoSuggestions([]);
+      setIsSearchingRowPo(false);
       return;
     }
+
+    setIsSearchingRowPo(true);
+    rowSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await lookupPoMaterials(clean);
+        const currentRowPo = String(latestBookingRef.current.items[itemIdx]?.poNumber || '').trim();
+        if (currentRowPo.toLowerCase() !== clean.toLowerCase()) return;
+        const found = Array.isArray(res?.items) ? res.items : [];
+        cachePoSuppliersFromResults(found);
+        setRowPoSuggestions(found);
+        if (itemId) {
+          setRowItemOptions(prev => ({ ...prev, [itemId]: found }));
+        }
+      } catch {
+        // Ignore transient row search error
+      } finally {
+        setIsSearchingRowPo(false);
+      }
+    }, 200);
+  };
+
+  const handleRowPoFocus = async (itemIdx: number) => {
+    setActiveRowLookupIdx(itemIdx);
+    const currentRow = latestBookingRef.current.items[itemIdx];
+    const clean = String(currentRow?.poNumber || '').trim();
+    if (clean.length < 2) {
+      setRowPoSuggestions([]);
+      return;
+    }
+    const existingOpts = currentRow?.id ? rowItemOptions[currentRow.id] : undefined;
+    if (Array.isArray(existingOpts) && existingOpts.length > 0) {
+      setRowPoSuggestions(existingOpts);
+      return;
+    }
+    setIsSearchingRowPo(true);
     try {
-      const res = await lookupPoMaterials(clean);
-      const found = res.items || [];
-      cachePoSuppliersFromResults(found);
-      const exact = found.find((i: any) =>
-        String(i?.poNumber || '').toLowerCase() === clean.toLowerCase() ||
-        String(i?.itemCode || '').toLowerCase() === clean.toLowerCase()
-      ) || found[0];
-      if (exact?.supplierName) {
+      const { items: found } = await fetchExactOrFallbackPoItems(clean);
+      setRowPoSuggestions(found);
+      if (currentRow?.id && found.length > 0) {
+        setRowItemOptions(prev => ({ ...prev, [currentRow.id]: found }));
+      }
+    } finally {
+      setIsSearchingRowPo(false);
+    }
+  };
+
+  const handleLookupItemPoAndFill = async (
+    itemIdx: number,
+    rawPoVal: string,
+    fromExplicitTrigger = false
+  ) => {
+    const clean = String(rawPoVal || '').trim();
+    const targetRow = latestBookingRef.current.items[itemIdx];
+    if (!targetRow || clean.length < 2) return;
+
+    try {
+      const { items: found } = await fetchExactOrFallbackPoItems(clean);
+      if (found.length === 0) {
+        setRowItemOptions(prev => {
+          if (!prev[targetRow.id]) return prev;
+          const next = { ...prev };
+          delete next[targetRow.id];
+          return next;
+        });
+        setRowLookupFeedback(prev => ({
+          ...prev,
+          [targetRow.id]: { type: 'info', text: 'Chưa thấy trên ERP' },
+        }));
+        return;
+      }
+
+      // Deduplicate options by itemName + unit + quantity
+      const seenOpt = new Set<string>();
+      const uniqueOptions: any[] = [];
+      for (const r of found) {
+        const key = `${String(r?.itemName || '').trim().toLowerCase()}|${String(r?.unit || '').trim().toLowerCase()}|${Number(r?.quantity || 0)}`;
+        if (!seenOpt.has(key)) {
+          seenOpt.add(key);
+          uniqueOptions.push(r);
+        }
+      }
+
+      setRowItemOptions(prev => ({ ...prev, [targetRow.id]: uniqueOptions }));
+
+      // Update supplier attribution on row & header if empty
+      const supplierRec = uniqueOptions.find((i: any) => String(i?.supplierName || '').trim()) || uniqueOptions[0];
+      if (supplierRec?.supplierName) {
         setNewBooking(prev => {
           const updated = [...prev.items];
           if (updated[itemIdx]) {
-            updated[itemIdx] = { ...updated[itemIdx], supplierName: exact.supplierName };
+            updated[itemIdx] = { ...updated[itemIdx], supplierName: supplierRec.supplierName };
           }
           return { ...prev, items: updated };
         });
+        if (!latestBookingRef.current.supplierName.trim()) {
+          await hydrateSupplierFromPoRecord(supplierRec);
+        }
+      }
+
+      const rowNow = latestBookingRef.current.items[itemIdx];
+      const currentName = String(rowNow?.itemName || '').trim();
+      const rowCanAutoFill =
+        currentName.length === 0 ||
+        currentName === 'Tủ âm tường MFC Phủ Melamine' ||
+        fromExplicitTrigger;
+
+      if (uniqueOptions.length === 1 && rowCanAutoFill) {
+        await applyLookupRecordToRow(itemIdx, uniqueOptions[0], clean);
+        if (fromExplicitTrigger) setActiveRowLookupIdx(null);
+      } else if (uniqueOptions.length > 1) {
+        setRowPoSuggestions(uniqueOptions);
+        if (fromExplicitTrigger) {
+          setActiveRowLookupIdx(itemIdx);
+        } else if (rowCanAutoFill) {
+          await applyLookupRecordToRow(itemIdx, uniqueOptions[0], clean);
+          setRowLookupFeedback(prev => ({
+            ...prev,
+            [targetRow.id]: {
+              type: 'success',
+              text: `Đã điền dòng đầu (${uniqueOptions.length} vật tư khớp — bấm chọn nếu muốn đổi)`,
+            },
+          }));
+        }
       }
     } catch {
       // Ignore optional row lookup failure
@@ -644,6 +995,12 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
     });
     setPoSearchResults([]);
     setPoSupplierMap({});
+    setPoLookupStatus(null);
+    setActiveRowLookupIdx(null);
+    setRowPoSuggestions([]);
+    setRowItemOptions({});
+    setRowLookupFeedback({});
+    recentHeaderCommitRef.current = null;
     setIsUploadingDocs(false);
     setSupplierStatus({ status: 'idle', originalSupplier: null });
     setShowPoDropdown(false);
@@ -714,6 +1071,12 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
       items: parsedItems,
       documents: booking.documents || {},
     });
+    setPoLookupStatus(null);
+    setActiveRowLookupIdx(null);
+    setRowPoSuggestions([]);
+    setRowItemOptions({});
+    setRowLookupFeedback({});
+    recentHeaderCommitRef.current = null;
     setIsUploadingDocs(false);
     setSupplierStatus({ status: 'idle', originalSupplier: null });
     setShowPoDropdown(false);
@@ -2173,8 +2536,8 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                             e.preventDefault();
                             handleCommitHeaderPoTokens();
                           }}
-                          title="Thêm mã PO/PR này vào phiếu (không tự thêm hạng mục)"
-                          className="min-h-[44px] lg:min-h-[38px] px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                          title="Thêm mã PO/PR này vào phiếu và tự nạp NCC + hạng mục"
+                          className="min-h-[44px] lg:min-h-[38px] px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Thêm mã</span>
@@ -2213,48 +2576,80 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                       </div>
                     )}
 
+                    {/* Inline status feedback after PO/PR auto-lookup */}
+                    {poLookupStatus && (
+                      <div
+                        role="status"
+                        className={`mt-1.5 flex items-start gap-1.5 text-[11px] leading-snug font-medium ${
+                          poLookupStatus.type === 'success'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : poLookupStatus.type === 'warning'
+                              ? 'text-amber-700 dark:text-amber-400'
+                              : 'text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {poLookupStatus.type === 'success' ? (
+                          <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        )}
+                        <span>{poLookupStatus.text}</span>
+                      </div>
+                    )}
+
                     {/* Auto-lookup dropdown */}
                     {showPoDropdown && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
-                        <div className="p-2 text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/80">
-                          <span>Kết quả dò trong Material / IPO ({poSearchResults.length})</span>
-                          <button type="button" onClick={() => setShowPoDropdown(false)} className="min-h-[36px] px-2.5 text-slate-400 hover:text-slate-600 rounded">Đóng</button>
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/90 sticky top-0">
+                          <span>Kết quả Material / IPO ({poSearchResults.length})</span>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setShowPoDropdown(false);
+                            }}
+                            className="min-h-[36px] px-2.5 text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white rounded cursor-pointer"
+                          >
+                            Đóng
+                          </button>
                         </div>
 
                         {poSearchResults.length === 0 ? (
-                          <div className="p-3 text-xs text-slate-500 italic text-center">
-                            {isSearchingPo ? 'Đang dò tìm...' : 'Không tìm thấy thông tin PO/PR phù hợp'}
+                          <div className="p-3 text-xs text-slate-500 dark:text-slate-400 italic text-center">
+                            {isSearchingPo ? 'Đang dò tìm trong ERP...' : 'Không tìm thấy thông tin PO/PR phù hợp'}
                           </div>
                         ) : (
-                          poSearchResults.map((resItem, idx) => {
-                            const hasExistingPo = allFormPoTokens.length > 0;
-                            return (
-                              <div
-                                key={idx}
-                                onMouseDown={() => handleSelectPoItem(resItem, hasExistingPo)}
-                                className="p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer border-b border-slate-100 dark:border-slate-700/50 last:border-0 transition-colors"
-                              >
-                                <div className="flex items-center justify-between gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
-                                  <span>{resItem.poNumber || resItem.itemCode || 'PO / Material'}</span>
-                                  <div className="flex items-center gap-1.5">
-                                    {hasExistingPo && (
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-sans font-semibold">
-                                        + Chỉ thêm mã PO/PR
-                                      </span>
-                                    )}
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-sans">
-                                      {resItem.source?.toUpperCase()}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5">{resItem.itemName}</div>
-                                <div className="text-[11px] text-slate-500 flex items-center justify-between mt-1">
-                                  <span className="truncate max-w-[200px]">Xưởng: {resItem.supplierName || 'Mặc định'}</span>
-                                  <span>SL: {resItem.quantity} {resItem.unit}</span>
-                                </div>
+                          poSearchResults.map((resItem, idx) => (
+                            <div
+                              key={idx}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleSelectPoItem(resItem);
+                              }}
+                              className="p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer border-b border-slate-100 dark:border-slate-700/60 last:border-0 transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="font-bold text-blue-600 dark:text-blue-400 font-mono tabular-nums">
+                                  {resItem.poNumber || resItem.itemCode || 'PO / Material'}
+                                </span>
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap shrink-0">
+                                  {resItem.source?.toUpperCase()}
+                                  {resItem.matchedBy ? ` · ${resItem.matchedBy}` : ''}
+                                </span>
                               </div>
-                            );
-                          })
+                              <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 mt-0.5 line-clamp-2">
+                                {resItem.itemName}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2 mt-1">
+                                <span className="truncate">
+                                  {resItem.supplierName || (resItem.projectName ? `DA: ${resItem.projectName}` : 'Chưa rõ NCC')}
+                                </span>
+                                <span className="font-mono tabular-nums shrink-0">
+                                  {resItem.quantity} {resItem.unit}
+                                </span>
+                              </div>
+                            </div>
+                          ))
                         )}
                       </div>
                     )}
@@ -2370,9 +2765,13 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                     </button>
                   </div>
 
-                  {newBooking.items.map((item, itemIdx) => (
+                  {newBooking.items.map((item, itemIdx) => {
+                    const isRowLookupOpen = activeRowLookupIdx === itemIdx;
+                    const cachedRowOpts = rowItemOptions[item.id] || [];
+                    const rowMsg = rowLookupFeedback[item.id];
+                    return (
                     <div key={item.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-start">
                         <div className="sm:col-span-1 flex sm:flex-col items-center justify-between sm:justify-center pt-1 gap-2">
                           <label className="block text-[10px] text-slate-500 font-bold uppercase">KIỂM</label>
                           <input
@@ -2389,32 +2788,143 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                             className="w-5 h-5 text-blue-600 focus:ring-blue-500 rounded cursor-pointer sm:mt-1"
                           />
                         </div>
-                        <div className="sm:col-span-3">
-                          <label className="block text-[10px] text-slate-400 font-medium mb-1">Mã PO / PR (Dòng hàng)</label>
-                          <input
-                            type="text"
-                            list={`booking-item-po-list-${itemIdx}`}
-                            placeholder={allFormPoTokens[0] || 'VD: PO-001'}
-                            value={item.poNumber || ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setNewBooking(prev => {
-                                const updated = [...prev.items];
-                                updated[itemIdx] = { ...updated[itemIdx], poNumber: val };
-                                return { ...prev, items: updated };
-                              });
-                            }}
-                            onBlur={e => handleLookupItemPoSupplier(itemIdx, e.target.value)}
-                            className="w-full min-h-[44px] lg:min-h-[36px] px-2.5 py-2 lg:py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono text-blue-700 dark:text-blue-300 font-semibold"
-                          />
-                          <datalist id={`booking-item-po-list-${itemIdx}`}>
-                            {allFormPoTokens.map(tok => (
-                              <option key={tok} value={tok} />
-                            ))}
-                          </datalist>
+                        <div className="sm:col-span-3 relative">
+                          <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mb-1">
+                            Mã PO / PR (Dòng hàng)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder={allFormPoTokens[0] || 'Nhập PO / PR để gợi ý...'}
+                              value={item.poNumber || ''}
+                              onFocus={() => handleRowPoFocus(itemIdx)}
+                              onChange={e => handleRowPoChange(itemIdx, e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleLookupItemPoAndFill(itemIdx, item.poNumber || '', true);
+                                } else if (e.key === 'Escape') {
+                                  setActiveRowLookupIdx(null);
+                                }
+                              }}
+                              onBlur={e => {
+                                const val = e.target.value;
+                                setTimeout(() => {
+                                  setActiveRowLookupIdx(prev => (prev === itemIdx ? null : prev));
+                                  handleLookupItemPoAndFill(itemIdx, val, false);
+                                }, 180);
+                              }}
+                              className="w-full min-h-[44px] lg:min-h-[36px] pl-2.5 pr-7 py-2 lg:py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono text-blue-700 dark:text-blue-300 font-semibold"
+                            />
+                            {isRowLookupOpen && isSearchingRowPo && (
+                              <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin absolute right-2 top-3 lg:top-2.5 pointer-events-none" />
+                            )}
+                          </div>
+
+                          {/* Row-level inline feedback or multi-item picker trigger */}
+                          {cachedRowOpts.length > 1 && (
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setRowPoSuggestions(cachedRowOpts);
+                                setActiveRowLookupIdx(isRowLookupOpen ? null : itemIdx);
+                              }}
+                              className="mt-1 min-h-[28px] text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer text-left"
+                            >
+                              <ChevronDown className="w-3 h-3 shrink-0" />
+                              <span>Chọn vật tư ERP ({cachedRowOpts.length} dòng khớp)</span>
+                            </button>
+                          )}
+                          {rowMsg && cachedRowOpts.length <= 1 && (
+                            <div
+                              className={`mt-1 text-[10px] leading-tight ${
+                                rowMsg.type === 'success'
+                                  ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+                                  : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              {rowMsg.text}
+                            </div>
+                          )}
+
+                          {/* Per-row ERP suggestion popover */}
+                          {isRowLookupOpen && (rowPoSuggestions.length > 0 || (allFormPoTokens.length > 0 && !String(item.poNumber || '').trim())) && (
+                            <div className="absolute left-0 right-0 sm:w-[340px] top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-[60] max-h-60 overflow-y-auto">
+                              <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/90 sticky top-0">
+                                <span>
+                                  {rowPoSuggestions.length > 0
+                                    ? `Gợi ý vật tư ERP (${rowPoSuggestions.length})`
+                                    : 'Chọn mã PO / PR đã gắn'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setActiveRowLookupIdx(null);
+                                  }}
+                                  className="min-h-[28px] px-2 text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white rounded cursor-pointer"
+                                >
+                                  Đóng
+                                </button>
+                              </div>
+
+                              {rowPoSuggestions.length === 0 ? (
+                                <div className="p-2 flex flex-wrap gap-1.5">
+                                  {allFormPoTokens.map((tok) => (
+                                    <button
+                                      key={tok}
+                                      type="button"
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        setNewBooking(prev => {
+                                          const updated = [...prev.items];
+                                          if (updated[itemIdx]) {
+                                            updated[itemIdx] = { ...updated[itemIdx], poNumber: tok };
+                                          }
+                                          return { ...prev, items: updated };
+                                        });
+                                        handleLookupItemPoAndFill(itemIdx, tok, true);
+                                      }}
+                                      className="min-h-[32px] px-2.5 py-1 rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-mono text-[11px] font-semibold cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                                    >
+                                      {tok}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                rowPoSuggestions.map((rec, rIdx) => (
+                                  <button
+                                    key={rIdx}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      handleSelectRowPoSuggestion(itemIdx, rec);
+                                    }}
+                                    className="w-full text-left p-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 border-b border-slate-100 dark:border-slate-700/60 last:border-0 transition-colors cursor-pointer"
+                                  >
+                                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                                        {rec.poNumber || rec.itemCode}
+                                      </span>
+                                      <span className="font-mono tabular-nums text-slate-600 dark:text-slate-300 shrink-0">
+                                        {rec.quantity} {rec.unit}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 mt-0.5 line-clamp-2">
+                                      {rec.itemName}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                                      {rec.supplierName || rec.projectName || rec.source?.toUpperCase()}
+                                    </div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="sm:col-span-3">
-                          <label className="block text-[10px] text-slate-400 font-medium mb-1">Tên Sản Phẩm / Hạng Mục (*)</label>
+                          <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mb-1">Tên Sản Phẩm / Hạng Mục (*)</label>
                           <input
                             type="text"
                             required
@@ -2432,10 +2942,11 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                           />
                         </div>
                         <div className="sm:col-span-1">
-                          <label className="block text-[10px] text-slate-400 font-medium mb-1">Số Lượng</label>
+                          <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mb-1">Số Lượng</label>
                           <input
                             type="number"
-                            min="1"
+                            min="0.001"
+                            step="any"
                             value={item.quantity}
                             onChange={e => {
                               const val = parseFloat(e.target.value) || 1;
@@ -2445,11 +2956,11 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                                 return { ...prev, items: updated };
                               });
                             }}
-                            className="w-full min-h-[44px] lg:min-h-[36px] px-2 py-2 lg:py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono"
+                            className="w-full min-h-[44px] lg:min-h-[36px] px-2 py-2 lg:py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded font-mono tabular-nums"
                           />
                         </div>
                         <div className="sm:col-span-1">
-                          <label className="block text-[10px] text-slate-400 font-medium mb-1">ĐVT</label>
+                          <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mb-1">ĐVT</label>
                           <input
                             type="text"
                             value={item.unit}
@@ -2466,7 +2977,7 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                         </div>
                         <div className="sm:col-span-3 flex items-end gap-1.5">
                           <div className="flex-1">
-                            <label className="block text-[10px] text-slate-400 font-medium mb-1">Quy Cách / Ghi Chú</label>
+                            <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mb-1">Quy Cách / Ghi Chú</label>
                             <input
                               type="text"
                               placeholder="Theo shopdrawing..."
@@ -2486,7 +2997,7 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                             <button
                               type="button"
                               onClick={() => setNewBooking(prev => ({ ...prev, items: prev.items.filter((_, idx) => idx !== itemIdx) }))}
-                              className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] inline-flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:text-red-700 hover:bg-red-100 transition-colors shrink-0"
+                              className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] inline-flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:text-red-700 hover:bg-red-100 transition-colors shrink-0 cursor-pointer"
                               title="Xóa hạng mục"
                               aria-label="Xóa hạng mục"
                             >
@@ -2516,6 +3027,9 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                                     };
                                     return { ...prev, items: updated };
                                   });
+                                  if (!isAssignedHere) {
+                                    handleLookupItemPoAndFill(itemIdx, tok, true);
+                                  }
                                 }}
                                 className={`px-2 py-0.5 rounded border font-mono text-[10px] font-semibold transition-colors cursor-pointer ${
                                   isAssignedHere
@@ -2530,7 +3044,8 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* 4. Địa chỉ xưởng */}

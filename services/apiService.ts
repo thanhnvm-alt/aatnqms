@@ -323,8 +323,15 @@ export const fetchSupplierMaterials = async (name: string): Promise<any> => {
 };
 
 // --- PO / PR & MATERIAL AUTO-LOOKUP ---
-export const lookupPoMaterials = async (q: string): Promise<{ items: any[] }> => {
-  return apiFetch(`/api/po-materials/lookup?q=${encodeURIComponent(q)}`);
+export const lookupPoMaterials = async (
+  q: string,
+  options?: { exact?: boolean }
+): Promise<{ items: any[] }> => {
+  const params = new URLSearchParams({ q });
+  if (options?.exact) {
+    params.set('exact', '1');
+  }
+  return apiFetch(`/api/po-materials/lookup?${params.toString()}`);
 };
 
 // --- INSPECTIONS API ---
