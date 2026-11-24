@@ -1,15 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   SubcontractorBooking,
   SubcontractorBookingItem,
 } from '../types.js';
 import {
-  BOOKING_DOCUMENT_GROUPS,
+  BookingAttachmentReviewItem,
+  flattenBookingDocumentsForReview,
   formatFileSize,
-  getAttachmentActionUrl,
+  getAttachmentDownloadUrl,
   getFileExtBadge,
-  normalizeBookingDocuments,
 } from '../src/utils/bookingDocuments.js';
+import { BookingAttachmentReviewModal } from './BookingAttachmentReviewModal';
 import { formatBookingPoSummary } from '../src/utils/poTokens.js';
 import {
   AlertTriangle,
@@ -17,7 +18,6 @@ import {
   Calendar,
   ClipboardList,
   Download,
-  ExternalLink,
   Eye,
   FileText,
   History,
@@ -31,6 +31,11 @@ import {
 interface BookingExpandedDetailPanelProps {
   booking: SubcontractorBooking;
   onOpenFullModal: (booking: SubcontractorBooking) => void;
+  onOpenAttachmentReview?: (
+    booking: SubcontractorBooking,
+    items: BookingAttachmentReviewItem[],
+    initialIndex: number
+  ) => void;
 }
 
 const formatGmt7Date = (unixSeconds?: number): string => {
@@ -100,20 +105,14 @@ const getStatusLabel = (booking: SubcontractorBooking): string => {
 export const BookingExpandedDetailPanel: React.FC<BookingExpandedDetailPanelProps> = ({
   booking,
   onOpenFullModal,
+  onOpenAttachmentReview,
 }) => {
-  const normalizedDocs = useMemo(
-    () => normalizeBookingDocuments(booking.documents),
+  const [localReviewIndex, setLocalReviewIndex] = useState<number | null>(null);
+
+  const flatAttachments = useMemo(
+    () => flattenBookingDocumentsForReview(booking.documents),
     [booking.documents]
   );
-
-  const flatAttachments = useMemo(() => {
-    return BOOKING_DOCUMENT_GROUPS.flatMap((group) =>
-      normalizedDocs[group.field].map((item) => ({
-        ...item,
-        groupLabel: group.shortTitle,
-      }))
-    );
-  }, [normalizedDocs]);
 
   const items: SubcontractorBookingItem[] = Array.isArray(booking.items) ? booking.items : [];
   const poSummary = useMemo(() => formatBookingPoSummary(booking), [booking]);
@@ -384,23 +383,32 @@ export const BookingExpandedDetailPanel: React.FC<BookingExpandedDetailPanelProp
               </div>
             ) : (
               flatAttachments.map((doc, i) => {
-                const actionUrl = getAttachmentActionUrl(doc.url);
+                const downloadUrl = getAttachmentDownloadUrl(doc.url, doc.name);
                 const extBadge = getFileExtBadge(doc);
                 const sizeText = formatFileSize(doc.size);
+                const handleOpenReview = () => {
+                  if (onOpenAttachmentReview) {
+                    onOpenAttachmentReview(booking, flatAttachments, i);
+                  } else {
+                    setLocalReviewIndex(i);
+                  }
+                };
                 return (
                   <div
                     key={doc.id || i}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40"
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
                   >
-                    <div className="min-w-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleOpenReview}
+                      className="min-w-0 flex-1 flex items-center gap-2 text-left cursor-pointer"
+                      title={`Xem tài liệu: ${doc.name}`}
+                    >
                       <span className="px-1.5 py-0.5 rounded bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 text-[10px] font-mono font-bold shrink-0">
                         {extBadge}
                       </span>
                       <div className="min-w-0">
-                        <div
-                          className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate"
-                          title={doc.name}
-                        >
+                        <div className="text-xs font-medium text-slate-800 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 truncate">
                           {doc.name}
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
@@ -408,21 +416,30 @@ export const BookingExpandedDetailPanel: React.FC<BookingExpandedDetailPanelProp
                           {sizeText ? ` · ${sizeText}` : ''}
                         </div>
                       </div>
-                    </div>
-                    <a
-                      href={actionUrl}
-                      download={doc.sourceType === 'UPLOAD' ? doc.name : undefined}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`Tải xuống / mở ${doc.name}`}
-                      className="min-w-[32px] min-h-[32px] inline-flex items-center justify-center rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors shrink-0"
-                    >
-                      {doc.sourceType === 'LINK' ? (
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      ) : (
-                        <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleOpenReview}
+                        title={`Review tài liệu ${doc.name}`}
+                        aria-label={`Review ${doc.name}`}
+                        className="min-w-[36px] min-h-[36px] px-2 inline-flex items-center justify-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-[11px] font-semibold transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Xem</span>
+                      </button>
+                      {doc.sourceType === 'UPLOAD' && (
+                        <a
+                          href={downloadUrl}
+                          download={doc.name}
+                          title={`Tải xuống ${doc.name}`}
+                          aria-label={`Tải xuống ${doc.name}`}
+                          className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
                       )}
-                    </a>
+                    </div>
                   </div>
                 );
               })
@@ -488,6 +505,16 @@ export const BookingExpandedDetailPanel: React.FC<BookingExpandedDetailPanelProp
           </div>
         </div>
       </div>
+
+      {localReviewIndex !== null && (
+        <BookingAttachmentReviewModal
+          open={true}
+          items={flatAttachments}
+          initialIndex={localReviewIndex}
+          titleContext={`Booking ${booking.bookingCode}${poSummary.primaryPo ? ` · ${poSummary.primaryPo}` : ''}`}
+          onClose={() => setLocalReviewIndex(null)}
+        />
+      )}
     </div>
   );
 };

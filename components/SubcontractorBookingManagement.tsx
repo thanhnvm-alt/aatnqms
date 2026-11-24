@@ -30,7 +30,13 @@ import { BookingDetailModal } from './BookingDetailModal';
 import { BookingExpandedDetailPanel } from './BookingExpandedDetailPanel';
 import { QCAssignmentModal } from './QCAssignmentModal';
 import { BookingDocumentsUploader } from './BookingDocumentsUploader';
-import { countBookingDocuments, serializeBookingDocumentsForSave } from '../src/utils/bookingDocuments';
+import { BookingAttachmentReviewModal } from './BookingAttachmentReviewModal';
+import {
+  BookingAttachmentReviewItem,
+  countBookingDocuments,
+  flattenBookingDocumentsForReview,
+  serializeBookingDocumentsForSave,
+} from '../src/utils/bookingDocuments';
 import {
   splitPoTokens,
   collectBookingAllPoTokens,
@@ -239,6 +245,19 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
     Record<string, { type: 'success' | 'info'; text: string }>
   >({});
   const rowSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Attachment Review Modal sessions (Zero Modal Nesting: form modal suspends while reviewing)
+  const [panelReviewSession, setPanelReviewSession] = useState<{
+    items: BookingAttachmentReviewItem[];
+    initialIndex: number;
+    titleContext: string;
+  } | null>(null);
+  const [formReviewSession, setFormReviewSession] = useState<{
+    items: BookingAttachmentReviewItem[];
+    initialItemId?: string;
+    initialItemUrl?: string;
+    titleContext: string;
+  } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -2155,6 +2174,13 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                                 setSelectedBooking(target);
                                 setShowDetailModal(true);
                               }}
+                              onOpenAttachmentReview={(target, items, initialIndex) => {
+                                setPanelReviewSession({
+                                  items,
+                                  initialIndex,
+                                  titleContext: `Booking ${target.bookingCode}${target.poNumber ? ` · ${target.poNumber}` : ''}`,
+                                });
+                              }}
                             />
                           </td>
                         </tr>
@@ -2396,6 +2422,13 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                         setSelectedBooking(target);
                         setShowDetailModal(true);
                       }}
+                      onOpenAttachmentReview={(target, items, initialIndex) => {
+                        setPanelReviewSession({
+                          items,
+                          initialIndex,
+                          titleContext: `Booking ${target.bookingCode}${target.poNumber ? ` · ${target.poNumber}` : ''}`,
+                        });
+                      }}
                     />
                   )}
                 </div>
@@ -2414,7 +2447,7 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
       </div>
 
       {/* MODAL: TẠO / CHỈNH SỬA YÊU CẦU BOOK QC NGHIỆM THU GIA CÔNG */}
-      {showCreateModal && (() => {
+      {showCreateModal && !formReviewSession && (() => {
         const createBookingModal = (
         <div className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/60 backdrop-blur-sm overflow-hidden">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-3xl w-full border border-slate-200 dark:border-slate-800 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -3154,6 +3187,18 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
                   bookingId={editingBooking?.id}
                   currentUserName={currentUser?.name}
                   onUploadingChange={setIsUploadingDocs}
+                  onOpenAttachmentReview={(clickedItem) => {
+                    const items = flattenBookingDocumentsForReview(newBooking.documents);
+                    if (items.length === 0) return;
+                    setFormReviewSession({
+                      items,
+                      initialItemId: clickedItem.id,
+                      initialItemUrl: clickedItem.url,
+                      titleContext: editingBooking
+                        ? `Chỉnh sửa ${editingBooking.bookingCode}`
+                        : 'Hồ sơ đính kèm Book QC mới',
+                    });
+                  }}
                 />
               </div>
 
@@ -3195,6 +3240,29 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
         );
         return typeof document !== 'undefined' ? createPortal(createBookingModal, document.body) : createBookingModal;
       })()}
+
+      {/* Suspended Form Attachment Review Modal (Zero Modal Nesting) */}
+      {showCreateModal && formReviewSession && (
+        <BookingAttachmentReviewModal
+          open={true}
+          items={formReviewSession.items}
+          initialItemId={formReviewSession.initialItemId}
+          initialItemUrl={formReviewSession.initialItemUrl}
+          titleContext={formReviewSession.titleContext}
+          onClose={() => setFormReviewSession(null)}
+        />
+      )}
+
+      {/* Expanded Table Row Attachment Review Modal */}
+      {panelReviewSession && (
+        <BookingAttachmentReviewModal
+          open={true}
+          items={panelReviewSession.items}
+          initialIndex={panelReviewSession.initialIndex}
+          titleContext={panelReviewSession.titleContext}
+          onClose={() => setPanelReviewSession(null)}
+        />
+      )}
 
       {/* Extracted Booking Detail Modal (restores full UI + Related SQC table) */}
       <BookingDetailModal

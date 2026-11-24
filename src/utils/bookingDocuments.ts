@@ -109,10 +109,55 @@ export function getAttachmentActionUrl(rawUrl: string): string {
   return trimmed;
 }
 
+export function getAttachmentDownloadUrl(rawUrl: string, fileName?: string): string {
+  const actionUrl = getAttachmentActionUrl(rawUrl);
+  if (!actionUrl) return '';
+  if (actionUrl.startsWith(STORAGE_FILES_PREFIX) || actionUrl.includes(STORAGE_FILES_PREFIX)) {
+    const sep = actionUrl.includes('?') ? '&' : '?';
+    const fnParam = fileName ? `&filename=${encodeURIComponent(fileName)}` : '';
+    return `${actionUrl}${sep}download=1${fnParam}`;
+  }
+  return actionUrl;
+}
+
+export function isMediaProxyImageUrl(url: string): boolean {
+  const lower = String(url || '').toLowerCase().trim();
+  if (!lower) return false;
+  return (
+    lower.includes('/api/media/image/') ||
+    lower.includes('/api/image/') ||
+    lower.includes('/display-image/') ||
+    lower.includes('/media/stream/') ||
+    lower.includes('/api/proxy-image') ||
+    lower.includes('/api/images/proxy')
+  );
+}
+
+export function extractDriveIdFromAnyUrl(url: string): string {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com') || trimmed.includes('lh3.googleusercontent.com')) {
+    const fileMatch = trimmed.match(/\/file\/d\/([^/?]+)/);
+    const idMatch = trimmed.match(/[?&]id=([^&]+)/);
+    const dMatch = trimmed.match(/\/d\/([^/?]+)/);
+    return fileMatch?.[1] || idMatch?.[1] || dMatch?.[1] || '';
+  }
+  if (trimmed.includes('/api/media/image/') || trimmed.includes('/api/image/') || trimmed.includes('/display-image/') || trimmed.includes('/media/stream/')) {
+    const last = trimmed.split(/[/?]/).filter(Boolean).pop() || '';
+    if (/^[a-zA-Z0-9_-]{15,}$/.test(last)) return last;
+  }
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(trimmed)) return trimmed;
+  return '';
+}
+
 export function isValidAttachmentUrl(rawUrl: string): boolean {
   const trimmed = String(rawUrl || '').trim();
   if (!trimmed) return false;
-  if (trimmed.startsWith('/api/storage/files/') || trimmed.startsWith('/uploads/')) {
+  if (
+    trimmed.startsWith('/api/storage/files/') ||
+    trimmed.startsWith('/uploads/') ||
+    isMediaProxyImageUrl(trimmed)
+  ) {
     return true;
   }
   try {
@@ -125,7 +170,76 @@ export function isValidAttachmentUrl(rawUrl: string): boolean {
 
 export function isGoogleDriveUrl(url: string): boolean {
   const lower = String(url || '').toLowerCase();
-  return lower.includes('drive.google.com') || lower.includes('docs.google.com') || lower.includes('lh3.googleusercontent.com');
+  if (
+    lower.includes('drive.google.com') ||
+    lower.includes('docs.google.com') ||
+    lower.includes('lh3.googleusercontent.com')
+  ) {
+    return true;
+  }
+  return Boolean(extractDriveIdFromAnyUrl(url));
+}
+
+export function getGoogleDriveEmbedUrl(rawUrl: string): string | null {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return null;
+
+  // Google Docs / Sheets / Slides
+  const docsMatch = trimmed.match(/docs\.google\.com\/(document|spreadsheets|presentation|forms)\/d\/([a-zA-Z0-9_-]+)/i);
+  if (docsMatch) {
+    const kind = docsMatch[1].toLowerCase();
+    const id = docsMatch[2];
+    if (kind === 'forms') {
+      return `https://docs.google.com/forms/d/${id}/viewform?embedded=true`;
+    }
+    return `https://docs.google.com/${kind}/d/${id}/preview`;
+  }
+
+  // Google Drive Folder
+  const folderMatch = trimmed.match(/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([a-zA-Z0-9_-]+)/i);
+  if (folderMatch) {
+    return `https://drive.google.com/embeddedfolderview?id=${folderMatch[1]}#list`;
+  }
+
+  // Google Drive File (/file/d/<id>, ?id=<id>, or /api/media/image/<id>)
+  const fileId = extractDriveIdFromAnyUrl(trimmed);
+  if (fileId) {
+    return `https://drive.google.com/file/d/${fileId}/preview`;
+  }
+
+  return null;
+}
+
+export function isPdfAttachment(item: { url?: string; name?: string; mimeType?: string }): boolean {
+  const mime = String(item?.mimeType || '').toLowerCase();
+  if (mime === 'application/pdf') return true;
+  const cleanUrl = String(item?.url || '').split('?')[0].toLowerCase();
+  const cleanName = String(item?.name || '').toLowerCase();
+  return cleanUrl.endsWith('.pdf') || cleanName.endsWith('.pdf');
+}
+
+export function isSpreadsheetAttachment(item: { url?: string; name?: string; mimeType?: string }): boolean {
+  const mime = String(item?.mimeType || '').toLowerCase();
+  if (
+    mime.includes('spreadsheet') ||
+    mime.includes('excel') ||
+    mime === 'text/csv'
+  ) {
+    return true;
+  }
+  const cleanUrl = String(item?.url || '').split('?')[0].toLowerCase();
+  const cleanName = String(item?.name || '').toLowerCase();
+  return ['.xlsx', '.xls', '.csv', '.ods'].some((ext) => cleanUrl.endsWith(ext) || cleanName.endsWith(ext));
+}
+
+export function isTextAttachment(item: { url?: string; name?: string; mimeType?: string }): boolean {
+  const mime = String(item?.mimeType || '').toLowerCase();
+  if (mime === 'text/plain' || mime === 'application/json' || mime === 'text/markdown') {
+    return true;
+  }
+  const cleanUrl = String(item?.url || '').split('?')[0].toLowerCase();
+  const cleanName = String(item?.name || '').toLowerCase();
+  return ['.txt', '.log', '.json', '.md'].some((ext) => cleanUrl.endsWith(ext) || cleanName.endsWith(ext));
 }
 
 export function isImageAttachment(item: { url?: string; name?: string; mimeType?: string }): boolean {
@@ -135,7 +249,139 @@ export function isImageAttachment(item: { url?: string; name?: string; mimeType?
   const cleanUrl = String(item?.url || '').split('?')[0].toLowerCase();
   const cleanName = String(item?.name || '').toLowerCase();
   const imgExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.svg', '.heic', '.heif'];
-  return imgExts.some((ext) => cleanUrl.endsWith(ext) || cleanName.endsWith(ext));
+  if (imgExts.some((ext) => cleanUrl.endsWith(ext) || cleanName.endsWith(ext))) {
+    return true;
+  }
+  if (
+    isMediaProxyImageUrl(item?.url || '') &&
+    !isPdfAttachment(item) &&
+    !isSpreadsheetAttachment(item) &&
+    !isTextAttachment(item)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export type AttachmentPreviewKind =
+  | 'IMAGE'
+  | 'PDF'
+  | 'SPREADSHEET'
+  | 'TEXT'
+  | 'DRIVE_EMBED'
+  | 'GOOGLE_VIEWER';
+
+export function resolveAttachmentPreviewKind(item: {
+  url?: string;
+  name?: string;
+  mimeType?: string;
+  sourceType?: string;
+}): AttachmentPreviewKind {
+  if (isImageAttachment(item)) return 'IMAGE';
+  const rawUrlLower = String(item?.url || '').toLowerCase();
+  const isExplicitDriveLink =
+    rawUrlLower.includes('drive.google.com') || rawUrlLower.includes('docs.google.com');
+  if (isExplicitDriveLink && getGoogleDriveEmbedUrl(item?.url || '')) {
+    return 'DRIVE_EMBED';
+  }
+  if (isPdfAttachment(item)) return 'PDF';
+  if (isSpreadsheetAttachment(item)) return 'SPREADSHEET';
+  if (isTextAttachment(item)) return 'TEXT';
+  if (isGoogleDriveUrl(item?.url || '') && getGoogleDriveEmbedUrl(item?.url || '')) {
+    return 'DRIVE_EMBED';
+  }
+  return 'GOOGLE_VIEWER';
+}
+
+export function canUseExternalGoogleViewer(rawUrl: string, currentOrigin?: string): boolean {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return false;
+  try {
+    const base = currentOrigin || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    const parsed = new URL(trimmed, base);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.local') ||
+      host.endsWith('.run.app')
+    ) {
+      return false;
+    }
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export interface BookingAttachmentReviewItem extends BookingAttachmentItem {
+  groupLabel: string;
+  groupOrder: number;
+}
+
+export function flattenBookingDocumentsForReview(
+  docs?: SubcontractorBookingDocuments | null
+): BookingAttachmentReviewItem[] {
+  const norm = normalizeBookingDocuments(docs);
+  return BOOKING_DOCUMENT_GROUPS.flatMap((group) =>
+    norm[group.field].map((item) => ({
+      ...item,
+      category: group.key,
+      groupLabel: group.shortTitle,
+      groupOrder: group.order,
+    }))
+  );
+}
+
+export function flattenReferenceDocsForReview(
+  entries: Array<{
+    id?: string;
+    key?: string;
+    name?: string;
+    title?: string;
+    url?: string;
+    category?: BookingDocumentCategory;
+    sourceType?: 'UPLOAD' | 'LINK';
+    mimeType?: string;
+    size?: number;
+    uploadedAt?: number;
+    uploadedBy?: string;
+  }>
+): BookingAttachmentReviewItem[] {
+  const groupByKey = new Map(BOOKING_DOCUMENT_GROUPS.map((g) => [g.key, g]));
+  const items: BookingAttachmentReviewItem[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < (entries || []).length; i++) {
+    const entry = entries[i];
+    const rawUrl = String(entry?.url || '').trim();
+    if (!rawUrl || rawUrl === '#') continue;
+    const dedupeKey = stripStorageSignedQuery(rawUrl).toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    const cat: BookingDocumentCategory = entry.category || 'PR_PO';
+    const grp = groupByKey.get(cat);
+    items.push({
+      id: String(entry.id || entry.key || `ref_${i}`),
+      name: String(entry.title || entry.name || 'Tài liệu đính kèm').trim(),
+      url: rawUrl,
+      category: cat,
+      sourceType:
+        entry.sourceType ||
+        (rawUrl.startsWith(STORAGE_FILES_PREFIX) || rawUrl.startsWith('/uploads/') ? 'UPLOAD' : 'LINK'),
+      mimeType: entry.mimeType,
+      size: entry.size,
+      uploadedAt: entry.uploadedAt,
+      uploadedBy: entry.uploadedBy,
+      groupLabel: grp?.shortTitle || 'Tài liệu',
+      groupOrder: grp?.order ?? 99,
+    });
+  }
+
+  return items.sort((a, b) => a.groupOrder - b.groupOrder);
 }
 
 export function getFileExtBadge(item: { url?: string; name?: string; mimeType?: string; sourceType?: string }): string {

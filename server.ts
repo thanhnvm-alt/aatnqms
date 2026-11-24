@@ -1746,6 +1746,15 @@ app.get('/api/storage/files/*storageKey', (req: any, res) => {
     if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
       return res.status(404).json({ error: 'Storage asset not found' });
     }
+    const rawBaseName = String(req.query.filename || cleanKey.split('/').pop() || 'attachment')
+      .replace(/[\r\n"]/g, '_')
+      .trim() || 'attachment';
+    const isDownload = req.query.download === '1' || req.query.download === 'true';
+    const dispositionType = isDownload ? 'attachment' : 'inline';
+    res.setHeader(
+      'Content-Disposition',
+      `${dispositionType}; filename*=UTF-8''${encodeURIComponent(rawBaseName)}`
+    );
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Cache-Control', 'private, max-age=3600');

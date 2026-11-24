@@ -1,20 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { BookingDocumentCategory } from '../types.js';
 import {
+  flattenReferenceDocsForReview,
   getAttachmentActionUrl,
   getFileExtBadge,
   isGoogleDriveUrl,
   isImageAttachment,
 } from '../src/utils/bookingDocuments.js';
 import { ProxyImage } from '../src/components/ProxyImage.js';
+import { BookingAttachmentReviewModal } from './BookingAttachmentReviewModal';
 import {
-  ExternalLink,
+  Eye,
   FileCheck2,
   FileSpreadsheet,
   FileText,
   Image as ImageIcon,
   Paperclip,
-  X,
 } from 'lucide-react';
 
 interface DocEntryInput {
@@ -25,6 +26,7 @@ interface DocEntryInput {
   category?: BookingDocumentCategory;
   sourceType?: 'UPLOAD' | 'LINK';
   mimeType?: string;
+  size?: number;
   verified?: boolean;
 }
 
@@ -65,42 +67,13 @@ export const BookingReferenceDocsCard: React.FC<BookingReferenceDocsCardProps> =
   supportingDocs,
   referenceDocs,
 }) => {
-  const [previewImg, setPreviewImg] = useState<{ url: string; name: string } | null>(null);
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
 
   const items = useMemo(() => {
-    const merged: Array<{
-      key: string;
-      name: string;
-      url: string;
-      category?: BookingDocumentCategory;
-      sourceType?: 'UPLOAD' | 'LINK';
-      mimeType?: string;
-    }> = [];
-    const seen = new Set<string>();
-
-    const ingest = (list?: DocEntryInput[]) => {
-      if (!Array.isArray(list)) return;
-      for (let i = 0; i < list.length; i++) {
-        const entry = list[i];
-        const rawUrl = String(entry?.url || '').trim();
-        if (!rawUrl || rawUrl === '#') continue;
-        const cleanKey = rawUrl.split('?')[0].toLowerCase();
-        if (seen.has(cleanKey)) continue;
-        seen.add(cleanKey);
-        merged.push({
-          key: entry.id || `${cleanKey}_${i}`,
-          name: String(entry.title || entry.name || 'Tài liệu đính kèm').trim(),
-          url: rawUrl,
-          category: entry.category,
-          sourceType: entry.sourceType,
-          mimeType: entry.mimeType,
-        });
-      }
-    };
-
-    ingest(referenceDocs);
-    ingest(supportingDocs);
-    return merged;
+    return flattenReferenceDocsForReview([
+      ...(Array.isArray(referenceDocs) ? referenceDocs : []),
+      ...(Array.isArray(supportingDocs) ? supportingDocs : []),
+    ]);
   }, [supportingDocs, referenceDocs]);
 
   if (items.length === 0) return null;
@@ -120,7 +93,7 @@ export const BookingReferenceDocsCard: React.FC<BookingReferenceDocsCardProps> =
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {items.map((item) => {
+        {items.map((item, idx) => {
           const openHref = getAttachmentActionUrl(item.url);
           const isImg = isImageAttachment(item);
           const extBadge = getFileExtBadge(item);
@@ -129,24 +102,24 @@ export const BookingReferenceDocsCard: React.FC<BookingReferenceDocsCardProps> =
 
           return (
             <div
-              key={item.key}
-              className="flex items-center justify-between gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+              key={`${item.id}_${idx}`}
+              className="flex items-center justify-between gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
             >
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => setReviewIndex(idx)}
+                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                title={`Xem tài liệu: ${item.name}`}
+              >
                 {isImg ? (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewImg({ url: openHref, name: item.name })}
-                    className="shrink-0 rounded-md overflow-hidden border border-slate-200 dark:border-slate-700 cursor-zoom-in"
-                    title="Phóng to ảnh"
-                  >
+                  <div className="shrink-0 rounded-md overflow-hidden border border-slate-200 dark:border-slate-700">
                     <ProxyImage
                       src={openHref}
                       alt={item.name}
                       className="w-11 h-11 object-cover rounded-md"
                       allowDirectOpen={false}
                     />
-                  </button>
+                  </div>
                 ) : (
                   <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
                     <CatIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -162,59 +135,36 @@ export const BookingReferenceDocsCard: React.FC<BookingReferenceDocsCardProps> =
                       {catMeta.label}
                     </span>
                   )}
-                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate" title={item.name}>
+                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 truncate">
                     {item.name}
                   </div>
                   <div className="text-[10px] text-slate-500 dark:text-slate-400">
                     {isGoogleDriveUrl(item.url) ? 'Google Drive' : item.sourceType === 'LINK' ? 'Liên kết ngoài' : 'Tệp đính kèm'}
                   </div>
                 </div>
-              </div>
+              </button>
 
-              <a
-                href={openHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-[44px] min-h-[44px] lg:min-h-[34px] px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-semibold inline-flex items-center justify-center gap-1 shrink-0 transition-colors"
-                title="Xem / Tải tệp"
+              <button
+                type="button"
+                onClick={() => setReviewIndex(idx)}
+                className="min-w-[44px] min-h-[44px] lg:min-h-[34px] px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-semibold inline-flex items-center justify-center gap-1 shrink-0 transition-colors cursor-pointer"
+                title="Mở trình xem tài liệu"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Mở</span>
-              </a>
+                <Eye className="w-3.5 h-3.5" />
+                <span>Xem</span>
+              </button>
             </div>
           );
         })}
       </div>
 
-      {previewImg && (
-        <div
-          className="fixed inset-0 z-[300] bg-black/90 backdrop-blur-md flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] overflow-hidden"
-          onClick={() => setPreviewImg(null)}
-        >
-          <div className="flex items-center justify-between gap-3 px-4 py-2 text-white shrink-0">
-            <span className="text-xs font-semibold truncate">{previewImg.name}</span>
-            <button
-              type="button"
-              onClick={() => setPreviewImg(null)}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer"
-              aria-label="Đóng xem ảnh"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div
-            className="flex-1 min-h-0 flex items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={previewImg.url}
-              alt={previewImg.name}
-              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
-      )}
+      <BookingAttachmentReviewModal
+        open={reviewIndex !== null}
+        items={items}
+        initialIndex={reviewIndex ?? 0}
+        titleContext={bookingCode ? `Tài liệu Booking ${bookingCode}` : 'Tài liệu Booking QC'}
+        onClose={() => setReviewIndex(null)}
+      />
     </div>
   );
 };

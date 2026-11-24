@@ -46,17 +46,22 @@ import {
   SlidersHorizontal,
   ShieldCheck,
   AlertTriangle,
+  Eye,
 } from 'lucide-react';
 import { ProxyImage } from '../src/components/ProxyImage.js';
+import { BookingAttachmentReviewModal } from './BookingAttachmentReviewModal';
 import {
   BOOKING_DOCUMENT_GROUPS,
   countBookingDocuments,
+  flattenBookingDocumentsForReview,
   formatFileSize,
   getAttachmentActionUrl,
+  getAttachmentDownloadUrl,
   getFileExtBadge,
   isGoogleDriveUrl,
   isImageAttachment,
   normalizeBookingDocuments,
+  stripStorageSignedQuery,
 } from '../src/utils/bookingDocuments.js';
 import { formatBookingPoSummary } from '../src/utils/poTokens.js';
 
@@ -156,7 +161,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   } | null>(null);
 
   const [copiedField, setCopiedField] = useState<'phone' | 'address' | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
+  const [reviewSession, setReviewSession] = useState<{ open: boolean; initialIndex: number } | null>(null);
   const [showManualStatusPanel, setShowManualStatusPanel] = useState(false);
   const [manualResult, setManualResult] = useState<'PASS' | 'FAIL'>('PASS');
   const [manualSqcCode, setManualSqcCode] = useState('');
@@ -213,6 +218,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     setRelatedSqcReports([]);
     setRelatedSqcContext(null);
     setCopiedField(null);
+    setReviewSession(null);
     setReconcileNotice(null);
     setShowManualStatusPanel(false);
     setManualResult('PASS');
@@ -238,13 +244,13 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   }, [open, bookingKey, scrollToSqc, loadRelatedSqc]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || reviewSession?.open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, reviewSession?.open]);
 
   const activeBooking = liveBooking || booking;
   const canAssignQc = useMemo(
@@ -427,7 +433,44 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     }
   };
 
+  const reviewItems = useMemo(
+    () => flattenBookingDocumentsForReview(activeBooking?.documents),
+    [activeBooking?.documents]
+  );
+
+  const openAttachmentReview = useCallback(
+    (itemId?: string, itemUrl?: string) => {
+      if (reviewItems.length === 0) return;
+      let idx = 0;
+      if (itemId) {
+        const byId = reviewItems.findIndex((it) => it.id === itemId);
+        if (byId >= 0) idx = byId;
+      }
+      if (idx === 0 && itemUrl) {
+        const targetKey = stripStorageSignedQuery(itemUrl).toLowerCase();
+        const byUrl = reviewItems.findIndex(
+          (it) => stripStorageSignedQuery(it.url).toLowerCase() === targetKey
+        );
+        if (byUrl >= 0) idx = byUrl;
+      }
+      setReviewSession({ open: true, initialIndex: idx });
+    },
+    [reviewItems]
+  );
+
   if (!open || !activeBooking) return null;
+
+  if (reviewSession?.open) {
+    return (
+      <BookingAttachmentReviewModal
+        open={true}
+        items={reviewItems}
+        initialIndex={reviewSession.initialIndex}
+        titleContext={`Booking ${activeBooking.bookingCode}${activeBooking.poNumber ? ` · ${activeBooking.poNumber}` : ''}`}
+        onClose={() => setReviewSession(null)}
+      />
+    );
+  }
 
   const normalizedDocs = normalizeBookingDocuments(activeBooking.documents);
   const totalDocsCount = countBookingDocuments(activeBooking.documents).total;
@@ -984,14 +1027,26 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
           {/* Card 2: Technical Documents (4 Structured Categories) */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs font-semibold uppercase text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                 <FileCheck className="w-4 h-4 text-blue-600 shrink-0" />
                 Hồ Sơ & Tài Liệu Kỹ Thuật Nghiệm Thu
               </div>
-              <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono text-[11px] font-semibold tabular-nums">
-                {totalDocsCount} tệp / link
-              </span>
+              <div className="flex items-center gap-2">
+                {totalDocsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => openAttachmentReview()}
+                    className="no-print min-h-[34px] px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Review toàn bộ</span>
+                  </button>
+                )}
+                <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono text-[11px] font-semibold tabular-nums">
+                  {totalDocsCount} tệp / link
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -1029,9 +1084,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                                 <div key={imgItem.id} className="group relative">
                                   <button
                                     type="button"
-                                    onClick={() => setPreviewImage({ url: openHref, name: imgItem.name })}
+                                    onClick={() => openAttachmentReview(imgItem.id, imgItem.url)}
                                     className="block rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 cursor-zoom-in hover:ring-2 hover:ring-blue-500 transition-all"
-                                    title={`Xem ảnh: ${imgItem.name}`}
+                                    title={`Review tài liệu: ${imgItem.name}`}
                                   >
                                     <ProxyImage
                                       src={openHref}
@@ -1050,20 +1105,25 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                         {fileItems.length > 0 && (
                           <div className="space-y-1.5">
                             {fileItems.map((doc) => {
-                              const openHref = getAttachmentActionUrl(doc.url);
+                              const downloadHref = getAttachmentDownloadUrl(doc.url, doc.name);
                               const extBadge = getFileExtBadge(doc);
                               const sizeStr = formatFileSize(doc.size);
                               return (
                                 <div
                                   key={doc.id}
-                                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+                                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
                                 >
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => openAttachmentReview(doc.id, doc.url)}
+                                    className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                    title={`Review tài liệu: ${doc.name}`}
+                                  >
                                     <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono text-[10px] font-bold shrink-0">
                                       {extBadge}
                                     </span>
                                     <div className="min-w-0 flex-1">
-                                      <div className="font-medium text-slate-800 dark:text-slate-100 truncate" title={doc.name}>
+                                      <div className="font-medium text-slate-800 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 truncate">
                                         {doc.name}
                                       </div>
                                       <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
@@ -1071,24 +1131,21 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                                         {sizeStr ? ` · ${sizeStr}` : ''}
                                       </div>
                                     </div>
-                                  </div>
+                                  </button>
 
                                   <div className="flex items-center gap-1 shrink-0">
-                                    <a
-                                      href={openHref}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 min-h-[44px] lg:min-h-[32px] px-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold hover:underline whitespace-nowrap"
+                                    <button
+                                      type="button"
+                                      onClick={() => openAttachmentReview(doc.id, doc.url)}
+                                      className="inline-flex items-center gap-1 min-h-[44px] lg:min-h-[32px] px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 font-semibold whitespace-nowrap cursor-pointer transition-colors"
                                     >
-                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      <Eye className="w-3.5 h-3.5" />
                                       Xem
-                                    </a>
+                                    </button>
                                     {doc.sourceType === 'UPLOAD' && (
                                       <a
-                                        href={openHref}
+                                        href={downloadHref}
                                         download={doc.name}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
                                         className="no-print inline-flex items-center justify-center min-w-[44px] min-h-[44px] lg:min-w-[32px] lg:min-h-[32px] rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                                         title="Tải về"
                                         aria-label={`Tải về ${doc.name}`}
@@ -1626,51 +1683,6 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
         </div>
       </div>
     </div>
-
-    {previewImage && (
-      <div
-        className="no-print fixed inset-0 z-[300] bg-black/90 backdrop-blur-md flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] overflow-hidden"
-        onClick={() => setPreviewImage(null)}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Xem ảnh ${previewImage.name}`}
-      >
-        <div className="flex items-center justify-between gap-3 px-4 py-2 text-white shrink-0">
-          <span className="text-xs font-semibold truncate">{previewImage.name}</span>
-          <div className="flex items-center gap-2 shrink-0">
-            <a
-              href={previewImage.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="min-h-[44px] px-3 rounded-full bg-white/10 hover:bg-white/20 inline-flex items-center gap-1.5 text-xs font-semibold text-white transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Mở gốc
-            </a>
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="min-w-[44px] min-h-[44px] rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer"
-              aria-label="Đóng xem ảnh"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        <div
-          className="flex-1 min-h-0 flex items-center justify-center p-4"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <img
-            src={previewImage.url}
-            alt={previewImage.name}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-      </div>
-    )}
     </>
   );
 

@@ -7,6 +7,7 @@ import {
 import {
   BOOKING_DOCUMENT_GROUPS,
   BookingDocumentGroupConfig,
+  flattenBookingDocumentsForReview,
   formatFileSize,
   getAttachmentActionUrl,
   getFileExtBadge,
@@ -17,10 +18,11 @@ import {
 } from '../src/utils/bookingDocuments.js';
 import { uploadFileToStorage } from '../services/apiService.js';
 import { ProxyImage } from '../src/components/ProxyImage.js';
+import { BookingAttachmentReviewModal } from './BookingAttachmentReviewModal';
 import {
   AlertCircle,
   Camera,
-  ExternalLink,
+  Eye,
   FileCheck2,
   FileSpreadsheet,
   FileText,
@@ -40,6 +42,7 @@ interface BookingDocumentsUploaderProps {
   bookingId?: string;
   currentUserName?: string;
   onUploadingChange?: (isUploading: boolean) => void;
+  onOpenAttachmentReview?: (item: BookingAttachmentItem) => void;
 }
 
 const GROUP_ICONS: Record<BookingDocumentCategory, React.ComponentType<{ className?: string }>> = {
@@ -55,6 +58,7 @@ export const BookingDocumentsUploader: React.FC<BookingDocumentsUploaderProps> =
   bookingId,
   currentUserName,
   onUploadingChange,
+  onOpenAttachmentReview,
 }) => {
   const normalized = normalizeBookingDocuments(value);
 
@@ -67,7 +71,15 @@ export const BookingDocumentsUploader: React.FC<BookingDocumentsUploaderProps> =
   const [linkUrlInput, setLinkUrlInput] = useState('');
   const [linkNameInput, setLinkNameInput] = useState('');
   const [groupError, setGroupError] = useState<{ category: BookingDocumentCategory; message: string } | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<{ url: string; name: string } | null>(null);
+  const [localReviewTarget, setLocalReviewTarget] = useState<{ id?: string; url?: string } | null>(null);
+
+  const handleOpenItemReview = (item: BookingAttachmentItem) => {
+    if (onOpenAttachmentReview) {
+      onOpenAttachmentReview(item);
+    } else {
+      setLocalReviewTarget({ id: item.id, url: item.url });
+    }
+  };
 
   const setUploadingState = (cat: BookingDocumentCategory | null) => {
     setUploadingGroup(cat);
@@ -389,9 +401,9 @@ export const BookingDocumentsUploader: React.FC<BookingDocumentsUploaderProps> =
                           {isImg ? (
                             <button
                               type="button"
-                              onClick={() => setPreviewImageUrl({ url: openHref, name: item.name })}
+                              onClick={() => handleOpenItemReview(item)}
                               className="shrink-0 cursor-zoom-in rounded-md overflow-hidden border border-slate-200 dark:border-slate-700"
-                              title="Phóng to ảnh"
+                              title={`Review tài liệu: ${item.name}`}
                             >
                               <ProxyImage
                                 src={openHref}
@@ -407,15 +419,14 @@ export const BookingDocumentsUploader: React.FC<BookingDocumentsUploaderProps> =
                           )}
 
                           <div className="min-w-0 flex-1">
-                            <a
-                              href={openHref}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block text-xs font-medium text-slate-800 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 truncate"
-                              title={item.name}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenItemReview(item)}
+                              className="block w-full text-left text-xs font-medium text-slate-800 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 truncate cursor-pointer"
+                              title={`Review tài liệu: ${item.name}`}
                             >
                               {item.name}
-                            </a>
+                            </button>
                             <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono tabular-nums flex items-center gap-1.5">
                               <span>{item.sourceType === 'LINK' ? (isGoogleDriveUrl(item.url) ? 'Google Drive' : 'Liên kết') : 'Tệp tải lên'}</span>
                               {sizeStr && (
@@ -429,16 +440,15 @@ export const BookingDocumentsUploader: React.FC<BookingDocumentsUploaderProps> =
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
-                          <a
-                            href={openHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
-                            aria-label={`Mở ${item.name}`}
-                            title="Mở tài liệu"
+                          <button
+                            type="button"
+                            onClick={() => handleOpenItemReview(item)}
+                            className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                            aria-label={`Review ${item.name}`}
+                            title="Review tài liệu"
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(group, item.id)}
@@ -463,35 +473,16 @@ export const BookingDocumentsUploader: React.FC<BookingDocumentsUploaderProps> =
         })}
       </div>
 
-      {/* Lightweight Image Preview Lightbox */}
-      {previewImageUrl && (
-        <div
-          className="fixed inset-0 z-[300] bg-black/90 backdrop-blur-md flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] overflow-hidden"
-          onClick={() => setPreviewImageUrl(null)}
-        >
-          <div className="flex items-center justify-between gap-3 px-4 py-2 text-white shrink-0">
-            <span className="text-xs font-semibold truncate">{previewImageUrl.name}</span>
-            <button
-              type="button"
-              onClick={() => setPreviewImageUrl(null)}
-              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white shrink-0 cursor-pointer"
-              aria-label="Đóng xem ảnh"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div
-            className="flex-1 min-h-0 flex items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={previewImageUrl.url}
-              alt={previewImageUrl.name}
-              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
+      {/* Standalone fallback Attachment Review Modal when used outside suspended parent */}
+      {localReviewTarget && (
+        <BookingAttachmentReviewModal
+          open={true}
+          items={flattenBookingDocumentsForReview(value)}
+          initialItemId={localReviewTarget.id}
+          initialItemUrl={localReviewTarget.url}
+          titleContext="Tài liệu đính kèm Book QC"
+          onClose={() => setLocalReviewTarget(null)}
+        />
       )}
     </div>
   );
