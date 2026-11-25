@@ -156,7 +156,7 @@ export function checkModuleActionPermission(
       roleUpper === 'QA' ||
       roleUpper === 'QC_LEAD';
     if (isLeadOrManager && act === 'SIGN1') return true;
-    if ((roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN2') {
+    if ((roleUpper === 'MANAGER' || roleUpper === 'QA') && act === 'SIGN2') {
       return true;
     }
   }

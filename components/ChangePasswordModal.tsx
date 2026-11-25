@@ -27,6 +27,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   // Password complex validation rules:
   // - Minimum length >= 6
@@ -40,6 +41,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
     if (!isPasswordValid) {
       setErrorMsg('Mật khẩu không đáp ứng đầy đủ yêu cầu an toàn.');
@@ -55,13 +57,27 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     try {
       const response = await changePassword(currentPassword, newPassword);
       if (response && response.success) {
-        alert('Đổi mật khẩu thành công!');
-        if (onSuccess && response.user) {
-          onSuccess(response.user);
+        if (forcing) {
+          setSuccessMsg('Đổi mật khẩu thành công! Đang chuyển về màn hình đăng nhập...');
+          setTimeout(() => {
+            if (onLogout) {
+              onLogout();
+            } else if (onSuccess && response.user) {
+              onSuccess(response.user);
+            }
+            onClose();
+          }, 1200);
+        } else {
+          setSuccessMsg('Đổi mật khẩu thành công!');
+          setTimeout(() => {
+            if (onSuccess && response.user) {
+              onSuccess(response.user);
+            }
+            onClose();
+          }, 1000);
         }
-        onClose();
       } else {
-        setErrorMsg(response.error || 'Đổi mật khẩu thất bại.');
+        setErrorMsg(response?.error || 'Đổi mật khẩu thất bại.');
       }
     } catch (err: any) {
       console.error(err);
@@ -108,6 +124,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl text-xs text-red-600 dark:text-red-400 font-semibold flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-start gap-2">
+              <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              <span>{successMsg}</span>
             </div>
           )}
 
@@ -240,7 +263,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 <button 
                   type="button" 
                   onClick={onClose}
-                  disabled={isLoading}
+                  disabled={isLoading || Boolean(successMsg)}
                   className="min-h-[44px] sm:min-h-[36px] px-3.5 sm:px-4 py-2 sm:py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
                 >
                   Hủy
@@ -248,9 +271,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               )}
               <button 
                 type="submit" 
-                disabled={isLoading || !isPasswordValid || (newPassword !== confirmPassword)}
+                disabled={isLoading || Boolean(successMsg) || !isPasswordValid || (newPassword !== confirmPassword)}
                 className={`min-h-[44px] sm:min-h-[36px] flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-sm whitespace-nowrap shrink-0 ${
-                  isLoading || !isPasswordValid || (newPassword !== confirmPassword)
+                  isLoading || Boolean(successMsg) || !isPasswordValid || (newPassword !== confirmPassword)
                     ? 'bg-slate-300 dark:bg-slate-800 cursor-not-allowed text-slate-400 dark:text-slate-600'
                     : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
                 }`}

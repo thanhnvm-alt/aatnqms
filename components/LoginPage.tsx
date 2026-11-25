@@ -36,6 +36,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
   const [forgotError, setForgotError] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [successNotice, setSuccessNotice] = useState('');
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
@@ -50,6 +51,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
     if (!dbReady) return; 
     
     setError('');
+    setSuccessNotice('');
     setIsLoading(true);
 
     try {
@@ -67,7 +69,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
             }
 
             // Check if user requires password change on first login
-            if (loginData.user.requirePasswordChange || loginData.user.role === 'GUEST') {
+            if (loginData.user.requirePasswordChange || loginData.user.require_password_change) {
                 setTempLoggedInUser(loginData.user);
                 setShowForceChangeModal(true);
             } else {
@@ -107,9 +109,14 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
     try {
         await changePassword(password, newPassword);
         setShowForceChangeModal(false);
-        if (tempLoggedInUser) {
-            onLoginSuccess({ ...tempLoggedInUser, requirePasswordChange: false }, rememberMe);
-        }
+        // Theo yêu cầu: Đăng xuất và yêu cầu đăng nhập lại bằng mật khẩu mới
+        localStorage.removeItem('aatn_qms_token');
+        sessionStorage.removeItem('aatn_qms_token');
+        setPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setTempLoggedInUser(null);
+        setSuccessNotice('Đổi mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.');
     } catch (err: any) {
         setChangeError(err.message || 'Đổi mật khẩu thất bại');
     } finally {
@@ -161,13 +168,14 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
     setForgotLoading(true);
     try {
         const res = await resetPassword(forgotEmail, resetCode, forgotNewPassword);
-        alert(res.message || 'Khôi phục mật khẩu thành công!');
         setShowForgotPasswordModal(false);
         setForgotStep('email');
         setForgotEmail('');
         setResetCode('');
         setForgotNewPassword('');
         setForgotConfirmPassword('');
+        setPassword('');
+        setSuccessNotice(res?.message || 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.');
     } catch (err: any) {
         setForgotError(err.message || 'Đặt lại mật khẩu thất bại');
     } finally {
@@ -292,6 +300,13 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                     </span>
                 </div>
             </div>
+
+            {successNotice && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs p-3 rounded-lg flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                <span>{successNotice}</span>
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg flex items-center animate-shake">

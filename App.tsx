@@ -840,7 +840,7 @@ const App = () => {
                       await updateSingleInspection(id, true);
                       setView(returnView);
                     } catch (error) {
-                      alert("Lỗi xử lý: " + (error instanceof Error ? error.message : "Thất bại"));
+                      throw error;
                     }
                   }, 
                   onPostComment: async (id: string, cmt: any) => {

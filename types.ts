@@ -786,12 +786,42 @@ export const hasPermission = (user: User | null | undefined, rolesList: any[] = 
 
   if (Array.isArray(userPerms) && userPerms.length > 0) {
     matchedPermissions.push(...userPerms);
-  } else if (roleUpper && Array.isArray(rolesList) && rolesList.length > 0) {
+  }
+  if (Array.isArray(rolesList) && rolesList.length > 0) {
+    const posUpper = String((user as any).position || '').toUpperCase().trim();
     const matchedRole = rolesList.find(
-      (r: any) => r && typeof r === 'object' && (String(r.id || '').toUpperCase() === roleUpper || String(r.name || '').toUpperCase() === roleUpper)
+      (r: any) =>
+        r &&
+        typeof r === 'object' &&
+        !r.isPosition &&
+        (String(r.id || '').toUpperCase().trim() === roleUpper || String(r.name || '').toUpperCase().trim() === roleUpper)
     );
     if (matchedRole && Array.isArray(matchedRole.permissions)) {
-      matchedPermissions.push(...matchedRole.permissions);
+      if (userPerms.length === 0) {
+        matchedPermissions.push(...matchedRole.permissions);
+      } else {
+        matchedRole.permissions.forEach((rp: any) => {
+          const rpMod = String(rp?.moduleId || '').toUpperCase().trim();
+          const hasExplicitModule = userPerms.some((up: any) => String(up?.moduleId || '').toUpperCase().trim() === rpMod);
+          if (!hasExplicitModule) matchedPermissions.push(rp);
+        });
+      }
+    }
+    if (posUpper) {
+      const matchedPosition = rolesList.find(
+        (r: any) =>
+          r &&
+          typeof r === 'object' &&
+          r.isPosition &&
+          (String(r.id || '').toUpperCase().trim() === posUpper || String(r.name || '').toUpperCase().trim() === posUpper)
+      );
+      if (matchedPosition && Array.isArray(matchedPosition.permissions)) {
+        matchedPosition.permissions.forEach((pp: any) => {
+          const ppMod = String(pp?.moduleId || '').toUpperCase().trim();
+          const hasExplicitModule = userPerms.some((up: any) => String(up?.moduleId || '').toUpperCase().trim() === ppMod);
+          if (!hasExplicitModule) matchedPermissions.push(pp);
+        });
+      }
     }
   }
 
@@ -815,9 +845,52 @@ export const hasPermission = (user: User | null | undefined, rolesList: any[] = 
     if ((Boolean((user as any).la_to_truong) || roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN1') {
       return true;
     }
-    if ((roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN2') {
+    if ((roleUpper === 'MANAGER' || roleUpper === 'QA') && act === 'SIGN2') {
       return true;
     }
+  }
+
+  return false;
+};
+
+export const getInspectionModuleCandidates = (inspectionType?: string | null): string[] => {
+  const t = String(inspectionType || 'PQC').toUpperCase().trim();
+  const candidates = new Set<string>([t]);
+  if (t === 'SQC_VT') candidates.add('SQC_MAT');
+  if (t === 'SQC_MAT') candidates.add('SQC_VT');
+  candidates.add('INSPECTIONS');
+  candidates.add('LIST');
+  return Array.from(candidates);
+};
+
+export const hasInspectionApprovalPermission = (
+  user: User | null | undefined,
+  rolesList: any[] = [],
+  inspectionType: string | null | undefined,
+  action: 'SIGN1' | 'SIGN2'
+): boolean => {
+  if (!user) return false;
+  const roleUpper = String(user.role || '').toUpperCase().trim();
+  if (roleUpper === 'ADMIN') return true;
+  if (roleUpper === 'GUEST') return false;
+
+  const act = String(action || 'SIGN1').toUpperCase().trim() as 'SIGN1' | 'SIGN2';
+
+  // Role-level managerial defaults (L2: MANAGER / QA; L1: MANAGER / QA / QC_LEAD / la_to_truong)
+  if (act === 'SIGN2' && (roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QUẢN LÝ')) {
+    return true;
+  }
+  if (
+    act === 'SIGN1' &&
+    (roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD' || roleUpper === 'QUẢN LÝ' || Boolean((user as any).la_to_truong))
+  ) {
+    return true;
+  }
+
+  const candidates = getInspectionModuleCandidates(inspectionType);
+  for (const mod of candidates) {
+    if (hasPermission(user, rolesList, mod, act)) return true;
+    if (act === 'SIGN1' && hasPermission(user, rolesList, mod, 'APPROVE')) return true;
   }
 
   return false;

@@ -10,6 +10,7 @@ import {
   purgeTraceabilityIndex,
 } from './traceabilityIndexService.js';
 import { collectBookingAllPoTokens, splitPoTokens } from '../src/utils/poTokens.js';
+import { sendPasswordResetEmail } from './emailService.js';
 
 const SCHEMA = '"appQAQC"';
 const JWT_SECRET = process.env.JWT_SECRET || 'aa-qms-v3-1-0-jwt-secret-key';
@@ -397,9 +398,46 @@ export async function getAuthenticatedUserContext(userIdOrUsername?: string | nu
   const st = String(row.status || 'ACTIVE').toUpperCase();
   if (st === 'INACTIVE' || st === 'LOCKED') return null;
   const mapped = mapUserRow(row, { stripHeavyMedia: true });
+
+  // Nạp quyền từ bảng qms_roles cho cả vai trò (role) và chức vụ (position)
+  let rolePermissions: any[] = [];
+  try {
+    const rolesRes = await query(
+      `SELECT id, name, permissions, data FROM ${SCHEMA}.qms_roles WHERE deleted_at IS NULL`
+    );
+    const roleUpper = String(mapped.role || '').toUpperCase().trim();
+    const posUpper = String(mapped.position || '').toUpperCase().trim();
+    const userPerms: any[] = Array.isArray(mapped.userPermissions) ? mapped.userPermissions : [];
+
+    for (const rRow of rolesRes.rows) {
+      const extra = safeJsonParse<Record<string, any>>(rRow.data, {});
+      const isPos = Boolean(extra.isPosition);
+      const rIdUpper = String(rRow.id || '').toUpperCase().trim();
+      const rNameUpper = String(rRow.name || '').toUpperCase().trim();
+      const matchesRole = !isPos && roleUpper && (rIdUpper === roleUpper || rNameUpper === roleUpper);
+      const matchesPos = isPos && posUpper && (rIdUpper === posUpper || rNameUpper === posUpper);
+      if (!matchesRole && !matchesPos) continue;
+
+      const rPerms = safeJsonParse<any[]>(rRow.permissions, extra.permissions || []);
+      if (Array.isArray(rPerms)) {
+        for (const rp of rPerms) {
+          const rpMod = String(rp?.moduleId || '').toUpperCase().trim();
+          if (!rpMod) continue;
+          const hasExplicitModule = userPerms.some((up: any) => String(up?.moduleId || '').toUpperCase().trim() === rpMod);
+          if (userPerms.length === 0 || !hasExplicitModule) {
+            rolePermissions.push(rp);
+          }
+        }
+      }
+    }
+  } catch (roleErr: any) {
+    console.warn('[AuthContext] Failed loading qms_roles permissions:', roleErr?.message);
+  }
+
   return {
     ...mapped,
     roleUpper: String(mapped.role || '').toUpperCase(),
+    rolePermissions,
   };
 }
 
@@ -427,14 +465,16 @@ export function hasServerPermission(userCtx: any, moduleId: string, action: stri
   const roleUpper = String(userCtx.role || userCtx.roleUpper || '').toUpperCase().trim();
   if (roleUpper === 'GUEST') return false;
 
-  const perms: any[] = Array.isArray(userCtx.userPermissions) ? userCtx.userPermissions : [];
+  const userPerms: any[] = Array.isArray(userCtx.userPermissions) ? userCtx.userPermissions : [];
+  const rolePerms: any[] = Array.isArray(userCtx.rolePermissions) ? userCtx.rolePermissions : [];
+  const combinedPerms: any[] = [...userPerms, ...rolePerms];
 
-  const sysAdmin = perms.find((p) => String(p?.moduleId || '').toUpperCase() === 'SYSTEM_ADMIN');
+  const sysAdmin = combinedPerms.find((p) => String(p?.moduleId || '').toUpperCase() === 'SYSTEM_ADMIN');
   if (sysAdmin && Array.isArray(sysAdmin.actions) && serverActionMatches(sysAdmin.actions, act)) {
     return true;
   }
 
-  const matched = perms.filter((p) => String(p?.moduleId || '').toUpperCase() === mod);
+  const matched = combinedPerms.filter((p) => String(p?.moduleId || '').toUpperCase() === mod);
   if (matched.length > 0) {
     return matched.some((p) => Array.isArray(p?.actions) && serverActionMatches(p.actions, act));
   }
@@ -442,13 +482,53 @@ export function hasServerPermission(userCtx: any, moduleId: string, action: stri
   const allowedModules: string[] = Array.isArray(userCtx.allowedModules) ? userCtx.allowedModules : [];
   if (allowedModules.map((m) => String(m).toUpperCase().trim()).includes(mod)) {
     if (act === 'VIEW' || act === 'CREATE' || act === 'EDIT' || act === 'EDIT_OWN') return true;
-    if ((userCtx.la_to_truong || roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN1') return true;
-    if ((roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD') && act === 'SIGN2') return true;
+    if ((userCtx.la_to_truong || roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD' || roleUpper === 'QUẢN LÝ') && act === 'SIGN1') return true;
+    if ((roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QUẢN LÝ') && act === 'SIGN2') return true;
   }
 
-  if (mod === 'INSPECTIONS' || mod === 'PQC' || mod === 'FQC' || mod === 'SQC' || mod === 'IQC') {
-    if ((act === 'SIGN1' || act === 'APPROVE') && (roleUpper === 'QC_LEAD' || roleUpper === 'MANAGER' || roleUpper === 'QA' || Boolean(userCtx.la_to_truong))) return true;
-    if ((act === 'SIGN2' || act === 'VERIFY' || act === 'LOCK') && (roleUpper === 'MANAGER' || roleUpper === 'QA')) return true;
+  if ([
+    'INSPECTIONS', 'LIST', 'IQC', 'PQC', 'FQC', 'FSR', 'STEP', 'SPR', 'SITE',
+    'SQC', 'SQC_MAT', 'SQC_VT', 'SQC_BTP', 'SQC_TP',
+  ].includes(mod)) {
+    if ((act === 'SIGN1' || act === 'APPROVE') && (roleUpper === 'QC_LEAD' || roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QUẢN LÝ' || Boolean(userCtx.la_to_truong))) return true;
+    if ((act === 'SIGN2' || act === 'VERIFY' || act === 'LOCK') && (roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QUẢN LÝ')) return true;
+  }
+
+  return false;
+}
+
+export function hasServerInspectionApprovalPermission(
+  userCtx: any,
+  inspectionType: string | null | undefined,
+  action: 'SIGN1' | 'SIGN2'
+): boolean {
+  if (!userCtx) return false;
+  if (isServerAdmin(userCtx)) return true;
+
+  const roleUpper = String(userCtx.role || userCtx.roleUpper || '').toUpperCase().trim();
+  if (roleUpper === 'GUEST') return false;
+
+  const act = String(action || 'SIGN1').toUpperCase().trim() as 'SIGN1' | 'SIGN2';
+  if (act === 'SIGN2' && (roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QUẢN LÝ')) {
+    return true;
+  }
+  if (
+    act === 'SIGN1' &&
+    (roleUpper === 'MANAGER' || roleUpper === 'QA' || roleUpper === 'QC_LEAD' || roleUpper === 'QUẢN LÝ' || Boolean(userCtx.la_to_truong))
+  ) {
+    return true;
+  }
+
+  const t = String(inspectionType || 'PQC').toUpperCase().trim();
+  const candidates = new Set<string>([t]);
+  if (t === 'SQC_VT') candidates.add('SQC_MAT');
+  if (t === 'SQC_MAT') candidates.add('SQC_VT');
+  candidates.add('INSPECTIONS');
+  candidates.add('LIST');
+
+  for (const mod of candidates) {
+    if (hasServerPermission(userCtx, mod, act)) return true;
+    if (act === 'SIGN1' && hasServerPermission(userCtx, mod, 'APPROVE')) return true;
   }
 
   return false;
@@ -580,6 +660,10 @@ export async function changeUserPassword(userId: string, currentPassword: string
   if (!newPassword || newPassword.length < 6) {
     throw Object.assign(new Error('Mật khẩu mới phải có tối thiểu 6 ký tự'), { statusCode: 400 });
   }
+  if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
+    throw Object.assign(new Error('Mật khẩu mới bắt buộc phải chứa cả ký tự viết hoa (A-Z) và viết thường (a-z)'), { statusCode: 400 });
+  }
+
   const res = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`, [userId]);
   if (res.rows.length === 0) {
     throw Object.assign(new Error('Không tìm thấy tài khoản người dùng'), { statusCode: 404 });
@@ -599,6 +683,9 @@ export async function changeUserPassword(userId: string, currentPassword: string
     [hashed, nowTs, userId]
   );
 
+  const updatedRes = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1 LIMIT 1`, [userId]);
+  const safeUser = updatedRes.rows[0] ? mapUserRow(updatedRes.rows[0]) : null;
+
   await writeAuditLog({
     userId,
     action: 'CHANGE_PASSWORD',
@@ -607,44 +694,153 @@ export async function changeUserPassword(userId: string, currentPassword: string
     newValue: { require_password_change: false },
   });
 
-  return { success: true };
+  return { success: true, user: safeUser };
 }
 
 export async function requestPasswordReset(email: string) {
   const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) {
+    throw Object.assign(new Error('Vui lòng nhập địa chỉ email hợp lệ'), { statusCode: 400 });
+  }
+
   const res = await query(
-    `SELECT id, username, email FROM ${SCHEMA}.users WHERE LOWER(TRIM(COALESCE(email,''))) = $1 AND deleted_at IS NULL LIMIT 1`,
+    `SELECT id, username, name, email FROM ${SCHEMA}.users WHERE LOWER(TRIM(COALESCE(email,''))) = $1 AND deleted_at IS NULL LIMIT 1`,
     [cleanEmail]
   );
   if (res.rows.length === 0) {
-    throw Object.assign(new Error('Không tìm thấy tài khoản với email này'), { statusCode: 404 });
+    throw Object.assign(new Error('Không tìm thấy tài khoản với email này trong hệ thống QMS'), { statusCode: 404 });
   }
+
   const user = res.rows[0];
   const code = String(crypto.randomInt(100000, 999999));
+  const nowTs = Math.floor(Date.now() / 1000);
+  const expiresAt = nowTs + 15 * 60; // 15 phút
+
+  // Lưu mã OTP vào bảng PostgreSQL password_resets
+  try {
+    // Vô hiệu hóa các mã OTP trước đó của email này
+    await query(
+      `UPDATE ${SCHEMA}.password_resets SET used_at = $1 WHERE email = $2 AND used_at IS NULL`,
+      [nowTs, cleanEmail]
+    );
+
+    // Ghi mã mới
+    await query(
+      `INSERT INTO ${SCHEMA}.password_resets (id, email, code, expires_at, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
+      [cleanEmail, code, expiresAt, nowTs]
+    );
+  } catch (dbErr: any) {
+    console.warn('[requestPasswordReset] DB persist error, falling back to memory map:', dbErr?.message);
+  }
+
+  // Dự phòng trong bộ nhớ
   passwordResetCodes.set(cleanEmail, { code, userId: user.id, expiresAt: Date.now() + 15 * 60 * 1000 });
-  return { success: true, message: 'Mã xác thực khôi phục đã được khởi tạo và gửi tới email đăng ký.' };
+
+  // Gửi email qua SMTP
+  const emailRes = await sendPasswordResetEmail(cleanEmail, user.name || user.username, code);
+
+  await writeAuditLog({
+    userId: user.id,
+    action: 'REQUEST_PASSWORD_RESET',
+    entityType: 'user',
+    entityId: user.id,
+    newValue: { email: cleanEmail, emailSent: emailRes.sent, error: emailRes.error },
+  });
+
+  if (!emailRes.success) {
+    throw Object.assign(
+      new Error(`Không thể gửi email xác thực tới ${cleanEmail}: ${emailRes.error || 'Lỗi kết nối máy chủ SMTP'}`),
+      { statusCode: 502 }
+    );
+  }
+
+  const msg = emailRes.sent
+    ? `Mã xác thực đã được gửi tới email ${cleanEmail}. Vui lòng kiểm tra hòm thư của bạn.`
+    : `Mã xác thực đã được khởi tạo thành công (máy chủ chưa cấu hình SMTP gửi mail tự động). Vui lòng liên hệ Quản trị viên để nhận mã hoặc cấu hình SMTP.`;
+
+  return { success: true, message: msg, sent: emailRes.sent };
 }
 
 export async function confirmPasswordReset(email: string, code: string, newPassword: string) {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const record = passwordResetCodes.get(cleanEmail);
-  if (!record || record.code !== String(code || '').trim() || Date.now() > record.expiresAt) {
-    throw Object.assign(new Error('Mã xác thực không hợp lệ hoặc đã hết hạn'), { statusCode: 400 });
+  const cleanCode = String(code || '').trim();
+
+  if (!cleanEmail || !cleanCode) {
+    throw Object.assign(new Error('Vui lòng cung cấp email và mã xác thực'), { statusCode: 400 });
   }
-  const hashed = await bcrypt.hash(newPassword, 10);
+
+  if (!newPassword || newPassword.length < 6) {
+    throw Object.assign(new Error('Mật khẩu mới phải có tối thiểu 6 ký tự'), { statusCode: 400 });
+  }
+
+  if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
+    throw Object.assign(new Error('Mật khẩu mới bắt buộc phải chứa cả ký tự viết hoa (A-Z) và viết thường (a-z)'), { statusCode: 400 });
+  }
+
   const nowTs = Math.floor(Date.now() / 1000);
+  let isValid = false;
+
+  // 1. Kiểm tra đối chiếu trong bảng PostgreSQL password_resets
+  try {
+    const prRes = await query(
+      `SELECT * FROM ${SCHEMA}.password_resets 
+       WHERE email = $1 AND code = $2 AND used_at IS NULL AND expires_at > $3 
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail, cleanCode, nowTs]
+    );
+
+    if (prRes.rows.length > 0) {
+      isValid = true;
+      const record = prRes.rows[0];
+      await query(
+        `UPDATE ${SCHEMA}.password_resets SET used_at = $1 WHERE id = $2`,
+        [nowTs, record.id]
+      );
+    }
+  } catch (dbErr: any) {
+    console.warn('[confirmPasswordReset] DB check warning, falling back to memory map:', dbErr?.message);
+  }
+
+  // 2. Dự phòng trong memory map nếu bảng DB chưa khớp
+  if (!isValid) {
+    const memRecord = passwordResetCodes.get(cleanEmail);
+    if (memRecord && memRecord.code === cleanCode && Date.now() <= memRecord.expiresAt) {
+      isValid = true;
+      passwordResetCodes.delete(cleanEmail);
+    }
+  }
+
+  if (!isValid) {
+    throw Object.assign(new Error('Mã xác thực không hợp lệ hoặc đã hết hạn (hiệu lực 15 phút)'), { statusCode: 400 });
+  }
+
+  const userRes = await query(
+    `SELECT id, username FROM ${SCHEMA}.users WHERE LOWER(TRIM(COALESCE(email,''))) = $1 AND deleted_at IS NULL LIMIT 1`,
+    [cleanEmail]
+  );
+  if (userRes.rows.length === 0) {
+    throw Object.assign(new Error('Không tìm thấy tài khoản người dùng tương ứng với email này'), { statusCode: 404 });
+  }
+  const userId = userRes.rows[0].id;
+
+  const hashed = await bcrypt.hash(newPassword, 10);
   await query(
     `UPDATE ${SCHEMA}.users SET password = $1, require_password_change = false, updated_at = $2 WHERE id = $3`,
-    [hashed, nowTs, record.userId]
+    [hashed, nowTs, userId]
   );
+
   passwordResetCodes.delete(cleanEmail);
+
   await writeAuditLog({
-    userId: record.userId,
+    userId,
     action: 'RESET_PASSWORD',
     entityType: 'user',
-    entityId: record.userId,
+    entityId: userId,
+    newValue: { email: cleanEmail, method: 'OTP' },
   });
-  return { success: true };
+
+  return { success: true, message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.' };
 }
 
 export async function getUsersList(options?: { includeMedia?: boolean }) {
@@ -1614,8 +1810,24 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
     }
 
     // 3. Optimistic Locking check when version is present
-    if (hasInspVersion && payload.version !== undefined && payload.version !== null && existingRow.version !== undefined && existingRow.version !== null) {
-      if (Number(payload.version) !== Number(existingRow.version)) {
+    const currentFormVer =
+      existingFormRow?.version !== undefined && existingFormRow?.version !== null
+        ? Number(existingFormRow.version)
+        : existingFormExtra?.version !== undefined && existingFormExtra?.version !== null
+        ? Number(existingFormExtra.version)
+        : null;
+    const currentIdxVer =
+      hasInspVersion && existingRow.version !== undefined && existingRow.version !== null
+        ? Number(existingRow.version)
+        : null;
+    const expectedVersion = currentFormVer ?? currentIdxVer;
+
+    if (expectedVersion !== null && payload.version !== undefined && payload.version !== null) {
+      const providedVer = Number(payload.version);
+      const matchesExpected =
+        providedVer === expectedVersion ||
+        (currentIdxVer !== null && currentFormVer !== null && currentIdxVer !== currentFormVer && providedVer === currentIdxVer);
+      if (!matchesExpected) {
         throw Object.assign(
           new Error('Xung đột dữ liệu (Optimistic Lock): Hồ sơ đã được cập nhật bởi người dùng khác, vui lòng tải lại trang.'),
           { statusCode: 409 }
@@ -1623,18 +1835,46 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
       }
     }
 
-    // 4. Server-authoritative RBAC check for status transitions
-    if (curCanonical !== requestedStatus && actorUser) {
-      const canSign1 = hasServerPermission(actorUser, 'INSPECTIONS', 'SIGN1') || hasServerPermission(actorUser, 'INSPECTIONS', 'APPROVE');
-      const canSign2 = hasServerPermission(actorUser, 'INSPECTIONS', 'SIGN2');
-      if (requestedStatus === 'APPROVED' && !canSign1 && !canSign2) {
-        throw Object.assign(new Error('Không đủ thẩm quyền RBAC để phê duyệt phiếu (APPROVED).'), { statusCode: 403 });
+    // 4. Server-authoritative RBAC check for status transitions & signature mutations
+    if (actorUser) {
+      const canSign1 = hasServerInspectionApprovalPermission(actorUser, typeUpper, 'SIGN1');
+      const canSign2 = hasServerInspectionApprovalPermission(actorUser, typeUpper, 'SIGN2');
+
+      if (curCanonical !== requestedStatus) {
+        if (requestedStatus === 'APPROVED' && !canSign1 && !canSign2) {
+          throw Object.assign(new Error('Không đủ thẩm quyền RBAC để phê duyệt phiếu (APPROVED).'), { statusCode: 403 });
+        }
+        if ((requestedStatus === 'VERIFIED' || requestedStatus === 'LOCKED') && !canSign2 && !isServerAdmin(actorUser)) {
+          throw Object.assign(new Error(`Không đủ thẩm quyền RBAC (Cấp L2 / Manager / QA / Admin) để chuyển phiếu sang ${requestedStatus}.`), { statusCode: 403 });
+        }
+        if (requestedStatus === 'REJECTED' && !canSign1 && !canSign2 && !isServerAdmin(actorUser)) {
+          throw Object.assign(new Error('Không đủ thẩm quyền RBAC để từ chối phiếu (REJECTED).'), { statusCode: 403 });
+        }
       }
-      if ((requestedStatus === 'VERIFIED' || requestedStatus === 'LOCKED') && !canSign2 && !isServerAdmin(actorUser)) {
-        throw Object.assign(new Error(`Không đủ thẩm quyền RBAC (Cấp L2 / Manager / Admin) để chuyển phiếu sang ${requestedStatus}.`), { statusCode: 403 });
+
+      const prevManagerSig = String(existingFormRow?.signature_manager || existingFormExtra?.managerSignature || '').trim();
+      const nextManagerSig = String(payload.managerSignature || '').trim();
+      if (nextManagerSig && nextManagerSig !== prevManagerSig && !canSign2 && !isServerAdmin(actorUser)) {
+        throw Object.assign(new Error('Không đủ thẩm quyền RBAC (Cấp L2 / SIGN2) để ký phê duyệt L2.'), { statusCode: 403 });
       }
-      if (requestedStatus === 'REJECTED' && !canSign1 && !canSign2 && !isServerAdmin(actorUser)) {
-        throw Object.assign(new Error('Không đủ thẩm quyền RBAC để từ chối phiếu (REJECTED).'), { statusCode: 403 });
+
+      const prevTeamSig = String(existingFormRow?.signature_teamlead || existingFormExtra?.teamLeadSignature || '').trim();
+      const nextTeamSig = String(payload.teamLeadSignature || '').trim();
+      if (nextTeamSig && nextTeamSig !== prevTeamSig && !canSign1 && !canSign2 && !isServerAdmin(actorUser)) {
+        throw Object.assign(new Error('Không đủ thẩm quyền RBAC (Cấp L1 / SIGN1) để ký xác nhận L1.'), { statusCode: 403 });
+      }
+    }
+
+    // 5. L2 Signature prerequisite before LOCKED (ISO Two-Tier Enforcement)
+    if (requestedStatus === 'LOCKED') {
+      const resolvedManagerSig = String(
+        payload.managerSignature || existingFormRow?.signature_manager || existingFormExtra?.managerSignature || ''
+      ).trim();
+      if (!resolvedManagerSig) {
+        throw Object.assign(
+          new Error('Không thể khóa hồ sơ ISO (LOCKED) khi chưa có chữ ký phê duyệt cấp L2.'),
+          { statusCode: 400 }
+        );
       }
     }
   } else {
@@ -1665,7 +1905,12 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
 
   const createdTs = existingRow?.created_at ? Number(existingRow.created_at) : (typeof payload.created_at === 'number' ? payload.created_at : nowTs);
   const statusVal = requestedStatus;
-  const nextVersion = existingRow && existingRow.version !== undefined && existingRow.version !== null ? Number(existingRow.version) + 1 : 1;
+  const maxExistingVersion = Math.max(
+    existingFormRow?.version !== undefined && existingFormRow?.version !== null ? Number(existingFormRow.version) : 0,
+    existingFormExtra?.version !== undefined && existingFormExtra?.version !== null ? Number(existingFormExtra.version) : 0,
+    existingRow?.version !== undefined && existingRow?.version !== null ? Number(existingRow.version) : 0
+  );
+  const nextVersion = existingRow ? (maxExistingVersion > 0 ? maxExistingVersion + 1 : 2) : 1;
   const inspectorName = payload.inspectorName || payload.inspector || payload.created_by || '';
 
   // 1. Upsert into corresponding forms_* table dynamically matching exact table columns
@@ -1744,62 +1989,49 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
     );
   }
 
-  // 2. Sync summary row in `inspections` index table
+  // 2. Sync summary row in `inspections` index table (including `version` when column exists)
+  const inspIdxCols = [
+    'id', 'created_at', 'updated_at', 'created_by', 'ma_ct', 'ten_ct', 'ma_nha_may', 'ten_hang_muc',
+    'workshop', 'status', 'type', 'score', 'headcode', 'stage', 'sub_stage',
+    'inspected_qty', 'passed_qty', 'failed_qty', 'so_luong_ipo', 'priority', 'date', 'po_number',
+    ...(hasInspVersion ? ['version'] : []),
+  ];
+  const inspIdxVals: any[] = [
+    id,
+    createdTs,
+    nowTs,
+    inspectorName,
+    payload.ma_ct || '',
+    payload.ten_ct || '',
+    payload.ma_nha_may || payload.supplier || '',
+    payload.ten_hang_muc || '',
+    payload.workshop || '',
+    statusVal,
+    typeUpper,
+    payload.score !== undefined ? Number(payload.score) : null,
+    payload.headcode || '',
+    payload.stage || '',
+    payload.subStage || payload.sub_stage || '',
+    payload.inspectedQuantity ?? null,
+    payload.passedQuantity ?? null,
+    payload.failedQuantity ?? null,
+    payload.so_luong_ipo ?? null,
+    payload.priority || null,
+    dateTs,
+    payload.po_number || payload.poNumber || null,
+    ...(hasInspVersion ? [nextVersion] : []),
+  ];
+  const inspIdxPlaceholders = inspIdxVals.map((_, idx) => `$${idx + 1}`).join(', ');
+  const inspIdxUpdates = inspIdxCols
+    .filter((c) => c !== 'id' && c !== 'created_at')
+    .map((c) => `"${c}" = EXCLUDED."${c}"`)
+    .join(',\n      ');
   await query(
-    `INSERT INTO ${SCHEMA}.inspections (
-      id, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc,
-      workshop, status, type, score, headcode, stage, sub_stage,
-      inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority, date, po_number
-    ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,
-      $9,$10,$11,$12,$13,$14,$15,
-      $16,$17,$18,$19,$20,$21,$22
-    )
-    ON CONFLICT (id) DO UPDATE SET
-      updated_at = EXCLUDED.updated_at,
-      created_by = EXCLUDED.created_by,
-      ma_ct = EXCLUDED.ma_ct,
-      ten_ct = EXCLUDED.ten_ct,
-      ma_nha_may = EXCLUDED.ma_nha_may,
-      ten_hang_muc = EXCLUDED.ten_hang_muc,
-      workshop = EXCLUDED.workshop,
-      status = EXCLUDED.status,
-      type = EXCLUDED.type,
-      score = EXCLUDED.score,
-      headcode = EXCLUDED.headcode,
-      stage = EXCLUDED.stage,
-      sub_stage = EXCLUDED.sub_stage,
-      inspected_qty = EXCLUDED.inspected_qty,
-      passed_qty = EXCLUDED.passed_qty,
-      failed_qty = EXCLUDED.failed_qty,
-      so_luong_ipo = EXCLUDED.so_luong_ipo,
-      priority = EXCLUDED.priority,
-      date = EXCLUDED.date,
-      po_number = EXCLUDED.po_number`,
-    [
-      id,
-      createdTs,
-      nowTs,
-      inspectorName,
-      payload.ma_ct || '',
-      payload.ten_ct || '',
-      payload.ma_nha_may || payload.supplier || '',
-      payload.ten_hang_muc || '',
-      payload.workshop || '',
-      statusVal,
-      typeUpper,
-      payload.score !== undefined ? Number(payload.score) : null,
-      payload.headcode || '',
-      payload.stage || '',
-      payload.subStage || payload.sub_stage || '',
-      payload.inspectedQuantity ?? null,
-      payload.passedQuantity ?? null,
-      payload.failedQuantity ?? null,
-      payload.so_luong_ipo ?? null,
-      payload.priority || null,
-      dateTs,
-      payload.po_number || payload.poNumber || null,
-    ]
+    `INSERT INTO ${SCHEMA}.inspections (${inspIdxCols.join(', ')})
+     VALUES (${inspIdxPlaceholders})
+     ON CONFLICT (id) DO UPDATE SET
+      ${inspIdxUpdates}`,
+    inspIdxVals
   );
 
   // 3. Write permanent ISO Audit Trail with rich JSONB snapshot

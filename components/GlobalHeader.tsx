@@ -157,6 +157,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       case 'IPO': return 'IPO Data';
       case 'DETAIL': return 'Inspection Detail';
       case 'TOOLS': return 'Quản lý Công cụ dụng cụ';
+      case 'SUBCONTRACTOR_BOOKING': return 'Quản lý nghiệm thu';
       default: return 'QAQC System';
     }
   };
@@ -176,6 +177,9 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
         case 'SITE': return 'Kiểm soát lắp đặt hiện trường';
         default: return 'Đang thực hiện kiểm tra';
       }
+    }
+    if (view === 'SUBCONTRACTOR_BOOKING') {
+      return 'Điều phối lịch nghiệm thu gia công ngoài (SQC), phân công QC & đối chiếu chứng từ PO/PR';
     }
     return '';
   };

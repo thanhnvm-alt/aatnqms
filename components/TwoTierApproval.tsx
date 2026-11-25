@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Inspection, InspectionStatus, User, Role, RoleObject, ModuleId, hasPermission } from '../types';
-import { ShieldCheck, CheckSquare, Edit, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward, Lock, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { Inspection, InspectionStatus, User, RoleObject, hasInspectionApprovalPermission } from '../types';
+import { ShieldCheck, CheckSquare, X, RefreshCw, AlertCircle, Sparkles, Ban, FastForward, Lock, Clock, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { getProxyImageUrl } from '../src/utils';
 import { fetchRoles, fetchInspectionAuditLogs, fetchUsers, uploadQMSImage } from '../services/apiService';
@@ -25,6 +26,9 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   const [showLockConfirm, setShowLockConfirm] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [modalError, setModalError] = useState('');
+  const [rejectError, setRejectError] = useState('');
 
   useEffect(() => {
     if (!inspection.id || isGuest) return;
@@ -238,68 +242,63 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       .then(data => {
         if (active && Array.isArray(data)) {
           setUsers(data);
-          // Sync current logged-in user properties if available in fetched users
-          const selfInDb = data.find(u => u.id === user.id || u.username === user.username);
-          if (selfInDb) {
-            if (selfInDb.to_qc && !user.to_qc) user.to_qc = selfInDb.to_qc;
-            if ((selfInDb as any).team_id && !(user as any).team_id) (user as any).team_id = (selfInDb as any).team_id;
-            if (selfInDb.la_to_truong !== undefined) user.la_to_truong = !!selfInDb.la_to_truong;
-          }
         }
       })
       .catch(err => console.error('Failed to load users in TwoTierApproval:', err));
     return () => { active = false; };
-  }, [user, isGuest]);
+  }, [user.id, isGuest]);
 
+  const effectiveUser = useMemo<User>(() => {
+    const selfInDb = users.find(u => u.id === user.id || u.username === user.username);
+    if (!selfInDb) return user;
+    return {
+      ...selfInDb,
+      ...user,
+      to_qc: user.to_qc || selfInDb.to_qc,
+      team_id: (user as any).team_id || (selfInDb as any).team_id,
+      la_to_truong: user.la_to_truong !== undefined ? !!user.la_to_truong : !!selfInDb.la_to_truong,
+      userPermissions:
+        Array.isArray((user as any).userPermissions) && (user as any).userPermissions.length > 0
+          ? (user as any).userPermissions
+          : (selfInDb as any).userPermissions || (selfInDb as any).user_permissions || [],
+      allowedModules:
+        Array.isArray(user.allowedModules) && user.allowedModules.length > 0
+          ? user.allowedModules
+          : selfInDb.allowedModules || (selfInDb as any).allowed_modules || [],
+      signature_template: user.signature_template || selfInDb.signature_template,
+    };
+  }, [user, users]);
+
+  // Kiểm tra thẩm quyền Tổ QC (CHỈ áp dụng cho xác nhận cấp L1)
   const isAuthorizedTeam = useMemo(() => {
-    console.log(`[TEAM_LEAD_AUTH] START verification check | inspId=${inspection.id} | inspectorName="${inspection.inspectorName}" | created_by="${(inspection as any).created_by}"`);
-    console.log(`[TEAM_LEAD_AUTH] Current User profile:`, {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      position: user.position,
-      la_to_truong: user.la_to_truong,
-      to_qc: user.to_qc,
-      team_id: user.team_id,
-      phong_ban: user.phong_ban || (user as any).phongBan || user.bo_phan
-    });
-
-    // 1. Management Roles & High Level Positions always authorized
-    const rUpper = String(user.role || '').toUpperCase();
-    const posUpper = String(user.position || '').toUpperCase();
+    const rUpper = String(effectiveUser.role || '').toUpperCase();
+    const posUpper = String(effectiveUser.position || '').toUpperCase();
     if (
-      rUpper === 'ADMIN' || 
-      rUpper === 'MANAGER' || 
+      rUpper === 'ADMIN' ||
+      rUpper === 'MANAGER' ||
+      rUpper === 'QA' ||
       rUpper === 'QUẢN LÝ' ||
       posUpper.includes('TRƯỞNG PHÒNG') ||
       posUpper.includes('TRUONG PHONG') ||
       posUpper.includes('GIÁM ĐỐC') ||
       posUpper.includes('GIAM DOC')
     ) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Management role or upper position "${user.role}" / "${user.position}")`);
       return true;
     }
 
-    // 2. If user is NOT marked as team lead (la_to_truong), no team-lead restriction applies
-    if (!user.la_to_truong) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: User is not marked as team lead (la_to_truong=false))`);
+    if (!effectiveUser.la_to_truong) {
       return true;
     }
 
-    // Helper for Unicode NFC normalization
-    const normClean = (s?: string) => s ? String(s).normalize('NFC').trim().toLowerCase() : '';
+    const normClean = (s?: string) => (s ? String(s).normalize('NFC').trim().toLowerCase() : '');
 
-    // 3. Resolve creatorUser with Unicode-normalized multi-field matching
     const searchTargets = [
       inspection.inspectorName,
       (inspection as any).inspector_name,
       (inspection as any).inspector,
       (inspection as any).created_by,
-      (inspection as any).createdBy
+      (inspection as any).createdBy,
     ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0);
-
-    console.log(`[TEAM_LEAD_AUTH] Searching creatorUser from targets:`, searchTargets, `among ${users.length} total users in state`);
 
     let creatorUser: User | undefined;
     for (const target of searchTargets) {
@@ -318,36 +317,26 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           (ufullname.length > 2 && (clean.includes(ufullname) || ufullname.includes(clean)))
         );
       });
-      if (creatorUser) {
-        console.log(`[TEAM_LEAD_AUTH] Found matched creatorUser:`, {
-          id: creatorUser.id,
-          username: creatorUser.username,
-          name: creatorUser.name,
-          to_qc: creatorUser.to_qc,
-          team_id: creatorUser.team_id,
-          phong_ban: creatorUser.phong_ban
-        }, `matched from target "${target}"`);
-        break;
-      }
+      if (creatorUser) break;
     }
 
-    if (!creatorUser) {
-      console.warn(`[TEAM_LEAD_AUTH] Could NOT find creatorUser in users list for targets:`, searchTargets);
-    }
-
-    // Self-created inspection report
-    if (creatorUser && (creatorUser.id === user.id || creatorUser.username === user.username || normClean(creatorUser.name) === normClean(user.name))) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Self-created inspection)`);
+    if (
+      creatorUser &&
+      (creatorUser.id === effectiveUser.id ||
+        creatorUser.username === effectiveUser.username ||
+        normClean(creatorUser.name) === normClean(effectiveUser.name))
+    ) {
       return true;
     }
 
-    // Physical team_id match
-    if (user.team_id && creatorUser?.team_id && String(user.team_id).trim() === String(creatorUser.team_id).trim()) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Physical team_id match "${user.team_id}")`);
+    if (
+      effectiveUser.team_id &&
+      creatorUser?.team_id &&
+      String(effectiveUser.team_id).trim() === String(creatorUser.team_id).trim()
+    ) {
       return true;
     }
 
-    // Normalized team string matching (strip accents, punctuation, spaces)
     const normTeam = (s?: string) => {
       if (!s) return '';
       return String(s)
@@ -359,102 +348,44 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         .replace(/[^a-z0-9]/g, '');
     };
 
-    const userTeamNorm = normTeam(user.to_qc);
+    const userTeamNorm = normTeam(effectiveUser.to_qc);
     const creatorTeamNorm = normTeam(creatorUser?.to_qc);
-
-    console.log(`[TEAM_LEAD_AUTH] Comparing normalized to_qc: userTeamNorm="${userTeamNorm}" (raw: "${user.to_qc}") vs creatorTeamNorm="${creatorTeamNorm}" (raw: "${creatorUser?.to_qc}")`);
 
     if (userTeamNorm && creatorTeamNorm) {
       if (
-        userTeamNorm === creatorTeamNorm || 
-        userTeamNorm.includes(creatorTeamNorm) || 
+        userTeamNorm === creatorTeamNorm ||
+        userTeamNorm.includes(creatorTeamNorm) ||
         creatorTeamNorm.includes(userTeamNorm)
       ) {
-        console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Normalized to_qc match "${userTeamNorm}" <=> "${creatorTeamNorm}")`);
         return true;
       }
     }
 
-    // Match by department / division if both belong to same QAQC department/division
-    const userDeptNorm = normTeam(user.phong_ban || (user as any).phongBan || user.bo_phan);
+    const userDeptNorm = normTeam(effectiveUser.phong_ban || (effectiveUser as any).phongBan || effectiveUser.bo_phan);
     const creatorDeptNorm = normTeam(creatorUser?.phong_ban || (creatorUser as any)?.phongBan || creatorUser?.bo_phan);
-    console.log(`[TEAM_LEAD_AUTH] Comparing department/division: userDeptNorm="${userDeptNorm}" vs creatorDeptNorm="${creatorDeptNorm}"`);
     if (userDeptNorm && creatorDeptNorm && (userDeptNorm === creatorDeptNorm || userDeptNorm.includes(creatorDeptNorm))) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Department/division match "${userDeptNorm}" <=> "${creatorDeptNorm}")`);
       return true;
     }
 
-    // Match against inspection's to_qc or workshop
     const inspTeamNorm = normTeam((inspection as any).to_qc || inspection.workshop);
-    console.log(`[TEAM_LEAD_AUTH] Comparing inspection workshop/to_qc: inspTeamNorm="${inspTeamNorm}" against userTeamNorm="${userTeamNorm}"`);
-    if (userTeamNorm && inspTeamNorm && (userTeamNorm === inspTeamNorm || userTeamNorm.includes(inspTeamNorm) || inspTeamNorm.includes(userTeamNorm))) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Inspection workshop/to_qc match "${inspTeamNorm}" <=> "${userTeamNorm}")`);
+    if (
+      userTeamNorm &&
+      inspTeamNorm &&
+      (userTeamNorm === inspTeamNorm || userTeamNorm.includes(inspTeamNorm) || inspTeamNorm.includes(userTeamNorm))
+    ) {
       return true;
     }
 
-    // Fallback when creatorUser is not found or user.to_qc / creatorUser.to_qc is empty
-    if (!creatorUser || !creatorUser.to_qc || !user.to_qc) {
-      console.log(`[TEAM_LEAD_AUTH] RESULT: TRUE (Reason: Fallback due to missing creatorUser or empty to_qc field. creatorUser=${!!creatorUser}, user.to_qc="${user.to_qc}", creator.to_qc="${creatorUser?.to_qc}")`);
+    if (!creatorUser || !creatorUser.to_qc || !effectiveUser.to_qc) {
       return true;
     }
 
-    console.log(`[TEAM_LEAD_AUTH] RESULT: FALSE (Reason: User is Team Lead (la_to_truong=true) but to_qc/team_id/department mismatch between user "${user.name}" [to_qc: "${user.to_qc}"] and creator "${creatorUser.name}" [to_qc: "${creatorUser.to_qc}"])`);
     return false;
-  }, [user, inspection, users]);
+  }, [effectiveUser, inspection, users]);
 
   const hasSignPermission = (action: 'SIGN1' | 'SIGN2'): boolean => {
     if (isGuest) return false;
-    const moduleId = (inspection.type || 'PQC') as ModuleId;
-
-    if (user.role === 'ADMIN') {
-      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Admin override`);
-      return true;
-    }
-
-    // Team Lead (la_to_truong) automatically gets level 1 signature right
-    if (user.la_to_truong && action === 'SIGN1') {
-      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | User is Team Lead (la_to_truong=true)`);
-      return true;
-    }
-
-    // Use our refined case-insensitive union permissions checker
-    if (hasPermission(user, roles, moduleId, action)) {
-      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Matched hasPermission`);
-      return true;
-    }
-
-    // 1. Check user role with direct case-insensitive logic as robust backup
-    const rConfig = roles.find(
-      r => String(r.id).toLowerCase() === String(user.role).toLowerCase() || 
-           String(r.name).toLowerCase() === String(user.role).toLowerCase()
-    );
-    const rHas = rConfig?.permissions?.find(
-      p => String(p.moduleId).toLowerCase() === String(moduleId).toLowerCase()
-    )?.actions?.includes(action);
-
-    // 2. Check user position (Chức vụ) with case-insensitive logic as robust backup
-    const pConfig = roles.find(
-      r => r.isPosition && 
-           (String(r.id).toLowerCase() === String(user.position).toLowerCase() || 
-            String(r.name).toLowerCase() === String(user.position).toLowerCase())
-    );
-    const pHas = pConfig?.permissions?.find(
-      p => String(p.moduleId).toLowerCase() === String(moduleId).toLowerCase()
-    )?.actions?.includes(action);
-
-    if (rHas || pHas) {
-      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Role or Position backup permission matched (rHas=${rHas}, pHas=${pHas})`);
-      return true;
-    }
-
-    // Fallback for MANAGER / Quản lý to have Level 2 signature
-    if ((String(user.role).toUpperCase() === 'MANAGER' || String(user.role).toUpperCase() === 'QUẢN LÝ') && action === 'SIGN2') {
-      console.log(`[SIGN_PERM] hasSignPermission TRUE | action=${action} | Manager SIGN2 fallback`);
-      return true;
-    }
-
-    console.log(`[SIGN_PERM] hasSignPermission FALSE | action=${action} | User ${user.username || user.name} lacks permission`);
-    return false;
+    return hasInspectionApprovalPermission(effectiveUser, roles, inspection.type || 'PQC', action);
   };
 
   const formatDateTime = (dateVal: any) => {
@@ -488,13 +419,25 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   const isVerifiedState = currentStatusUpper === 'VERIFIED' || currentStatusUpper === 'COMPLETED';
   const isApprovedState = currentStatusUpper === 'APPROVED';
 
+  const hasTeamLeadSig = Boolean(inspection.teamLeadSignature && String(inspection.teamLeadSignature).trim());
+  const hasManagerSig = Boolean(inspection.managerSignature && String(inspection.managerSignature).trim());
+  const canSignL1 = hasSignPermission('SIGN1');
+  const canSignL2 = hasSignPermission('SIGN2');
+  const isAdminUser = String(effectiveUser.role || '').toUpperCase() === 'ADMIN';
+
   const handleSigningSubmit = async () => {
+    setModalError('');
+    setActionError('');
     if (!signature) {
-      alert("Vui lòng ký tên trước khi xác nhận.");
+      setModalError('Vui lòng ký tên trước khi xác nhận.');
       return;
     }
-    if (!isAuthorizedTeam) {
-      alert("Không thuộc thẩm quyền quản lý: Bạn không thuộc Tổ QC quản lý của người lập phiếu này!");
+    if (showModal === 'SIGN1' && !isAuthorizedTeam) {
+      setModalError('Không thuộc thẩm quyền quản lý: Bạn không thuộc Tổ QC quản lý của người lập phiếu này.');
+      return;
+    }
+    if (showModal === 'SIGN2' && !canSignL2) {
+      setModalError('Bạn không có quyền phê duyệt báo cáo cấp L2 (SIGN2).');
       return;
     }
     setIsProcessing(true);
@@ -511,31 +454,39 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       if (showModal === 'SIGN1') {
         await onApprove(inspection.id, '', {
           teamLeadSignature: resolvedSig,
-          teamLeadName: user.name,
+          teamLeadName: effectiveUser.name,
           teamLeadDate: nowISO,
           status: InspectionStatus.APPROVED,
-          updatedAt: nowISO
+          updatedAt: nowISO,
         });
       } else if (showModal === 'SIGN2') {
-        const nextStatus = is1Level && !isApprovedState ? InspectionStatus.APPROVED : InspectionStatus.VERIFIED;
+        const nextStatus =
+          isApprovedState || isVerifiedState
+            ? InspectionStatus.VERIFIED
+            : InspectionStatus.APPROVED;
         await onApprove(inspection.id, resolvedSig, {
           managerSignature: resolvedSig,
-          managerName: user.name,
+          managerName: effectiveUser.name,
           managerDate: nowISO,
           status: nextStatus,
-          updatedAt: nowISO
+          updatedAt: nowISO,
         });
       }
       setShowModal(false);
       setSignature('');
     } catch (e) {
-      alert("Lỗi khi ký duyệt: " + (e instanceof Error ? e.message : "Thất bại"));
+      setModalError('Lỗi khi ký duyệt: ' + (e instanceof Error ? e.message : 'Thất bại'));
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleVerifyStep = async () => {
+    setActionError('');
+    if (!hasManagerSig) {
+      setActionError('Cần hoàn tất ký phê duyệt L2 trước khi thẩm tra hồ sơ.');
+      return;
+    }
     setIsProcessing(true);
     try {
       await onApprove(inspection.id, '', {
@@ -543,18 +494,24 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         updatedAt: new Date().toISOString(),
       });
     } catch (e) {
-      alert("Lỗi khi thẩm tra phiếu: " + (e instanceof Error ? e.message : "Thất bại"));
+      setActionError('Lỗi khi thẩm tra phiếu: ' + (e instanceof Error ? e.message : 'Thất bại'));
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleLockFinal = () => {
+    setActionError('');
+    if (!hasManagerSig) {
+      setActionError('Không thể khóa hồ sơ ISO (LOCKED) khi chưa có chữ ký phê duyệt cấp L2.');
+      return;
+    }
     setShowLockConfirm(true);
   };
 
   const confirmLockFinal = async () => {
     setShowLockConfirm(false);
+    setActionError('');
     setIsProcessing(true);
     try {
       await onApprove(inspection.id, '', {
@@ -562,15 +519,17 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         updatedAt: new Date().toISOString(),
       });
     } catch (e) {
-      alert("Lỗi khi khóa hồ sơ: " + (e instanceof Error ? e.message : "Thất bại"));
+      setActionError('Lỗi khi khóa hồ sơ: ' + (e instanceof Error ? e.message : 'Thất bại'));
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleReject = () => {
-    if (!isAuthorizedTeam) {
-      alert("Không thuộc thẩm quyền quản lý: Bạn không thuộc Tổ QC quản lý của người lập phiếu này!");
+    setActionError('');
+    setRejectError('');
+    if (!canSignL2 && !isAuthorizedTeam) {
+      setActionError('Không thuộc thẩm quyền quản lý: Bạn không thuộc Tổ QC quản lý của người lập phiếu này.');
       return;
     }
     setRejectReason('');
@@ -578,30 +537,44 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
   };
 
   const submitReject = async () => {
+    setRejectError('');
     if (!rejectReason.trim()) {
-      alert("Vui lòng nhập lý do hợp lệ.");
+      setRejectError('Vui lòng nhập lý do từ chối hợp lệ.');
       return;
     }
-    setShowRejectModal(false);
     setIsProcessing(true);
     try {
-      await onApprove(inspection.id, "", {
+      await onApprove(inspection.id, '', {
         status: InspectionStatus.REJECTED,
-        summary: (inspection.summary || "") + "\n\n[LÝ DO TỪ CHỐI]: " + rejectReason.trim(),
-        updatedAt: new Date().toISOString()
+        summary: (inspection.summary || '') + '\n\n[LÝ DO TỪ CHỐI]: ' + rejectReason.trim(),
+        updatedAt: new Date().toISOString(),
       });
+      setShowRejectModal(false);
       setRejectReason('');
     } catch (e) {
-      alert("Lỗi từ chối phiếu: " + (e instanceof Error ? e.message : "Thất bại"));
+      setRejectError('Lỗi từ chối phiếu: ' + (e instanceof Error ? e.message : 'Thất bại'));
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const showSign1Button = !is1Level && hasSignPermission('SIGN1') && !inspection.teamLeadSignature && !isApprovedState && !isVerifiedState && !isLockedFinal;
-  const showSign2Button = hasSignPermission('SIGN2') && !inspection.managerSignature && !isVerifiedState && !isLockedFinal && (is1Level || isApprovedState || Boolean(inspection.teamLeadSignature));
-  const showVerifyButton = isApprovedState && Boolean(inspection.managerSignature) && (hasSignPermission('SIGN2') || String(user.role || '').toUpperCase() === 'ADMIN');
-  const showLockButton = isVerifiedState && (hasSignPermission('SIGN2') || String(user.role || '').toUpperCase() === 'ADMIN');
+  const showSign1Button =
+    !is1Level &&
+    canSignL1 &&
+    !hasTeamLeadSig &&
+    !hasManagerSig &&
+    !isApprovedState &&
+    !isVerifiedState &&
+    !isLockedFinal;
+  const showSign2Button =
+    canSignL2 &&
+    !hasManagerSig &&
+    !isLockedFinal &&
+    (is1Level || isApprovedState || isVerifiedState || hasTeamLeadSig);
+  const showVerifyButton = isApprovedState && hasManagerSig && (canSignL2 || isAdminUser);
+  const showLockButton = isVerifiedState && hasManagerSig && (canSignL2 || isAdminUser);
+  const canRejectCurrent = (canSignL1 || canSignL2) && !isVerifiedState && !isLockedFinal && currentStatusUpper !== 'REJECTED';
+  const canClickReject = canSignL2 || isAuthorizedTeam;
 
   // ISO Immutability Lock (Frozen only at final LOCKED state)
   if (isLockedFinal) {
@@ -729,22 +702,30 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             </button>
           )}
           {/* Rejected Button for managers / Leads */}
-          {(hasSignPermission('SIGN1') || hasSignPermission('SIGN2')) && !isVerifiedState && !isLockedFinal && currentStatusUpper !== 'REJECTED' && (
+          {canRejectCurrent && (
             <button 
+              type="button"
               onClick={handleReject}
-              disabled={isProcessing || !isAuthorizedTeam}
+              disabled={isProcessing || !canClickReject}
               className={`min-h-[44px] lg:min-h-[36px] px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 border ${
-                isAuthorizedTeam 
+                canClickReject
                   ? 'bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/20 dark:text-red-400 border-red-100 dark:border-red-900/50 cursor-pointer' 
                   : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 border-slate-200 dark:border-slate-800 cursor-not-allowed'
               }`}
-              title={!isAuthorizedTeam ? "Không thuộc thẩm quyền quản lý của Tổ QC" : ""}
+              title={!canClickReject ? "Không thuộc thẩm quyền quản lý của Tổ QC" : ""}
             >
               <Ban className="w-3.5 h-3.5" /> Trả lại / Từ chối
             </button>
           )}
         </div>
       </div>
+
+      {actionError && (
+        <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl text-xs text-red-600 dark:text-red-400 font-semibold flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 ${(inspection.type === 'IQC' || inspection.type === 'SITE') ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
         {/* CỘT 1: Người lập phiện */}
@@ -829,7 +810,8 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                   {showSign1Button ? (
                     isAuthorizedTeam ? (
                       <button 
-                        onClick={() => { setSignature(user.signature_template || ''); setShowModal('SIGN1'); }}
+                        type="button"
+                        onClick={() => { setModalError(''); setSignature(effectiveUser.signature_template || ''); setShowModal('SIGN1'); }}
                         className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
                       >
                         <CheckSquare className="w-3.5 h-3.5" /> Ký xác nhận L1
@@ -897,36 +879,21 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             ) : (
               <div className="text-center">
                 {showSign2Button ? (
-                  isAuthorizedTeam ? (
-                    <button 
-                      onClick={() => {
-                        setSignature(user.signature_template || '');
-                        const isBoss = 
-                          user.role === 'ADMIN' || 
-                          user.role === 'MANAGER' ||
-                          (user.position && (
-                            user.position.toUpperCase().includes('GIÁM ĐỐC') ||
-                            user.position.toUpperCase().includes('GIÁM DOC') ||
-                            user.position.toUpperCase().includes('TRƯỞNG PHÒNG') ||
-                            user.position.toUpperCase().includes('TRUONG PHONG') ||
-                            user.position.toUpperCase().includes('BỘ PHẬN') ||
-                            user.position.toUpperCase().includes('BO PHAN')
-                          ));
-
-                        setShowModal('SIGN2');
-                      }}
-                      className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" /> Ký phê duyệt L2
-                    </button>
-                  ) : (
-                    <div className="text-center px-2 py-1.5 bg-red-50/50 dark:bg-red-950/10 rounded-xl max-w-[190px] border border-dashed border-red-200 dark:border-red-900/30">
-                      <span className="text-[8px] text-red-500 dark:text-red-400 font-black tracking-tight uppercase flex items-center justify-center gap-1 leading-tight">
-                        <Ban className="w-2.5 h-2.5 shrink-0" /> Không thuộc thẩm quyền quản lý
-                      </span>
-                      <p className="text-[7.5px] text-slate-400 mt-0.5 uppercase tracking-normal leading-none font-bold">Yêu cầu Tổ QC của: {inspection.inspectorName}</p>
-                    </div>
-                  )
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setModalError('');
+                      setSignature(effectiveUser.signature_template || '');
+                      setShowModal('SIGN2');
+                    }}
+                    className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md transition-all active:scale-95 flex items-center gap-1.5 focus:outline-none"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" /> Ký phê duyệt L2
+                  </button>
+                ) : isVerifiedState && !hasManagerSig ? (
+                  <span className="text-[10px] text-orange-500 font-bold tracking-wider uppercase block px-2">
+                    CẦN PHÊ DUYỆT L2 TRƯỚC KHI KHÓA
+                  </span>
                 ) : (
                   <span className="text-[10px] text-slate-300 font-bold tracking-wider">CHỜ TRƯỞNG PHÒNG DUYỆT</span>
                 )}
@@ -947,8 +914,8 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       </div>
 
       {/* Signature drawing Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-[220] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+      {showModal && (typeof document !== 'undefined' ? createPortal(
+        <div className="fixed inset-0 z-[240] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden scale-in duration-200 shadow-2xl border border-slate-100 dark:border-slate-800">
             <header className="flex justify-between items-center gap-2 px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
               <div className="min-w-0 pr-2">
@@ -969,15 +936,22 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
             </header>
 
             <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-3.5 sm:p-5 space-y-3.5">
+              {modalError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl text-xs text-red-600 dark:text-red-400 font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
               <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-950 p-2 shadow-inner">
                 <SignaturePad label="Chữ ký xác nhận" value={signature} onChange={setSignature} />
               </div>
 
-              {user.signature_template && (
+              {effectiveUser.signature_template && (
                 <div>
                   <button
                     type="button"
-                    onClick={() => setSignature(user.signature_template || '')}
+                    onClick={() => setSignature(effectiveUser.signature_template || '')}
                     className="w-full min-h-[44px] sm:min-h-[38px] py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-100 transition-all active:scale-95"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
@@ -1006,11 +980,12 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
               </button>
             </footer>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null)}
 
-      {showRejectModal && (
-        <div className="fixed inset-0 z-[220] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
+      {showRejectModal && (typeof document !== 'undefined' ? createPortal(
+        <div className="fixed inset-0 z-[240] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-hidden">
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
             <header className="flex justify-between items-center gap-2 px-4 py-2 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
               <h4 className="text-sm font-black text-red-600 dark:text-red-400 uppercase tracking-tight flex items-center gap-2 truncate">
@@ -1025,7 +1000,13 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                 <X className="w-5 h-5" />
               </button>
             </header>
-            <div className="space-y-2 p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto">
+            <div className="space-y-3 p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto">
+              {rejectError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl text-xs text-red-600 dark:text-red-400 font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{rejectError}</span>
+                </div>
+              )}
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Lý do từ chối *</label>
               <textarea
                 value={rejectReason}
@@ -1053,8 +1034,9 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
               </button>
             </footer>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null)}
 
       <ConfirmDialog
         open={showLockConfirm}

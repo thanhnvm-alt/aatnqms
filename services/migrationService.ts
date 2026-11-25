@@ -1092,6 +1092,25 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ inspection_traceability_index setup warning: ${traceErr?.message}`);
     }
 
+    // --- PASSWORD RESETS (M00 OTP) ---
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."password_resets" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "email" TEXT NOT NULL,
+          "code" TEXT NOT NULL,
+          "expires_at" BIGINT NOT NULL,
+          "created_at" BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
+          "used_at" BIGINT
+        );
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS "idx_password_resets_email_code" ON "${schema}"."password_resets" ("email", "code", "used_at");`);
+      migrationLogs.push(`✅ Ensured password_resets table exists in ${schema}`);
+    } catch (pwErr: any) {
+      console.warn(`⚠️ Could not setup password_resets:`, pwErr?.message);
+      migrationLogs.push(`⚠️ password_resets setup warning: ${pwErr?.message}`);
+    }
+
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
     try {
       fs.writeFileSync(path.join(process.cwd(), 'diag_migration.json'), JSON.stringify({

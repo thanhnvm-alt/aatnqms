@@ -70,6 +70,7 @@ import {
   List as ListIcon,
   CalendarDays,
   FileSpreadsheet,
+  Filter,
 } from 'lucide-react';
 
 interface Props {
@@ -142,6 +143,8 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
   const [isExporting, setIsExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
 
   const [search, setSearch] = useState('');
   const [sqcTypeFilter, setSqcTypeFilter] = useState<string | null>(null);
@@ -317,6 +320,9 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
     const handleClickOutside = (e: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
         setShowExportMenu(false);
+      }
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
+        setShowFiltersPanel(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -1633,26 +1639,127 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
         </div>
       )}
 
-      {/* 1. ERP HEADER (Full-bleed flush with Sidebar) */}
-      <div className="w-full min-w-0 px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-            <ClipboardCheck className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold uppercase tracking-tight text-slate-900 dark:text-white truncate leading-tight">
-              QUẢN LÝ NGHIỆM THU
-            </h1>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Điều phối lịch nghiệm thu gia công ngoài (SQC), phân công QC & đối chiếu chứng từ PO/PR
-            </p>
-          </div>
+      {/* 1. ERP ACTION BAR */}
+      <div className="w-full min-w-0 px-3 sm:px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono tabular-nums">
+            {filteredBookings.length.toLocaleString('vi-VN')} phiếu nghiệm thu
+          </span>
+          {hasActiveFilters && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              Đang lọc ({[search, sqcTypeFilter, supplierFilter, statusFilter, dateFilter].filter(Boolean).length})
+            </span>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <span className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 font-mono tabular-nums mr-1">
-            {filteredBookings.length.toLocaleString('vi-VN')} phiếu nghiệm thu
-          </span>
+          {/* Filter Toggle Button & Popover Panel */}
+          <div ref={filterPanelRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setShowFiltersPanel((prev) => !prev)}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-[40px] lg:min-h-[36px] rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                hasActiveFilters
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
+              }`}
+              title="Bộ lọc tìm kiếm (5 bộ lọc)"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Bộ lọc</span>
+              {hasActiveFilters && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white text-blue-600 text-[10px] font-bold">
+                  {[search, sqcTypeFilter, supplierFilter, statusFilter, dateFilter].filter(Boolean).length}
+                </span>
+              )}
+            </button>
+
+            {showFiltersPanel && (
+              <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[160] p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">5 Bộ lọc tìm kiếm</span>
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium cursor-pointer"
+                    >
+                      Xóa tất cả
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">1. Tìm kiếm từ khóa</label>
+                    <SearchInput
+                      value={search}
+                      onChange={setSearch}
+                      placeholder="Tìm số PO, mã BK, xưởng vệ tinh..."
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">2. Loại nghiệm thu</label>
+                    <Combobox
+                      value={sqcTypeFilter}
+                      onChange={setSqcTypeFilter}
+                      options={sqcTypeOptions}
+                      placeholder="Tất cả loại nghiệm thu..."
+                      searchPlaceholder="Tìm loại..."
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">3. Xưởng vệ tinh</label>
+                    <Combobox
+                      value={supplierFilter}
+                      onChange={setSupplierFilter}
+                      options={supplierOptions}
+                      placeholder="Tất cả xưởng vệ tinh..."
+                      searchPlaceholder="Tìm xưởng..."
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">4. Trạng thái</label>
+                    <Combobox
+                      value={statusFilter}
+                      onChange={setStatusFilter}
+                      options={statusOptions}
+                      placeholder="Tất cả trạng thái..."
+                      searchPlaceholder="Tìm trạng thái..."
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">5. Ngày nghiệm thu</label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="date"
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                        className="w-full min-h-[36px] px-2 py-1 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                      />
+                      {dateFilter && (
+                        <button
+                          type="button"
+                          onClick={() => setDateFilter('')}
+                          className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {m03Caps.canCreate && (
             <button
@@ -1711,132 +1818,58 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
         </div>
       </div>
 
-      {/* 2. FILTER BAR & STATUS LEGEND (Seamless attached strip) */}
-      <div className="w-full min-w-0 px-3 sm:px-4 py-2 bg-slate-50/70 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2 items-center">
-          <div className="lg:col-span-3">
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Tìm số PO, mã BK, xưởng vệ tinh..."
-              className="w-full"
-            />
-          </div>
-
-          <div className="lg:col-span-2">
-            <Combobox
-              value={sqcTypeFilter}
-              onChange={setSqcTypeFilter}
-              options={sqcTypeOptions}
-              placeholder="Loại nghiệm thu..."
-              searchPlaceholder="Tìm loại nghiệm thu..."
-              className="w-full"
-              ariaLabel="Lọc theo loại nghiệm thu"
-            />
-          </div>
-
-          <div className="lg:col-span-3">
-            <Combobox
-              value={supplierFilter}
-              onChange={setSupplierFilter}
-              options={supplierOptions}
-              placeholder="Xưởng vệ tinh..."
-              searchPlaceholder="Tìm tên xưởng vệ tinh..."
-              className="w-full"
-              ariaLabel="Lọc theo xưởng vệ tinh"
-            />
-          </div>
-
-          <div className="lg:col-span-2">
-            <Combobox
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={statusOptions}
-              placeholder="Trạng thái..."
-              searchPlaceholder="Tìm trạng thái..."
-              className="w-full"
-              ariaLabel="Lọc theo trạng thái"
-            />
-          </div>
-
-          <div className="lg:col-span-2 flex items-center gap-1">
-            <div className="relative flex-1 min-w-0">
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                aria-label="Lọc theo ngày nghiệm thu"
-                title="Lọc theo ngày nghiệm thu"
-                className="w-full min-h-[40px] lg:min-h-[36px] px-2 py-1 text-xs sm:text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
-              />
-            </div>
-            {dateFilter && (
-              <button
-                type="button"
-                onClick={() => setDateFilter('')}
-                aria-label="Xóa lọc ngày"
-                title="Xóa lọc ngày"
-                className="min-w-[36px] min-h-[40px] lg:min-h-[36px] inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+      {/* STATUS LEGEND & VIEW MODE TOGGLE STRIP */}
+      <div className="w-full min-w-0 px-3 sm:px-4 py-2 bg-slate-50/70 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+          <span className="font-semibold text-slate-500 dark:text-slate-400">Chú thích:</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-600 shrink-0" aria-hidden="true" />
+            <span>Đã nghiệm thu</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" aria-hidden="true" />
+            <span>Chờ phân công</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" aria-hidden="true" />
+            <span>Đang xử lý</span>
+          </span>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+            >
+              Xóa bộ lọc
+            </button>
+          )}
         </div>
 
-        {/* View Toggle & Status Legend */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200/70 dark:border-slate-800">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
-            <span className="font-semibold text-slate-500 dark:text-slate-400">Chú thích:</span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-600 shrink-0" aria-hidden="true" />
-              <span>Đã nghiệm thu</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" aria-hidden="true" />
-              <span>Chờ phân công</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" aria-hidden="true" />
-              <span>Đang xử lý</span>
-            </span>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-              >
-                Xóa bộ lọc
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1 p-0.5 bg-slate-200/70 dark:bg-slate-800 rounded-lg shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewMode('FLAT')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                viewMode === 'FLAT'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <ListIcon className="w-3.5 h-3.5" />
-              <span>Theo dòng</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('GROUPED_BY_DATE')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                viewMode === 'GROUPED_BY_DATE'
-                  ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <CalendarDays className="w-3.5 h-3.5" />
-              <span>Theo ngày</span>
-            </button>
-          </div>
+        <div className="flex items-center gap-1 p-0.5 bg-slate-200/70 dark:bg-slate-800 rounded-lg shrink-0">
+          <button
+            type="button"
+            onClick={() => setViewMode('FLAT')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+              viewMode === 'FLAT'
+                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <ListIcon className="w-3.5 h-3.5" />
+            <span>Theo dòng</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('GROUPED_BY_DATE')}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+              viewMode === 'GROUPED_BY_DATE'
+                ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>Theo ngày</span>
+          </button>
         </div>
       </div>
 

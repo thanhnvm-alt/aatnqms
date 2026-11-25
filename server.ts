@@ -804,17 +804,36 @@ app.get('/api/export/inspections', async (req, res) => {
     const format = String(req.query.format || 'csv').toLowerCase();
     const result = await dbService.getInspectionsList(req.query, 1, 10000);
     const items = Array.isArray(result) ? result : (result?.items || []);
-    const rows = items.map((item: any) => ({
-      'ID Phiếu': item.id || '',
-      'Mã CT / Dự án': item.projectCode || item.projectId || '',
-      'Công đoạn (Type)': item.type || item.stage || '',
-      'Mã Đơn Hàng / PO': item.factoryOrder || item.poNumber || '',
-      'Nhà Cung Cấp': item.supplierName || '',
-      'Trạng thái': item.status || '',
-      'Kết quả': item.result || '',
-      'QC Phụ trách': item.qcName || item.qc || '',
-      'Ngày kiểm tra': item.date || item.createdAt || '',
-    }));
+    const rows = items.map((item: any) => {
+      const inspected = Number(item.inspectedQuantity ?? item.inspected_qty ?? 0);
+      const passed = Number(item.passedQuantity ?? item.passed_qty ?? 0);
+      const failed = Number(item.failedQuantity ?? item.failed_qty ?? 0);
+      const passRate = inspected > 0 ? ((passed / inspected) * 100).toFixed(1) + '%' : '';
+      const failRate = inspected > 0 ? ((failed / inspected) * 100).toFixed(1) + '%' : '';
+
+      return {
+        'Mã hồ sơ': item.id || '',
+        'Loại phiếu': item.type || '',
+        'Mã dự án': item.ma_ct || item.projectCode || item.projectId || '',
+        'Tên dự án': item.ten_ct || item.projectName || '',
+        'Hạng mục/Mô tả': item.ten_hang_muc || item.description || item.title || '',
+        'Mã nhà máy': item.ma_nha_may || item.factoryOrder || item.poNumber || '',
+        'Headcode': item.headcode || '',
+        'QC kiểm tra': item.inspectorName || item.created_by || item.qcName || '',
+        'Xưởng': item.workshop || '',
+        'Công đoạn sản xuất': item.stage || item.subStage || '',
+        'Ngày thực hiện': item.date || item.createdAt || '',
+        'Trạng thái': item.status || '',
+        'SL ĐĐH': item.so_luong_ipo !== undefined && item.so_luong_ipo !== null ? item.so_luong_ipo : (item.orderedQty !== undefined ? item.orderedQty : ''),
+        'SLkiem': inspected || '',
+        'SLDat': passed || '',
+        'TLDat': passRate,
+        'SLLoi': failed || '',
+        'TLLoi': failRate,
+        'Kết luận/Ghi chú': item.conclusion || item.notes || item.remarks || '',
+        'ĐVT/Unit': item.unit || item.uom || '',
+      };
+    });
 
     if (format === 'csv') {
       let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
@@ -831,6 +850,150 @@ app.get('/api/export/inspections', async (req, res) => {
       const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename=AATN_Inspections_${Date.now()}.xlsx`);
+      return res.send(buf);
+    }
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/export/ncrs', async (req, res) => {
+  try {
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const result = await dbService.getNcrs(req.query, 1, 10000);
+    const items = Array.isArray(result) ? result : (result?.items || []);
+    const rows = items.map((n: any) => ({
+      'Mã NCR': n.code || n.ncrNumber || n.id || '',
+      'Mã Dự Án': n.projectCode || n.projectId || '',
+      'Nhà Cung Cấp': n.supplierName || '',
+      'Mô tả lỗi': n.description || n.title || '',
+      'Trạng thái': n.status || '',
+      'Mức độ nghiêm trọng': n.severity || '',
+      'Hạn khắc phục': n.dueDate || n.deadline || '',
+      'Ngày tạo': n.createdAt || n.date || '',
+    }));
+
+    if (format === 'csv') {
+      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      for (const r of rows) {
+        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_NCRs_${Date.now()}.csv`);
+      return res.send(csv);
+    } else {
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+      xlsx.utils.book_append_sheet(wb, ws, 'NCRs');
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_NCRs_${Date.now()}.xlsx`);
+      return res.send(buf);
+    }
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/export/defects', async (req, res) => {
+  try {
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const result = typeof (dbService as any).getDefects === 'function' ? await (dbService as any).getDefects() : (typeof (dbService as any).getDefectLibrary === 'function' ? await (dbService as any).getDefectLibrary() : []);
+    const items = Array.isArray(result) ? result : (result?.items || []);
+    const rows = items.map((d: any) => ({
+      'Mã Lỗi': d.code || d.defectCode || d.id || '',
+      'Tên Lỗi': d.name || d.defectName || d.title || '',
+      'Danh mục': d.category || '',
+      'Mức độ': d.severity || '',
+      'Mô tả': d.description || '',
+    }));
+
+    if (format === 'csv') {
+      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      for (const r of rows) {
+        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Defects_${Date.now()}.csv`);
+      return res.send(csv);
+    } else {
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+      xlsx.utils.book_append_sheet(wb, ws, 'Defects');
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Defects_${Date.now()}.xlsx`);
+      return res.send(buf);
+    }
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/export/materials', async (req, res) => {
+  try {
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const result = typeof (dbService as any).getMaterials === 'function' ? await (dbService as any).getMaterials(req.query) : [];
+    const items = Array.isArray(result) ? result : (result?.items || []);
+    const rows = items.map((m: any) => ({
+      'Mã Vật Tư': m.code || m.materialCode || m.id || '',
+      'Tên Vật Tư': m.name || m.materialName || '',
+      'Đơn vị tính': m.unit || '',
+      'Nhà Cung Cấp': m.supplierName || '',
+      'Quy cách / Mô tả': m.spec || m.description || '',
+    }));
+
+    if (format === 'csv') {
+      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      for (const r of rows) {
+        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Materials_${Date.now()}.csv`);
+      return res.send(csv);
+    } else {
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+      xlsx.utils.book_append_sheet(wb, ws, 'Materials');
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Materials_${Date.now()}.xlsx`);
+      return res.send(buf);
+    }
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/export/ipo', async (req, res) => {
+  try {
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const result = typeof (dbService as any).getIpoData === 'function' ? await (dbService as any).getIpoData(1, 10000, req.query.factoryOrder as string, req.query.maTender as string) : { items: [] };
+    const items = Array.isArray(result) ? result : (result?.items || []);
+    const rows = items.map((i: any) => ({
+      'Factory Order': i.factoryOrder || i.order || '',
+      'Mã Tender': i.maTender || i.tender || '',
+      'Mã Dự Án': i.idProject || i.projectCode || '',
+      'Tên Sản Phẩm': i.productName || i.name || '',
+      'Số lượng': i.quantity || '',
+      'Trạng thái': i.status || '',
+    }));
+
+    if (format === 'csv') {
+      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      for (const r of rows) {
+        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_IPO_${Date.now()}.csv`);
+      return res.send(csv);
+    } else {
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+      xlsx.utils.book_append_sheet(wb, ws, 'IPO');
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_IPO_${Date.now()}.xlsx`);
       return res.send(buf);
     }
   } catch (err: any) {
