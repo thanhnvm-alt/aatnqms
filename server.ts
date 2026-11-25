@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
+import * as xlsx from 'xlsx';
 import * as dbService from './services/dbService.js';
 import * as dbMod from './services/dbModuleService.js';
 import * as storageService from './services/storageService.js';
@@ -689,6 +690,46 @@ app.get('/api/suppliers', async (req, res) => {
   }
 });
 
+app.get('/api/export/suppliers', async (req, res) => {
+  try {
+    const format = String(req.query.format || 'xlsx').toLowerCase();
+    const search = String(req.query.search || '');
+    const result = await dbService.getSuppliers(search, 10000);
+    const suppliers = Array.isArray(result) ? result : (result?.items || []);
+    const rows = suppliers.map((s: any) => ({
+      'Mã NCC': s.code || s.supplierCode || '',
+      'Tên Nhà Cung Cấp': s.name || s.supplierName || '',
+      'Loại NCC': s.type || '',
+      'Xưởng Phụ Trách': s.workshop || '',
+      'Trạng thái': s.status || '',
+      'Người liên hệ': s.contactPerson || '',
+      'Số điện thoại': s.phone || '',
+      'Email': s.email || '',
+      'Địa chỉ': s.address || '',
+    }));
+
+    if (format === 'csv') {
+      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      for (const r of rows) {
+        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Suppliers_${Date.now()}.csv`);
+      return res.send(csv);
+    } else {
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+      xlsx.utils.book_append_sheet(wb, ws, 'Suppliers');
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Suppliers_${Date.now()}.xlsx`);
+      return res.send(buf);
+    }
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
 app.post('/api/suppliers', async (req: any, res) => {
   try {
     const supplier = await dbService.upsertSupplier(req.body, getActorId(req));
@@ -753,6 +794,45 @@ app.get('/api/inspections', async (req, res) => {
     const limit = parseInt(req.query.limit as string || '200', 10);
     const result = await dbService.getInspectionsList(req.query, page, limit);
     res.json(result);
+  } catch (err: any) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/export/inspections', async (req, res) => {
+  try {
+    const format = String(req.query.format || 'csv').toLowerCase();
+    const result = await dbService.getInspectionsList(req.query, 1, 10000);
+    const items = Array.isArray(result) ? result : (result?.items || []);
+    const rows = items.map((item: any) => ({
+      'ID Phiếu': item.id || '',
+      'Mã CT / Dự án': item.projectCode || item.projectId || '',
+      'Công đoạn (Type)': item.type || item.stage || '',
+      'Mã Đơn Hàng / PO': item.factoryOrder || item.poNumber || '',
+      'Nhà Cung Cấp': item.supplierName || '',
+      'Trạng thái': item.status || '',
+      'Kết quả': item.result || '',
+      'QC Phụ trách': item.qcName || item.qc || '',
+      'Ngày kiểm tra': item.date || item.createdAt || '',
+    }));
+
+    if (format === 'csv') {
+      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      for (const r of rows) {
+        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Inspections_${Date.now()}.csv`);
+      return res.send(csv);
+    } else {
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+      xlsx.utils.book_append_sheet(wb, ws, 'Inspections');
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=AATN_Inspections_${Date.now()}.xlsx`);
+      return res.send(buf);
+    }
   } catch (err: any) {
     sendErr(res, err);
   }

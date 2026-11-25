@@ -375,11 +375,45 @@ export const fetchPublicInspectionById = async (id: string): Promise<Inspection 
   return res?.inspection || res?.data || res || null;
 };
 
+export const preprocessInspectionPayloadForStorage = async (inspection: Inspection): Promise<Inspection> => {
+  const cloned = JSON.parse(JSON.stringify(inspection));
+  if (cloned.signature && typeof cloned.signature === 'string' && cloned.signature.startsWith('data:')) {
+    cloned.signature = await uploadQMSImage(cloned.signature, { type: 'SIGNATURE', role: 'SIGNATURE_QC' });
+  }
+  if (cloned.managerSignature && typeof cloned.managerSignature === 'string' && cloned.managerSignature.startsWith('data:')) {
+    cloned.managerSignature = await uploadQMSImage(cloned.managerSignature, { type: 'SIGNATURE', role: 'SIGNATURE_MANAGER' });
+  }
+  if (cloned.teamLeadSignature && typeof cloned.teamLeadSignature === 'string' && cloned.teamLeadSignature.startsWith('data:')) {
+    cloned.teamLeadSignature = await uploadQMSImage(cloned.teamLeadSignature, { type: 'SIGNATURE', role: 'SIGNATURE_TEAMLEAD' });
+  }
+  if (cloned.productionSignature && typeof cloned.productionSignature === 'string' && cloned.productionSignature.startsWith('data:')) {
+    cloned.productionSignature = await uploadQMSImage(cloned.productionSignature, { type: 'SIGNATURE', role: 'SIGNATURE_PRODUCTION' });
+  }
+  if (cloned.pmSignature && typeof cloned.pmSignature === 'string' && cloned.pmSignature.startsWith('data:')) {
+    cloned.pmSignature = await uploadQMSImage(cloned.pmSignature, { type: 'SIGNATURE', role: 'SIGNATURE_PM' });
+  }
+  if (cloned.receiverSignature && typeof cloned.receiverSignature === 'string' && cloned.receiverSignature.startsWith('data:')) {
+    cloned.receiverSignature = await uploadQMSImage(cloned.receiverSignature, { type: 'SIGNATURE', role: 'SIGNATURE_RECEIVER' });
+  }
+  if (Array.isArray(cloned.images)) {
+    for (let i = 0; i < cloned.images.length; i++) {
+      const img = cloned.images[i];
+      if (typeof img === 'string' && img.startsWith('data:')) {
+        cloned.images[i] = await uploadQMSImage(img, { type: 'INSPECTION_IMAGE' });
+      } else if (img && typeof img === 'object' && img.url && typeof img.url === 'string' && img.url.startsWith('data:')) {
+        img.url = await uploadQMSImage(img.url, { type: 'INSPECTION_IMAGE' });
+      }
+    }
+  }
+  return cloned;
+};
+
 export const saveInspectionToSheet = async (inspection: Inspection): Promise<{ success: boolean, inspection: Inspection }> => {
+  const processed = await preprocessInspectionPayloadForStorage(inspection);
   return apiFetch('/api/inspections', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(inspection),
+    body: JSON.stringify(processed),
   });
 };
 
