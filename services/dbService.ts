@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { query } from '../lib/db.js';
 import { writeAuditLog } from './dbModuleService.js';
-import { assertNoNewBase64DataUri } from './storageService.js';
+import { assertNoNewBase64DataUri, stripTransientMediaUrlParams } from './storageService.js';
 import {
   normalizeTraceCode,
   splitAndNormalizeTraceCodes,
@@ -877,6 +877,7 @@ export async function updateSubcontractorBooking(
     throw err;
   }
 
+  updates = stripTransientMediaUrlParams(updates);
   assertNoNewBase64DataUri(updates, existing, 'Lịch nghiệm thu GCN');
 
   const fields: string[] = [];
@@ -1454,6 +1455,163 @@ export async function getInspectionsList(filters: any = {}, page: number = 1, li
   });
 
   return { items, total };
+}
+
+function resolveExportFormTable(type?: string): string {
+  const t = String(type || 'PQC').trim().toUpperCase();
+  if (t === 'IQC') return 'forms_iqc';
+  if (t === 'SQC_VT') return 'forms_sqc_vt';
+  if (t === 'SQC_MAT' || t === 'SQC') return 'forms_sqc_mat';
+  if (t === 'SQC_BTP') return 'forms_sqc_btp';
+  if (t === 'SQC_TP') return 'forms_sqc_tp';
+  if (t === 'FSR') return 'forms_fsr';
+  if (t === 'STEP') return 'forms_step';
+  if (t === 'FQC') return 'forms_fqc';
+  if (t === 'SPR') return 'forms_spr';
+  if (t === 'SITE') return 'forms_site';
+  return 'forms_pqc';
+}
+
+const firstNonEmptyStr = (...vals: any[]): string => {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+};
+
+export async function getInspectionsExportRows(filters: any = {}, limit: number = 10000): Promise<any[]> {
+  const { items } = await getInspectionsList(filters, 1, limit);
+  if (!items || items.length === 0) return [];
+
+  const groupedIds = new Map<string, string[]>();
+  for (const it of items) {
+    const tbl = resolveExportFormTable(it.type);
+    const list = groupedIds.get(tbl) || [];
+    list.push(it.id);
+    groupedIds.set(tbl, list);
+  }
+
+  const formRowById = new Map<string, any>();
+  await Promise.all(
+    Array.from(groupedIds.entries()).map(async ([tableName, ids]) => {
+      try {
+        const res = await query(
+          `SELECT id, stage, sub_stage, dvt, summary, comment_production, materials_json, items_json, data
+           FROM ${SCHEMA}."${tableName}"
+           WHERE id = ANY($1::text[]) AND deleted_at IS NULL`,
+          [ids]
+        );
+        for (const r of res.rows) {
+          formRowById.set(String(r.id), r);
+        }
+      } catch (err) {
+        console.warn(`getInspectionsExportRows warning (${tableName}):`, err);
+      }
+    })
+  );
+
+  return items.map((item: any) => {
+    const formRow = formRowById.get(String(item.id));
+    const extraData = safeJsonParse<Record<string, any>>(formRow?.data, {});
+    const materials = Array.isArray(extraData.materials)
+      ? extraData.materials
+      : safeJsonParse<any[]>(formRow?.materials_json, []);
+    const checkItems = Array.isArray(extraData.items)
+      ? extraData.items
+      : safeJsonParse<any[]>(formRow?.items_json, []);
+
+    const stageMain = firstNonEmptyStr(
+      item.stage,
+      formRow?.stage,
+      extraData.stage,
+      extraData.inspectionStage
+    );
+    const subStage = firstNonEmptyStr(
+      item.subStage,
+      formRow?.sub_stage,
+      extraData.subStage,
+      extraData.sub_stage
+    );
+    const exportStage = stageMain && subStage && !stageMain.toLowerCase().includes(subStage.toLowerCase())
+      ? `${stageMain} (${subStage})`
+      : (stageMain || subStage || '');
+
+    let exportSummary = firstNonEmptyStr(
+      formRow?.summary,
+      extraData.summary,
+      extraData.conclusion,
+      extraData.notes,
+      extraData.remarks,
+      formRow?.comment_production,
+      extraData.productionComment,
+      extraData.pmComment,
+      item.summary,
+      item.conclusion,
+      item.notes,
+      item.remarks
+    );
+
+    if (!exportSummary) {
+      const detailNotes: string[] = [];
+      const seenNotes = new Set<string>();
+      for (const m of materials) {
+        const note = firstNonEmptyStr(m?.notes, m?.note, m?.ncr?.issueDescription, m?.ncr?.description);
+        if (note && !seenNotes.has(note)) {
+          seenNotes.add(note);
+          detailNotes.push(note);
+          if (detailNotes.length >= 3) break;
+        }
+      }
+      if (detailNotes.length < 3) {
+        for (const ci of checkItems) {
+          const note = firstNonEmptyStr(ci?.notes, ci?.ncr?.issueDescription, ci?.ncr?.description);
+          if (note && !seenNotes.has(note)) {
+            seenNotes.add(note);
+            detailNotes.push(note);
+            if (detailNotes.length >= 3) break;
+          }
+        }
+      }
+      exportSummary = detailNotes.join('; ');
+    }
+
+    let exportUnit = firstNonEmptyStr(
+      formRow?.dvt,
+      extraData.dvt,
+      extraData.unit,
+      extraData.uom,
+      item.dvt,
+      item.unit,
+      item.uom
+    );
+    if (!exportUnit && materials.length > 0) {
+      const units = Array.from(
+        new Set(
+          materials
+            .map((m: any) => firstNonEmptyStr(m?.unit, m?.dvt, m?.uom))
+            .filter(Boolean)
+        )
+      );
+      exportUnit = units.join(', ');
+    }
+
+    const resolvedIpo = item.so_luong_ipo ?? extraData.so_luong_ipo ?? item.orderedQty;
+
+    return {
+      ...item,
+      so_luong_ipo: resolvedIpo,
+      stage: stageMain || item.stage || '',
+      subStage: subStage || item.subStage || '',
+      dvt: exportUnit,
+      unit: exportUnit,
+      summary: exportSummary,
+      exportStage,
+      exportSummary,
+      exportUnit,
+    };
+  });
 }
 
 export async function syncMissingInspectionsFromForms(): Promise<{ inserted: number; updated: number }> {
@@ -3230,6 +3388,7 @@ export async function upsertSupplier(data: {
 
   const nowTs = Math.floor(Date.now() / 1000);
   const existing = existingRes.rows[0] || null;
+  data = stripTransientMediaUrlParams(data);
   assertNoNewBase64DataUri(data, existing, 'Nhà cung cấp');
 
   if (existing) {
@@ -3632,6 +3791,7 @@ export async function lookupPoMaterials(
 // --- CREATE & DELETE SUBCONTRACTOR BOOKING ---
 
 export async function createSubcontractorBooking(data: any, actorId?: string | null): Promise<SubcontractorBooking> {
+  data = stripTransientMediaUrlParams(data);
   assertNoNewBase64DataUri(data, null, 'Lịch nghiệm thu GCN');
   const nowTs = Math.floor(Date.now() / 1000);
   const id = data.id || crypto.randomUUID();
@@ -4158,6 +4318,7 @@ export async function upsertNcr(ncrData: any, actorId?: string | null, actorUser
     throw Object.assign(new Error('Bản ghi NCR đã bị xóa mềm, không thể chỉnh sửa.'), { statusCode: 404 });
   }
 
+  ncrData = stripTransientMediaUrlParams(ncrData);
   const existingMapped = existing ? mapNcrRow(existing) : null;
   assertNoNewBase64DataUri(ncrData, existingMapped, 'Hồ sơ NCR');
 
@@ -4746,6 +4907,7 @@ export async function saveToolCatalog(catalog: any, actorId?: string | null) {
     throw Object.assign(new Error('Danh mục CCDC đã bị xóa mềm.'), { statusCode: 404 });
   }
 
+  catalog = stripTransientMediaUrlParams(catalog);
   assertNoNewBase64DataUri(catalog, existing, 'Danh mục CCDC');
 
   if (existing && catalog.version !== undefined && existing.version !== undefined && Number(catalog.version) !== Number(existing.version)) {
@@ -4913,6 +5075,7 @@ export async function saveToolAsset(asset: any, actorId?: string | null) {
     throw Object.assign(new Error('Thiết bị CCDC đã bị xóa mềm.'), { statusCode: 404 });
   }
 
+  asset = stripTransientMediaUrlParams(asset);
   assertNoNewBase64DataUri(asset, existing, 'Thiết bị CCDC');
 
   if (existing && asset.version !== undefined && existing.version !== undefined && Number(asset.version) !== Number(existing.version)) {
@@ -5071,6 +5234,7 @@ export async function saveToolTransfer(
   const existingRes = await query(`SELECT * FROM ${SCHEMA}.tool_transfers WHERE id = $1 LIMIT 1`, [id]);
   const existing = existingRes.rows[0] || null;
 
+  transfer = stripTransientMediaUrlParams(transfer);
   // Tolerate pre-existing legacy signatures while strictly blocking any newly submitted Base64 payloads
   assertNoNewBase64DataUri(transfer, existing, 'Luân chuyển CCDC');
 
@@ -5269,6 +5433,7 @@ export async function saveToolCalibration(
     throw Object.assign(new Error('Thiết bị CCDC cần hiệu chuẩn không tồn tại hoặc đã bị xóa.'), { statusCode: 404 });
   }
 
+  calib = stripTransientMediaUrlParams(calib);
   assertNoNewBase64DataUri(calib, existing, 'Hiệu chuẩn CCDC');
 
   if (!existing) {

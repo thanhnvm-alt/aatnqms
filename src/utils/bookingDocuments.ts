@@ -92,19 +92,25 @@ export function getAttachmentActionUrl(rawUrl: string): string {
   const trimmed = String(rawUrl || '').trim();
   if (!trimmed) return '';
   if (trimmed.startsWith(STORAGE_FILES_PREFIX) || trimmed.includes(STORAGE_FILES_PREFIX)) {
-    if (trimmed.includes('sig=') || trimmed.includes('token=')) {
-      return trimmed;
+    const qIdx = trimmed.indexOf('?');
+    const base = qIdx === -1 ? trimmed : trimmed.slice(0, qIdx);
+    const params = new URLSearchParams(qIdx === -1 ? '' : trimmed.slice(qIdx + 1));
+    const sig = params.get('sig');
+    const expNum = Number(params.get('expires') || 0);
+    if (!sig || !expNum || !Number.isFinite(expNum) || (expNum * 1000 <= Date.now())) {
+      params.delete('sig');
+      params.delete('expires');
     }
     try {
       const token = localStorage.getItem('aatn_qms_token') || sessionStorage.getItem('aatn_qms_token') || '';
-      if (token) {
-        return trimmed.includes('?')
-          ? `${trimmed}&token=${encodeURIComponent(token)}`
-          : `${trimmed}?token=${encodeURIComponent(token)}`;
+      if (token && !params.has('token')) {
+        params.set('token', token);
       }
     } catch {
-      return trimmed;
+      // Ignore storage access errors
     }
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
   }
   return trimmed;
 }
@@ -112,7 +118,11 @@ export function getAttachmentActionUrl(rawUrl: string): string {
 export function getAttachmentDownloadUrl(rawUrl: string, fileName?: string): string {
   const actionUrl = getAttachmentActionUrl(rawUrl);
   if (!actionUrl) return '';
-  if (actionUrl.startsWith(STORAGE_FILES_PREFIX) || actionUrl.includes(STORAGE_FILES_PREFIX)) {
+  if (
+    actionUrl.startsWith(STORAGE_FILES_PREFIX) ||
+    actionUrl.includes(STORAGE_FILES_PREFIX) ||
+    actionUrl.includes('/api/media/image/')
+  ) {
     const sep = actionUrl.includes('?') ? '&' : '?';
     const fnParam = fileName ? `&filename=${encodeURIComponent(fileName)}` : '';
     return `${actionUrl}${sep}download=1${fnParam}`;

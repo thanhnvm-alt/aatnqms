@@ -124,7 +124,11 @@ export const getDirectGoogleDriveViewUrl = (fileIdOrUrl: string): string => {
   if (fileId) {
     return `https://drive.google.com/file/d/${fileId}/view`;
   }
-  return fileIdOrUrl.startsWith('http') ? fileIdOrUrl : `https://drive.google.com`;
+  const raw = String(fileIdOrUrl || '').trim();
+  if (raw.startsWith('https://drive.google.com/') || raw.startsWith('http://drive.google.com/')) {
+    return raw;
+  }
+  return '';
 };
 
 const blobCache = new Map<string, string>();

@@ -1,6 +1,6 @@
 {
   "schema": "appQAQC",
-  "timestamp": "2026-11-23T05:54:15.210Z",
+  "timestamp": "2026-11-26T00:55:19.139Z",
   "logs": [
     "✅ Ensured table audit_logs exists in appQAQC",
     "✅ Ensured table status_history exists in appQAQC",
@@ -40,6 +40,8 @@
     "✅ Ensured table teams exists in appQAQC",
     "✅ Ensured table tools exists in appQAQC",
     "✅ Ensured subcontractor booking & inspection tables exist in appQAQC",
-    "✅ Ensured inspection_traceability_index & B-Tree indexes exist in appQAQC"
+    "✅ Ensured inspection_traceability_index & B-Tree indexes exist in appQAQC",
+    "✅ Ensured password_resets table exists in appQAQC",
+    "✅ Ensured storage_drive_map table exists in appQAQC"
   ]
 }

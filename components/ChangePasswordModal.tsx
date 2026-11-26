@@ -17,11 +17,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   forcing = false,
   onLogout 
 }) => {
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -55,7 +53,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 
     setIsLoading(true);
     try {
-      const response = await changePassword(currentPassword, newPassword);
+      const response = await changePassword(newPassword);
       if (response && response.success) {
         if (forcing) {
           setSuccessMsg('Đổi mật khẩu thành công! Đang chuyển về màn hình đăng nhập...');
@@ -133,33 +131,6 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               <span>{successMsg}</span>
             </div>
           )}
-
-          {/* Current Password */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-              Mật khẩu hiện tại <span className="text-red-500 dark:text-red-400">*</span>
-            </label>
-            <div className="relative">
-              <input 
-                type={showCurrentPassword ? "text" : "password"}
-                required
-                disabled={isLoading}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Nhập mật khẩu hiện tại"
-                className="w-full min-h-[44px] pl-3 pr-12 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all placeholder:text-slate-400"
-              />
-              <button 
-                type="button"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                aria-label={showCurrentPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-                className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                tabIndex={-1}
-              >
-                {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
 
           {/* New Password */}
           <div className="flex flex-col gap-1.5">

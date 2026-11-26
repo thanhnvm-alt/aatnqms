@@ -9,7 +9,7 @@ import {
   ChevronUp, History, FileCheck, Search, AlertCircle, MapPin, Locate,
   CheckSquare, Square, Info, ShieldCheck, CheckCircle, AlertTriangle, AlertOctagon
 } from 'lucide-react';
-import { fetchPlans, uploadQMSImage, fetchMaterials } from '../services/apiService';
+import { fetchPlans, uploadQMSImage, uploadQMSImagesBatch, preprocessInspectionPayloadForStorage, fetchMaterials } from '../services/apiService';
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 import { PersistenceService } from '../services/persistenceService';
@@ -36,7 +36,7 @@ const SUPPORTING_DOC_TEMPLATES = [
 const UNIT_OPTIONS = ["PCS", "M2", "M3", "MÉT", "CHAI", "LỌ", "THÙNG", "PHUY", "FIT", "TUÝP", "BỘ", "CẶP", "KG", "LÍT"];
 
 import { SignaturePad } from './SignaturePad';
-import { Combobox, ConfirmDialog } from '../src/components/qms';
+import { Combobox, ConfirmDialog, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
 import { BookingReferenceDocsCard } from './BookingReferenceDocsCard';
 import { BookingSelectorField } from './BookingSelectorField';
 import { buildSqcPrefillFromBooking } from '../src/utils/bookingDocuments';
@@ -78,6 +78,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
   const [matSearchInput, setMatSearchInput] = useState('');
   const [deleteMatIdx, setDeleteMatIdx] = useState<number | null>(null);
   const [pendingBookingPrefill, setPendingBookingPrefill] = useState<Partial<Inspection> | null>(null);
+  const [formAlert, setFormAlert] = useState<FormAlertState | null>(null);
 
   const applyBookingPrefill = (prefill: Partial<Inspection>, overwriteMaterials: boolean) => {
       setFormData(prev => {
@@ -155,7 +156,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
                   setIsGettingLocation(false);
               },
               (err) => {
-                  alert("Không thể lấy vị trí GPS.");
+                  setFormAlert({ type: 'warning', title: 'Vị trí GPS', message: 'Không thể lấy vị trí GPS. Vui lòng cấp quyền vị trí hoặc nhập thủ công.' });
                   setIsGettingLocation(false);
               }
           );
@@ -271,9 +272,9 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             materials: matIqc 
         }));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Không tìm thấy thông tin PO.");
+      setFormAlert({ type: 'warning', title: 'Tra cứu PO', message: extractFormErrorMessage(e, 'Không tìm thấy thông tin PO.') });
     } finally {
       setIsLookupLoading(false);
     }
@@ -412,218 +413,180 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
   const onImageSave = async (index: number, newImageUrl: string) => {
       if (!editorState) return;
-      const newImages = [...editorState.images];
-      newImages[index] = newImageUrl;
-      setEditorState({ ...editorState, images: newImages });
       const { type, matIdx, itemIdx } = editorState.context || {};
-      
-      if (type === 'MAIN') {
-          setFormData(prev => ({ ...prev, images: newImages }));
-      } else if (type === 'DELIVERY') {
-          setFormData(prev => ({ ...prev, deliveryNoteImages: newImages }));
-      } else if (type === 'REPORT') {
-          setFormData(prev => ({ ...prev, reportImages: newImages }));
-      } else if (type === 'MATERIAL' && matIdx !== undefined) {
-          setFormData(prev => {
-              const next = { ...prev };
-              if (next.materials && next.materials[matIdx]) {
-                  next.materials[matIdx].images = newImages;
-              }
-              return next;
+      setFormAlert(null);
+      setIsProcessingImages(true);
+      setImageUploadProgress(0);
+      try {
+          const res = await fetch(newImageUrl);
+          const blob = await res.blob();
+          const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          const uploadedUrl = await uploadQMSImage(file, {
+              entityId: formData.id || 'new',
+              ma_ct: formData.ma_ct,
+              type: 'INSPECTION',
+              role: type || 'MAIN'
+          }, undefined, undefined, (percent) => {
+              setImageUploadProgress(percent);
           });
-      } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-          setFormData(prev => {
-              const next = { ...prev };
-              if (next.materials && next.materials[matIdx] && next.materials[matIdx].items && next.materials[matIdx].items[itemIdx]) {
-                  next.materials[matIdx].items[itemIdx].images = newImages;
-              }
-              return next;
-          });
+
+          const newImages = [...editorState.images];
+          newImages[index] = uploadedUrl;
+          setEditorState({ ...editorState, images: newImages });
+
+          if (type === 'MAIN') {
+              setFormData(prev => ({ ...prev, images: newImages }));
+          } else if (type === 'DELIVERY') {
+              setFormData(prev => ({ ...prev, deliveryNoteImages: newImages }));
+          } else if (type === 'REPORT') {
+              setFormData(prev => ({ ...prev, reportImages: newImages }));
+          } else if (type === 'MATERIAL' && matIdx !== undefined) {
+              setFormData(prev => {
+                  const nextMaterials = [...(prev.materials || [])];
+                  if (nextMaterials[matIdx]) {
+                      nextMaterials[matIdx] = { ...nextMaterials[matIdx], images: newImages };
+                  }
+                  return { ...prev, materials: nextMaterials };
+              });
+          } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+              setFormData(prev => {
+                  const nextMaterials = [...(prev.materials || [])];
+                  if (nextMaterials[matIdx] && nextMaterials[matIdx].items) {
+                      const nextItems = [...(nextMaterials[matIdx].items || [])];
+                      if (nextItems[itemIdx]) {
+                          nextItems[itemIdx] = { ...nextItems[itemIdx], images: newImages };
+                          nextMaterials[matIdx] = { ...nextMaterials[matIdx], items: nextItems };
+                      }
+                  }
+                  return { ...prev, materials: nextMaterials };
+              });
+          }
+      } catch (err: any) {
+          setFormAlert({ type: 'error', title: 'Lỗi lưu ảnh chỉnh sửa', message: extractFormErrorMessage(err, 'Không thể tải ảnh chỉnh sửa lên Google Drive.') });
+      } finally {
+          setIsProcessingImages(false);
+          setImageUploadProgress(null);
       }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadContext) return;
+    setFormAlert(null);
     setIsProcessingImages(true);
     setImageUploadProgress(0);
     try {
-        const uploadedUrls = await Promise.all(
-            Array.from(files).map(async (file: File) => {
-                return await uploadQMSImage(file, { 
-                    entityId: formData.id || 'new', 
-                    type: 'INSPECTION', 
-                    role: activeUploadContext.type
-                }, undefined, undefined, (percent) => {
-                    setImageUploadProgress(percent);
-                });
-            })
-        );
-        
+        const result = await uploadQMSImagesBatch(files, {
+            entityId: formData.id || 'new',
+            ma_ct: formData.ma_ct,
+            type: 'INSPECTION',
+            role: activeUploadContext.type
+        }, (percent) => {
+            setImageUploadProgress(percent);
+        });
+
         const { type, matIdx, itemIdx } = activeUploadContext;
-        if (type === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
-        } else if (type === 'DELIVERY') {
-            setFormData(prev => ({ ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...uploadedUrls] }));
-        } else if (type === 'REPORT') {
-            setFormData(prev => ({ ...prev, reportImages: [...(prev.reportImages || []), ...uploadedUrls] }));
-        } else if (type === 'MATERIAL' && matIdx !== undefined) {
-            setFormData(prev => {
-                const next = { ...prev };
-                if (next.materials && next.materials[matIdx]) {
-                    next.materials[matIdx].images = [...(next.materials[matIdx].images || []), ...uploadedUrls];
-                }
-                return next;
-            });
-        } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
-            setFormData(prev => {
-                const next = { ...prev };
-                if (next.materials && next.materials[matIdx] && next.materials[matIdx].items && next.materials[matIdx].items[itemIdx]) {
-                    next.materials[matIdx].items[itemIdx].images = [...(next.materials[matIdx].items[itemIdx].images || []), ...uploadedUrls];
-                }
-                return next;
+        if (result.uploadedUrls.length > 0) {
+            if (type === 'MAIN') {
+                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...result.uploadedUrls] }));
+            } else if (type === 'DELIVERY') {
+                setFormData(prev => ({ ...prev, deliveryNoteImages: [...(prev.deliveryNoteImages || []), ...result.uploadedUrls] }));
+            } else if (type === 'REPORT') {
+                setFormData(prev => ({ ...prev, reportImages: [...(prev.reportImages || []), ...result.uploadedUrls] }));
+            } else if (type === 'MATERIAL' && matIdx !== undefined) {
+                setFormData(prev => {
+                    const nextMaterials = [...(prev.materials || [])];
+                    if (nextMaterials[matIdx]) {
+                        nextMaterials[matIdx] = { ...nextMaterials[matIdx], images: [...(nextMaterials[matIdx].images || []), ...result.uploadedUrls] };
+                    }
+                    return { ...prev, materials: nextMaterials };
+                });
+            } else if (type === 'ITEM' && matIdx !== undefined && itemIdx !== undefined) {
+                setFormData(prev => {
+                    const nextMaterials = [...(prev.materials || [])];
+                    if (nextMaterials[matIdx] && nextMaterials[matIdx].items) {
+                        const nextItems = [...(nextMaterials[matIdx].items || [])];
+                        if (nextItems[itemIdx]) {
+                            nextItems[itemIdx] = { ...nextItems[itemIdx], images: [...(nextItems[itemIdx].images || []), ...result.uploadedUrls] };
+                            nextMaterials[matIdx] = { ...nextMaterials[matIdx], items: nextItems };
+                        }
+                    }
+                    return { ...prev, materials: nextMaterials };
+                });
+            }
+        }
+
+        if (result.failed.length > 0) {
+            setFormAlert({
+                type: result.uploadedUrls.length > 0 ? 'warning' : 'error',
+                title: result.uploadedUrls.length > 0 ? 'Một số ảnh tải lên thất bại' : 'Lỗi tải ảnh lên Google Drive',
+                message: result.failed.map(f => `${f.name}: ${f.error}`).join('\n')
             });
         }
-    } catch (err) { 
-        console.error("ISO-UPLOAD: Failed", err); 
-        alert("Lỗi tải ảnh lên.");
-    } finally { 
-        setIsProcessingImages(false); 
+    } catch (err: any) {
+        console.error("ISO-UPLOAD: Failed", err);
+        setFormAlert({ type: 'error', title: 'Lỗi tải ảnh', message: extractFormErrorMessage(err, 'Không thể tải ảnh lên Google Drive.') });
+    } finally {
+        setIsProcessingImages(false);
         setImageUploadProgress(null);
-        e.target.value = ''; 
+        e.target.value = '';
     }
   };
 
   const handleSubmit = async () => {
-    if (!formData.po_number || !formData.supplier) { alert("Vui lòng nhập Mã PO và Nhà cung cấp."); return; }
-    if (!formData.signature) { alert("QC bắt buộc phải ký tên xác nhận báo cáo."); return; }
+    setFormAlert(null);
+    if (!formData.po_number || !formData.supplier) {
+        setFormAlert({ type: 'warning', title: 'Thiếu thông tin', message: 'Vui lòng nhập Mã PO và Nhà cung cấp.' });
+        return;
+    }
+    if (!formData.signature) {
+        setFormAlert({ type: 'warning', title: 'Thiếu chữ ký', message: 'QC bắt buộc phải ký tên xác nhận báo cáo.' });
+        return;
+    }
 
     const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
     if (invalidQtySum) {
-        alert(`Vật tư "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.`);
+        setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: `Vật tư "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.` });
         return;
     }
-    
+
     setIsSaving(true);
     setUploadProgress(0);
     try {
-        const entityId = formData.id || 'new';
-        
-        // Helper to prepare upload tasks
-        interface UploadTask {
-            url: string;
-            role: string;
-            path: string;
-            matIndex?: number;
-            itemIndex?: number;
-            originalIndex?: number;
-        }
+        const totalInspected = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
+        const totalPassed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
+        const totalFailed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
 
-        const tasks: UploadTask[] = [];
-
-        // 1. Identify all base64 images
-        (formData.images || []).forEach((img, idx) => {
-            if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx });
-        });
-        (formData.deliveryNoteImages || []).forEach((img, idx) => {
-            if (img.startsWith('data:')) tasks.push({ url: img, role: 'DELIVERY', path: 'DELIVERY', originalIndex: idx });
-        });
-        (formData.reportImages || []).forEach((img, idx) => {
-            if (img.startsWith('data:')) tasks.push({ url: img, role: 'REPORT', path: 'REPORT', originalIndex: idx });
-        });
-        if (formData.signature?.startsWith('data:')) tasks.push({ url: formData.signature, role: 'SIGNATURE_QC', path: 'SIGNATURE' });
-
-        (formData.materials || []).forEach((mat, mIdx) => {
-            (mat.images || []).forEach((img, idx) => {
-                if (img.startsWith('data:')) tasks.push({ url: img, role: 'MATERIAL', path: 'MATERIAL', matIndex: mIdx, originalIndex: idx });
-            });
-            (mat.items || []).forEach((item, iIdx) => {
-                (item.images || []).forEach((img, idx) => {
-                    if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', matIndex: mIdx, itemIndex: iIdx, originalIndex: idx });
-                });
-            });
-        });
-
-        const totalTasks = tasks.length;
-        let completedCount = 0;
-
-        // Function to update formData state and free memory
-        const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
-            setFormData(prev => {
-                const next = { ...prev };
-                if (task.path === 'MAIN' && task.originalIndex !== undefined) {
-                    const nextImgs = [...(next.images || [])];
-                    nextImgs[task.originalIndex] = serverUrl;
-                    next.images = nextImgs;
-                } else if (task.path === 'DELIVERY' && task.originalIndex !== undefined) {
-                    const nextImgs = [...(next.deliveryNoteImages || [])];
-                    nextImgs[task.originalIndex] = serverUrl;
-                    next.deliveryNoteImages = nextImgs;
-                } else if (task.path === 'REPORT' && task.originalIndex !== undefined) {
-                    const nextImgs = [...(next.reportImages || [])];
-                    nextImgs[task.originalIndex] = serverUrl;
-                    next.reportImages = nextImgs;
-                } else if (task.path === 'SIGNATURE') {
-                    next.signature = serverUrl;
-                } else if (task.path === 'MATERIAL' && task.matIndex !== undefined && task.originalIndex !== undefined) {
-                    const nextMats = [...(next.materials || [])];
-                    const mat = { ...nextMats[task.matIndex] };
-                    const matImgs = [...(mat.images || [])];
-                    matImgs[task.originalIndex] = serverUrl;
-                    mat.images = matImgs;
-                    nextMats[task.matIndex] = mat;
-                    next.materials = nextMats;
-                } else if (task.path === 'ITEM' && task.matIndex !== undefined && task.itemIndex !== undefined && task.originalIndex !== undefined) {
-                    const nextMats = [...(next.materials || [])];
-                    const mat = { ...nextMats[task.matIndex] };
-                    const nextItems = [...(mat.items || [])];
-                    const item = { ...nextItems[task.itemIndex] };
-                    const itemImgs = [...(item.images || [])];
-                    itemImgs[task.originalIndex] = serverUrl;
-                    item.images = itemImgs;
-                    nextItems[task.itemIndex] = item;
-                    mat.items = nextItems;
-                    nextMats[task.matIndex] = mat;
-                    next.materials = nextMats;
-                }
-                return next;
-            });
+        const workingDraft: Inspection = {
+            ...JSON.parse(JSON.stringify(formData)),
+            booking_id: formData.booking_id,
+            booking_code: formData.booking_code,
+            status: InspectionStatus.SUBMITTED,
+            inspectedQuantity: totalInspected,
+            passedQuantity: totalPassed,
+            failedQuantity: totalFailed,
+            updatedAt: new Date().toISOString()
         };
 
-        // Execute uploads in parallel but track progress
-        if (totalTasks > 0) {
-            await Promise.all(tasks.map(async (task) => {
-                const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'SQC_VT', role: task.role });
-                updateStateWithUrl(task, serverUrl);
-                completedCount++;
-                setUploadProgress(Math.round((completedCount / totalTasks) * 100));
-            }));
-        }
+        const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
+            setUploadProgress(pct);
+        });
+        setFormData(preparedInspection);
 
-        // Final snap for saving
-        const finalForm = formData;
-            const totalInspected = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
-            const totalPassed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
-            const totalFailed = (finalForm.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
-
-            await onSave({ ...finalForm,
-                booking_id: finalForm.booking_id,
-                booking_code: finalForm.booking_code,
-                status: InspectionStatus.SUBMITTED,
-                inspectedQuantity: totalInspected,
-                passedQuantity: totalPassed,
-                failedQuantity: totalFailed,
-                updatedAt: new Date().toISOString() 
-            } as Inspection);
-            
-            clearDraft();
-            
-
-    } catch (e: any) { 
+        await onSave(preparedInspection);
+        clearDraft();
+    } catch (e: any) {
         console.error("ISO-SAVE-VT:", e);
-        alert(`Lỗi hệ thống: ${e.message || "Không thể tải ảnh lên"}`); 
-    } finally { 
-        setIsSaving(false); 
+        if (e?.partialPayload) {
+            setFormData(e.partialPayload);
+        }
+        setFormAlert({
+            type: 'error',
+            title: 'Lỗi lưu báo cáo SQC-VT',
+            message: extractFormErrorMessage(e)
+        });
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -693,6 +656,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
       )}
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-28">
+        <FormAlertBanner alert={formAlert} onClose={() => setFormAlert(null)} />
         {/* I. THÔNG TIN QUẢN LÝ */}
         <section className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-teal-50 dark:border-slate-800 pb-2 mb-1 gap-2">

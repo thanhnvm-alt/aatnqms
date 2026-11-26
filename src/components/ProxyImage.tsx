@@ -1,15 +1,11 @@
 import React from 'react';
 import { getProxyImageUrl } from '../utils';
-import { formatDateTime } from '../../lib/utils';
-import { 
-  extractGoogleDriveFileId, 
-  getDirectGoogleDriveViewUrl, 
-  fetchGoogleDriveImageBlob,
-  isGoogleDriveSignedIn,
-  signInWithGoogleDrive,
-  subscribeGoogleDriveAuth
+import { formatDateTime, formatDisplayDate } from '../../lib/utils';
+import {
+  extractGoogleDriveFileId,
+  getDirectGoogleDriveViewUrl,
 } from '../services/googleDriveAuth';
-import { ExternalLink, KeyRound, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ExternalLink, ImageOff, RefreshCw, Upload } from 'lucide-react';
 
 interface ProxyImageProps {
   src: string | any;
@@ -20,88 +16,100 @@ interface ProxyImageProps {
   showTimestamp?: boolean;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
   allowDirectOpen?: boolean;
+  onReplace?: () => void;
 }
 
-const DEFAULT_BROKEN_IMAGE_SVG =
-  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23f1f5f9'/%3E%3Cpath d='M160 120h80v60h-80z' fill='none' stroke='%2394a3b8' stroke-width='4' rx='6'/%3E%3Ccircle cx='182' cy='140' r='6' fill='%2394a3b8'/%3E%3Cpath d='M166 172l24-22 18 16 14-12 12 18z' fill='%23cbd5e1'/%3E%3C/svg%3E";
+type ImageErrorKind = '404' | 'drive' | 'generic' | null;
 
-export const ProxyImage: React.FC<ProxyImageProps> = ({ 
-  src, 
-  alt, 
-  className = '', 
-  fallbackSrc = DEFAULT_BROKEN_IMAGE_SVG,
+function appendRetryParam(url: string, retryCount: number): string {
+  if (!url || retryCount <= 0 || url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}_r=${retryCount}`;
+}
+
+function formatImageTimestamp(timestamp: string | number): string {
+  if (!timestamp) return '';
+  if (typeof timestamp === 'string') {
+    const trimmed = timestamp.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(trimmed)) {
+      return formatDisplayDate(trimmed);
+    }
+  }
+  return formatDateTime(timestamp);
+}
+
+export const ProxyImage: React.FC<ProxyImageProps> = ({
+  src,
+  alt,
+  className = '',
   timestamp,
   showTimestamp = false,
   onClick,
-  allowDirectOpen = true
+  allowDirectOpen = true,
+  onReplace,
 }) => {
   const [error, setError] = React.useState(false);
-  const [blobUrl, setBlobUrl] = React.useState<string | null>(null);
-  const [isDriveAuth, setIsDriveAuth] = React.useState(isGoogleDriveSignedIn());
-  const [isAuthenticating, setIsAuthenticating] = React.useState(false);
-
-  React.useEffect(() => {
-    return subscribeGoogleDriveAuth((_user, token) => {
-      setIsDriveAuth(!!token);
-    });
-  }, []);
+  const [errorKind, setErrorKind] = React.useState<ImageErrorKind>(null);
+  const [retryCount, setRetryCount] = React.useState(0);
+  const [isLoaded, setIsLoaded] = React.useState(false);
 
   const fileId = React.useMemo(() => extractGoogleDriveFileId(src), [src]);
   const driveViewUrl = React.useMemo(() => getDirectGoogleDriveViewUrl(src), [src]);
 
   React.useEffect(() => {
     setError(false);
-    setBlobUrl(null);
+    setErrorKind(null);
+    setRetryCount(0);
+    setIsLoaded(false);
   }, [src]);
 
-  // Attempt to fetch via Google Drive API if user is authenticated and error occurred
-  React.useEffect(() => {
-    let active = true;
-    if (error && fileId && isDriveAuth && !blobUrl) {
-      fetchGoogleDriveImageBlob(fileId).then((url) => {
-        if (active && url) {
-          setBlobUrl(url);
-          setError(false);
-        }
-      });
-    }
-    return () => {
-      active = false;
-    };
-  }, [error, fileId, isDriveAuth, blobUrl]);
+  const baseProxiedSrc = React.useMemo(() => getProxyImageUrl(src), [src]);
+  const proxiedSrc = React.useMemo(
+    () => appendRetryParam(baseProxiedSrc, retryCount),
+    [baseProxiedSrc, retryCount]
+  );
 
-  const handleError = () => {
-    if (fileId && isDriveAuth && !blobUrl) {
-      fetchGoogleDriveImageBlob(fileId).then((url) => {
-        if (url) {
-          setBlobUrl(url);
-          setError(false);
-          return;
-        }
-        setError(true);
-      });
-    } else {
-      setError(true);
+  const isLegacyStoragePath = React.useMemo(() => {
+    const rawStr = typeof src === 'string'
+      ? src
+      : String(src?.url || src?.url_hd || src?.fileUrl || src?.file_url || '');
+    return baseProxiedSrc.includes('/api/storage/files/') || rawStr.includes('/api/storage/files/');
+  }, [baseProxiedSrc, src]);
+
+  const handleError = async () => {
+    setIsLoaded(false);
+    setError(true);
+    if (!baseProxiedSrc || baseProxiedSrc.startsWith('data:') || baseProxiedSrc.startsWith('blob:')) {
+      setErrorKind('generic');
+      return;
+    }
+
+    try {
+      const probeRes = await fetch(proxiedSrc || baseProxiedSrc, { method: 'HEAD' });
+      if (probeRes.status === 404) {
+        setErrorKind(fileId ? 'drive' : '404');
+      } else if (probeRes.status === 502 || probeRes.status === 503 || probeRes.status === 504) {
+        setErrorKind('drive');
+      } else if (isLegacyStoragePath && !fileId) {
+        setErrorKind('404');
+      } else {
+        setErrorKind(fileId ? 'drive' : 'generic');
+      }
+    } catch {
+      if (isLegacyStoragePath && !fileId) {
+        setErrorKind('404');
+      } else {
+        setErrorKind(fileId ? 'drive' : 'generic');
+      }
     }
   };
 
-  const handleGoogleLogin = async (e: React.MouseEvent) => {
+  const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsAuthenticating(true);
-    try {
-      const authRes = await signInWithGoogleDrive();
-      if (authRes && fileId) {
-        const url = await fetchGoogleDriveImageBlob(fileId);
-        if (url) {
-          setBlobUrl(url);
-          setError(false);
-        }
-      }
-    } catch (err) {
-      console.error('Google Workspace Auth failed:', err);
-    } finally {
-      setIsAuthenticating(false);
-    }
+    setError(false);
+    setErrorKind(null);
+    setIsLoaded(false);
+    setRetryCount((prev) => prev + 1);
   };
 
   const handleOpenDrive = (e: React.MouseEvent) => {
@@ -111,72 +119,119 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({
     }
   };
 
-  const proxiedSrc = React.useMemo(() => {
-    if (blobUrl) return blobUrl;
-    return getProxyImageUrl(src);
-  }, [src, blobUrl]);
+  const handleReplaceClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onReplace?.();
+  };
+
+  const formattedTs = React.useMemo(
+    () => (showTimestamp && timestamp ? formatImageTimestamp(timestamp) : ''),
+    [showTimestamp, timestamp]
+  );
+
+  const isMissingLegacy = errorKind === '404';
+  const showDriveButton = Boolean(
+    !isMissingLegacy && !isLegacyStoragePath && !onReplace && allowDirectOpen && fileId && driveViewUrl
+  );
+  const errorTitle = isMissingLegacy
+    ? 'Mất tệp (404)'
+    : errorKind === 'drive'
+      ? 'Lỗi tải ảnh Drive'
+      : 'Không tải được ảnh';
 
   return (
     <div className="flex flex-col gap-1 w-fit" onClick={onClick}>
       <div className={`relative overflow-hidden bg-slate-100 dark:bg-slate-800 rounded-xl group/img ${className}`}>
-        {error && fileId ? (
-          <div className="w-full h-full min-h-[96px] p-2 flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-1">
-              <ExternalLink className="w-3.5 h-3.5" />
+        {error ? (
+          <div
+            className={`relative z-20 w-full h-full min-h-[80px] p-1.5 flex flex-col items-center justify-center text-center rounded-xl border ${
+              isMissingLegacy
+                ? 'bg-red-50/95 dark:bg-red-950/40 border-red-200 dark:border-red-900/60'
+                : 'bg-amber-50/95 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/60'
+            }`}
+            title={
+              isMissingLegacy
+                ? 'Tệp ảnh cũ không còn tồn tại trên bộ nhớ tạm máy chủ (404). Vui lòng tải ảnh mới nếu cần.'
+                : 'Không thể nạp ảnh từ máy chủ. Bấm Thử lại để kết nối lại.'
+            }
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center mb-1 shrink-0 ${
+                isMissingLegacy
+                  ? 'bg-red-100 text-red-600 dark:bg-red-900/60 dark:text-red-300'
+                  : 'bg-amber-100 text-amber-600 dark:bg-amber-900/60 dark:text-amber-300'
+              }`}
+            >
+              {isMissingLegacy ? (
+                <ImageOff className="w-3.5 h-3.5" />
+              ) : (
+                <AlertTriangle className="w-3.5 h-3.5" />
+              )}
             </div>
-            <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300 leading-tight line-clamp-1 mb-1.5">
-              Ảnh Google Drive
+            <span
+              className={`text-[10px] font-semibold leading-tight line-clamp-1 mb-1.5 px-0.5 ${
+                isMissingLegacy
+                  ? 'text-red-700 dark:text-red-300'
+                  : 'text-amber-800 dark:text-amber-200'
+              }`}
+            >
+              {errorTitle}
             </span>
-            <div className="flex flex-col gap-1 w-full px-1">
-              {allowDirectOpen && (
+            <div className="flex flex-col gap-1 w-full px-0.5">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="w-full min-h-[26px] py-0.5 px-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-semibold rounded flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                title="Thử tải lại ảnh"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>Thử lại</span>
+              </button>
+              {onReplace && (
+                <button
+                  type="button"
+                  onClick={handleReplaceClick}
+                  className="w-full min-h-[26px] py-0.5 px-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold rounded flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                  title="Tải ảnh mới thay thế"
+                >
+                  <Upload className="w-2.5 h-2.5" />
+                  <span>Tải ảnh mới</span>
+                </button>
+              )}
+              {showDriveButton && (
                 <button
                   type="button"
                   onClick={handleOpenDrive}
-                  className="w-full py-1 px-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-bold rounded flex items-center justify-center gap-1 shadow-xs transition-colors"
-                  title="Mở ảnh trong tab mới bằng tài khoản Google"
+                  className="w-full min-h-[24px] py-0.5 px-1 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-semibold rounded flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                  title="Mở tệp trên Google Drive"
                 >
                   <ExternalLink className="w-2.5 h-2.5" />
-                  <span>Mở trên Drive</span>
-                </button>
-              )}
-              {!isDriveAuth && (
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  disabled={isAuthenticating}
-                  className="w-full py-0.5 px-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[8px] font-medium rounded flex items-center justify-center gap-1 transition-colors"
-                  title="Đăng nhập Google Workspace để xem ảnh nội bộ"
-                >
-                  {isAuthenticating ? (
-                    <RefreshCw className="w-2 h-2 animate-spin" />
-                  ) : (
-                    <KeyRound className="w-2 h-2 text-amber-500" />
-                  )}
-                  <span>Đăng nhập Google</span>
+                  <span>Mở Drive</span>
                 </button>
               )}
             </div>
           </div>
         ) : (
           <img
-            src={error ? fallbackSrc : proxiedSrc}
+            src={proxiedSrc}
             alt={alt}
             loading="lazy"
+            onLoad={() => setIsLoaded(true)}
             onError={handleError}
             referrerPolicy="no-referrer"
-            className="w-full h-full object-cover transition-opacity duration-500 hover:opacity-90"
+            className="w-full h-full object-cover transition-opacity duration-300 hover:opacity-90"
           />
         )}
-        
-        {/* Aspect Ratio Skeleton */}
-        {!src && !blobUrl && (
-          <div className="absolute inset-0 animate-pulse bg-slate-200 dark:bg-slate-700" />
+
+        {/* Loading / Empty Skeleton */}
+        {!error && (!src || !isLoaded) && (
+          <div className="pointer-events-none absolute inset-0 animate-pulse bg-slate-200/70 dark:bg-slate-700/70" />
         )}
       </div>
 
-      {showTimestamp && timestamp && formatDateTime(timestamp) && (
+      {formattedTs && (
         <div className="text-[9px] font-mono font-medium text-slate-500 dark:text-slate-400 px-1 leading-tight mb-1 tabular-nums">
-          {formatDateTime(timestamp)}
+          {formattedTs}
         </div>
       )}
     </div>

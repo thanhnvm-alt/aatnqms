@@ -134,7 +134,6 @@ export const Settings: React.FC<SettingsProps> = ({
   const [selectedModuleForTemplate, setSelectedModuleForTemplate] = useState<string>('PQC');
 
   const [showPassword, setShowPassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
@@ -188,10 +187,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleChangePassword = async () => {
     setProfileFeedback(null);
-    if (!currentPassword) {
-        setProfileFeedback({ type: 'error', message: 'Vui lòng nhập mật khẩu hiện tại.' });
-        return;
-    }
     if (!newPassword || newPassword.length < 6) { 
         setProfileFeedback({ type: 'error', message: 'Mật khẩu mới phải có tối thiểu 6 ký tự.' }); 
         return; 
@@ -206,12 +201,11 @@ export const Settings: React.FC<SettingsProps> = ({
     }
     setIsUpdatingPassword(true);
     try {
-        const res = await changePassword(currentPassword, newPassword);
+        const res = await changePassword(newPassword);
         if (res?.user) {
           onPasswordUpdated?.(res.user);
         }
         setProfileFeedback({ type: 'success', message: 'Đã cập nhật mật khẩu thành công!' });
-        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
     } catch (error: any) { 
@@ -573,11 +567,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                 </button>
                             </div>
                             <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2">
-                                <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-3 gap-2">
-                                    <div className="min-h-[44px] lg:min-h-[38px] flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5">
-                                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase shrink-0">Mật khẩu cũ:</span>
-                                        <input type={showPassword ? 'text' : 'password'} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="w-full bg-transparent border-none p-0 outline-none text-xs font-bold text-slate-800 dark:text-slate-200" placeholder="Nhập mật khẩu cũ..."/>
-                                    </div>
+                                <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-2">
                                     <div className="min-h-[44px] lg:min-h-[38px] flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5">
                                         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase shrink-0">Mật khẩu mới:</span>
                                         <input type={showPassword ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-transparent border-none p-0 outline-none text-xs font-bold text-slate-800 dark:text-slate-200" placeholder="Ít nhất 6 ký tự (Hoa+thường)"/>
@@ -590,7 +580,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                 <button 
                                     type="button"
                                     onClick={handleChangePassword} 
-                                    disabled={isUpdatingPassword || !currentPassword || !newPassword || !confirmPassword} 
+                                    disabled={isUpdatingPassword || !newPassword || !confirmPassword} 
                                     className="min-h-[44px] lg:min-h-[38px] px-4 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-black text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all shrink-0 flex items-center justify-center gap-1.5 disabled:opacity-50"
                                 >
                                     {isUpdatingPassword ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}

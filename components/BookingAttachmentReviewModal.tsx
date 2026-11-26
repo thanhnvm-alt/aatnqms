@@ -17,12 +17,7 @@ import {
 } from '../src/utils/bookingDocuments.js';
 import { getSignedDownloadUrl } from '../services/apiService.js';
 import { getProxyImageUrl } from '../src/utils.js';
-import {
-  extractGoogleDriveFileId,
-  fetchGoogleDriveImageBlob,
-  isGoogleDriveSignedIn,
-  signInWithGoogleDrive,
-} from '../src/services/googleDriveAuth.js';
+import { extractGoogleDriveFileId } from '../src/services/googleDriveAuth.js';
 import { ProxyImage } from '../src/components/ProxyImage.js';
 import {
   AlertTriangle,
@@ -35,7 +30,6 @@ import {
   FileSpreadsheet,
   FileText,
   Image as ImageIcon,
-  KeyRound,
   Layers,
   Loader2,
   RefreshCw,
@@ -133,8 +127,7 @@ export const BookingAttachmentReviewModal: React.FC<BookingAttachmentReviewModal
   const [rotationDeg, setRotationDeg] = useState(0);
   const [imgError, setImgError] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
-  const [driveBlobUrl, setDriveBlobUrl] = useState<string | null>(null);
-  const [isDriveAuthenticating, setIsDriveAuthenticating] = useState(false);
+  const [imgRetryNonce, setImgRetryNonce] = useState(0);
   const [driveEmbedOverride, setDriveEmbedOverride] = useState(false);
 
   // Local Spreadsheet / Text state
@@ -206,7 +199,7 @@ export const BookingAttachmentReviewModal: React.FC<BookingAttachmentReviewModal
     setZoomPct(100);
     setRotationDeg(0);
     setImgError(false);
-    setDriveBlobUrl(null);
+    setImgRetryNonce(0);
     setCopiedLink(false);
     setSignedPublicUrl(null);
     setSheets([]);
@@ -456,37 +449,9 @@ export const BookingAttachmentReviewModal: React.FC<BookingAttachmentReviewModal
     return counts;
   }, [items]);
 
-  const handleImageError = async () => {
-    if (activeDriveFileId && isGoogleDriveSignedIn() && !driveBlobUrl) {
-      const blob = await fetchGoogleDriveImageBlob(activeDriveFileId);
-      if (blob) {
-        setDriveBlobUrl(blob);
-        setImgError(false);
-        setImgLoading(false);
-        return;
-      }
-    }
+  const handleImageError = () => {
     setImgLoading(false);
     setImgError(true);
-  };
-
-  const handleGoogleDriveSignIn = async () => {
-    if (!activeDriveFileId) return;
-    setIsDriveAuthenticating(true);
-    try {
-      const res = await signInWithGoogleDrive();
-      if (res) {
-        const blob = await fetchGoogleDriveImageBlob(activeDriveFileId);
-        if (blob) {
-          setDriveBlobUrl(blob);
-          setImgError(false);
-        }
-      }
-    } catch {
-      // keep fallback card
-    } finally {
-      setIsDriveAuthenticating(false);
-    }
   };
 
   const handleCopyUrl = async () => {
@@ -509,7 +474,11 @@ export const BookingAttachmentReviewModal: React.FC<BookingAttachmentReviewModal
   const activeExt = getFileExtBadge(activeItem);
   const activeSizeStr = formatFileSize(activeItem.size);
   const isBinaryOrCad = isLikelyBinaryOrCadExt(activeItem);
-  const imageRenderSrc = driveBlobUrl || getProxyImageUrl(activeActionUrl);
+  const baseImageRenderSrc = getProxyImageUrl(activeActionUrl);
+  const imageRenderSrc =
+    imgRetryNonce > 0 && baseImageRenderSrc && !baseImageRenderSrc.startsWith('data:') && !baseImageRenderSrc.startsWith('blob:')
+      ? `${baseImageRenderSrc}${baseImageRenderSrc.includes('?') ? '&' : '?'}_r=${imgRetryNonce}`
+      : baseImageRenderSrc;
   const currentSheet = sheets[activeSheetIdx] || sheets[0] || null;
 
   const renderPlaylistBody = () => (
@@ -937,10 +906,24 @@ export const BookingAttachmentReviewModal: React.FC<BookingAttachmentReviewModal
                       <div className="text-sm font-bold">Không thể nạp trực tiếp hình ảnh</div>
                       <p className="text-xs text-slate-400 leading-relaxed">
                         {activeDriveFileId
-                          ? 'Tệp trên Google Drive có thể là tài liệu đa trang hoặc yêu cầu đăng nhập Google Workspace. Hãy thử chuyển sang bản Drive Preview hoặc tải về.'
-                          : 'Tệp ảnh không phản hồi hoặc định dạng không được trình duyệt hỗ trợ.'}
+                          ? 'Tệp trên Google Drive có thể là tài liệu đa trang hoặc kết nối OAuth Drive của máy chủ đang gián đoạn. Hãy thử tải lại, dùng Drive Preview hoặc tải về.'
+                          : activeItem.url.includes('/api/storage/files/')
+                            ? 'Tệp ảnh lưu trên bộ nhớ tạm cũ có thể đã bị mất (404) hoặc kết nối gián đoạn. Hãy bấm Thử tải lại hoặc tải tệp lên lại.'
+                            : 'Tệp ảnh không phản hồi hoặc định dạng không được trình duyệt hỗ trợ.'}
                       </p>
                       <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImgError(false);
+                            setImgLoading(true);
+                            setImgRetryNonce((n) => n + 1);
+                          }}
+                          className="min-h-[44px] sm:min-h-[36px] px-3.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Thử tải lại</span>
+                        </button>
                         {driveEmbedUrl && (
                           <button
                             type="button"
@@ -949,21 +932,6 @@ export const BookingAttachmentReviewModal: React.FC<BookingAttachmentReviewModal
                           >
                             <FileText className="w-3.5 h-3.5 text-blue-400" />
                             <span>Thử Google Drive Preview</span>
-                          </button>
-                        )}
-                        {activeDriveFileId && !isGoogleDriveSignedIn() && (
-                          <button
-                            type="button"
-                            onClick={handleGoogleDriveSignIn}
-                            disabled={isDriveAuthenticating}
-                            className="min-h-[44px] sm:min-h-[36px] px-3.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                          >
-                            {isDriveAuthenticating ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                            )}
-                            <span>Đăng nhập Google Drive</span>
                           </button>
                         )}
                         <a

@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query } from '../lib/db.js';
-import { assertNoNewBase64DataUri } from './storageService.js';
+import { assertNoNewBase64DataUri, stripTransientMediaUrlParams } from './storageService.js';
 import {
   syncInspectionTraceabilityIndex,
   markTraceabilityIndexDeleted,
@@ -387,16 +387,35 @@ export function verifyJwtToken(authHeader?: string): { id?: string; username?: s
   }
 }
 
+function isDisabledUserStatus(status: any): boolean {
+  const st = String(status || 'ACTIVE').trim().toUpperCase();
+  return st === 'INACTIVE' || st === 'LOCKED' || st === 'ĐÃ NGHỈ VIỆC' || st === 'NGHỈ VIỆC';
+}
+
+function validateNewPasswordPolicy(newPassword: string): string {
+  const pwd = String(newPassword || '');
+  if (!pwd || pwd.length < 6) {
+    throw Object.assign(new Error('Mật khẩu mới phải có tối thiểu 6 ký tự'), { statusCode: 400 });
+  }
+  if (!/[a-z]/.test(pwd) || !/[A-Z]/.test(pwd)) {
+    throw Object.assign(new Error('Mật khẩu mới bắt buộc phải chứa cả ký tự viết hoa (A-Z) và viết thường (a-z)'), { statusCode: 400 });
+  }
+  return pwd;
+}
+
 export async function getAuthenticatedUserContext(userIdOrUsername?: string | null) {
   if (!userIdOrUsername) return null;
+  const key = String(userIdOrUsername).trim();
   const res = await query(
-    `SELECT * FROM ${SCHEMA}.users WHERE deleted_at IS NULL AND (id = $1 OR LOWER(username) = LOWER($1)) LIMIT 1`,
-    [String(userIdOrUsername)]
+    `SELECT * FROM ${SCHEMA}.users
+     WHERE deleted_at IS NULL AND (id = $1 OR LOWER(TRIM(COALESCE(username,''))) = LOWER($1))
+     ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, updated_at DESC NULLS LAST
+     LIMIT 1`,
+    [key]
   );
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
-  const st = String(row.status || 'ACTIVE').toUpperCase();
-  if (st === 'INACTIVE' || st === 'LOCKED') return null;
+  if (isDisabledUserStatus(row.status)) return null;
   const mapped = mapUserRow(row, { stripHeavyMedia: true });
 
   // Nạp quyền từ bảng qms_roles cho cả vai trò (role) và chức vụ (position)
@@ -602,11 +621,23 @@ export async function authenticateUser(
     throw Object.assign(new Error('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu'), { statusCode: 400 });
   }
 
+  // Lấy toàn bộ hồ sơ ứng viên theo thứ tự ưu tiên: username > msnv > email
+  // Tránh trường hợp trùng email/username khiến LIMIT 1 bốc nhầm sang tài khoản khác
   const res = await query(
     `SELECT * FROM ${SCHEMA}.users
      WHERE deleted_at IS NULL
-       AND (LOWER(TRIM(username)) = LOWER($1) OR LOWER(TRIM(COALESCE(email,''))) = LOWER($1) OR LOWER(TRIM(COALESCE(msnv,''))) = LOWER($1))
-     LIMIT 1`,
+       AND (
+         LOWER(TRIM(COALESCE(username,''))) = LOWER($1)
+         OR LOWER(TRIM(COALESCE(msnv,''))) = LOWER($1)
+         OR LOWER(TRIM(COALESCE(email,''))) = LOWER($1)
+       )
+     ORDER BY
+       CASE
+         WHEN LOWER(TRIM(COALESCE(username,''))) = LOWER($1) THEN 0
+         WHEN LOWER(TRIM(COALESCE(msnv,''))) = LOWER($1) THEN 1
+         ELSE 2
+       END,
+       updated_at DESC NULLS LAST`,
     [uname]
   );
 
@@ -614,24 +645,53 @@ export async function authenticateUser(
     throw Object.assign(new Error('Tên đăng nhập hoặc mật khẩu không đúng'), { statusCode: 401 });
   }
 
-  const row = res.rows[0];
-  const storedPw = String(row.password || '');
-  let valid = false;
-  if (storedPw.startsWith('$2a$') || storedPw.startsWith('$2b$') || storedPw.startsWith('$2y$')) {
-    valid = await bcrypt.compare(pwd, storedPw);
-  } else {
-    valid = storedPw === pwd;
+  let matchedRow: any = null;
+  let matchedPlaintext = false;
+  let matchedDisabledRow: any = null;
+
+  for (const candidate of res.rows) {
+    const storedPw = String(candidate.password || '');
+    let valid = false;
+    let isPlaintext = false;
+    if (storedPw.startsWith('$2a$') || storedPw.startsWith('$2b$') || storedPw.startsWith('$2y$')) {
+      valid = await bcrypt.compare(pwd, storedPw);
+    } else if (storedPw !== '') {
+      valid = storedPw === pwd;
+      isPlaintext = valid;
+    }
+
+    if (!valid) continue;
+
+    if (isDisabledUserStatus(candidate.status)) {
+      if (!matchedDisabledRow) matchedDisabledRow = candidate;
+      continue;
+    }
+
+    matchedRow = candidate;
+    matchedPlaintext = isPlaintext;
+    break;
   }
 
-  if (!valid) {
-    throw Object.assign(new Error('Tên đăng nhập hoặc mật khẩu không đúng'), { statusCode: 401 });
-  }
-
-  if (String(row.status || 'ACTIVE').toUpperCase() === 'INACTIVE' || String(row.status || '').toUpperCase() === 'LOCKED') {
+  if (!matchedRow && matchedDisabledRow) {
     throw Object.assign(new Error('Tài khoản đang bị khóa hoặc ngừng hoạt động'), { statusCode: 403 });
   }
 
-  const safeUser = mapUserRow(row);
+  if (!matchedRow) {
+    throw Object.assign(new Error('Tên đăng nhập hoặc mật khẩu không đúng'), { statusCode: 401 });
+  }
+
+  // Tự động chuẩn hóa nâng cấp mật khẩu plaintext (nếu có) sang bcrypt
+  if (matchedPlaintext) {
+    try {
+      const upgradedHash = await bcrypt.hash(pwd, 10);
+      await query(
+        `UPDATE ${SCHEMA}.users SET password = $1, updated_at = $2 WHERE id = $3`,
+        [upgradedHash, Math.floor(Date.now() / 1000), matchedRow.id]
+      );
+    } catch {}
+  }
+
+  const safeUser = mapUserRow(matchedRow);
   const token = jwt.sign(
     { id: safeUser.id, username: safeUser.username, role: safeUser.role, name: safeUser.name },
     JWT_SECRET,
@@ -653,16 +713,8 @@ export async function authenticateUser(
 
 const passwordResetCodes = new Map<string, { code: string; userId: string; expiresAt: number }>();
 
-export async function changeUserPassword(userId: string, currentPassword: string, newPassword: string) {
-  if (!currentPassword || !String(currentPassword).trim()) {
-    throw Object.assign(new Error('Vui lòng nhập mật khẩu hiện tại để xác thực'), { statusCode: 400 });
-  }
-  if (!newPassword || newPassword.length < 6) {
-    throw Object.assign(new Error('Mật khẩu mới phải có tối thiểu 6 ký tự'), { statusCode: 400 });
-  }
-  if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
-    throw Object.assign(new Error('Mật khẩu mới bắt buộc phải chứa cả ký tự viết hoa (A-Z) và viết thường (a-z)'), { statusCode: 400 });
-  }
+export async function changeUserPassword(userId: string, newPassword: string, _currentPassword?: string) {
+  const validNewPw = validateNewPasswordPolicy(newPassword);
 
   const res = await query(`SELECT * FROM ${SCHEMA}.users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`, [userId]);
   if (res.rows.length === 0) {
@@ -670,13 +722,11 @@ export async function changeUserPassword(userId: string, currentPassword: string
   }
 
   const row = res.rows[0];
-  const storedPw = String(row.password || '');
-  const match = storedPw.startsWith('$2') ? await bcrypt.compare(currentPassword, storedPw) : storedPw === currentPassword;
-  if (!match) {
-    throw Object.assign(new Error('Mật khẩu hiện tại không chính xác'), { statusCode: 400 });
+  if (isDisabledUserStatus(row.status)) {
+    throw Object.assign(new Error('Tài khoản đang bị khóa hoặc ngừng hoạt động'), { statusCode: 403 });
   }
 
-  const hashed = await bcrypt.hash(newPassword, 10);
+  const hashed = await bcrypt.hash(validNewPw, 10);
   const nowTs = Math.floor(Date.now() / 1000);
   await query(
     `UPDATE ${SCHEMA}.users SET password = $1, require_password_change = false, updated_at = $2 WHERE id = $3`,
@@ -691,54 +741,132 @@ export async function changeUserPassword(userId: string, currentPassword: string
     action: 'CHANGE_PASSWORD',
     entityType: 'user',
     entityId: userId,
-    newValue: { require_password_change: false },
+    newValue: { require_password_change: false, verification: 'NONE' },
   });
 
   return { success: true, user: safeUser };
 }
 
+export async function resetPasswordDirect(
+  identifierInput: string,
+  newPassword: string,
+  reqMeta?: { ip?: string; userAgent?: string }
+) {
+  const cleanIdentifier = String(identifierInput || '').trim().toLowerCase();
+  if (!cleanIdentifier) {
+    throw Object.assign(new Error('Vui lòng nhập tên đăng nhập hoặc email duy nhất'), { statusCode: 400 });
+  }
+
+  const validNewPw = validateNewPasswordPolicy(newPassword);
+
+  const res = await query(
+    `SELECT id, username, name, email, status
+     FROM ${SCHEMA}.users
+     WHERE deleted_at IS NULL
+       AND (
+         LOWER(TRIM(COALESCE(username,''))) = $1
+         OR LOWER(TRIM(COALESCE(email,''))) = $1
+       )
+     ORDER BY updated_at DESC NULLS LAST`,
+    [cleanIdentifier]
+  );
+
+  if (res.rows.length === 0) {
+    throw Object.assign(
+      new Error('Không tìm thấy tài khoản hoặc email tương ứng trong hệ thống QMS'),
+      { statusCode: 404 }
+    );
+  }
+
+  if (res.rows.length > 1) {
+    const collidingLabels = res.rows
+      .map((r: any) => String(r.username || r.name || r.id))
+      .slice(0, 4)
+      .join(', ');
+    throw Object.assign(
+      new Error(
+        `Tên đăng nhập hoặc email "${identifierInput.trim()}" đang bị trùng trên ${res.rows.length} tài khoản (${collidingLabels}). Chỉ được phép đặt lại mật khẩu khi tài khoản hoặc email là duy nhất — vui lòng liên hệ Quản trị viên chuẩn hóa dữ liệu.`
+      ),
+      { statusCode: 409 }
+    );
+  }
+
+  const target = res.rows[0];
+  if (isDisabledUserStatus(target.status)) {
+    throw Object.assign(
+      new Error('Tài khoản đang bị khóa hoặc đã nghỉ việc, không thể đặt lại mật khẩu'),
+      { statusCode: 403 }
+    );
+  }
+
+  const nowTs = Math.floor(Date.now() / 1000);
+  const hashed = await bcrypt.hash(validNewPw, 10);
+  await query(
+    `UPDATE ${SCHEMA}.users SET password = $1, require_password_change = false, updated_at = $2 WHERE id = $3`,
+    [hashed, nowTs, target.id]
+  );
+
+  passwordResetCodes.delete(cleanIdentifier);
+
+  await writeAuditLog({
+    userId: target.id,
+    action: 'RESET_PASSWORD',
+    entityType: 'user',
+    entityId: target.id,
+    newValue: { identifier: cleanIdentifier, username: target.username, method: 'DIRECT_UNIQUE' },
+    ipAddress: reqMeta?.ip || null,
+    userAgent: reqMeta?.userAgent || null,
+  });
+
+  return { success: true, message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.' };
+}
+
 export async function requestPasswordReset(email: string) {
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanEmail) {
-    throw Object.assign(new Error('Vui lòng nhập địa chỉ email hợp lệ'), { statusCode: 400 });
+    throw Object.assign(new Error('Vui lòng nhập địa chỉ email hoặc tên đăng nhập hợp lệ'), { statusCode: 400 });
   }
 
   const res = await query(
-    `SELECT id, username, name, email FROM ${SCHEMA}.users WHERE LOWER(TRIM(COALESCE(email,''))) = $1 AND deleted_at IS NULL LIMIT 1`,
+    `SELECT id, username, name, email, status FROM ${SCHEMA}.users
+     WHERE deleted_at IS NULL AND (LOWER(TRIM(COALESCE(email,''))) = $1 OR LOWER(TRIM(COALESCE(username,''))) = $1)`,
     [cleanEmail]
   );
   if (res.rows.length === 0) {
-    throw Object.assign(new Error('Không tìm thấy tài khoản với email này trong hệ thống QMS'), { statusCode: 404 });
+    throw Object.assign(new Error('Không tìm thấy tài khoản với thông tin này trong hệ thống QMS'), { statusCode: 404 });
+  }
+  if (res.rows.length > 1) {
+    throw Object.assign(
+      new Error('Tên đăng nhập hoặc email này đang bị trùng trên nhiều tài khoản. Vui lòng liên hệ Quản trị viên để xử lý trùng lặp.'),
+      { statusCode: 409 }
+    );
   }
 
   const user = res.rows[0];
+  if (isDisabledUserStatus(user.status)) {
+    throw Object.assign(new Error('Tài khoản đang bị khóa hoặc đã nghỉ việc'), { statusCode: 403 });
+  }
+
   const code = String(crypto.randomInt(100000, 999999));
   const nowTs = Math.floor(Date.now() / 1000);
-  const expiresAt = nowTs + 15 * 60; // 15 phút
+  const expiresAt = nowTs + 15 * 60;
 
-  // Lưu mã OTP vào bảng PostgreSQL password_resets
   try {
-    // Vô hiệu hóa các mã OTP trước đó của email này
     await query(
       `UPDATE ${SCHEMA}.password_resets SET used_at = $1 WHERE email = $2 AND used_at IS NULL`,
       [nowTs, cleanEmail]
     );
-
-    // Ghi mã mới
     await query(
       `INSERT INTO ${SCHEMA}.password_resets (id, email, code, expires_at, created_at)
        VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
       [cleanEmail, code, expiresAt, nowTs]
     );
   } catch (dbErr: any) {
-    console.warn('[requestPasswordReset] DB persist error, falling back to memory map:', dbErr?.message);
+    console.warn('[requestPasswordReset] DB persist error:', dbErr?.message);
   }
 
-  // Dự phòng trong bộ nhớ
   passwordResetCodes.set(cleanEmail, { code, userId: user.id, expiresAt: Date.now() + 15 * 60 * 1000 });
-
-  // Gửi email qua SMTP
-  const emailRes = await sendPasswordResetEmail(cleanEmail, user.name || user.username, code);
+  const emailRes = await sendPasswordResetEmail(user.email || cleanEmail, user.name || user.username, code);
 
   await writeAuditLog({
     userId: user.id,
@@ -755,92 +883,11 @@ export async function requestPasswordReset(email: string) {
     );
   }
 
-  const msg = emailRes.sent
-    ? `Mã xác thực đã được gửi tới email ${cleanEmail}. Vui lòng kiểm tra hòm thư của bạn.`
-    : `Mã xác thực đã được khởi tạo thành công (máy chủ chưa cấu hình SMTP gửi mail tự động). Vui lòng liên hệ Quản trị viên để nhận mã hoặc cấu hình SMTP.`;
-
-  return { success: true, message: msg, sent: emailRes.sent };
+  return { success: true, message: 'Hệ thống hỗ trợ đặt lại mật khẩu trực tiếp theo tên đăng nhập hoặc email duy nhất.', sent: emailRes.sent };
 }
 
-export async function confirmPasswordReset(email: string, code: string, newPassword: string) {
-  const cleanEmail = String(email || '').trim().toLowerCase();
-  const cleanCode = String(code || '').trim();
-
-  if (!cleanEmail || !cleanCode) {
-    throw Object.assign(new Error('Vui lòng cung cấp email và mã xác thực'), { statusCode: 400 });
-  }
-
-  if (!newPassword || newPassword.length < 6) {
-    throw Object.assign(new Error('Mật khẩu mới phải có tối thiểu 6 ký tự'), { statusCode: 400 });
-  }
-
-  if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword)) {
-    throw Object.assign(new Error('Mật khẩu mới bắt buộc phải chứa cả ký tự viết hoa (A-Z) và viết thường (a-z)'), { statusCode: 400 });
-  }
-
-  const nowTs = Math.floor(Date.now() / 1000);
-  let isValid = false;
-
-  // 1. Kiểm tra đối chiếu trong bảng PostgreSQL password_resets
-  try {
-    const prRes = await query(
-      `SELECT * FROM ${SCHEMA}.password_resets 
-       WHERE email = $1 AND code = $2 AND used_at IS NULL AND expires_at > $3 
-       ORDER BY created_at DESC LIMIT 1`,
-      [cleanEmail, cleanCode, nowTs]
-    );
-
-    if (prRes.rows.length > 0) {
-      isValid = true;
-      const record = prRes.rows[0];
-      await query(
-        `UPDATE ${SCHEMA}.password_resets SET used_at = $1 WHERE id = $2`,
-        [nowTs, record.id]
-      );
-    }
-  } catch (dbErr: any) {
-    console.warn('[confirmPasswordReset] DB check warning, falling back to memory map:', dbErr?.message);
-  }
-
-  // 2. Dự phòng trong memory map nếu bảng DB chưa khớp
-  if (!isValid) {
-    const memRecord = passwordResetCodes.get(cleanEmail);
-    if (memRecord && memRecord.code === cleanCode && Date.now() <= memRecord.expiresAt) {
-      isValid = true;
-      passwordResetCodes.delete(cleanEmail);
-    }
-  }
-
-  if (!isValid) {
-    throw Object.assign(new Error('Mã xác thực không hợp lệ hoặc đã hết hạn (hiệu lực 15 phút)'), { statusCode: 400 });
-  }
-
-  const userRes = await query(
-    `SELECT id, username FROM ${SCHEMA}.users WHERE LOWER(TRIM(COALESCE(email,''))) = $1 AND deleted_at IS NULL LIMIT 1`,
-    [cleanEmail]
-  );
-  if (userRes.rows.length === 0) {
-    throw Object.assign(new Error('Không tìm thấy tài khoản người dùng tương ứng với email này'), { statusCode: 404 });
-  }
-  const userId = userRes.rows[0].id;
-
-  const hashed = await bcrypt.hash(newPassword, 10);
-  await query(
-    `UPDATE ${SCHEMA}.users SET password = $1, require_password_change = false, updated_at = $2 WHERE id = $3`,
-    [hashed, nowTs, userId]
-  );
-
-  passwordResetCodes.delete(cleanEmail);
-
-  await writeAuditLog({
-    userId,
-    action: 'RESET_PASSWORD',
-    entityType: 'user',
-    entityId: userId,
-    newValue: { email: cleanEmail, method: 'OTP' },
-  });
-
-  return { success: true, message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.' };
+export async function confirmPasswordReset(email: string, _code: string, newPassword: string, reqMeta?: { ip?: string; userAgent?: string }) {
+  return resetPasswordDirect(email, newPassword, reqMeta);
 }
 
 export async function getUsersList(options?: { includeMedia?: boolean }) {
@@ -877,6 +924,7 @@ export async function upsertUserRecord(payload: any, actorId?: string | null) {
     }
   }
 
+  payload = stripTransientMediaUrlParams(payload);
   assertNoNewBase64DataUri(
     {
       avatar: payload.avatar,
@@ -924,7 +972,7 @@ export async function upsertUserRecord(payload: any, actorId?: string | null) {
   };
   delete mergedData.password;
 
-  const username = payload.username ?? existing?.username ?? id;
+  const username = String(payload.username ?? existing?.username ?? id).trim();
   const name = payload.name ?? existing?.name ?? username;
   const role = payload.role ?? existing?.role ?? 'QC';
   const avatar = resolvedAvatar;
@@ -934,7 +982,39 @@ export async function upsertUserRecord(payload: any, actorId?: string | null) {
   const joinDate = payload.joinDate ?? payload.join_date ?? existing?.join_date ?? '';
   const education = payload.education ?? existing?.education ?? '';
   const notes = payload.notes ?? existing?.notes ?? '';
-  const email = payload.email ?? existing?.email ?? '';
+  const email = String(payload.email ?? existing?.email ?? '').trim();
+
+  // Kiểm tra trùng lặp username / email với các hồ sơ đang hoạt động khác (chống phát sinh tài khoản trùng)
+  const existingUsernameNorm = String(existing?.username || '').trim().toLowerCase();
+  const existingEmailNorm = String(existing?.email || '').trim().toLowerCase();
+  if (username && (!existing || username.toLowerCase() !== existingUsernameNorm)) {
+    const dupU = await query(
+      `SELECT id, username, name FROM ${SCHEMA}.users
+       WHERE deleted_at IS NULL AND id <> $1 AND LOWER(TRIM(COALESCE(username,''))) = LOWER($2)
+       LIMIT 1`,
+      [id, username]
+    );
+    if (dupU.rows.length > 0) {
+      throw Object.assign(
+        new Error(`Tên đăng nhập "${username}" đã tồn tại trên tài khoản ${dupU.rows[0].name || dupU.rows[0].username}. Vui lòng chọn tên đăng nhập duy nhất.`),
+        { statusCode: 409 }
+      );
+    }
+  }
+  if (email && (!existing || email.toLowerCase() !== existingEmailNorm)) {
+    const dupE = await query(
+      `SELECT id, username, name FROM ${SCHEMA}.users
+       WHERE deleted_at IS NULL AND id <> $1 AND LOWER(TRIM(COALESCE(email,''))) = LOWER($2)
+       LIMIT 1`,
+      [id, email]
+    );
+    if (dupE.rows.length > 0) {
+      throw Object.assign(
+        new Error(`Email "${email}" đã được gán cho tài khoản ${dupE.rows[0].username || dupE.rows[0].name}. Vui lòng sử dụng email duy nhất cho mỗi nhân sự.`),
+        { statusCode: 409 }
+      );
+    }
+  }
   const status = payload.status ?? existing?.status ?? 'ACTIVE';
   const phongBan = payload.phong_ban ?? payload.phongBan ?? existing?.phong_ban ?? '';
   const boPhan = payload.bo_phan ?? payload.boPhan ?? existing?.bo_phan ?? '';
@@ -1288,6 +1368,7 @@ export async function saveWorkshopRecord(ws: any, actorId?: string | null) {
     ? (await query(`SELECT data, data_json FROM ${SCHEMA}.workshops WHERE id = $1 LIMIT 1`, [id])).rows[0]
     : null;
   const existingPayload = existingWs ? { ...safeJsonParse(existingWs.data, {}), ...safeJsonParse(existingWs.data_json, {}) } : undefined;
+  ws = stripTransientMediaUrlParams(ws);
   assertNoNewBase64DataUri(ws, existingPayload, 'Xưởng sản xuất');
 
   const payload = { ...ws, id, code: cleanCode, name: cleanName };
@@ -1456,7 +1537,8 @@ export async function getProjectByCode(code: string) {
   return mapProjectRow(res.rows[0]);
 }
 
-export async function updateProjectRecord(idOrCode: string, payload: any, actorId?: string | null) {
+export async function updateProjectRecord(idOrCode: string, rawPayload: any, actorId?: string | null) {
+  const payload = stripTransientMediaUrlParams(rawPayload);
   const nowTs = Math.floor(Date.now() / 1000);
   const existingRes = await query(
     `SELECT * FROM ${SCHEMA}.projects WHERE deleted_at IS NULL AND (id = $1 OR ma_ct = $1) LIMIT 1`,
@@ -1554,6 +1636,7 @@ export async function getProjectDocuments(projectId: string) {
 export async function saveProjectDocument(doc: any, actorId?: string | null) {
   const nowTs = Math.floor(Date.now() / 1000);
   const id = doc.id || crypto.randomUUID();
+  doc = stripTransientMediaUrlParams(doc);
   assertNoNewBase64DataUri(doc, undefined, 'Tài liệu dự án');
   const fileUrl = doc.fileUrl || doc.file_url || doc.url || '';
   const name = doc.name || doc.title || 'Tài liệu dự án';
@@ -1621,6 +1704,7 @@ export async function saveFloorPlan(plan: any, actorId?: string | null) {
   const existingRes = plan.id
     ? await query(`SELECT image_url FROM ${SCHEMA}.floor_plans WHERE id = $1 LIMIT 1`, [id])
     : { rows: [] as any[] };
+  plan = stripTransientMediaUrlParams(plan);
   assertNoNewBase64DataUri(plan, existingRes.rows[0] || undefined, 'Mặt bằng dự án');
 
   const imgUrl = plan.image_url || plan.imageUrl || '';
@@ -1739,7 +1823,8 @@ const ALLOWED_INSPECTION_TRANSITIONS: Record<CanonicalInspectionState, Canonical
   LOCKED: [],
 };
 
-export async function upsertInspectionRecord(payload: any, actorId?: string | null, actorUser?: any) {
+export async function upsertInspectionRecord(rawPayload: any, actorId?: string | null, actorUser?: any) {
+  const payload = stripTransientMediaUrlParams(rawPayload);
   const nowTs = Math.floor(Date.now() / 1000);
   const typeUpper = String(payload.type || 'PQC').toUpperCase();
   const id = payload.id || crypto.randomUUID();
@@ -1915,7 +2000,19 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
 
   // 1. Upsert into corresponding forms_* table dynamically matching exact table columns
   const cols = await getTableColumns(tableName);
-  const fullData = { ...payload, id, type: typeUpper, status: statusVal, version: nextVersion, updated_at: nowTs };
+  const resolvedStage = String(payload.stage || payload.inspectionStage || '').trim();
+  const resolvedSubStage = String(payload.subStage || payload.sub_stage || '').trim();
+  const fullData = {
+    ...payload,
+    id,
+    type: typeUpper,
+    stage: resolvedStage,
+    ...(payload.inspectionStage || resolvedStage ? { inspectionStage: payload.inspectionStage || resolvedStage } : {}),
+    subStage: resolvedSubStage,
+    status: statusVal,
+    version: nextVersion,
+    updated_at: nowTs,
+  };
   const candidateValues: Record<string, any> = {
     id,
     type: typeUpper,
@@ -1935,8 +2032,8 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
     score: payload.score !== undefined ? Number(payload.score) : null,
     summary: payload.summary || '',
     headcode: payload.headcode || '',
-    stage: payload.stage || '',
-    sub_stage: payload.subStage || payload.sub_stage || '',
+    stage: resolvedStage,
+    sub_stage: resolvedSubStage,
     dvt: payload.dvt || '',
     so_luong_ipo: payload.so_luong_ipo ?? null,
     inspected_qty: payload.inspectedQuantity ?? null,
@@ -2010,8 +2107,8 @@ export async function upsertInspectionRecord(payload: any, actorId?: string | nu
     typeUpper,
     payload.score !== undefined ? Number(payload.score) : null,
     payload.headcode || '',
-    payload.stage || '',
-    payload.subStage || payload.sub_stage || '',
+    resolvedStage,
+    resolvedSubStage,
     payload.inspectedQuantity ?? null,
     payload.passedQuantity ?? null,
     payload.failedQuantity ?? null,
@@ -2599,6 +2696,7 @@ export async function getDefectLibraryList() {
 export async function saveDefectLibraryRecord(item: any, actorId?: string | null) {
   const nowTs = Math.floor(Date.now() / 1000);
   const id = item.id || crypto.randomUUID();
+  item = stripTransientMediaUrlParams(item);
   assertNoNewBase64DataUri(item, undefined, 'Thư viện lỗi');
   const code = item.code || item.defect_code || id;
   const name = item.name || item.defect_name || '';
@@ -2799,6 +2897,7 @@ export async function saveIpoDetailExtendedRecord(detail: any, actorId?: string 
 export async function saveIpoDrawingRecord(drawing: any, actorId?: string | null) {
   const id = crypto.randomUUID();
   const nowTs = Math.floor(Date.now() / 1000);
+  drawing = stripTransientMediaUrlParams(drawing);
   assertNoNewBase64DataUri(drawing, undefined, 'Bản vẽ IPO');
   await query(
     `INSERT INTO ${SCHEMA}.ipo_drawing_list (id, id_factory_order, drawing_name, version, file_url, revision_notes, page_count, created_at, created_by, data)
@@ -2823,6 +2922,7 @@ export async function saveIpoDrawingRecord(drawing: any, actorId?: string | null
 export async function saveIpoMaterialHistoryRecord(mat: any, actorId?: string | null) {
   const id = crypto.randomUUID();
   const nowTs = Math.floor(Date.now() / 1000);
+  mat = stripTransientMediaUrlParams(mat);
   assertNoNewBase64DataUri(mat, undefined, 'Lịch sử vật liệu IPO');
   await query(
     `INSERT INTO ${SCHEMA}.ipo_material_history (id, id_factory_order, material_name, specification, version, drawing_ref, created_at, created_by, data, file_url)
@@ -2847,6 +2947,7 @@ export async function saveIpoMaterialHistoryRecord(mat: any, actorId?: string | 
 export async function saveIpoSampleHistoryRecord(sample: any, actorId?: string | null) {
   const id = crypto.randomUUID();
   const nowTs = Math.floor(Date.now() / 1000);
+  sample = stripTransientMediaUrlParams(sample);
   assertNoNewBase64DataUri(sample, undefined, 'Mẫu IPO');
   await query(
     `INSERT INTO ${SCHEMA}.ipo_sample_history (id, id_factory_order, sample_name, status, version, file_url, created_at, created_by, deleted_at, data)
@@ -2868,6 +2969,7 @@ export async function saveIpoSampleHistoryRecord(sample: any, actorId?: string |
 }
 
 export async function updateIpoSampleHistoryRecord(id: string, sample: any, actorId?: string | null) {
+  sample = stripTransientMediaUrlParams(sample);
   assertNoNewBase64DataUri(sample, undefined, 'Mẫu IPO');
   await query(
     `UPDATE ${SCHEMA}.ipo_sample_history SET sample_name=$1, status=$2, version=$3, file_url=$4, data=$5 WHERE id=$6 AND deleted_at IS NULL`,

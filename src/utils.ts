@@ -31,20 +31,39 @@ export const getProxyImageUrl = (url: any): string => {
 
   // Signed Storage URLs or JWT-authenticated internal storage assets
   if (normalizedUrl.startsWith('/api/storage/files/') || normalizedUrl.includes('/api/storage/files/')) {
-    if (normalizedUrl.includes('sig=') || normalizedUrl.includes('token=')) {
-      return normalizedUrl;
+    const qIdx = normalizedUrl.indexOf('?');
+    const base = qIdx === -1 ? normalizedUrl : normalizedUrl.slice(0, qIdx);
+    const params = new URLSearchParams(qIdx === -1 ? '' : normalizedUrl.slice(qIdx + 1));
+    const sig = params.get('sig');
+    const expRaw = params.get('expires');
+    const expNum = expRaw ? Number(expRaw) : 0;
+    const isSigExpired = !sig || !expNum || !Number.isFinite(expNum) || (expNum * 1000 <= Date.now());
+    if (isSigExpired) {
+      params.delete('sig');
+      params.delete('expires');
     }
-    if (token) {
-      return normalizedUrl.includes('?')
-        ? `${normalizedUrl}&token=${encodeURIComponent(token)}`
-        : `${normalizedUrl}?token=${encodeURIComponent(token)}`;
+    if (token && !params.has('token')) {
+      params.set('token', token);
     }
-    return normalizedUrl;
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
   }
 
   // If already routed via /api/media/image/:id or legacy media paths
-  if (normalizedUrl.includes('/display-image/') || normalizedUrl.includes('/api/image/') || normalizedUrl.includes('/api/media/image/') || normalizedUrl.includes('/media/stream/')) {
-    return normalizedUrl;
+  if (
+    normalizedUrl.includes('/display-image/') ||
+    normalizedUrl.includes('/api/image/') ||
+    normalizedUrl.includes('/api/media/image/') ||
+    normalizedUrl.includes('/media/stream/')
+  ) {
+    const qIdx = normalizedUrl.indexOf('?');
+    if (qIdx === -1) return normalizedUrl;
+    const base = normalizedUrl.slice(0, qIdx);
+    const params = new URLSearchParams(normalizedUrl.slice(qIdx + 1));
+    params.delete('google_token');
+    params.delete('token');
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
   }
 
   // If already routed via our proxy endpoint, normalize

@@ -13,13 +13,13 @@ import {
   Calendar, UserCheck, Eye, ChevronRight, Activity, ShieldCheck, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { generateNCRSuggestions } from '../services/geminiService';
-import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, fetchPlans, saveDefectLibraryItem } from '../services/apiService';
+import { fetchIpoByFactoryOrder, fetchDefectLibrary, saveNcrMapped, fetchInspectionById, uploadQMSImage, uploadQMSImagesBatch, preprocessInspectionPayloadForStorage, fetchPlans, saveDefectLibraryItem } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 import { PersistenceService } from '../services/persistenceService';
 
 import { SignaturePad } from './SignaturePad';
-import { Combobox } from '../src/components/qms';
+import { Combobox, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
 
 const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionStage }: { isOpen: boolean; onClose: () => void; onSave: (ncr: NCR) => void; initialData?: NCR; itemName: string; inspectionStage?: string; }) => {
     const [ncrData, setNcrData] = useState<Partial<NCR>>({ severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
@@ -47,9 +47,11 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const [uploadTarget, setUploadTarget] = useState<'BEFORE' | 'AFTER'>('BEFORE');
     const [editorState, setEditorState] = useState<{ images: string[]; index: number; type: 'BEFORE' | 'AFTER' } | null>(null);
+    const [modalAlert, setModalAlert] = useState<FormAlertState | null>(null);
 
     useEffect(() => {
         if (isOpen) {
+            setModalAlert(null);
             setNcrData(initialData || { severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
             fetchDefectLibrary().then(setLibrary);
             if (initialData?.defect_code) {
@@ -76,30 +78,32 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
-        
-        setIsAiLoading(true); // Reuse AI loading state or add a new one
+
+        setModalAlert(null);
+        setIsAiLoading(true);
         try {
-            const uploadedUrls = await Promise.all(
-                Array.from(files).map(async (file: File) => {
-                    return new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = async () => {
-                            try {
-                                const url = await uploadQMSImage(file, { entityId: ncrData.id || 'new', type: 'NCR', role: uploadTarget }); resolve(url);
-                            } catch(e) { reject(e); }
-                        };
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-                })
-            );
-            
-            setNcrData(prev => {
-                const field = uploadTarget === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-                return { ...prev, [field]: [...(prev[field] as string[] || []), ...uploadedUrls] };
+            const result = await uploadQMSImagesBatch(files, {
+                entityId: ncrData.id || 'new',
+                type: 'NCR',
+                role: uploadTarget
             });
-        } catch (err) {
-            alert("Lỗi tải ảnh lên.");
+
+            if (result.uploadedUrls.length > 0) {
+                setNcrData(prev => {
+                    const field = uploadTarget === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+                    return { ...prev, [field]: [...(prev[field] as string[] || []), ...result.uploadedUrls] };
+                });
+            }
+
+            if (result.failed.length > 0) {
+                setModalAlert({
+                    type: result.uploadedUrls.length > 0 ? 'warning' : 'error',
+                    title: result.uploadedUrls.length > 0 ? 'Một số ảnh tải lên thất bại' : 'Lỗi tải ảnh lên Google Drive',
+                    message: result.failed.map(f => `${f.name}: ${f.error}`).join('\n')
+                });
+            }
+        } catch (err: any) {
+            setModalAlert({ type: 'error', title: 'Lỗi tải ảnh', message: extractFormErrorMessage(err, 'Không thể tải ảnh lên Google Drive.') });
         } finally {
             setIsAiLoading(false);
             e.target.value = '';
@@ -108,18 +112,22 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
 
     const handleAiAnalysis = async () => {
         if (!ncrData.issueDescription) return;
+        setModalAlert(null);
         setIsAiLoading(true);
         try {
             const result = await generateNCRSuggestions(ncrData.issueDescription, itemName);
             setNcrData(prev => ({ ...prev, rootCause: result.rootCause, solution: result.solution }));
-        } catch (e) { alert("Lỗi phân tích AI."); } finally { setIsAiLoading(false); }
+        } catch (e: any) {
+            setModalAlert({ type: 'error', title: 'Lỗi phân tích AI', message: extractFormErrorMessage(e, 'Không thể kết nối AI phân tích lúc này.') });
+        } finally { setIsAiLoading(false); }
     };
 
     const handleViewImage = (images: string[], index: number, type: 'BEFORE' | 'AFTER') => { setEditorState({ images, index, type }); };
-    
+
     const handleFinalSave = async () => {
+        setModalAlert(null);
         let currentNcrData = { ...ncrData };
-        
+
         if (saveToLibrary && !currentNcrData.defect_code) {
             try {
                 const libCode = `DEF-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -135,25 +143,40 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                 };
                 await saveDefectLibraryItem(newItem);
                 currentNcrData.defect_code = libCode;
-                alert("Đã lưu lỗi vào thư viện chuẩn.");
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Lỗi khi lưu vào thư viện:", e);
-                alert("Lỗi khi lưu thông tin lỗi vào thư viện.");
+                setModalAlert({ type: 'warning', title: 'Thư viện lỗi', message: extractFormErrorMessage(e, 'Không thể lưu lỗi mới vào thư viện chuẩn, tiếp tục lưu vào phiếu.') });
             }
         }
-        
+
         onSave(currentNcrData as NCR);
     };
 
-    const handleImageSave = (index: number, newImage: string) => {
+    const handleImageSave = async (index: number, newImage: string) => {
         if (!editorState) return;
         const { type } = editorState;
-        setNcrData(prev => {
-            const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
-            const list = [...(prev[field] || [])];
-            list[index] = newImage;
-            return { ...prev, [field]: list };
-        });
+        setModalAlert(null);
+        setIsAiLoading(true);
+        try {
+            const res = await fetch(newImage);
+            const blob = await res.blob();
+            const file = new File([blob], `edited_ncr_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const uploadedUrl = await uploadQMSImage(file, {
+                entityId: ncrData.id || 'new',
+                type: 'NCR',
+                role: type
+            });
+            setNcrData(prev => {
+                const field = type === 'BEFORE' ? 'imagesBefore' : 'imagesAfter';
+                const list = [...(prev[field] || [])];
+                list[index] = uploadedUrl;
+                return { ...prev, [field]: list };
+            });
+        } catch (err: any) {
+            setModalAlert({ type: 'error', title: 'Lỗi lưu ảnh chỉnh sửa', message: extractFormErrorMessage(err, 'Không thể tải ảnh chỉnh sửa lên Google Drive.') });
+        } finally {
+            setIsAiLoading(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -165,6 +188,7 @@ const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionSt
                     <button type="button" onClick={onClose} className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -my-1.5 sm:-my-0.5 -mr-1.5 shrink-0 flex items-center justify-center hover:bg-red-100 dark:hover:bg-red-900/40 rounded-full transition-colors" aria-label="Đóng"><X className="w-4 h-4 text-slate-500 dark:text-slate-400"/></button>
                 </div>
                 <div className="p-3.5 sm:p-5 space-y-3 overflow-y-auto flex-1 min-h-0 no-scrollbar bg-slate-50 dark:bg-slate-800/30">
+                    <FormAlertBanner alert={modalAlert} onClose={() => setModalAlert(null)} />
                     <div className="border border-blue-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
                         <button onClick={() => setShowLibrary(!showLibrary)} className="w-full min-h-[44px] lg:min-h-[38px] px-3 py-2 flex justify-between items-center text-blue-700 dark:text-blue-300 font-bold bg-blue-50 dark:bg-slate-800/50 text-xs" type="button">
                             <span className="flex items-center gap-2"><BookOpen className="w-4 h-4"/> Chọn lỗi từ thư viện chuẩn</span>
@@ -359,6 +383,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
 
   const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const [formAlert, setFormAlert] = useState<FormAlertState | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -519,7 +544,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
               if (isNaN(parsedVal)) parsedVal = 0;
               const ipo = parseFloat(String(next.so_luong_ipo || 0));
               
-              if (parsedVal > ipo) {
+              if (ipo > 0 && parsedVal > ipo) {
                   next.inspectedQuantity = ipo;
                   next.passedQuantity = ipo;
                   next.failedQuantity = 0;
@@ -594,96 +619,115 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleSubmit = async () => {
+    setFormAlert(null);
     const ins = Number(formData.inspectedQuantity || 0);
     const ipo = Number(formData.so_luong_ipo || 0);
 
-    if (!formData.workshop || !formData.inspectionStage) { alert("Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra."); return; }
-    
-    if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
-    if (ins > ipo) { alert("Số lượng kiểm tra không được vượt quá số lượng IPO."); return; }
+    if (!formData.workshop || !formData.inspectionStage) {
+        setFormAlert({ type: 'warning', title: 'Thiếu thông tin', message: 'Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra.' });
+        return;
+    }
+
+    if (ins <= 0) {
+        setFormAlert({ type: 'warning', title: 'Số lượng chưa hợp lệ', message: 'Số lượng kiểm tra phải lớn hơn 0.' });
+        return;
+    }
+    if (ipo > 0 && ins > ipo) {
+        setFormAlert({ type: 'warning', title: 'Vượt số lượng IPO', message: 'Số lượng kiểm tra không được vượt quá số lượng IPO.' });
+        return;
+    }
 
     const pas = Number(formData.passedQuantity || 0);
     const fai = Number(formData.failedQuantity || 0);
     if (pas + fai !== ins) {
-        alert("Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.");
+        setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: 'Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.' });
         return;
     }
 
     setIsSaving(true);
     setUploadProgress(0);
     try {
-        const entityId = formData.id || 'new';
         const foCode = formData.ma_nha_may || formData.headcode || searchCode || '';
-        const finalForm = {
-            ...formData,
+        const itemsToSave = (formData.items || []).filter((it: any) => it.stage === formData.inspectionStage || !it.stage);
+        const workingDraft: Inspection = {
+            ...JSON.parse(JSON.stringify(formData)),
             ma_ct: formData.ma_ct || foCode,
             ma_nha_may: formData.ma_nha_may || foCode,
-            headcode: formData.headcode || foCode
+            headcode: formData.headcode || foCode,
+            stage: formData.stage || formData.inspectionStage || '',
+            items: itemsToSave,
+            status: InspectionStatus.SUBMITTED,
+            inspectorName: user.name,
+            updatedAt: new Date().toISOString()
         };
-            const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
-            const finalStatus = InspectionStatus.SUBMITTED;
 
-            await onSave({ ...finalForm, 
-                items: itemsToSave,
-                status: finalStatus, 
-                inspectorName: user.name, 
-                updatedAt: new Date().toISOString() 
-            } as Inspection);
-            
-            clearDraft();
-            
+        const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
+            setUploadProgress(pct);
+        });
+        setFormData(preparedInspection);
 
-    } catch (e: any) { 
+        await onSave(preparedInspection);
+        clearDraft();
+    } catch (e: any) {
         console.error("ISO-SAVE: Error uploading images or saving", e);
-        // If it's a JSON string of error info (our FirestoreError format), try to parse it
-        let message = e.message;
-        try {
-            const parsed = JSON.parse(e.message);
-            if (parsed.error) message = parsed.error;
-        } catch {}
-        alert(`Lỗi lưu báo cáo: ${message || "Không xác định"}`); 
-    } finally { 
-        setIsSaving(false); 
+        if (e?.partialPayload) {
+            setFormData(e.partialPayload);
+        }
+        setFormAlert({
+            type: 'error',
+            title: 'Lỗi lưu báo cáo PQC',
+            message: extractFormErrorMessage(e)
+        });
+    } finally {
+        setIsSaving(false);
     }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadId) return;
+    setFormAlert(null);
     setIsProcessingImages(true);
     setImageUploadProgress(0);
     try {
-        const uploadedUrls = await Promise.all(
-            Array.from(files).map(async (file: File) => {
-                return await uploadQMSImage(file, { 
-                    entityId: formData.id || 'new', 
-                    type: 'INSPECTION', 
-                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
-                }, undefined, undefined, (percent) => {
-                    setImageUploadProgress(percent);
-                });
-            })
-        );
-        
-        if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
-        } else {
-            setFormData(prev => ({ 
-                ...prev, 
-                items: prev.items?.map(i => 
-                    i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
-                        : i
-                ) 
-            }));
+        const result = await uploadQMSImagesBatch(files, {
+            entityId: formData.id || 'new',
+            ma_ct: formData.ma_ct,
+            type: 'INSPECTION',
+            role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM'
+        }, (percent) => {
+            setImageUploadProgress(percent);
+        });
+
+        if (result.uploadedUrls.length > 0) {
+            if (activeUploadId === 'MAIN') {
+                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...result.uploadedUrls] }));
+            } else {
+                setFormData(prev => ({
+                    ...prev,
+                    items: prev.items?.map(i =>
+                        i.id === activeUploadId
+                            ? { ...i, images: [...(i.images || []), ...result.uploadedUrls] }
+                            : i
+                    )
+                }));
+            }
         }
-    } catch (err) { 
-        console.error("ISO-UPLOAD: Failed", err); 
-        alert("Lỗi tải ảnh lên.");
-    } finally { 
-        setIsProcessingImages(false); 
+
+        if (result.failed.length > 0) {
+            setFormAlert({
+                type: result.uploadedUrls.length > 0 ? 'warning' : 'error',
+                title: result.uploadedUrls.length > 0 ? 'Một số ảnh tải lên thất bại' : 'Lỗi tải ảnh lên Google Drive',
+                message: result.failed.map(f => `${f.name}: ${f.error}`).join('\n')
+            });
+        }
+    } catch (err: any) {
+        console.error("ISO-UPLOAD: Failed", err);
+        setFormAlert({ type: 'error', title: 'Lỗi tải ảnh', message: extractFormErrorMessage(err, 'Không thể tải ảnh lên Google Drive.') });
+    } finally {
+        setIsProcessingImages(false);
         setImageUploadProgress(null);
-        e.target.value = ''; 
+        e.target.value = '';
     }
   };
 
@@ -691,42 +735,41 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   const onImageSave = async (idx: number, updatedImg: string) => {
       if (!editorState) return;
       const { type, itemId } = editorState.context;
+      setFormAlert(null);
       setIsProcessingImages(true);
       setImageUploadProgress(0);
       try {
-          // Convert base64 to File
           const res = await fetch(updatedImg);
           const blob = await res.blob();
           const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
-          
-          // Upload immediately
-          const uploadedUrl = await uploadQMSImage(file, { 
-              entityId: formData.id || 'new', 
-              type: 'INSPECTION', 
-              role: type === 'MAIN' ? 'MAIN' : 'ITEM' 
+
+          const uploadedUrl = await uploadQMSImage(file, {
+              entityId: formData.id || 'new',
+              ma_ct: formData.ma_ct,
+              type: 'INSPECTION',
+              role: type === 'MAIN' ? 'MAIN' : 'ITEM'
           }, undefined, undefined, (percent) => {
               setImageUploadProgress(percent);
           });
 
-          if (type === 'MAIN') { 
-              setFormData(prev => { 
-                  const newImgs = [...(prev.images || [])]; 
-                  newImgs[idx] = uploadedUrl; 
-                  return { ...prev, images: newImgs }; 
-              }); 
+          if (type === 'MAIN') {
+              setFormData(prev => {
+                  const newImgs = [...(prev.images || [])];
+                  newImgs[idx] = uploadedUrl;
+                  return { ...prev, images: newImgs };
+              });
+          } else if (type === 'ITEM' && itemId) {
+              setFormData(prev => ({
+                  ...prev,
+                  items: prev.items?.map(i => i.id === itemId
+                      ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) }
+                      : i)
+              }));
           }
-          else if (type === 'ITEM' && itemId) { 
-              setFormData(prev => ({ 
-                  ...prev, 
-                  items: prev.items?.map(i => i.id === itemId 
-                      ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) } 
-                      : i) 
-              })); 
-          }
-      } catch (err) { 
-          alert("Lỗi lưu ảnh chỉnh sửa."); 
-      } finally { 
-          setIsProcessingImages(false); 
+      } catch (err: any) {
+          setFormAlert({ type: 'error', title: 'Lỗi lưu ảnh chỉnh sửa', message: extractFormErrorMessage(err, 'Không thể tải ảnh chỉnh sửa lên Google Drive.') });
+      } finally {
+          setIsProcessingImages(false);
           setImageUploadProgress(null);
       }
   };
@@ -797,6 +840,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       )}
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 dark:bg-slate-800/50 pb-28">
+        <FormAlertBanner alert={formAlert} onClose={() => setFormAlert(null)} />
         
         <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <div className="flex justify-between items-center border-b border-blue-50 dark:border-slate-800 pb-2 mb-1 gap-2">

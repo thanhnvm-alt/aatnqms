@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Database, KeyRound, Mail, ArrowLeft, ShieldCheck } from 'lucide-react';
-import { verifyUserCredentials, changePassword, forgotPassword, resetPassword } from '../services/apiService';
+import { Lock, User as UserIcon, Loader2, Info, Eye, EyeOff, CheckSquare, Database, KeyRound, ShieldCheck, Check } from 'lucide-react';
+import { verifyUserCredentials, changePassword, resetPassword } from '../services/apiService';
 import { getProxyImageUrl } from '../src/utils';
 
 interface LoginPageProps {
@@ -23,20 +23,26 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
   const [tempLoggedInUser, setTempLoggedInUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showForceNewPw, setShowForceNewPw] = useState(false);
+  const [showForceConfirmPw, setShowForceConfirmPw] = useState(false);
   const [changeError, setChangeError] = useState('');
   const [changeLoading, setChangeLoading] = useState(false);
 
-  // Forgot password modal state
+  // Direct reset password modal state (không cần OTP, kiểm tra username/email duy nhất)
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
-  const [forgotStep, setForgotStep] = useState<'email' | 'code'>('email');
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [resetCode, setResetCode] = useState('');
+  const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showForgotNewPw, setShowForgotNewPw] = useState(false);
+  const [showForgotConfirmPw, setShowForgotConfirmPw] = useState(false);
   const [forgotError, setForgotError] = useState('');
-  const [forgotMessage, setForgotMessage] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [successNotice, setSuccessNotice] = useState('');
+
+  const forceCheckLength = newPassword.length >= 6;
+  const forceCheckLowerUpper = /[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword);
+  const forgotCheckLength = forgotNewPassword.length >= 6;
+  const forgotCheckLowerUpper = /[a-z]/.test(forgotNewPassword) && /[A-Z]/.test(forgotNewPassword);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('aatn_saved_username');
@@ -80,7 +86,12 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
         }
     } catch (err: any) {
         console.error("Login attempt failed", err);
-        setError(`Lỗi hệ thống: ${err.message || "Không thể kết nối Database"}`);
+        const rawMsg = String(err?.message || '').trim();
+        if (err?.status === 401 || err?.status === 403 || err?.status === 400) {
+            setError(rawMsg || 'Tên đăng nhập hoặc mật khẩu không đúng');
+        } else {
+            setError(rawMsg ? `Lỗi kết nối: ${rawMsg}` : 'Không thể kết nối máy chủ QMS');
+        }
     } finally {
         setIsLoading(false);
     }
@@ -107,9 +118,8 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
 
     setChangeLoading(true);
     try {
-        await changePassword(password, newPassword);
+        await changePassword(newPassword);
         setShowForceChangeModal(false);
-        // Theo yêu cầu: Đăng xuất và yêu cầu đăng nhập lại bằng mật khẩu mới
         localStorage.removeItem('aatn_qms_token');
         sessionStorage.removeItem('aatn_qms_token');
         setPassword('');
@@ -124,31 +134,15 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
     }
   };
 
-  const handleRequestResetCode = async (e: React.FormEvent) => {
+  const handleDirectResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
-    setForgotMessage('');
-    if (!forgotEmail) {
-        setForgotError('Vui lòng nhập địa chỉ email');
+
+    const cleanIdentifier = forgotIdentifier.trim();
+    if (!cleanIdentifier) {
+        setForgotError('Vui lòng nhập Tên đăng nhập hoặc Email duy nhất của tài khoản.');
         return;
     }
-
-    setForgotLoading(true);
-    try {
-        const res = await forgotPassword(forgotEmail);
-        setForgotMessage(res.message || 'Mã xác thực đã được gửi.');
-        setForgotStep('code');
-    } catch (err: any) {
-        setForgotError(err.message || 'Không tìm thấy tài khoản với email này');
-    } finally {
-        setForgotLoading(false);
-    }
-  };
-
-  const handleConfirmResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setForgotError('');
-    setForgotMessage('');
 
     if (forgotNewPassword !== forgotConfirmPassword) {
         setForgotError('Mật khẩu mới và xác nhận mật khẩu không khớp');
@@ -161,20 +155,20 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
     }
 
     if (!/[a-z]/.test(forgotNewPassword) || !/[A-Z]/.test(forgotNewPassword)) {
-        setForgotError('Mật khẩu mới bắt buộc phải chứa cả ký tự hoa và thường');
+        setForgotError('Mật khẩu mới bắt buộc phải chứa cả ký tự viết hoa (A-Z) và viết thường (a-z)');
         return;
     }
 
     setForgotLoading(true);
     try {
-        const res = await resetPassword(forgotEmail, resetCode, forgotNewPassword);
+        const res = await resetPassword(cleanIdentifier, forgotNewPassword);
         setShowForgotPasswordModal(false);
-        setForgotStep('email');
-        setForgotEmail('');
-        setResetCode('');
+        setUsername(cleanIdentifier);
+        setForgotIdentifier('');
         setForgotNewPassword('');
         setForgotConfirmPassword('');
         setPassword('');
+        setError('');
         setSuccessNotice(res?.message || 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.');
     } catch (err: any) {
         setForgotError(err.message || 'Đặt lại mật khẩu thất bại');
@@ -240,7 +234,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={!dbReady || isLoading}
                   className="pl-10 pr-3 block w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-lg py-2.5 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-900 focus:border-transparent transition-all disabled:opacity-50"
-                  placeholder="Nhập tên đăng nhập..."
+                  placeholder="Tên đăng nhập, Email hoặc MSNV..."
                   required
                 />
               </div>
@@ -251,10 +245,16 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
                 <label className="block text-xs font-bold text-slate-500 uppercase">Mật khẩu</label>
                 <button
                   type="button"
-                  onClick={() => setShowForgotPasswordModal(true)}
+                  onClick={() => {
+                    setForgotIdentifier(username.trim());
+                    setForgotError('');
+                    setForgotNewPassword('');
+                    setForgotConfirmPassword('');
+                    setShowForgotPasswordModal(true);
+                  }}
                   className="min-h-[44px] lg:min-h-[32px] px-2 -mr-2 inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline rounded-lg"
                 >
-                  Quên mật khẩu?
+                  Quên / Đổi mật khẩu?
                 </button>
               </div>
               <div className="relative group">
@@ -311,7 +311,7 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 text-red-600 dark:text-red-400 text-sm p-3 rounded-lg flex items-center animate-shake">
                  <Info className="w-4 h-4 mr-2 flex-shrink-0" />
-                 {error}
+                 <span>{error}</span>
               </div>
             )}
 
@@ -345,53 +345,88 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
       {showForceChangeModal && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/70 backdrop-blur-sm animate-in fade-in overflow-hidden">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden">
-            <div className="bg-blue-600 p-4 sm:p-6 text-white text-center shrink-0">
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                <ShieldCheck className="w-7 h-7 text-white" />
+            <div className="bg-blue-600 p-4 sm:p-5 text-white text-center shrink-0">
+              <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                <ShieldCheck className="w-6 h-6 text-white" />
               </div>
               <h3 className="text-lg font-bold">Đổi Mật Khẩu Lần Đầu</h3>
-              <p className="text-xs text-blue-100 mt-1">Tài khoản của bạn đang dùng mật khẩu mặc định hoặc cần cập nhật mật khẩu mới theo chính sách bảo mật hệ thống.</p>
+              <p className="text-xs text-blue-100 mt-1">
+                {tempLoggedInUser?.name ? `Xin chào ${tempLoggedInUser.name}, vui lòng ` : 'Vui lòng '}
+                thiết lập mật khẩu mới để bảo mật tài khoản.
+              </p>
             </div>
 
-            <form onSubmit={handleForceChangePassword} className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
+            <form onSubmit={handleForceChangePassword} className="p-4 sm:p-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
               {changeError && (
-                <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center">
-                  <Info className="w-4 h-4 mr-2 flex-shrink-0" />
-                  {changeError}
+                <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center gap-2">
+                  <Info className="w-4 h-4 shrink-0" />
+                  <span>{changeError}</span>
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mật khẩu mới</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Tối thiểu 6 ký tự (có chữ hoa & thường)"
-                  className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showForceNewPw ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Tối thiểu 6 ký tự (có chữ hoa & thường)"
+                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg pl-3 pr-12 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowForceNewPw(v => !v)}
+                    aria-label={showForceNewPw ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"}
+                    className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showForceNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <Check className={`w-3.5 h-3.5 ${forceCheckLength ? 'text-emerald-500' : 'text-slate-300'}`} />
+                    <span className={forceCheckLength ? 'text-emerald-600 font-medium' : 'text-slate-500'}>Tối thiểu 6 ký tự</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className={`w-3.5 h-3.5 ${forceCheckLowerUpper ? 'text-emerald-500' : 'text-slate-300'}`} />
+                    <span className={forceCheckLowerUpper ? 'text-emerald-600 font-medium' : 'text-slate-500'}>Có cả chữ hoa (A-Z) và chữ thường (a-z)</span>
+                  </div>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Xác nhận mật khẩu mới</label>
-                <input
-                  type="password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  placeholder="Nhập lại mật khẩu mới"
-                  className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showForceConfirmPw ? "text" : "password"}
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Nhập lại mật khẩu mới"
+                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg pl-3 pr-12 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowForceConfirmPw(v => !v)}
+                    aria-label={showForceConfirmPw ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"}
+                    className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showForceConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={changeLoading}
+                  disabled={changeLoading || !forceCheckLength || !forceCheckLowerUpper || newPassword !== confirmNewPassword}
                   className="w-full min-h-[44px] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all flex items-center justify-center disabled:opacity-50"
                 >
-                  {changeLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : 'XÁC NHẬN & VÀO HỆ THỐNG'}
+                  {changeLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : 'XÁC NHẬN ĐỔI MẬT KHẨU'}
                 </button>
               </div>
             </form>
@@ -399,148 +434,136 @@ export function LoginPage({ onLoginSuccess, users, dbReady = false }: LoginPageP
         </div>
       )}
 
-      {/* Forgot Password Modal */}
+      {/* Direct Reset Password Modal (Không cần xác minh OTP, yêu cầu username/email duy nhất) */}
       {showForgotPasswordModal && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-slate-900/70 backdrop-blur-sm animate-in fade-in overflow-hidden">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden">
-            <div className="bg-slate-800 p-4 sm:p-6 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-600/30 rounded-full flex items-center justify-center">
+            <div className="bg-slate-800 px-4 py-3 sm:py-3.5 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 bg-blue-600/30 rounded-full flex items-center justify-center shrink-0">
                   <KeyRound className="w-5 h-5 text-blue-400" />
                 </div>
-                <div>
-                  <h3 className="text-base font-bold">Khôi phục mật khẩu</h3>
-                  <p className="text-xs text-slate-400">Xác thực qua email nhân viên</p>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold truncate">Đặt lại mật khẩu</h3>
+                  <p className="text-xs text-slate-400 truncate">Theo tên đăng nhập hoặc email duy nhất</p>
                 </div>
               </div>
               <button 
+                type="button"
                 onClick={() => {
                   setShowForgotPasswordModal(false);
-                  setForgotStep('email');
                   setForgotError('');
-                  setForgotMessage('');
                 }}
                 aria-label="Đóng"
-                className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] -my-1.5 -mr-1.5 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
               >
                 ✕
               </button>
             </div>
 
-            {forgotStep === 'email' ? (
-              <form onSubmit={handleRequestResetCode} className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
-                {forgotError && (
-                  <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center">
-                    <Info className="w-4 h-4 mr-2 flex-shrink-0" />
-                    {forgotError}
-                  </div>
-                )}
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Nhập địa chỉ email đã đăng ký của bạn. Chúng tôi sẽ gửi mã xác thực gồm 6 chữ số để bạn thiết lập lại mật khẩu mới.
-                </p>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email nhân viên</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input
-                      type="email"
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="vd: ten.nv@aacorporation.com"
-                      className="pl-10 w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      required
-                    />
-                  </div>
+            <form onSubmit={handleDirectResetPassword} className="p-4 sm:p-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
+              {forgotError && (
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 text-xs p-3 rounded-lg flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{forgotError}</span>
                 </div>
+              )}
 
-                <div className="pt-2 flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotPasswordModal(false)}
-                    className="flex-1 min-h-[44px] py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={forgotLoading}
-                    className="flex-1 min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
-                  >
-                    {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Gửi mã xác thực'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleConfirmResetPassword} className="p-4 sm:p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
-                {forgotError && (
-                  <div className="bg-red-50 text-red-600 text-xs p-3 rounded-lg flex items-center">
-                    <Info className="w-4 h-4 mr-2 flex-shrink-0" />
-                    {forgotError}
-                  </div>
-                )}
-                {forgotMessage && (
-                  <div className="bg-emerald-50 text-emerald-700 text-xs p-3 rounded-lg flex items-center">
-                    <Info className="w-4 h-4 mr-2 flex-shrink-0" />
-                    {forgotMessage}
-                  </div>
-                )}
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Nhập đúng <strong>Tên đăng nhập</strong> hoặc <strong>Email duy nhất</strong> của tài khoản để đặt lại mật khẩu mới trực tiếp (không cần mã xác minh).
+              </p>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mã xác thực (6 số)</label>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tên đăng nhập hoặc Email *</label>
+                <div className="relative">
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
-                    maxLength={6}
-                    value={resetCode}
-                    onChange={(e) => setResetCode(e.target.value)}
-                    placeholder="Nhập 6 số..."
-                    className="w-full min-h-[44px] text-center tracking-widest font-mono text-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={forgotIdentifier}
+                    onChange={(e) => setForgotIdentifier(e.target.value)}
+                    placeholder="vd: ten.nv@aacorporation.com"
+                    className="pl-10 pr-3 w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     required
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mật khẩu mới</label>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mật khẩu mới *</label>
+                <div className="relative">
                   <input
-                    type="password"
+                    type={showForgotNewPw ? "text" : "password"}
                     value={forgotNewPassword}
                     onChange={(e) => setForgotNewPassword(e.target.value)}
                     placeholder="Tối thiểu 6 ký tự (có chữ hoa & thường)"
-                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg pl-3 pr-12 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotNewPw(v => !v)}
+                    aria-label={showForgotNewPw ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"}
+                    className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
+                  >
+                    {showForgotNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
+                <div className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <Check className={`w-3.5 h-3.5 ${forgotCheckLength ? 'text-emerald-500' : 'text-slate-300'}`} />
+                    <span className={forgotCheckLength ? 'text-emerald-600 font-medium' : 'text-slate-500'}>Độ dài tối thiểu 6 ký tự</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className={`w-3.5 h-3.5 ${forgotCheckLowerUpper ? 'text-emerald-500' : 'text-slate-300'}`} />
+                    <span className={forgotCheckLowerUpper ? 'text-emerald-600 font-medium' : 'text-slate-500'}>Bắt buộc chứa chữ Hoa (A-Z) và chữ thường (a-z)</span>
+                  </div>
+                </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Xác nhận mật khẩu mới</label>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Xác nhận mật khẩu mới *</label>
+                <div className="relative">
                   <input
-                    type="password"
+                    type={showForgotConfirmPw ? "text" : "password"}
                     value={forgotConfirmPassword}
                     onChange={(e) => setForgotConfirmPassword(e.target.value)}
                     placeholder="Nhập lại mật khẩu mới"
-                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-lg pl-3 pr-12 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     required
                   />
-                </div>
-
-                <div className="pt-2 flex space-x-3">
                   <button
                     type="button"
-                    onClick={() => setForgotStep('email')}
-                    className="min-h-[44px] py-2.5 px-4 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center"
+                    onClick={() => setShowForgotConfirmPw(v => !v)}
+                    aria-label={showForgotConfirmPw ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"}
+                    className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600"
+                    tabIndex={-1}
                   >
-                    <ArrowLeft className="w-4 h-4 mr-1" /> Quay lại
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={forgotLoading}
-                    className="flex-1 min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
-                  >
-                    {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Đặt lại mật khẩu'}
+                    {showForgotConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              </form>
-            )}
+              </div>
+
+              <div className="pt-2 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPasswordModal(false);
+                    setForgotError('');
+                  }}
+                  className="flex-1 min-h-[44px] py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={forgotLoading || !forgotIdentifier.trim() || !forgotCheckLength || !forgotCheckLowerUpper || forgotNewPassword !== forgotConfirmPassword}
+                  className="flex-1 min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-all flex items-center justify-center disabled:opacity-50"
+                >
+                  {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Đặt lại mật khẩu'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

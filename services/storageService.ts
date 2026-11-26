@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { query } from '../lib/db.js';
 
 export const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -215,13 +216,69 @@ export async function writeStorageBuffer(storageKey: string, buffer: Buffer): Pr
   };
 }
 
+export function stripTransientMediaUrl(rawUrl: string): string {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return rawUrl;
+
+  if (trimmed.includes('/api/storage/files/')) {
+    const qIdx = trimmed.indexOf('?');
+    if (qIdx === -1) return trimmed;
+    const base = trimmed.slice(0, qIdx);
+    const params = new URLSearchParams(trimmed.slice(qIdx + 1));
+    params.delete('expires');
+    params.delete('sig');
+    params.delete('token');
+    params.delete('_r');
+    const rest = params.toString();
+    return rest ? `${base}?${rest}` : base;
+  }
+
+  if (
+    trimmed.includes('/api/media/image/') ||
+    trimmed.includes('/api/image/') ||
+    trimmed.includes('/display-image/') ||
+    trimmed.includes('/media/stream/')
+  ) {
+    const qIdx = trimmed.indexOf('?');
+    if (qIdx === -1) return trimmed;
+    const base = trimmed.slice(0, qIdx);
+    const params = new URLSearchParams(trimmed.slice(qIdx + 1));
+    params.delete('google_token');
+    params.delete('token');
+    params.delete('_r');
+    const rest = params.toString();
+    return rest ? `${base}?${rest}` : base;
+  }
+
+  return rawUrl;
+}
+
+export function stripTransientMediaUrlParams<T>(input: T, depth: number = 0): T {
+  if (depth > 8 || input === null || input === undefined) return input;
+  if (typeof input === 'string') {
+    return stripTransientMediaUrl(input) as unknown as T;
+  }
+  if (Array.isArray(input)) {
+    return input.map((item) => stripTransientMediaUrlParams(item, depth + 1)) as unknown as T;
+  }
+  if (typeof input === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(input as Record<string, any>)) {
+      out[k] = stripTransientMediaUrlParams(v, depth + 1);
+    }
+    return out as T;
+  }
+  return input;
+}
+
 export function signPublicMediaUrls<T>(input: T, ttlSeconds: number = 3600): T {
   if (input === null || input === undefined) return input;
   if (typeof input === 'string') {
-    if (input.startsWith('/api/storage/files/')) {
-      return createSignedDownloadUrl(input, ttlSeconds) as unknown as T;
+    const clean = stripTransientMediaUrl(input);
+    if (clean.startsWith('/api/storage/files/')) {
+      return createSignedDownloadUrl(clean, ttlSeconds) as unknown as T;
     }
-    return input;
+    return clean as unknown as T;
   }
   if (Array.isArray(input)) {
     return input.map((item) => signPublicMediaUrls(item, ttlSeconds)) as unknown as T;
@@ -297,3 +354,102 @@ export function assertNoNewBase64DataUri(
     );
   }
 }
+
+// --- LEGACY TEMPORARY ASSET RECOVERY HELPERS (Shared App -> System Drive) ---
+const DB_SCHEMA_NAME = process.env.DB_SCHEMA || 'appQAQC';
+const DEFAULT_SHARED_APP_ORIGIN = 'https://ais-pre-e6ynktw6fbldrpiouvfick-129161440033.asia-southeast1.run.app';
+const POSITIVE_DRIVE_MAP_CACHE = new Map<string, string>();
+const NEGATIVE_SHARED_PULL_CACHE = new Map<string, number>();
+const NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function isPrivateOrLoopbackHost(hostname: string): boolean {
+  const h = String(hostname || '').trim().toLowerCase();
+  if (!h) return true;
+  if (h === 'localhost' || h === '::1' || h === '0.0.0.0' || h.endsWith('.local')) return true;
+  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h)) return true;
+  const m172 = h.match(/^172\.(\d+)\./);
+  if (m172) {
+    const second = Number(m172[1]);
+    if (second >= 16 && second <= 31) return true;
+  }
+  return false;
+}
+
+export function getAllowedSharedAppOrigin(): string | null {
+  const raw = String(process.env.SHARED_APP_ORIGIN || DEFAULT_SHARED_APP_ORIGIN).trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return null;
+    if (isPrivateOrLoopbackHost(parsed.hostname)) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+export async function getMigratedDriveFileId(storageKey: string): Promise<string | null> {
+  const cleanKey = sanitizeStorageKey(storageKey);
+  const cached = POSITIVE_DRIVE_MAP_CACHE.get(cleanKey);
+  if (cached) return cached;
+
+  try {
+    const res = await query(
+      `SELECT drive_file_id FROM "${DB_SCHEMA_NAME}"."storage_drive_map" WHERE storage_key = $1 LIMIT 1`,
+      [cleanKey]
+    );
+    const fileId = res.rows?.[0]?.drive_file_id ? String(res.rows[0].drive_file_id).trim() : '';
+    if (fileId) {
+      POSITIVE_DRIVE_MAP_CACHE.set(cleanKey, fileId);
+      return fileId;
+    }
+  } catch {
+    // Table may not exist yet during early boot; fail safely
+  }
+  return null;
+}
+
+export async function saveMigratedDriveFileId(params: {
+  storageKey: string;
+  driveFileId: string;
+  mimeType?: string;
+  sourceOrigin?: string;
+}): Promise<void> {
+  const cleanKey = sanitizeStorageKey(params.storageKey);
+  const cleanFileId = String(params.driveFileId || '').trim();
+  if (!cleanFileId) return;
+  POSITIVE_DRIVE_MAP_CACHE.set(cleanKey, cleanFileId);
+  NEGATIVE_SHARED_PULL_CACHE.delete(cleanKey);
+
+  try {
+    await query(
+      `INSERT INTO "${DB_SCHEMA_NAME}"."storage_drive_map" (storage_key, drive_file_id, mime_type, source_origin, migrated_at)
+       VALUES ($1, $2, $3, $4, EXTRACT(EPOCH FROM NOW())::BIGINT)
+       ON CONFLICT (storage_key) DO UPDATE SET
+         drive_file_id = EXCLUDED.drive_file_id,
+         mime_type = COALESCE(EXCLUDED.mime_type, "${DB_SCHEMA_NAME}"."storage_drive_map".mime_type),
+         source_origin = COALESCE(EXCLUDED.source_origin, "${DB_SCHEMA_NAME}"."storage_drive_map".source_origin),
+         migrated_at = EXCLUDED.migrated_at`,
+      [cleanKey, cleanFileId, params.mimeType || null, params.sourceOrigin || null]
+    );
+  } catch (err: any) {
+    console.warn('[storageService] Could not persist storage_drive_map:', err?.message || err);
+  }
+}
+
+export function isSharedPullNegativelyCached(storageKey: string): boolean {
+  const cleanKey = sanitizeStorageKey(storageKey);
+  const ts = NEGATIVE_SHARED_PULL_CACHE.get(cleanKey);
+  if (!ts) return false;
+  if (Date.now() - ts > NEGATIVE_CACHE_TTL_MS) {
+    NEGATIVE_SHARED_PULL_CACHE.delete(cleanKey);
+    return false;
+  }
+  return true;
+}
+
+export function markSharedPullNotFound(storageKey: string): void {
+  const cleanKey = sanitizeStorageKey(storageKey);
+  NEGATIVE_SHARED_PULL_CACHE.set(cleanKey, Date.now());
+}
+

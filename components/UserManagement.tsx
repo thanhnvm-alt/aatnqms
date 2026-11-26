@@ -36,7 +36,9 @@ import {
   Filter,
   CheckCircle2,
   FileSpreadsheet,
-  Wand2
+  Wand2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { UserActivityList } from './UserActivityList';
 import { Combobox, ConfirmDialog, PageActions, Pagination, SearchInput } from '../src/components/qms';
@@ -95,6 +97,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
   const [teamsState, setTeamsState] = useState<{ id: string; name: string; divisionId: string; leaderId?: string }[]>([]);
   const [selectedActUserId, setSelectedActUserId] = useState<string | null>(null);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
+  const [showModalPassword, setShowModalPassword] = useState(false);
 
   const isAdmin = String(currentUser?.role || '').toUpperCase().trim() === 'ADMIN';
   const canCreate = isAdmin || hasPermission(currentUser, roles, 'SETTINGS_USERS', 'CREATE');
@@ -189,6 +192,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
     return 'bg-blue-50 dark:bg-slate-800/80 text-blue-700 border-blue-200 dark:border-slate-700';
   };
 
+  const duplicateStats = useMemo(() => {
+    const unameCounts = new Map<string, number>();
+    const emailCounts = new Map<string, number>();
+    for (const u of users) {
+      const un = String(u.username || '').trim().toLowerCase();
+      const em = String(u.email || '').trim().toLowerCase();
+      if (un) unameCounts.set(un, (unameCounts.get(un) || 0) + 1);
+      if (em) emailCounts.set(em, (emailCounts.get(em) || 0) + 1);
+    }
+    const dupUsernames = new Set<string>();
+    const dupEmails = new Set<string>();
+    unameCounts.forEach((cnt, key) => { if (cnt > 1) dupUsernames.add(key); });
+    emailCounts.forEach((cnt, key) => { if (cnt > 1) dupEmails.add(key); });
+    return { dupUsernames, dupEmails };
+  }, [users]);
+
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
       const name = (u.name || '').toLowerCase();
@@ -275,6 +294,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
 
   const handleOpenModal = (user?: User) => {
     setModalError(null);
+    setShowModalPassword(false);
     if (user) {
       if (!canEditTarget(user)) {
         setFeedback({ type: 'error', message: 'Bạn không có quyền chỉnh sửa tài khoản Quản trị viên (ADMIN).' });
@@ -653,6 +673,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
         </div>
       )}
 
+      {(duplicateStats.dupUsernames.size > 0 || duplicateStats.dupEmails.size > 0) && (
+        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+          <div className="space-y-0.5">
+            <p className="font-bold">Phát hiện dữ liệu tài khoản bị trùng định danh (cần tách duy nhất để tự đặt lại mật khẩu):</p>
+            <p className="text-[11px]">
+              {duplicateStats.dupUsernames.size > 0 && (
+                <span>Trùng Tên đăng nhập: <strong>{Array.from(duplicateStats.dupUsernames).join(', ')}</strong>. </span>
+              )}
+              {duplicateStats.dupEmails.size > 0 && (
+                <span>Trùng Email: <strong>{Array.from(duplicateStats.dupEmails).join(', ')}</strong>.</span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       <PageActions
         title="Nhân sự Hệ thống"
         subtitle="ISO Competence Records"
@@ -799,6 +836,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                         <ShieldCheck className="w-3 h-3" />
                       </span>
                     )}
+                    {(duplicateStats.dupUsernames.has(String(u.username || '').trim().toLowerCase()) ||
+                      duplicateStats.dupEmails.has(String(u.email || '').trim().toLowerCase())) && (
+                      <span className="shrink-0 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-bold" title="Trùng username hoặc email với tài khoản khác">
+                        Trùng TK/Email
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                     <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded border border-blue-100 dark:border-slate-700 text-[10px] font-mono font-bold tabular-nums">{u.msnv || '---'}</span>
@@ -872,8 +915,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                                                   <ShieldCheck className="w-3 h-3" />
                                               </span>
                                           )}
+                                          {(duplicateStats.dupUsernames.has(String(u.username || '').trim().toLowerCase()) ||
+                                            duplicateStats.dupEmails.has(String(u.email || '').trim().toLowerCase())) && (
+                                              <span className="shrink-0 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-bold" title="Trùng username hoặc email với tài khoản khác">
+                                                  Trùng TK/Email
+                                              </span>
+                                          )}
                                       </div>
-                                      <p className="text-[11px] font-mono text-slate-400 truncate">@{u.username}</p>
+                                      <p className="text-[11px] font-mono text-slate-400 truncate">@{u.username}{u.email ? ` • ${u.email}` : ''}</p>
                                   </div>
                               </div>
                           </td>
@@ -1020,7 +1069,24 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, use
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Shield className="w-3 h-3"/> Mật khẩu</label>
-                                  <input type="password" value={formData.password || ''} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm" placeholder={editingUser ? "Bỏ trống để giữ nguyên" : "Mặc định: 123456"} />
+                                  <div className="relative">
+                                    <input
+                                      type={showModalPassword ? "text" : "password"}
+                                      value={formData.password || ''}
+                                      onChange={e => setFormData({...formData, password: e.target.value})}
+                                      className="w-full min-h-[44px] pl-4 pr-12 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-sm outline-none focus:ring-4 ring-blue-100 shadow-sm"
+                                      placeholder={editingUser ? "Bỏ trống để giữ nguyên" : "Mặc định: 123456"}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowModalPassword(v => !v)}
+                                      aria-label={showModalPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                      className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                      tabIndex={-1}
+                                    >
+                                      {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                  </div>
                               </div>
                               <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><ShieldCheck className="w-3 h-3"/> Vai trò hệ thống (Role) *</label>

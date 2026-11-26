@@ -11,14 +11,14 @@ import {
   Ruler, Microscope, PenTool, Eraser, Loader2, Sparkles, CheckCircle2, History, Clock,
   Activity, ShieldCheck, CheckCircle, AlertCircle, ChevronRight
 } from 'lucide-react';
-import { fetchIpoByFactoryOrder, uploadQMSImage, fetchInspectionById } from '../services/apiService';
+import { fetchIpoByFactoryOrder, uploadQMSImage, uploadQMSImagesBatch, preprocessInspectionPayloadForStorage, fetchInspectionById } from '../services/apiService';
 import { ImageEditorModal } from './ImageEditorModal';
 import { QRScannerModal } from './QRScannerModal';
 import { PersistenceService } from '../services/persistenceService';
 import { SPR_CHECKLIST_TEMPLATE } from '../constants';
 
 import { SignaturePad } from './SignaturePad';
-import { Combobox } from '../src/components/qms';
+import { Combobox, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -68,6 +68,7 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
   const [showHistory, setShowHistory] = useState(false);
   
   const [editorState, setEditorState] = useState<{ images: string[]; index: number; context: { type: 'MAIN' | 'ITEM', itemId?: string }; } | null>(null);
+  const [formAlert, setFormAlert] = useState<FormAlertState | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -156,9 +157,10 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
                 return;
             }
         }
-        alert("Không tìm thấy dữ liệu IPO cho mã này.");
-    } catch (e) {
+        setFormAlert({ type: 'warning', title: 'Tra cứu IPO', message: 'Không tìm thấy dữ liệu IPO cho mã này.' });
+    } catch (e: any) {
         console.error("Lookup error:", e);
+        setFormAlert({ type: 'error', title: 'Lỗi tra cứu IPO', message: extractFormErrorMessage(e, 'Không thể truy vấn dữ liệu IPO.') });
     } finally {
         setIsLookupLoading(false);
     }
@@ -182,113 +184,105 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const handleSubmit = async () => {
+    setFormAlert(null);
     const ins = Number(formData.inspectedQuantity || 0);
-    if (!formData.workshop || !formData.inspectionStage) { 
-        alert("Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra."); 
-        return; 
+    if (!formData.workshop || !formData.inspectionStage) {
+        setFormAlert({ type: 'warning', title: 'Thiếu thông tin', message: 'Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra.' });
+        return;
     }
-    if (ins <= 0) { alert("Số lượng kiểm tra phải lớn hơn 0."); return; }
+    if (ins <= 0) {
+        setFormAlert({ type: 'warning', title: 'Số lượng chưa hợp lệ', message: 'Số lượng kiểm tra phải lớn hơn 0.' });
+        return;
+    }
 
     const pas = Number(formData.passedQuantity || 0);
     const fai = Number(formData.failedQuantity || 0);
     if (pas + fai !== ins) {
-        alert("Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.");
+        setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: 'Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.' });
         return;
     }
 
     setIsSaving(true);
+    setUploadProgress(0);
     try {
-        const entityId = formData.id || 'new';
-        interface UploadTask { url: string; role: string; path: string; originalIndex?: number; itemId?: string; }
-        const tasks: UploadTask[] = [];
-
-        (formData.images || []).forEach((img, idx) => { if (img.startsWith('data:')) tasks.push({ url: img, role: 'MAIN', path: 'MAIN', originalIndex: idx }); });
-        (formData.items || []).forEach((item) => {
-            (item.images || []).forEach((img, idx) => { if (img.startsWith('data:')) tasks.push({ url: img, role: 'ITEM', path: 'ITEM', itemId: item.id, originalIndex: idx }); });
-        });
-        if (formData.signature?.startsWith('data:')) tasks.push({ url: formData.signature, role: 'SIGNATURE_QC', path: 'SIGNATURE' });
-
-        const totalTasks = tasks.length;
-        let completedCount = 0;
-        const updateStateWithUrl = (task: UploadTask, serverUrl: string) => {
-            setFormData(prev => {
-                const next = { ...prev };
-                if (task.path === 'MAIN' && task.originalIndex !== undefined) {
-                    const nextImgs = [...(next.images || [])]; nextImgs[task.originalIndex] = serverUrl; next.images = nextImgs;
-                } else if (task.path === 'ITEM' && task.itemId) {
-                    next.items = (next.items || []).map(it => it.id === task.itemId 
-                        ? { ...it, images: (it.images || []).map((img, i) => i === task.originalIndex ? serverUrl : img) } : it
-                    );
-                } else if (task.path === 'SIGNATURE') { next.signature = serverUrl; }
-                return next;
-            });
-        };
-
-        if (totalTasks > 0) {
-            await Promise.all(tasks.map(async (task) => {
-                const serverUrl = await uploadQMSImage(task.url, { entityId, type: 'SPR', role: task.role });
-                updateStateWithUrl(task, serverUrl);
-                completedCount++;
-                setUploadProgress(Math.round((completedCount / totalTasks) * 100));
-            }));
-        }
-
         const foCode = formData.ma_nha_may || formData.headcode || searchCode || '';
-        const finalForm = {
-            ...formData,
+        const itemsToSave = (formData.items || []).filter((it: any) => it.stage === formData.inspectionStage || !it.stage);
+        const workingDraft: Inspection = {
+            ...JSON.parse(JSON.stringify(formData)),
             ma_ct: formData.ma_ct || foCode,
             ma_nha_may: formData.ma_nha_may || foCode,
-            headcode: formData.headcode || foCode
+            headcode: formData.headcode || foCode,
+            stage: formData.stage || formData.inspectionStage || '',
+            items: itemsToSave,
+            status: InspectionStatus.SUBMITTED,
+            inspectorName: user.name,
+            updatedAt: new Date().toISOString()
         };
-            const itemsToSave = (finalForm.items || []).filter((it: any) => it.stage === finalForm.inspectionStage || !it.stage);
-            const finalStatus = InspectionStatus.SUBMITTED;
 
-            await onSave({ ...finalForm, items: itemsToSave, status: finalStatus, inspectorName: user.name, updatedAt: new Date().toISOString() } as Inspection);
-            clearDraft();
-            
+        const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
+            setUploadProgress(pct);
+        });
+        setFormData(preparedInspection);
 
-    } catch (e: any) { 
-        alert(`Lỗi lưu báo cáo: ${e.message || "Không xác định"}`); 
+        await onSave(preparedInspection);
+        clearDraft();
+    } catch (e: any) {
+        if (e?.partialPayload) {
+            setFormData(e.partialPayload);
+        }
+        setFormAlert({
+            type: 'error',
+            title: 'Lỗi lưu báo cáo SPR',
+            message: extractFormErrorMessage(e)
+        });
     } finally { setIsSaving(false); }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !activeUploadId) return;
+    setFormAlert(null);
     setIsProcessingImages(true);
     setImageUploadProgress(0);
     try {
-        const uploadedUrls = await Promise.all(
-            Array.from(files).map(async (file: File) => {
-                return await uploadQMSImage(file, { 
-                    entityId: formData.id || 'new', 
-                    type: 'INSPECTION', 
-                    role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM' 
-                }, undefined, undefined, (percent) => {
-                    setImageUploadProgress(percent);
-                });
-            })
-        );
-        
-        if (activeUploadId === 'MAIN') {
-            setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...uploadedUrls] }));
-        } else {
-            setFormData(prev => ({ 
-                ...prev, 
-                items: prev.items?.map(i => 
-                    i.id === activeUploadId 
-                        ? { ...i, images: [...(i.images || []), ...uploadedUrls] } 
-                        : i
-                ) 
-            }));
+        const result = await uploadQMSImagesBatch(files, {
+            entityId: formData.id || 'new',
+            ma_ct: formData.ma_ct,
+            type: 'INSPECTION',
+            role: activeUploadId === 'MAIN' ? 'MAIN' : 'ITEM'
+        }, (percent) => {
+            setImageUploadProgress(percent);
+        });
+
+        if (result.uploadedUrls.length > 0) {
+            if (activeUploadId === 'MAIN') {
+                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...result.uploadedUrls] }));
+            } else {
+                setFormData(prev => ({
+                    ...prev,
+                    items: prev.items?.map(i =>
+                        i.id === activeUploadId
+                            ? { ...i, images: [...(i.images || []), ...result.uploadedUrls] }
+                            : i
+                    )
+                }));
+            }
         }
-    } catch (err) { 
-        console.error("ISO-UPLOAD: Failed", err); 
-        alert("Lỗi tải ảnh lên.");
-    } finally { 
-        setIsProcessingImages(false); 
+
+        if (result.failed.length > 0) {
+            setFormAlert({
+                type: result.uploadedUrls.length > 0 ? 'warning' : 'error',
+                title: result.uploadedUrls.length > 0 ? 'Một số ảnh tải lên thất bại' : 'Lỗi tải ảnh lên Google Drive',
+                message: result.failed.map(f => `${f.name}: ${f.error}`).join('\n')
+            });
+        }
+    } catch (err: any) {
+        console.error("ISO-UPLOAD: Failed", err);
+        setFormAlert({ type: 'error', title: 'Lỗi tải ảnh', message: extractFormErrorMessage(err, 'Không thể tải ảnh lên Google Drive.') });
+    } finally {
+        setIsProcessingImages(false);
         setImageUploadProgress(null);
-        e.target.value = ''; 
+        e.target.value = '';
     }
   };
 
@@ -296,42 +290,41 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
   const onImageSave = async (idx: number, updatedImg: string) => {
       if (!editorState) return;
       const { type, itemId } = editorState.context;
+      setFormAlert(null);
       setIsProcessingImages(true);
       setImageUploadProgress(0);
       try {
-          // Convert base64 to File
           const res = await fetch(updatedImg);
           const blob = await res.blob();
           const file = new File([blob], `edited_${Date.now()}.jpg`, { type: 'image/jpeg' });
-          
-          // Upload immediately
-          const uploadedUrl = await uploadQMSImage(file, { 
-              entityId: formData.id || 'new', 
-              type: 'INSPECTION', 
-              role: type === 'MAIN' ? 'MAIN' : 'ITEM' 
+
+          const uploadedUrl = await uploadQMSImage(file, {
+              entityId: formData.id || 'new',
+              ma_ct: formData.ma_ct,
+              type: 'INSPECTION',
+              role: type === 'MAIN' ? 'MAIN' : 'ITEM'
           }, undefined, undefined, (percent) => {
               setImageUploadProgress(percent);
           });
 
-          if (type === 'MAIN') { 
-              setFormData(prev => { 
-                  const newImgs = [...(prev.images || [])]; 
-                  newImgs[idx] = uploadedUrl; 
-                  return { ...prev, images: newImgs }; 
-              }); 
+          if (type === 'MAIN') {
+              setFormData(prev => {
+                  const newImgs = [...(prev.images || [])];
+                  newImgs[idx] = uploadedUrl;
+                  return { ...prev, images: newImgs };
+              });
+          } else if (type === 'ITEM' && itemId) {
+              setFormData(prev => ({
+                  ...prev,
+                  items: prev.items?.map(i => i.id === itemId
+                      ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) }
+                      : i)
+              }));
           }
-          else if (type === 'ITEM' && itemId) { 
-              setFormData(prev => ({ 
-                  ...prev, 
-                  items: prev.items?.map(i => i.id === itemId 
-                      ? { ...i, images: i.images?.map((img, imIdx) => imIdx === idx ? uploadedUrl : img) } 
-                      : i) 
-              })); 
-          }
-      } catch (err) { 
-          alert("Lỗi lưu ảnh chỉnh sửa."); 
-      } finally { 
-          setIsProcessingImages(false); 
+      } catch (err: any) {
+          setFormAlert({ type: 'error', title: 'Lỗi lưu ảnh chỉnh sửa', message: extractFormErrorMessage(err, 'Không thể tải ảnh chỉnh sửa lên Google Drive.') });
+      } finally {
+          setIsProcessingImages(false);
           setImageUploadProgress(null);
       }
   };
@@ -380,6 +373,7 @@ export const InspectionFormSPR: React.FC<InspectionFormProps> = ({ initialData, 
       )}
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar bg-slate-50 dark:bg-slate-800/50 pb-28">
+        <FormAlertBanner alert={formAlert} onClose={() => setFormAlert(null)} />
         <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <div className="flex flex-wrap justify-between items-center gap-2 border-b border-blue-50 dark:border-slate-800 pb-2 mb-1">
                 <h3 className="text-blue-800 dark:text-blue-400 font-bold uppercase tracking-widest flex items-center gap-2 text-xs"><Box className="w-4 h-4 shrink-0"/> I. THÔNG TIN SẢN PHẨM</h3>

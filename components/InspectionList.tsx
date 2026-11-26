@@ -1568,8 +1568,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                             showTimestamp={true}
                                                             timestamp={typeof img === 'object' ? (img.created_at || selectedItemDesktop.date) : selectedItemDesktop.date}
                                                         />
-                                                        <div className="absolute inset-0 bg-black/20 md:opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                                                            <Maximize2 className="w-5 h-5 text-white" />
+                                                        <div className="pointer-events-none z-0 absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                                            <Maximize2 className="w-5 h-5 text-white drop-shadow" />
                                                         </div>
                                                     </div>
                                                 );

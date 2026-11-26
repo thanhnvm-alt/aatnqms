@@ -149,11 +149,11 @@ export const verifyUserCredentials = async (username: string, password: string):
   });
 };
 
-export const changePassword = async (currentPassword: string, newPassword: string): Promise<any> => {
+export const changePassword = async (newPassword: string, currentPassword?: string): Promise<any> => {
   return apiFetch('/api/auth/change-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ currentPassword, newPassword }),
+    body: JSON.stringify({ newPassword, ...(currentPassword ? { currentPassword } : {}) }),
   });
 };
 
@@ -165,11 +165,11 @@ export const forgotPassword = async (email: string): Promise<any> => {
   });
 };
 
-export const resetPassword = async (email: string, code: string, newPassword: string): Promise<any> => {
+export const resetPassword = async (identifier: string, newPassword: string): Promise<any> => {
   return apiFetch('/api/auth/reset-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, code, newPassword }),
+    body: JSON.stringify({ identifier, newPassword }),
   });
 };
 
@@ -375,36 +375,102 @@ export const fetchPublicInspectionById = async (id: string): Promise<Inspection 
   return res?.inspection || res?.data || res || null;
 };
 
-export const preprocessInspectionPayloadForStorage = async (inspection: Inspection): Promise<Inspection> => {
+const inferUploadMetaFromPath = (path: string): { type: string; role: string } => {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.signature') || lower === 'signature') return { type: 'SIGNATURE', role: 'SIGNATURE_QC' };
+  if (lower.includes('managersignature')) return { type: 'SIGNATURE', role: 'SIGNATURE_MANAGER' };
+  if (lower.includes('teamleadsignature')) return { type: 'SIGNATURE', role: 'SIGNATURE_TEAMLEAD' };
+  if (lower.includes('productionsignature')) return { type: 'SIGNATURE', role: 'SIGNATURE_PRODUCTION' };
+  if (lower.includes('pmsignature')) return { type: 'SIGNATURE', role: 'SIGNATURE_PM' };
+  if (lower.includes('receiversignature')) return { type: 'SIGNATURE', role: 'SIGNATURE_RECEIVER' };
+  if (lower.includes('imagesbefore')) return { type: 'NCR', role: 'NCR_BEFORE' };
+  if (lower.includes('imagesafter')) return { type: 'NCR', role: 'NCR_AFTER' };
+  if (lower.includes('deliverynoteimages')) return { type: 'INSPECTION_IMAGE', role: 'DELIVERY' };
+  if (lower.includes('reportimages')) return { type: 'INSPECTION_IMAGE', role: 'REPORT' };
+  if (lower.includes('drawingimages')) return { type: 'INSPECTION_IMAGE', role: 'DRAWING' };
+  if (lower.includes('materials')) return { type: 'INSPECTION_IMAGE', role: lower.includes('items') ? 'ITEM' : 'MATERIAL' };
+  if (lower.includes('items')) return { type: 'INSPECTION_IMAGE', role: 'ITEM' };
+  return { type: 'INSPECTION_IMAGE', role: 'MAIN' };
+};
+
+export const preprocessInspectionPayloadForStorage = async (
+  inspection: Inspection,
+  onProgress?: (pct: number) => void
+): Promise<Inspection> => {
   const cloned = JSON.parse(JSON.stringify(inspection));
-  if (cloned.signature && typeof cloned.signature === 'string' && cloned.signature.startsWith('data:')) {
-    cloned.signature = await uploadQMSImage(cloned.signature, { type: 'SIGNATURE', role: 'SIGNATURE_QC' });
+
+  // Ensure stage is always synced when form sets inspectionStage (PQC, FQC, FSR, STEP, SPR)
+  if ((!cloned.stage || !String(cloned.stage).trim()) && cloned.inspectionStage) {
+    cloned.stage = String(cloned.inspectionStage).trim();
   }
-  if (cloned.managerSignature && typeof cloned.managerSignature === 'string' && cloned.managerSignature.startsWith('data:')) {
-    cloned.managerSignature = await uploadQMSImage(cloned.managerSignature, { type: 'SIGNATURE', role: 'SIGNATURE_MANAGER' });
+
+  interface PendingDataUriTask {
+    parent: any;
+    key: string | number;
+    dataUri: string;
+    path: string;
   }
-  if (cloned.teamLeadSignature && typeof cloned.teamLeadSignature === 'string' && cloned.teamLeadSignature.startsWith('data:')) {
-    cloned.teamLeadSignature = await uploadQMSImage(cloned.teamLeadSignature, { type: 'SIGNATURE', role: 'SIGNATURE_TEAMLEAD' });
-  }
-  if (cloned.productionSignature && typeof cloned.productionSignature === 'string' && cloned.productionSignature.startsWith('data:')) {
-    cloned.productionSignature = await uploadQMSImage(cloned.productionSignature, { type: 'SIGNATURE', role: 'SIGNATURE_PRODUCTION' });
-  }
-  if (cloned.pmSignature && typeof cloned.pmSignature === 'string' && cloned.pmSignature.startsWith('data:')) {
-    cloned.pmSignature = await uploadQMSImage(cloned.pmSignature, { type: 'SIGNATURE', role: 'SIGNATURE_PM' });
-  }
-  if (cloned.receiverSignature && typeof cloned.receiverSignature === 'string' && cloned.receiverSignature.startsWith('data:')) {
-    cloned.receiverSignature = await uploadQMSImage(cloned.receiverSignature, { type: 'SIGNATURE', role: 'SIGNATURE_RECEIVER' });
-  }
-  if (Array.isArray(cloned.images)) {
-    for (let i = 0; i < cloned.images.length; i++) {
-      const img = cloned.images[i];
-      if (typeof img === 'string' && img.startsWith('data:')) {
-        cloned.images[i] = await uploadQMSImage(img, { type: 'INSPECTION_IMAGE' });
-      } else if (img && typeof img === 'object' && img.url && typeof img.url === 'string' && img.url.startsWith('data:')) {
-        img.url = await uploadQMSImage(img.url, { type: 'INSPECTION_IMAGE' });
+
+  const tasks: PendingDataUriTask[] = [];
+  const collectDataUris = (node: any, path: string, depth: number = 0) => {
+    if (!node || typeof node !== 'object' || depth > 12) return;
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i++) {
+        const val = node[i];
+        if (typeof val === 'string' && val.trim().startsWith('data:')) {
+          tasks.push({ parent: node, key: i, dataUri: val.trim(), path: `${path}[${i}]` });
+        } else if (val && typeof val === 'object') {
+          collectDataUris(val, `${path}[${i}]`, depth + 1);
+        }
+      }
+      return;
+    }
+    for (const [k, val] of Object.entries(node)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      const nextPath = path ? `${path}.${k}` : k;
+      if (typeof val === 'string' && val.trim().startsWith('data:')) {
+        tasks.push({ parent: node, key: k, dataUri: val.trim(), path: nextPath });
+      } else if (val && typeof val === 'object') {
+        collectDataUris(val, nextPath, depth + 1);
       }
     }
+  };
+
+  collectDataUris(cloned, '');
+
+  if (tasks.length > 0) {
+    const entityId = String(cloned.id || 'new');
+    const ma_ct = String(cloned.ma_ct || '').trim() || undefined;
+    let completed = 0;
+    const failures: string[] = [];
+
+    await runWithConcurrency(tasks, 3, async (task) => {
+      const meta = inferUploadMetaFromPath(task.path);
+      try {
+        const uploadedUrl = await uploadQMSImage(task.dataUri, {
+          entityId,
+          ma_ct,
+          type: meta.type,
+          role: meta.role,
+        });
+        task.parent[task.key] = uploadedUrl;
+      } catch (err: any) {
+        failures.push(`${task.path}: ${err?.message || 'Lỗi tải ảnh lên Google Drive'}`);
+      } finally {
+        completed++;
+        onProgress?.(Math.round((completed / tasks.length) * 100));
+      }
+    });
+
+    if (failures.length > 0) {
+      const partialErr: any = new Error(
+        `Không thể tải ${failures.length} ảnh/chữ ký lên Google Drive. Các ảnh đã tải thành công vẫn được giữ lại. Vui lòng kiểm tra kết nối và thử lại.\n${failures.slice(0, 3).join('\n')}`
+      );
+      partialErr.partialPayload = cloned;
+      throw partialErr;
+    }
   }
+
   return cloned;
 };
 
@@ -503,6 +569,7 @@ interface UploadStorageMeta {
   entityType?: string;
   type?: string;
   entityId?: string;
+  ma_ct?: string;
   role?: string;
 }
 
@@ -513,6 +580,7 @@ function normalizeUploadMeta(metadata?: any): UploadStorageMeta {
     return {
       entityType: metadata.entityType || metadata.type || 'GENERAL',
       entityId: metadata.entityId,
+      ma_ct: metadata.ma_ct || metadata.maCt || metadata.projectCode || metadata.project_code,
       role: metadata.role,
     };
   }
@@ -525,18 +593,132 @@ export const getSignedDownloadUrl = async (keyOrUrl: string, ttlSeconds: number 
   return String(res?.url || keyOrUrl);
 };
 
-async function postUploadFile(
+const UPLOAD_TIMEOUT_MS = 90000;
+const UPLOAD_MAX_RETRIES = 2;
+const UPLOAD_CONCURRENCY_LIMIT = 3;
+const AUTO_COMPRESS_MIN_BYTES = 300 * 1024;
+const AUTO_COMPRESS_TARGET_BYTES = 500 * 1024;
+const AUTO_COMPRESS_MAX_WIDTH = 1600;
+
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  const effectiveLimit = Math.max(1, Math.min(limit, items.length));
+  let cursor = 0;
+  const runners = Array.from({ length: effectiveLimit }, async () => {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= items.length) break;
+      await worker(items[idx], idx);
+    }
+  });
+  await Promise.all(runners);
+}
+
+async function compressImageBlobIfNeeded(
   file: File | Blob,
-  filename?: string,
-  metadata?: any,
+  filename: string,
+  meta: UploadStorageMeta
+): Promise<{ blob: Blob; filename: string; contentType: string }> {
+  const origType = file.type || 'application/octet-stream';
+  const isSignature = String(meta.role || '').toUpperCase().startsWith('SIGNATURE') || String(meta.entityType || '').toUpperCase() === 'SIGNATURE';
+  const isCompressibleRaster =
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined' &&
+    !isSignature &&
+    (origType === 'image/jpeg' || origType === 'image/jpg' || origType === 'image/png' || origType === 'image/webp') &&
+    file.size > AUTO_COMPRESS_MIN_BYTES;
+
+  if (!isCompressibleRaster) {
+    return { blob: file, filename, contentType: origType };
+  }
+
+  try {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = (e) => reject(e);
+        el.src = objectUrl;
+      });
+
+      let width = img.naturalWidth || img.width;
+      let height = img.naturalHeight || img.height;
+      if (!width || !height) {
+        return { blob: file, filename, contentType: origType };
+      }
+
+      if (width > AUTO_COMPRESS_MAX_WIDTH) {
+        height = Math.round((height * AUTO_COMPRESS_MAX_WIDTH) / width);
+        width = AUTO_COMPRESS_MAX_WIDTH;
+      } else if (height > AUTO_COMPRESS_MAX_WIDTH) {
+        width = Math.round((width * AUTO_COMPRESS_MAX_WIDTH) / height);
+        height = AUTO_COMPRESS_MAX_WIDTH;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return { blob: file, filename, contentType: origType };
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      let quality = 0.78;
+      let outBlob: Blob | null = null;
+      while (quality >= 0.4) {
+        outBlob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', quality)
+        );
+        if (outBlob && outBlob.size <= AUTO_COMPRESS_TARGET_BYTES) break;
+        quality -= 0.12;
+      }
+
+      if (outBlob && outBlob.size > 0 && outBlob.size < file.size) {
+        const baseName = filename.replace(/\.[^.]+$/, '') || `upload_${Date.now()}`;
+        return {
+          blob: outBlob,
+          filename: `${baseName}.jpg`,
+          contentType: 'image/jpeg',
+        };
+      }
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    // Fallback safely to original binary if canvas fails (e.g. HEIC/corrupt image)
+  }
+
+  return { blob: file, filename, contentType: origType };
+}
+
+function isRetryableUploadError(err: any): boolean {
+  const status = Number(err?.status || 0);
+  const msg = String(err?.message || '');
+  if (status === 400 || status === 401 || status === 403 || status === 404) return false;
+  if (msg.includes('OAuth') && msg.includes('chưa cấu hình')) return false;
+  if (msg.includes('đường dẫn lưu trữ tạm')) return false;
+  if (err?.name === 'AbortError' || status === 408 || status === 429 || status >= 500) return true;
+  if (err?.name === 'TypeError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) return true;
+  return false;
+}
+
+async function postUploadFileSingleAttempt(
+  uploadBlob: Blob,
+  safeFilename: string,
+  contentType: string,
+  meta: UploadStorageMeta,
   onProgress?: (pct: number) => void
 ): Promise<string> {
-  const meta = normalizeUploadMeta(metadata);
-  const safeFilename = filename || (file instanceof File ? file.name : '') || `upload_${Date.now()}.png`;
-  const contentType = file.type || 'application/octet-stream';
-
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
   try {
     onProgress?.(10);
@@ -549,6 +731,7 @@ async function postUploadFile(
         contentType,
         entityType: meta.entityType || meta.type || 'GENERAL',
         entityId: meta.entityId,
+        ma_ct: meta.ma_ct,
         role: meta.role,
       }),
       signal: controller.signal,
@@ -559,11 +742,11 @@ async function postUploadFile(
     }
 
     onProgress?.(35);
-    // Step 2: PUT binary content directly to the Signed URL endpoint (no auth header needed; verified by HMAC signature)
+    // Step 2: PUT binary content to Signed URL -> server uploads directly to Google Drive via System OAuth
     const putResp = await fetch(grant.uploadUrl, {
       method: grant.method || 'PUT',
       headers: { 'Content-Type': contentType },
-      body: file,
+      body: uploadBlob,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -578,33 +761,114 @@ async function postUploadFile(
         const text = await putResp.text().catch(() => '');
         if (text) errMsg = `Signed upload failed (${putResp.status}): ${text.slice(0, 120)}`;
       }
-      void fetch('/api/system/audit-errors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ method: 'PUT', path: '/api/storage/upload', statusCode: putResp.status, errorMessage: errMsg }),
-      }).catch(() => {});
-      throw new Error(errMsg);
+      const httpErr: any = new Error(errMsg);
+      httpErr.status = putResp.status;
+      throw httpErr;
     }
 
     onProgress?.(100);
     const data = await putResp.json().catch(() => ({}));
-    const url = String(data.url || grant.accessUrl || '');
-    if (!url) throw new Error('Server không trả về URL hình ảnh sau khi tải lên');
+    const url = String(data.url || grant.accessUrl || '').trim();
+    if (!url) throw new Error('Server không trả về URL hình ảnh sau khi tải lên Google Drive');
+    const isDriveMediaUrl =
+      url.startsWith('/api/media/image/') ||
+      url.includes('drive.google.com') ||
+      url.includes('lh3.googleusercontent.com');
+    if (url.includes('/api/storage/files/') || !isDriveMediaUrl) {
+      const warnMsg = `Cảnh báo: Máy chủ tải lên trả về đường dẫn lưu trữ tạm (${url}) thay vì Google Drive. Vui lòng cập nhật/Publish lại ứng dụng trước khi lưu ảnh.`;
+      const warnErr: any = new Error(warnMsg);
+      warnErr.status = 502;
+      throw warnErr;
+    }
     return url;
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err?.name === 'AbortError') {
-      const msg = 'Tải ảnh lên quá thời gian chờ (30s)';
-      void fetch('/api/system/audit-errors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ method: 'PUT', path: '/api/storage/upload', statusCode: 408, errorMessage: msg }),
-      }).catch(() => {});
-      throw new Error(msg);
+      const timeoutErr: any = new Error('Tải ảnh lên Google Drive quá thời gian chờ (90s)');
+      timeoutErr.name = 'AbortError';
+      timeoutErr.status = 408;
+      throw timeoutErr;
     }
     throw err;
   }
 }
+
+async function postUploadFile(
+  file: File | Blob,
+  filename?: string,
+  metadata?: any,
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  const meta = normalizeUploadMeta(metadata);
+  const rawFilename = filename || (file instanceof File ? file.name : '') || `upload_${Date.now()}.png`;
+  const prepared = await compressImageBlobIfNeeded(file, rawFilename, meta);
+
+  let lastErr: any = null;
+  for (let attempt = 0; attempt <= UPLOAD_MAX_RETRIES; attempt++) {
+    try {
+      return await postUploadFileSingleAttempt(
+        prepared.blob,
+        prepared.filename,
+        prepared.contentType,
+        meta,
+        onProgress
+      );
+    } catch (err: any) {
+      lastErr = err;
+      const canRetry = attempt < UPLOAD_MAX_RETRIES && isRetryableUploadError(err);
+      if (!canRetry) break;
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+  }
+
+  const finalStatus = Number(lastErr?.status || 500);
+  const finalMessage = String(lastErr?.message || 'Lỗi tải ảnh lên Google Drive');
+  void fetch('/api/system/audit-errors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ method: 'PUT', path: '/api/storage/upload', statusCode: finalStatus, errorMessage: finalMessage }),
+  }).catch(() => {});
+  throw lastErr || new Error(finalMessage);
+}
+
+export interface BatchImageUploadResult {
+  uploadedUrls: string[];
+  failed: Array<{ name: string; error: string }>;
+}
+
+export const uploadQMSImagesBatch = async (
+  files: FileList | File[],
+  metadata?: any,
+  onProgress?: (pct: number) => void,
+  concurrency: number = UPLOAD_CONCURRENCY_LIMIT
+): Promise<BatchImageUploadResult> => {
+  const fileList = Array.from(files || []);
+  const results: Array<string | null> = new Array(fileList.length).fill(null);
+  const failed: Array<{ name: string; error: string }> = [];
+  let finished = 0;
+
+  await runWithConcurrency(fileList, concurrency, async (file, idx) => {
+    try {
+      const url = await uploadQMSImage(file, metadata, undefined, undefined, (singlePct) => {
+        if (fileList.length === 1) onProgress?.(singlePct);
+      });
+      results[idx] = url;
+    } catch (err: any) {
+      failed.push({
+        name: file.name || `Ảnh #${idx + 1}`,
+        error: err?.message || 'Không thể tải ảnh lên Google Drive',
+      });
+    } finally {
+      finished++;
+      onProgress?.(Math.round((finished / fileList.length) * 100));
+    }
+  });
+
+  return {
+    uploadedUrls: results.filter((u): u is string => Boolean(u)),
+    failed,
+  };
+};
 
 export const uploadQMSImage = async (
   fileOrDataUrl: File | Blob | string,
@@ -619,7 +883,11 @@ export const uploadQMSImage = async (
       trimmed.startsWith('http://') ||
       trimmed.startsWith('https://') ||
       trimmed.startsWith('/uploads/') ||
-      trimmed.startsWith('/api/storage/files/')
+      trimmed.startsWith('/api/storage/files/') ||
+      trimmed.startsWith('/api/media/image/') ||
+      trimmed.startsWith('/api/image/') ||
+      trimmed.startsWith('/display-image/') ||
+      trimmed.startsWith('/media/stream/')
     ) {
       return trimmed;
     }

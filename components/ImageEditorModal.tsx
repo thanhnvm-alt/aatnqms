@@ -103,6 +103,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   // Loading & Error State
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // --- VIEW MODE LOGIC ---
 
@@ -277,9 +279,13 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
       // Use proxy to bypass CORS and Authentication issues
       const imageUrl = images[currentIndex];
-      img.src = getProxyImageUrl(imageUrl);
+      const baseSrc = getProxyImageUrl(imageUrl);
+      img.src =
+        retryNonce > 0 && baseSrc && !baseSrc.startsWith('data:') && !baseSrc.startsWith('blob:')
+          ? `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}_r=${retryNonce}`
+          : baseSrc;
     }
-  }, [isEditing, currentIndex, images]);
+  }, [isEditing, currentIndex, images, retryNonce]);
 
   useEffect(() => {
     initCanvas();
@@ -292,6 +298,8 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   useEffect(() => {
     setRotation(0);
     setLoadError(null);
+    setSaveError(null);
+    setRetryNonce(0);
   }, [currentIndex]);
 
   const rotateCanvas90Deg = () => {
@@ -376,6 +384,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const handleCommitEdit = async () => {
     if (canvasRef.current && onSave && isDirty && !loadError) {
       try {
+          setSaveError(null);
           setIsProcessing(true);
           // Do not compress the image aggressively, keep high quality and upload to storage
           const updatedDataUrl = canvasRef.current.toDataURL('image/jpeg', 0.95);
@@ -385,7 +394,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           setIsDirty(false);
           setHistory([]);
       } catch (error: any) {
-          alert("Lỗi lưu ảnh: " + error.message);
+          setSaveError(error?.message || 'Không thể lưu ảnh lên Google Drive.');
       } finally {
           setIsProcessing(false);
       }
@@ -544,32 +553,69 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         onTouchMove={handlePointerMove} 
         onTouchEnd={handlePointerUp}
       >
+        {saveError && (
+          <div className="mx-3 mt-2 px-3 py-2 rounded-xl bg-red-950/90 border border-red-500/40 text-red-200 text-xs flex items-center justify-between gap-2 z-50">
+            <span>Lỗi lưu ảnh: {saveError}</span>
+            <button type="button" onClick={() => setSaveError(null)} className="px-2 py-0.5 rounded bg-red-800/70 hover:bg-red-700 text-white text-[11px] font-semibold">
+              Đóng
+            </button>
+          </div>
+        )}
         {!isEditing ? (
           <>
             <div 
-                className="relative transition-transform duration-75 ease-out overflow-hidden" 
+                className={`relative transition-transform duration-75 ease-out overflow-hidden ${loadError ? 'min-w-[280px] min-h-[220px] flex items-center justify-center' : ''}`}
                 style={{ 
                     transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, 
                     cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' 
                 }}
             >
-              <img 
-                src={getProxyImageUrl(images[currentIndex])} 
-                alt="HD Preview" 
-                className="max-w-[98vw] max-h-[98%] object-contain shadow-[0_50px_100px_rgba(0,0,0,0.6)] rounded-sm transition-transform duration-200" 
-                style={{ imageRendering: 'auto', transform: `rotate(${rotation}deg)` }} 
-                onError={() => setLoadError("Lỗi tải tệp tin HD.")}
-              />
+              {(() => {
+                const rawProxySrc = getProxyImageUrl(images[currentIndex]);
+                const effectiveSrc =
+                  retryNonce > 0 && rawProxySrc && !rawProxySrc.startsWith('data:') && !rawProxySrc.startsWith('blob:')
+                    ? `${rawProxySrc}${rawProxySrc.includes('?') ? '&' : '?'}_r=${retryNonce}`
+                    : rawProxySrc;
+                return (
+                  <img 
+                    key={`${currentIndex}_${retryNonce}`}
+                    src={effectiveSrc} 
+                    alt="HD Preview" 
+                    className={`max-w-[98vw] max-h-[98%] object-contain shadow-[0_50px_100px_rgba(0,0,0,0.6)] rounded-sm transition-transform duration-200 ${loadError ? 'opacity-0 w-[280px] h-[220px]' : ''}`}
+                    style={{ imageRendering: 'auto', transform: `rotate(${rotation}deg)` }} 
+                    onLoad={() => setLoadError(null)}
+                    onError={async () => {
+                      try {
+                        const probe = rawProxySrc ? await fetch(rawProxySrc, { method: 'HEAD' }) : null;
+                        if (probe && probe.status === 404) {
+                          setLoadError('Không tìm thấy tệp ảnh (404). Tệp tạm cũ có thể đã bị mất.');
+                          return;
+                        }
+                        if (probe && (probe.status === 502 || probe.status === 503)) {
+                          setLoadError('Không thể kết nối Google Drive hệ thống để tải ảnh.');
+                          return;
+                        }
+                      } catch {
+                        // ignore probe error
+                      }
+                      setLoadError('Lỗi tải tệp tin HD.');
+                    }}
+                  />
+                );
+              })()}
               {loadError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 bg-slate-900/90 rounded-xl border border-red-500/30 p-6 z-30">
-                      <AlertCircle className="w-12 h-12 mb-3 opacity-75" />
-                      <p className="font-black uppercase text-[10px] tracking-widest text-center mb-4">{loadError}</p>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-red-300 bg-slate-900/95 rounded-xl border border-red-500/30 p-6 z-30">
+                      <AlertCircle className="w-10 h-10 mb-3 text-red-400" />
+                      <p className="font-semibold text-xs text-center mb-4 leading-relaxed">{loadError}</p>
                       <button 
                         type="button"
-                        onClick={() => setLoadError(null)}
-                        className="min-h-[44px] px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all shadow-lg active:scale-95"
+                        onClick={() => {
+                          setLoadError(null);
+                          setRetryNonce((n) => n + 1);
+                        }}
+                        className="min-h-[44px] px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all shadow-lg active:scale-95 cursor-pointer"
                       >
-                        Thử lại (Retry)
+                        Thử lại
                       </button>
                   </div>
               )}
@@ -612,10 +658,28 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   </div>
               )}
               {loadError ? (
-                  <div className="text-red-400 p-10 text-center bg-slate-900 rounded-[2.5rem] border border-red-900/40 shadow-2xl max-w-sm">
-                      <AlertCircle className="w-14 h-14 mb-5 mx-auto" />
-                      <p className="font-black uppercase text-xs tracking-widest">{loadError}</p>
-                      <button onClick={onClose} className="mt-8 px-8 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest">THOÁT CHẾ ĐỘ EDITOR</button>
+                  <div className="text-red-300 p-8 text-center bg-slate-900 rounded-2xl border border-red-900/40 shadow-2xl max-w-sm space-y-4">
+                      <AlertCircle className="w-12 h-12 mx-auto text-red-400" />
+                      <p className="font-semibold text-xs leading-relaxed">{loadError}</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoadError(null);
+                            setRetryNonce((n) => n + 1);
+                          }}
+                          className="min-h-[40px] px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                        >
+                          Thử lại
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onClose}
+                          className="min-h-[40px] px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                        >
+                          Thoát Editor
+                        </button>
+                      </div>
                   </div>
               ) : (
                   <div className="relative group/canvas overflow-hidden" ref={canvasContainerRef}>

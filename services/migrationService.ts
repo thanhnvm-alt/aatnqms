@@ -1111,6 +1111,23 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ password_resets setup warning: ${pwErr?.message}`);
     }
 
+    // --- STORAGE DRIVE MAP (Legacy temporary /api/storage/files/* -> Google Drive fileId) ---
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS "${schema}"."storage_drive_map" (
+          "storage_key" TEXT PRIMARY KEY,
+          "drive_file_id" TEXT NOT NULL,
+          "mime_type" TEXT,
+          "source_origin" TEXT,
+          "migrated_at" BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
+        );
+      `);
+      migrationLogs.push(`✅ Ensured storage_drive_map table exists in ${schema}`);
+    } catch (sdErr: any) {
+      console.warn(`⚠️ Could not setup storage_drive_map:`, sdErr?.message);
+      migrationLogs.push(`⚠️ storage_drive_map setup warning: ${sdErr?.message}`);
+    }
+
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
     try {
       fs.writeFileSync(path.join(process.cwd(), 'diag_migration.json'), JSON.stringify({

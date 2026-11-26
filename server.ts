@@ -8,6 +8,7 @@ import * as xlsx from 'xlsx';
 import * as dbService from './services/dbService.js';
 import * as dbMod from './services/dbModuleService.js';
 import * as storageService from './services/storageService.js';
+import * as googleDriveSystem from './services/googleDriveSystemService.js';
 import { runMigrations } from './services/migrationService.js';
 import { backfillTraceabilityIndex } from './services/traceabilityIndexService.js';
 import {
@@ -45,13 +46,14 @@ app.use('/uploads', (req, res, next) => {
 // Attach JWT user context, enforce authentication on protected routes, & capture all API errors (>= 400) for System Audit
 const isPublicApiRoute = (method: string, pathUrl: string): boolean => {
   const cleanPath = (pathUrl || '').split('?')[0];
-  if (method === 'GET' && cleanPath === '/api/health') return true;
+  const isReadMethod = method === 'GET' || method === 'HEAD';
+  if (isReadMethod && cleanPath === '/api/health') return true;
   if (method === 'POST' && (cleanPath === '/api/auth/login' || cleanPath === '/api/auth/forgot-password' || cleanPath === '/api/auth/reset-password')) return true;
-  if (method === 'GET' && cleanPath.startsWith('/api/public/inspections/')) return true;
-  if (method === 'GET' && (cleanPath === '/api/proxy-image' || cleanPath === '/api/images/proxy')) return true;
-  if (method === 'GET' && (cleanPath.startsWith('/api/media/image') || cleanPath.startsWith('/api/image') || cleanPath.startsWith('/api/media/') || cleanPath.startsWith('/display-image') || cleanPath.startsWith('/media/stream'))) return true;
+  if (isReadMethod && cleanPath.startsWith('/api/public/inspections/')) return true;
+  if (isReadMethod && (cleanPath === '/api/proxy-image' || cleanPath === '/api/images/proxy')) return true;
+  if (isReadMethod && (cleanPath.startsWith('/api/media/image') || cleanPath.startsWith('/api/image') || cleanPath.startsWith('/api/media/') || cleanPath.startsWith('/display-image') || cleanPath.startsWith('/media/stream'))) return true;
   if ((method === 'PUT' || method === 'POST') && cleanPath === '/api/storage/upload') return true;
-  if (method === 'GET' && cleanPath.startsWith('/api/storage/files/')) return true;
+  if (isReadMethod && cleanPath.startsWith('/api/storage/files/')) return true;
   if (method === 'POST' && cleanPath === '/api/system/audit-errors') return true;
   return false;
 };
@@ -199,7 +201,7 @@ app.post('/api/auth/change-password', async (req: any, res) => {
   try {
     const userId = req.authUser?.id;
     if (!userId) return res.status(401).json({ error: 'Vui lòng đăng nhập để đổi mật khẩu' });
-    const result = await dbMod.changeUserPassword(userId, req.body?.currentPassword, req.body?.newPassword);
+    const result = await dbMod.changeUserPassword(userId, req.body?.newPassword, req.body?.currentPassword);
     res.json(result);
   } catch (err: any) {
     sendErr(res, err, 400);
@@ -208,7 +210,7 @@ app.post('/api/auth/change-password', async (req: any, res) => {
 
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
-    const result = await dbMod.requestPasswordReset(req.body?.email);
+    const result = await dbMod.requestPasswordReset(req.body?.email || req.body?.identifier);
     res.json(result);
   } catch (err: any) {
     sendErr(res, err, 400);
@@ -217,7 +219,11 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
-    const result = await dbMod.confirmPasswordReset(req.body?.email, req.body?.code, req.body?.newPassword);
+    const identifier = req.body?.identifier || req.body?.username || req.body?.email;
+    const result = await dbMod.resetPasswordDirect(identifier, req.body?.newPassword, {
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers['user-agent'],
+    });
     res.json(result);
   } catch (err: any) {
     sendErr(res, err, 400);
@@ -802,12 +808,43 @@ app.get('/api/inspections', async (req, res) => {
 app.get('/api/export/inspections', async (req, res) => {
   try {
     const format = String(req.query.format || 'csv').toLowerCase();
-    const result = await dbService.getInspectionsList(req.query, 1, 10000);
-    const items = Array.isArray(result) ? result : (result?.items || []);
+    const items = await dbService.getInspectionsExportRows(req.query, 10000);
+
+    const toExportNumeric = (val: any, zeroIfMissing: boolean): number | '' => {
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        const num = Number(val);
+        if (Number.isFinite(num)) return num;
+      }
+      return zeroIfMissing ? 0 : '';
+    };
+
+    const headers = [
+      'Mã hồ sơ',
+      'Loại phiếu',
+      'Mã dự án',
+      'Tên dự án',
+      'Hạng mục/Mô tả',
+      'Mã nhà máy',
+      'Headcode',
+      'QC kiểm tra',
+      'Xưởng',
+      'Công đoạn sản xuất',
+      'Ngày thực hiện',
+      'Trạng thái',
+      'SL ĐĐH',
+      'SLkiem',
+      'SLDat',
+      'TLDat',
+      'SLLoi',
+      'TLLoi',
+      'Kết luận/Ghi chú',
+      'ĐVT/Unit',
+    ];
+
     const rows = items.map((item: any) => {
-      const inspected = Number(item.inspectedQuantity ?? item.inspected_qty ?? 0);
-      const passed = Number(item.passedQuantity ?? item.passed_qty ?? 0);
-      const failed = Number(item.failedQuantity ?? item.failed_qty ?? 0);
+      const inspected = toExportNumeric(item.inspectedQuantity ?? item.inspected_qty, true) as number;
+      const passed = toExportNumeric(item.passedQuantity ?? item.passed_qty, true) as number;
+      const failed = toExportNumeric(item.failedQuantity ?? item.failed_qty, true) as number;
       const passRate = inspected > 0 ? ((passed / inspected) * 100).toFixed(1) + '%' : '';
       const failRate = inspected > 0 ? ((failed / inspected) * 100).toFixed(1) + '%' : '';
 
@@ -821,31 +858,31 @@ app.get('/api/export/inspections', async (req, res) => {
         'Headcode': item.headcode || '',
         'QC kiểm tra': item.inspectorName || item.created_by || item.qcName || '',
         'Xưởng': item.workshop || '',
-        'Công đoạn sản xuất': item.stage || item.subStage || '',
+        'Công đoạn sản xuất': item.exportStage || item.stage || item.subStage || '',
         'Ngày thực hiện': item.date || item.createdAt || '',
         'Trạng thái': item.status || '',
-        'SL ĐĐH': item.so_luong_ipo !== undefined && item.so_luong_ipo !== null ? item.so_luong_ipo : (item.orderedQty !== undefined ? item.orderedQty : ''),
-        'SLkiem': inspected || '',
-        'SLDat': passed || '',
+        'SL ĐĐH': toExportNumeric(item.so_luong_ipo ?? item.orderedQty, false),
+        'SLkiem': inspected,
+        'SLDat': passed,
         'TLDat': passRate,
-        'SLLoi': failed || '',
+        'SLLoi': failed,
         'TLLoi': failRate,
-        'Kết luận/Ghi chú': item.conclusion || item.notes || item.remarks || '',
-        'ĐVT/Unit': item.unit || item.uom || '',
+        'Kết luận/Ghi chú': item.exportSummary || item.summary || item.conclusion || item.notes || item.remarks || '',
+        'ĐVT/Unit': item.exportUnit || item.dvt || item.unit || item.uom || '',
       };
     });
 
     if (format === 'csv') {
-      let csv = '\uFEFF' + Object.keys(rows[0] || {}).join(',') + '\n';
+      let csv = '\uFEFF' + headers.join(',') + '\n';
       for (const r of rows) {
-        csv += Object.values(r).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+        csv += headers.map(h => `"${String((r as any)[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
       }
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=AATN_Inspections_${Date.now()}.csv`);
       return res.send(csv);
     } else {
       const wb = xlsx.utils.book_new();
-      const ws = xlsx.utils.json_to_sheet(rows);
+      const ws = xlsx.utils.json_to_sheet(rows, { header: headers });
       xlsx.utils.book_append_sheet(wb, ws, 'Inspections');
       const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1855,28 +1892,68 @@ const uploadFieldsMiddleware = memoryUpload.fields([
   { name: 'files', maxCount: 10 },
 ]);
 
+app.get('/api/storage/status', (_req, res) => {
+  const status = googleDriveSystem.getSystemDriveConfigStatus();
+  res.json({
+    provider: 'GOOGLE_DRIVE_SYSTEM_OAUTH',
+    configured: status.configured,
+    missingEnvCount: status.missing.length,
+    hasFolderId: status.hasFolderId,
+  });
+});
+
 app.post('/api/storage/signed-upload-url', (req: any, res) => {
   try {
+    // Fail fast before issuing upload URL if system Google Drive OAuth is unavailable
+    googleDriveSystem.assertSystemDriveConfigured();
+
+    const filename = String(req.body?.filename || req.body?.fileName || `upload_${Date.now()}.png`);
+    const contentType = String(req.body?.contentType || req.body?.mimeType || 'application/octet-stream');
+    const entityType = String(req.body?.entityType || req.body?.type || 'GENERAL');
+    const maCt = String(req.body?.ma_ct || req.body?.projectCode || '').trim();
+    const role = String(req.body?.role || '').trim();
+
     const grant = storageService.createSignedUploadUrl({
-      filename: req.body?.filename || req.body?.fileName,
-      contentType: req.body?.contentType || req.body?.mimeType,
-      entityType: req.body?.entityType || req.body?.type,
+      filename,
+      contentType,
+      entityType,
       entityId: req.body?.entityId,
-      role: req.body?.role,
+      role,
       ttlSeconds: req.body?.ttlSeconds,
     });
-    res.json(grant);
+
+    const metaParams = new URLSearchParams();
+    metaParams.set('filename', filename);
+    if (entityType) metaParams.set('entityType', entityType);
+    if (maCt) metaParams.set('ma_ct', maCt);
+    if (role) metaParams.set('role', role);
+
+    res.json({
+      ...grant,
+      uploadUrl: `${grant.uploadUrl}&${metaParams.toString()}`,
+    });
   } catch (err: any) {
-    sendErr(res, err, 400);
+    sendErr(res, err, err?.statusCode || 400);
   }
 });
 
-app.get('/api/storage/signed-download-url', (req: any, res) => {
+app.get('/api/storage/signed-download-url', async (req: any, res) => {
   try {
     const rawKey = String(req.query.key || req.query.url || '').trim();
     if (!rawKey) return res.status(400).json({ error: 'Thiếu tham số key hoặc url' });
+    const cleanRaw = storageService.stripTransientMediaUrl(rawKey);
+    if (cleanRaw.includes('/api/media/image/') || /^[a-zA-Z0-9_-]{15,}$/.test(cleanRaw)) {
+      return res.json({ url: cleanRaw.startsWith('/api/media/image/') ? cleanRaw : `/api/media/image/${cleanRaw}`, expiresIn: 0 });
+    }
+    if (cleanRaw.startsWith('/api/storage/files/')) {
+      const keyOnly = cleanRaw.slice('/api/storage/files/'.length).split('?')[0];
+      const migratedId = await storageService.getMigratedDriveFileId(keyOnly).catch(() => null);
+      if (migratedId) {
+        return res.json({ url: `/api/media/image/${migratedId}`, expiresIn: 0 });
+      }
+    }
     const ttl = parseInt(String(req.query.ttlSeconds || '3600'), 10);
-    const signedUrl = storageService.createSignedDownloadUrl(rawKey, ttl);
+    const signedUrl = storageService.createSignedDownloadUrl(cleanRaw, ttl);
     res.json({ url: signedUrl, expiresIn: ttl });
   } catch (err: any) {
     sendErr(res, err, 400);
@@ -1900,6 +1977,11 @@ const handleSignedStorageUpload = async (req: any, res: any) => {
       return res.status((verification as any).statusCode).json({ error: (verification as any).error });
     }
 
+    const entityType = String(req.query.entityType || 'GENERAL');
+    const maCt = String(req.query.ma_ct || '').trim();
+    const role = String(req.query.role || '').trim();
+    const queryFilename = String(req.query.filename || '').trim();
+
     const contentType = String(req.headers['content-type'] || '').toLowerCase();
     if (contentType.includes('multipart/form-data')) {
       return uploadFieldsMiddleware(req, res, async (err: any) => {
@@ -1917,16 +1999,27 @@ const handleSignedStorageUpload = async (req: any, res: any) => {
           return res.status(400).json({ error: 'Không có tệp được tải lên' });
         }
         try {
-          const stored = await storageService.writeStorageBuffer(verification.storageKey, primary.buffer);
-          return res.json({
-            ...stored,
-            url: stored.accessUrl,
-            signedDownloadUrl: storageService.createSignedDownloadUrl(stored.storageKey, 3600),
-            filename: primary.originalname,
-            mimetype: primary.mimetype,
+          const stored = await googleDriveSystem.uploadBufferToSystemDrive({
+            buffer: primary.buffer,
+            filename: queryFilename || primary.originalname || path.basename(verification.storageKey),
+            mimeType: primary.mimetype || 'application/octet-stream',
+            entityType,
+            ma_ct: maCt,
+            role,
           });
-        } catch (writeErr: any) {
-          return sendErr(res, writeErr);
+          return res.json({
+            success: true,
+            fileId: stored.fileId,
+            storageKey: stored.storageKey,
+            url: stored.url,
+            accessUrl: stored.accessUrl,
+            signedDownloadUrl: stored.url,
+            filename: stored.name,
+            mimetype: stored.mimetype,
+            size: stored.size,
+          });
+        } catch (uploadErr: any) {
+          return sendErr(res, uploadErr, uploadErr?.statusCode || 502);
         }
       });
     }
@@ -1939,15 +2032,32 @@ const handleSignedStorageUpload = async (req: any, res: any) => {
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
         return res.status(400).json({ error: 'Nội dung tệp tải lên rỗng.' });
       }
+      const cleanMime = String(req.headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
+      if (!storageService.isAllowedMimeType(cleanMime)) {
+        return res.status(400).json({ error: `Định dạng tệp không được hỗ trợ: ${cleanMime}` });
+      }
       try {
-        const stored = await storageService.writeStorageBuffer(verification.storageKey, req.body);
-        return res.json({
-          ...stored,
-          url: stored.accessUrl,
-          signedDownloadUrl: storageService.createSignedDownloadUrl(stored.storageKey, 3600),
+        const stored = await googleDriveSystem.uploadBufferToSystemDrive({
+          buffer: req.body,
+          filename: queryFilename || path.basename(verification.storageKey),
+          mimeType: cleanMime,
+          entityType,
+          ma_ct: maCt,
+          role,
         });
-      } catch (writeErr: any) {
-        return sendErr(res, writeErr);
+        return res.json({
+          success: true,
+          fileId: stored.fileId,
+          storageKey: stored.storageKey,
+          url: stored.url,
+          accessUrl: stored.accessUrl,
+          signedDownloadUrl: stored.url,
+          filename: stored.name,
+          mimetype: stored.mimetype,
+          size: stored.size,
+        });
+      } catch (uploadErr: any) {
+        return sendErr(res, uploadErr, uploadErr?.statusCode || 502);
       }
     });
   } catch (err: any) {
@@ -1958,56 +2068,190 @@ const handleSignedStorageUpload = async (req: any, res: any) => {
 app.put('/api/storage/upload', handleSignedStorageUpload);
 app.post('/api/storage/upload', handleSignedStorageUpload);
 
-app.get('/api/storage/files/*storageKey', (req: any, res) => {
+const inflightLegacyMigrations = new Map<string, Promise<{ ok: boolean; buf?: Buffer; contentType?: string; driveFileId?: string }>>();
+
+async function pullLegacyAssetFromSharedAppToDrive(
+  cleanKey: string,
+  authJwt?: string
+): Promise<{ ok: boolean; buf?: Buffer; contentType?: string; driveFileId?: string }> {
+  const existing = inflightLegacyMigrations.get(cleanKey);
+  if (existing) return existing;
+
+  const task = (async () => {
+    const sharedOrigin = storageService.getAllowedSharedAppOrigin();
+    if (!sharedOrigin) {
+      return { ok: false };
+    }
+
+    const encodedKeyPath = cleanKey.split('/').map((seg) => encodeURIComponent(seg)).join('/');
+    const signedPath = storageService.createSignedDownloadUrl(cleanKey, 120);
+    const candidateUrls = [
+      `${sharedOrigin}${signedPath}`,
+      ...(authJwt ? [`${sharedOrigin}/api/storage/files/${encodedKeyPath}?token=${encodeURIComponent(authJwt)}`] : []),
+      `${sharedOrigin}/uploads/${encodedKeyPath}`,
+    ];
+
+    for (const candidateUrl of candidateUrls) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        const resp = await fetch(candidateUrl, {
+          method: 'GET',
+          redirect: 'manual',
+          signal: controller.signal,
+          headers: authJwt ? { Authorization: `Bearer ${authJwt}` } : undefined,
+        });
+        if (!resp.ok) continue;
+
+        const ct = String(resp.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+        if (ct.includes('text/html') || ct.includes('application/xhtml+xml') || ct.includes('application/json')) {
+          continue;
+        }
+        const buf = Buffer.from(await resp.arrayBuffer());
+        if (buf.length === 0 || buf.length > storageService.MAX_STORAGE_FILE_BYTES) {
+          continue;
+        }
+
+        let driveFileId: string | undefined;
+        try {
+          if (googleDriveSystem.getSystemDriveConfigStatus().configured) {
+            const uploaded = await googleDriveSystem.uploadBufferToSystemDrive({
+              buffer: buf,
+              filename: path.basename(cleanKey),
+              mimeType: ct || 'application/octet-stream',
+              entityType: 'MIGRATED_SHARED_ASSET',
+            });
+            driveFileId = uploaded.fileId;
+            await storageService.saveMigratedDriveFileId({
+              storageKey: cleanKey,
+              driveFileId: uploaded.fileId,
+              mimeType: uploaded.mimetype,
+              sourceOrigin: sharedOrigin,
+            });
+          }
+        } catch (driveErr: any) {
+          console.warn(`[LegacyStorageRecovery] Pulled ${cleanKey} from Shared App but Drive upload failed:`, driveErr?.message || driveErr);
+        }
+
+        return { ok: true, buf, contentType: ct || 'application/octet-stream', driveFileId };
+      } catch {
+        // Try next candidate URL
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    return { ok: false };
+  })().finally(() => {
+    inflightLegacyMigrations.delete(cleanKey);
+  });
+
+  inflightLegacyMigrations.set(cleanKey, task);
+  return task;
+}
+
+app.get('/api/storage/files/*storageKey', async (req: any, res) => {
   try {
     const rawParam = Array.isArray(req.params.storageKey)
       ? req.params.storageKey.join('/')
       : String(req.params.storageKey || '');
     const cleanKey = storageService.sanitizeStorageKey(decodeURIComponent(rawParam));
+    const isHead = req.method === 'HEAD';
 
+    const rawQueryToken = String(req.query.token || '').trim();
+    const queryTokenBearer = rawQueryToken ? `Bearer ${rawQueryToken}` : undefined;
+    const rawAuthHeader = String(req.headers?.authorization || '').trim();
+    const bearerJwt = rawQueryToken || (rawAuthHeader.startsWith('Bearer ') ? rawAuthHeader.slice(7).trim() : '');
+    const hasJwt = Boolean(req.authUser || dbMod.verifyJwtToken(queryTokenBearer));
     const hasSignedParams = Boolean(req.query.sig && req.query.expires);
-    if (hasSignedParams) {
-      const verified = storageService.verifySignedStorageRequest({
-        action: 'download',
-        key: cleanKey,
-        expires: req.query.expires as string | undefined,
-        sig: req.query.sig as string | undefined,
-      });
-      if (!verified.ok) {
-        const errRes = verified as { statusCode: number; error: string };
-        return res.status(errRes.statusCode).json({ error: errRes.error });
-      }
-    } else {
-      const queryToken = req.query.token ? `Bearer ${String(req.query.token)}` : undefined;
-      const hasJwt = Boolean(req.authUser || dbMod.verifyJwtToken(queryToken));
-      if (!hasJwt) {
+
+    if (!hasJwt) {
+      if (hasSignedParams) {
+        const verified = storageService.verifySignedStorageRequest({
+          action: 'download',
+          key: cleanKey,
+          expires: req.query.expires as string | undefined,
+          sig: req.query.sig as string | undefined,
+        });
+        if (!verified.ok) {
+          const errRes = verified as { statusCode: number; error: string };
+          return res.status(errRes.statusCode).json({ error: errRes.error });
+        }
+      } else {
         return res.status(401).json({ error: 'Yêu cầu JWT hoặc Signed Download URL hợp lệ để truy cập tệp.' });
       }
     }
 
-    const filePath = storageService.resolveStorageFilePath(cleanKey);
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-      return res.status(404).json({ error: 'Storage asset not found' });
-    }
     const rawBaseName = String(req.query.filename || cleanKey.split('/').pop() || 'attachment')
       .replace(/[\r\n"]/g, '_')
       .trim() || 'attachment';
     const isDownload = req.query.download === '1' || req.query.download === 'true';
     const dispositionType = isDownload ? 'attachment' : 'inline';
-    res.setHeader(
-      'Content-Disposition',
-      `${dispositionType}; filename*=UTF-8''${encodeURIComponent(rawBaseName)}`
-    );
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    return res.sendFile(filePath);
+    const applyHeaders = (contentType?: string) => {
+      if (contentType) {
+        res.setHeader('Content-Type', contentType);
+      }
+      res.setHeader(
+        'Content-Disposition',
+        `${dispositionType}; filename*=UTF-8''${encodeURIComponent(rawBaseName)}`
+      );
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+    };
+
+    // 1. Check local disk first
+    const filePath = storageService.resolveStorageFilePath(cleanKey);
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      applyHeaders();
+      if (isHead) return res.status(200).end();
+      return res.sendFile(filePath);
+    }
+
+    // 2. Check migrated Drive file mapping in PostgreSQL / memory cache
+    const migratedDriveId = await storageService.getMigratedDriveFileId(cleanKey);
+    if (migratedDriveId) {
+      const driveResult = await resolveDriveFileResponse(migratedDriveId);
+      if (driveResult.ok && driveResult.buf) {
+        applyHeaders(driveResult.contentType || 'application/octet-stream');
+        if (isHead) return res.status(200).end();
+        return res.send(driveResult.buf);
+      }
+      if (driveResult.status && driveResult.status !== 404) {
+        return res.status(driveResult.status).json({
+          error: driveResult.error || 'Không thể tải tệp đã đồng bộ từ Google Drive',
+        });
+      }
+    }
+
+    // 3. Try pulling temporary file once from allowlisted Shared App origin into System Google Drive
+    const bypassNegativeCache = Boolean(req.query._r);
+    if (bypassNegativeCache || !storageService.isSharedPullNegativelyCached(cleanKey)) {
+      const pulled = await pullLegacyAssetFromSharedAppToDrive(cleanKey, hasJwt ? bearerJwt : undefined);
+      if (pulled.ok && pulled.buf) {
+        applyHeaders(pulled.contentType || 'application/octet-stream');
+        if (isHead) return res.status(200).end();
+        return res.send(pulled.buf);
+      }
+      storageService.markSharedPullNotFound(cleanKey);
+    }
+
+    return res.status(404).json({
+      error: 'Storage asset not found',
+      code: 'LEGACY_LOCAL_FILE_MISSING',
+    });
   } catch (err: any) {
     return sendErr(res, err);
   }
 });
 
 app.post('/api/upload', (req: any, res) => {
+  try {
+    googleDriveSystem.assertSystemDriveConfigured();
+  } catch (cfgErr: any) {
+    return sendErr(res, cfgErr, cfgErr?.statusCode || 503);
+  }
+
   uploadFieldsMiddleware(req, res, async (err: any) => {
     if (err) {
       const status = err?.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
@@ -2026,29 +2270,65 @@ app.post('/api/upload', (req: any, res) => {
     try {
       const batch = uploadedFiles.length > 0 ? uploadedFiles : [primary];
       const storedList = await Promise.all(
-        batch.map(async (f) => {
-          const grant = storageService.createSignedUploadUrl({
+        batch.map((f) =>
+          googleDriveSystem.uploadBufferToSystemDrive({
+            buffer: f.buffer,
             filename: f.originalname,
-            contentType: f.mimetype,
-            entityType: String(req.body?.entityType || 'GENERAL'),
+            mimeType: f.mimetype || 'application/octet-stream',
+            entityType: String(req.body?.entityType || req.body?.type || 'GENERAL'),
+            ma_ct: String(req.body?.ma_ct || req.body?.projectCode || '').trim(),
             role: String(req.body?.role || ''),
-          });
-          return storageService.writeStorageBuffer(grant.storageKey, f.buffer);
-        })
+          })
+        )
       );
       return res.json({
-        url: storedList[0].accessUrl,
-        urls: storedList.map((s) => s.accessUrl),
+        success: true,
+        url: storedList[0].url,
+        urls: storedList.map((s) => s.url),
+        fileId: storedList[0].fileId,
         storageKey: storedList[0].storageKey,
         filename: primary.originalname,
         mimetype: primary.mimetype,
         size: primary.size,
       });
-    } catch (writeErr: any) {
-      return sendErr(res, writeErr);
+    } catch (uploadErr: any) {
+      return sendErr(res, uploadErr, uploadErr?.statusCode || 502);
     }
   });
 });
+
+function isSafeExternalImageUrl(targetUrl: string): boolean {
+  try {
+    const parsed = new URL(targetUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (!host) return false;
+    if (
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host.startsWith('fe80:') ||
+      host.startsWith('fc') ||
+      host.startsWith('fd')
+    ) {
+      return false;
+    }
+    if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) {
+      return false;
+    }
+    const m172 = host.match(/^172\.(\d+)\./);
+    if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function normalizeGoogleDriveUrl(inputUrl: string): { primary: string; fallbacks: string[]; fileId?: string } {
   try {
@@ -2060,7 +2340,7 @@ function normalizeGoogleDriveUrl(inputUrl: string): { primary: string; fallbacks
       const dMatch = cleanUrl.match(/\/d\/([^/?]+)/);
       fileId = fileMatch?.[1] || idMatch?.[1] || dMatch?.[1] || '';
     } else if (cleanUrl.includes('/api/media/image/') || cleanUrl.includes('/api/image/') || cleanUrl.includes('/display-image/')) {
-      fileId = cleanUrl.split(/[/?]/).filter(Boolean).pop() || '';
+      fileId = cleanUrl.split('?')[0].split('/').filter(Boolean).pop() || '';
     } else if (/^[a-zA-Z0-9_-]{15,}$/.test(cleanUrl)) {
       fileId = cleanUrl;
     }
@@ -2117,17 +2397,63 @@ async function fetchUpstreamImage(targetUrl: string, googleToken?: string): Prom
   }
 }
 
+async function resolveDriveFileResponse(fileId: string, explicitToken?: string): Promise<{ ok: boolean; status: number; contentType: string; buf?: Buffer; error?: string }> {
+  // 1. Prefer System Google Drive OAuth (transparent to end users)
+  const sysResult = await googleDriveSystem.downloadDriveFileWithSystemOAuth(fileId);
+  if (sysResult.ok && sysResult.buf) {
+    return sysResult;
+  }
+
+  // 2. Fallback to optional explicit Google token if provided
+  if (explicitToken) {
+    const tokenResult = await fetchUpstreamImage(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+      explicitToken
+    );
+    if (tokenResult.ok && tokenResult.buf) {
+      return tokenResult;
+    }
+  }
+
+  // 3. Fallback to public Google Drive CDN endpoints for publicly shared assets
+  const { primary, fallbacks } = normalizeGoogleDriveUrl(fileId);
+  const cdnCandidates = [primary, ...fallbacks].filter((u) => u && u.startsWith('http'));
+  let lastStatus = sysResult.status || 404;
+  let lastError = sysResult.error || 'Google Drive file not accessible';
+
+  for (const candidate of cdnCandidates) {
+    const cdnRes = await fetchUpstreamImage(candidate);
+    if (cdnRes.ok && cdnRes.buf) {
+      return cdnRes;
+    }
+    if (cdnRes.status === 404) {
+      lastStatus = 404;
+      lastError = cdnRes.error || 'File not found';
+    } else if (lastStatus !== 404) {
+      lastStatus = cdnRes.status || 502;
+      lastError = cdnRes.error || lastError;
+    }
+  }
+
+  return {
+    ok: false,
+    status: lastStatus === 503 ? 502 : lastStatus,
+    contentType: '',
+    error: lastError,
+  };
+}
+
 const proxyImageHandler = async (req: any, res: any) => {
   try {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
-    let rawUrl = String(req.query.url || req.query.id || req.query.fileId || '').trim();
+    const rawUrl = String(req.query.url || req.query.id || req.query.fileId || '').trim();
     if (!rawUrl) return res.status(400).json({ error: 'Missing url or id parameter' });
 
     const googleToken = String(req.query.google_token || req.headers['x-google-token'] || req.headers['x-goog-token'] || '').trim();
 
-    // Handle local /uploads/ path or full URL pointing to local /uploads/
+    // Handle local /uploads/ path
     let localUploadsPath: string | null = null;
     if (rawUrl.startsWith('/uploads/')) {
       localUploadsPath = rawUrl;
@@ -2152,56 +2478,38 @@ const proxyImageHandler = async (req: any, res: any) => {
         res.setHeader('Cache-Control', 'public, max-age=86400');
         return res.sendFile(resolvedPath);
       }
-      const placeholderSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f5f9"/><path d="M160 120h80v60h-80z" fill="none" stroke="#94a3b8" stroke-width="4" rx="6"/><circle cx="182" cy="140" r="6" fill="#94a3b8"/><path d="M166 172l24-22 18 16 14-12 12 18z" fill="#cbd5e1"/><text x="200" y="220" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Hình ảnh chưa sẵn sàng</text></svg>`
-      );
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.send(placeholderSvg);
+      return res.status(404).json({ error: 'Local uploaded image not found' });
     }
 
-    // Google Drive normalization
-    const { primary, fallbacks, fileId } = normalizeGoogleDriveUrl(rawUrl);
-    const candidates: string[] = [];
-
-    // If Google Workspace OAuth token is provided and we have fileId, try Google Drive API direct download first
-    if (fileId && googleToken) {
-      candidates.push(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
-    }
-
-    if (primary && (primary.startsWith('http://') || primary.startsWith('https://'))) {
-      candidates.push(primary);
-    }
-    for (const fb of fallbacks) {
-      if (!candidates.includes(fb)) candidates.push(fb);
-    }
-
-    let result: { ok: boolean; status: number; contentType: string; buf?: Buffer; error?: string } = {
-      ok: false,
-      status: 502,
-      contentType: '',
-      buf: undefined,
-      error: 'Failed to proxy external image'
-    };
-    
-    for (const candidate of candidates) {
-      result = await fetchUpstreamImage(candidate, googleToken);
-      if (result.ok && result.buf) {
-        break;
+    // Google Drive file resolution via System OAuth + CDN fallbacks
+    const { fileId } = normalizeGoogleDriveUrl(rawUrl);
+    if (fileId) {
+      const driveResult = await resolveDriveFileResponse(fileId, googleToken);
+      if (driveResult.ok && driveResult.buf) {
+        res.setHeader('Content-Type', driveResult.contentType || 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(driveResult.buf);
       }
+      return res.status(driveResult.status || 404).json({
+        error: driveResult.error || 'Không thể tải ảnh từ Google Drive',
+      });
     }
 
-    if (!result.ok || !result.buf) {
-      const placeholderSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f5f9"/><path d="M160 120h80v60h-80z" fill="none" stroke="#94a3b8" stroke-width="4" rx="6"/><circle cx="182" cy="140" r="6" fill="#94a3b8"/><path d="M166 172l24-22 18 16 14-12 12 18z" fill="#cbd5e1"/><text x="200" y="220" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Không thể tải ảnh từ nguồn</text></svg>`
-      );
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.send(placeholderSvg);
+    // External non-Drive HTTP(S) URL with SSRF protection
+    if (!isSafeExternalImageUrl(rawUrl)) {
+      return res.status(403).json({ error: 'Blocked unsafe or private image URL' });
     }
-    res.setHeader('Content-Type', result.contentType || 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(result.buf);
+
+    const extResult = await fetchUpstreamImage(rawUrl);
+    if (extResult.ok && extResult.buf) {
+      res.setHeader('Content-Type', extResult.contentType || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(extResult.buf);
+    }
+
+    return res.status(extResult.status || 502).json({
+      error: extResult.error || 'Không thể tải ảnh từ nguồn bên ngoài',
+    });
   } catch (err: any) {
     sendErr(res, err);
   }
@@ -2209,7 +2517,7 @@ const proxyImageHandler = async (req: any, res: any) => {
 app.get('/api/proxy-image', proxyImageHandler);
 app.get('/api/images/proxy', proxyImageHandler);
 
-// Guard legacy image paths and resolve Google Drive IDs against Vite SPA HTML fallback
+// Serve Google Drive media IDs via System OAuth (transparent to end users) and guard legacy image paths
 app.use(['/display-image', '/api/image', '/api/media/image', '/media/stream'], async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -2224,38 +2532,24 @@ app.use(['/display-image', '/api/image', '/api/media/image', '/media/stream'], a
       return res.sendFile(resolved);
     }
 
-    // Check if candidateId matches Google Drive ID pattern or contains Drive URL
-    if (/^[a-zA-Z0-9_-]{15,}$/.test(candidateId) || candidateId.includes('drive.google.com') || candidateId.includes('lh3.googleusercontent.com')) {
+    const { fileId } = normalizeGoogleDriveUrl(candidateId);
+    const resolvedDriveId = fileId || (/^[a-zA-Z0-9_-]{15,}$/.test(candidateId) ? candidateId : '');
+    if (resolvedDriveId) {
       const googleToken = String(req.query.google_token || req.headers['x-google-token'] || req.headers['x-goog-token'] || '').trim();
-      const { primary, fallbacks, fileId } = normalizeGoogleDriveUrl(candidateId);
-      const candidates: string[] = [];
-
-      if (fileId && googleToken) {
-        candidates.push(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
-      }
-      if (primary && (primary.startsWith('http://') || primary.startsWith('https://'))) {
-        candidates.push(primary);
-      }
-      for (const fb of fallbacks) {
-        if (!candidates.includes(fb)) candidates.push(fb);
-      }
-
-      for (const candidate of candidates) {
-        const result = await fetchUpstreamImage(candidate, googleToken);
-        if (result.ok && result.buf) {
-          res.setHeader('Content-Type', result.contentType || 'image/jpeg');
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          return res.send(result.buf);
+      const driveResult = await resolveDriveFileResponse(resolvedDriveId, googleToken);
+      if (driveResult.ok && driveResult.buf) {
+        res.setHeader('Content-Type', driveResult.contentType || 'image/jpeg');
+        if (req.query.download === '1' || req.query.download === 'true') {
+          const dlName = String(req.query.filename || resolvedDriveId).replace(/["\r\n]/g, '_');
+          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(dlName)}"`);
         }
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        if (req.method === 'HEAD') return res.status(200).end();
+        return res.send(driveResult.buf);
       }
-
-      // Return placeholder SVG gracefully instead of 404
-      const placeholderSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f5f9"/><path d="M160 120h80v60h-80z" fill="none" stroke="#94a3b8" stroke-width="4" rx="6"/><circle cx="182" cy="140" r="6" fill="#94a3b8"/><path d="M166 172l24-22 18 16 14-12 12 18z" fill="#cbd5e1"/><text x="200" y="220" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Không thể tải ảnh từ nguồn</text></svg>`
-      );
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.send(placeholderSvg);
+      return res.status(driveResult.status || 404).json({
+        error: driveResult.error || 'Không thể tải ảnh từ Google Drive',
+      });
     }
   }
   return res.status(404).json({ error: `Image asset not found: ${req.originalUrl}` });
